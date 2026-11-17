@@ -26,7 +26,8 @@ import java.util.Set;
  * The bottom panel of the editor (specification chapter V): the transport buttons, a ruler in seconds over the whole
  * recording with the playhead, segment boundaries, marker flags and the export range, and under it one row for every
  * track of the scene with its keyframes as diamonds. The names of the tracks, with what can be done to each, stand in
- * a column at the left.
+ * a column at the left. Between the ruler and the rows, when there are any and they are wanted, the recording's
+ * moments: see {@link MomentsLane}.
  */
 final class TimelinePanel {
 
@@ -50,6 +51,10 @@ final class TimelinePanel {
     private int laneLeft;
     private int laneWidth;
     private int rulerTop;
+    /** Where the ruler ends; the moments rows, when shown, lie between here and the track rows */
+    private int rulerBottom;
+    private MomentsLane.Place moments = new MomentsLane.Place(0, 0, 1, 0);
+    private @Nullable Font font;
     private int lanesTop;
     private int lanesBottom;
     private int statusLeft;
@@ -57,6 +62,7 @@ final class TimelinePanel {
 
     private final List<Gadget> transport = new ArrayList<>();
     private final Gadget.Push fold;
+    private final Gadget.Push momentsSwitch;
     private final Gadget.Push addTrack;
 
     private Drag drag = Drag.NONE;
@@ -95,6 +101,8 @@ final class TimelinePanel {
                 .lit(EditorSession::followCamera).tip(Kit.t("transport.camera.tip")).wide(96));
         this.fold = Gadget.Push.icon(() -> EditorState.timelineFolded ? Kit.Icon.FOLD_UP : Kit.Icon.FOLD_DOWN, Kit.t("timeline.fold"),
                 () -> EditorState.timelineFolded = !EditorState.timelineFolded);
+        this.momentsSwitch = new Gadget.Push(Kit.t("moments.switch"), () -> MomentsLane.setShown(!MomentsLane.shown()));
+        this.momentsSwitch.lit(MomentsLane::shown).tip(Kit.t("moments.switch.tip"));
         this.addTrack = new Gadget.Push(Kit.t("track.add"), this::openAddMenu);
         this.addTrack.tip(Kit.t("track.add.tip"));
     }
@@ -107,7 +115,7 @@ final class TimelinePanel {
         }
         int tracks = EditorSession.open() ? EditorState.scene().tracks().size() : 0;
         int most = Math.max(2, (screenHeight * 42 / 100 - fixed - 8) / LANE);
-        return fixed + Math.max(2, Math.min(tracks, most)) * LANE + 8;
+        return fixed + MomentsLane.height() + Math.max(2, Math.min(tracks, most)) * LANE + 8;
     }
 
     void place(Font font, int newLeft, int newTop, int newRight, int newBottom) {
@@ -119,8 +127,12 @@ final class TimelinePanel {
         this.columnWidth = Math.max(84, Math.min(190, width * 24 / 100));
         this.laneLeft = newLeft + this.columnWidth + 1;
         this.laneWidth = Math.max(20, newRight - this.laneLeft - 5);
+        this.font = font;
         this.rulerTop = newTop + 2 + BAR + 2;
-        this.lanesTop = this.rulerTop + RULER;
+        this.rulerBottom = this.rulerTop + RULER;
+        this.moments = new MomentsLane.Place(newLeft, this.laneLeft, this.laneWidth, this.rulerBottom);
+        // The rows give way before the moments do, but never altogether: a short window keeps two rows
+        this.lanesTop = Math.min(this.rulerBottom + MomentsLane.height(), Math.max(this.rulerBottom, newBottom - 8 - 2 * LANE));
         this.lanesBottom = EditorState.timelineFolded ? this.lanesTop : Math.max(this.lanesTop, newBottom - 8);
 
         int x = newLeft + 3;
@@ -132,8 +144,11 @@ final class TimelinePanel {
         }
         this.fold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
         this.fold.place(font, newRight - 19, newTop + 2, 16, BAR);
+        int switchWide = this.momentsSwitch.wantedWidth(font);
+        this.momentsSwitch.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+        this.momentsSwitch.place(font, newRight - 21 - switchWide, newTop + 2, switchWide, BAR);
         this.statusLeft = x + 4;
-        this.statusRight = newRight - 23;
+        this.statusRight = newRight - 25 - switchWide;
         this.addTrack.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
         this.addTrack.place(font, newLeft + 3, this.rulerTop, this.columnWidth - 5, RULER - 1);
 
@@ -168,7 +183,12 @@ final class TimelinePanel {
     }
 
     private boolean overRuler(double mouseX, double mouseY) {
-        return mouseX >= this.laneLeft - 2 && mouseX < this.laneLeft + this.laneWidth + 3 && mouseY >= this.rulerTop && mouseY < this.lanesTop;
+        return mouseX >= this.laneLeft - 2 && mouseX < this.laneLeft + this.laneWidth + 3 && mouseY >= this.rulerTop && mouseY < this.rulerBottom;
+    }
+
+    /** Whether the moments rows are there and the mouse is over them */
+    private boolean overMoments(double mouseX, double mouseY) {
+        return this.lanesTop > this.rulerBottom && mouseY < this.lanesTop && MomentsLane.over(this.moments, mouseX, mouseY);
     }
 
     private boolean overLanes(double mouseX, double mouseY) {
@@ -280,6 +300,7 @@ final class TimelinePanel {
             gadget.draw(graphics, font, mouseX, mouseY);
         }
         this.fold.draw(graphics, font, mouseX, mouseY);
+        this.momentsSwitch.draw(graphics, font, mouseX, mouseY);
         this.drawStatus(graphics, font);
         this.addTrack.draw(graphics, font, mouseX, mouseY);
 
@@ -288,7 +309,7 @@ final class TimelinePanel {
         int laneRight = this.laneLeft + this.laneWidth;
 
         // The ruler and the rows
-        graphics.fill(this.laneLeft, this.rulerTop, laneRight + 1, this.lanesTop, Controls.FIELD);
+        graphics.fill(this.laneLeft, this.rulerTop, laneRight + 1, this.rulerBottom, Controls.FIELD);
         int rows = this.visibleLanes();
         for (int row = 0; row < rows; row++) {
             int index = EditorState.laneScroll + row;
@@ -301,6 +322,9 @@ final class TimelinePanel {
             this.drawRange(graphics, scene, total);
             this.drawRuler(graphics, font, total);
             this.drawMarks(graphics, total);
+            if (this.lanesTop > this.rulerBottom) {
+                MomentsLane.draw(graphics, font, this.moments, laneRight, mouseX, mouseY);
+            }
             for (int row = 0; row < rows; row++) {
                 int index = EditorState.laneScroll + row;
                 if (index < scene.tracks().size()) {
@@ -323,6 +347,9 @@ final class TimelinePanel {
             graphics.disableScissor();
         }
 
+        if (this.lanesTop > this.rulerBottom) {
+            MomentsLane.drawColumn(graphics, font, this.moments, this.laneLeft - 1, mouseX, mouseY);
+        }
         // The track names
         for (int row = 0; row < rows; row++) {
             int index = EditorState.laneScroll + row;
@@ -389,10 +416,10 @@ final class TimelinePanel {
         int to = (int) Math.round(this.across(end));
         graphics.fill(from, this.rulerTop, to + 1, Math.max(this.lanesTop, this.lanesBottom), RANGE_TINT);
         // A brass tab at either end to take hold of
-        graphics.fill(from, this.lanesTop - 6, from + 4, this.lanesTop, Controls.BRASS_BRIGHT);
-        graphics.fill(from, this.rulerTop, from + 1, this.lanesTop, Controls.BRASS_BRIGHT);
-        graphics.fill(to - 3, this.lanesTop - 6, to + 1, this.lanesTop, Controls.BRASS_BRIGHT);
-        graphics.fill(to, this.rulerTop, to + 1, this.lanesTop, Controls.BRASS_BRIGHT);
+        graphics.fill(from, this.rulerBottom - 6, from + 4, this.rulerBottom, Controls.BRASS_BRIGHT);
+        graphics.fill(from, this.rulerTop, from + 1, this.rulerBottom, Controls.BRASS_BRIGHT);
+        graphics.fill(to - 3, this.rulerBottom - 6, to + 1, this.rulerBottom, Controls.BRASS_BRIGHT);
+        graphics.fill(to, this.rulerTop, to + 1, this.rulerBottom, Controls.BRASS_BRIGHT);
     }
 
     private void drawRuler(GuiGraphics graphics, Font font, int total) {
@@ -417,13 +444,13 @@ final class TimelinePanel {
                 break;
             }
             int x = (int) Math.round(this.across(tick));
-            graphics.fill(x, this.lanesTop - 5, x + 1, this.lanesTop, Controls.BRASS);
+            graphics.fill(x, this.rulerBottom - 5, x + 1, this.rulerBottom, Controls.BRASS);
             int whole = (int) Math.round(tick);
             String label = step < 1.0 ? Controls.time(whole) : Controls.length(whole);
             Kit.text(graphics, font, label, x + 2, this.rulerTop + 2, Controls.PARCHMENT_DIM);
             int half = (int) Math.round(this.across(tick + stepTicks / 2.0));
             if (tick + stepTicks / 2.0 <= total) {
-                graphics.fill(half, this.lanesTop - 2, half + 1, this.lanesTop, Controls.BRASS);
+                graphics.fill(half, this.rulerBottom - 2, half + 1, this.rulerBottom, Controls.BRASS);
             }
         }
     }
@@ -446,7 +473,7 @@ final class TimelinePanel {
         for (RecordingManifest.Marker marker : manifest.markers) {
             int colour = 0xFF000000 | (marker.colour & 0xFFFFFF);
             int x = (int) Math.round(this.across(Math.max(0, Math.min(total, marker.tick))));
-            graphics.fill(x, this.rulerTop + 1, x + 1, this.lanesTop, colour);
+            graphics.fill(x, this.rulerTop + 1, x + 1, this.rulerBottom, colour);
             graphics.fill(x + 1, this.rulerTop + 1, x + 5, this.rulerTop + 5, colour);
         }
     }
@@ -531,14 +558,24 @@ final class TimelinePanel {
         if (folded != null) {
             return folded;
         }
+        Gadget switched = this.momentsSwitch.press(mouseX, mouseY, button);
+        if (switched != null) {
+            return switched;
+        }
         Gadget adding = this.addTrack.press(mouseX, mouseY, button);
         if (adding != null) {
             return adding;
         }
+        if (this.overMoments(mouseX, mouseY)) {
+            if (this.font != null) {
+                MomentsLane.press(this.font, this.moments, mouseX, mouseY, button);
+            }
+            return null;
+        }
         Scene scene = EditorState.scene();
         int total = Math.max(1, Playback.total());
         if (button == 0 && this.overRuler(mouseX, mouseY)) {
-            if (scene.hasExportRange() && mouseY >= this.lanesTop - 7) {
+            if (scene.hasExportRange() && mouseY >= this.rulerBottom - 7) {
                 double start = this.across(scene.exportStart());
                 double end = this.across(scene.exportEnd());
                 if (mouseX >= start - 2 && mouseX <= start + 5 && Math.abs(mouseX - start) <= Math.abs(mouseX - end)) {
@@ -809,10 +846,16 @@ final class TimelinePanel {
         }
         Component words = this.fold.tipAt(mouseX, mouseY);
         if (words == null) {
+            words = this.momentsSwitch.tipAt(mouseX, mouseY);
+        }
+        if (words == null) {
             words = this.addTrack.tipAt(mouseX, mouseY);
         }
         if (words != null) {
             return words;
+        }
+        if (this.overMoments(mouseX, mouseY)) {
+            return this.font == null ? null : MomentsLane.tipAt(this.font, this.moments, mouseX, mouseY);
         }
         Scene scene = EditorState.scene();
         if (this.overRuler(mouseX, mouseY)) {
@@ -827,7 +870,7 @@ final class TimelinePanel {
                     }
                 }
             }
-            if (scene.hasExportRange() && mouseY >= this.lanesTop - 7) {
+            if (scene.hasExportRange() && mouseY >= this.rulerBottom - 7) {
                 double start = this.across(scene.exportStart());
                 double end = this.across(scene.exportEnd());
                 if ((mouseX >= start - 2 && mouseX <= start + 5) || (mouseX >= end - 5 && mouseX <= end + 2)) {

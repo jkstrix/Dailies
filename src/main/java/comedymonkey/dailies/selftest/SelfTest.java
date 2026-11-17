@@ -89,6 +89,7 @@ public final class SelfTest {
             ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
+            TimelineSteps.original(this);
             LibrarySteps.run(this);
             ResourcePackSteps.play(this);
             WatchingSteps.watch(this);

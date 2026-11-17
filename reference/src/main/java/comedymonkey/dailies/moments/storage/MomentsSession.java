@@ -280,7 +280,15 @@ public class MomentsSession {
     }
 
     /** Tells the open moments pages that something of this session is new or different (GET /live) */
+    private static final java.util.concurrent.atomic.AtomicLong CHANGES = new java.util.concurrent.atomic.AtomicLong();
+
+    /** Goes up whenever any record of any session is added or changed; for whoever keeps something worked out from them */
+    public static long changes() {
+        return CHANGES.get();
+    }
+
     private void announce(String what, @Nullable String recordId, String change) {
+        CHANGES.incrementAndGet();
         if (comedymonkey.dailies.mcp.LiveHub.listeners() == 0) {
             return;
         }

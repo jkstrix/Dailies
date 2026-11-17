@@ -74,6 +74,12 @@ public final class Host {
     public record ClipLocation(Path file, String recordingId, String name, List<Stretch> stretches, boolean cut, int removedTicks, boolean open, boolean original) {
     }
 
+    /** Edits to make together, see {@link Mod#asOneEdit} */
+    @FunctionalInterface
+    public interface EditWork {
+        void run() throws Exception;
+    }
+
     /** What the core provides */
     public interface Mod {
         /** The mod's own folder in the game directory, where "moments" lives */
@@ -137,6 +143,19 @@ public final class Host {
          * the smart_camera_add tool: tick, target, mode and any setting in snake_case. Client thread
          */
         void addSmartCamera(JsonObject arguments) throws Exception;
+        /**
+         * Add a scene to the open recording with this name and export range, and make it the current one, through the
+         * editor's undo stack. Client thread.
+         *
+         * @param startTick the first tick exported
+         * @param endTick   the last tick exported
+         * @return the index of the new scene
+         */
+        int createScene(String name, int startTick, int endTick) throws Exception;
+        /** Change look settings of the current scene by name, as visuals_set does, through the editor's undo stack. Client thread */
+        void setSceneLooks(JsonObject values) throws Exception;
+        /** Run several edits so that they are one step to undo, under this description. Client thread */
+        void asOneEdit(String description, EditWork edits) throws Exception;
 
         // --- MCP ---
         /** Register the tool groups that belong to the core */

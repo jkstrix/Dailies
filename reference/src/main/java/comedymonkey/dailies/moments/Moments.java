@@ -200,6 +200,94 @@ public final class Moments {
         return PLAYER_NAMES.get(player);
     }
 
+    // --- The editor's timeline (specification EDIT-9) ---
+
+    /**
+     * The moments of a recording as the editor's timeline shows them: marks for events, bands for clips and a strip
+     * per speaker, all in that recording's own ticks and without what the ignore list hides. Works for a recording
+     * trimmed or combined from others: a moment made in an original lands where the edited recording holds it, and
+     * one that was cut is left out. Reads files the first time, so not for the client thread; safe from any other.
+     */
+    public static MomentsTimeline.Timeline timelineFor(String recordingId) {
+        if (storage == null || recordingId == null || recordingId.isBlank()) {
+            return MomentsTimeline.Timeline.empty(String.valueOf(recordingId));
+        }
+        Host.Mod host = Host.get();
+        boolean open = recordingId.equals(host.openRecordingId());
+        MomentsTimeline.Mapper mapper = new MomentsTimeline.Mapper() {
+            @Override
+            public int tick(String from, int tick) {
+                if (open) {
+                    // The open recording answers for itself, through its own source map
+                    return host.openRecordingContains(from, tick);
+                }
+                for (Host.Located located : host.locate(from, tick)) {
+                    if (located.recordingId().equals(recordingId)) {
+                        return located.tick();
+                    }
+                }
+                return -1;
+            }
+
+            @Override
+            public List<int[]> stretch(String from, int start, int end) {
+                List<int[]> pieces = new java.util.ArrayList<>();
+                for (Host.ClipLocation location : host.locateClip(from, start, end)) {
+                    if (location.recordingId().equals(recordingId)) {
+                        for (Host.Stretch stretch : location.stretches()) {
+                            pieces.add(new int[]{stretch.tick(), stretch.endTick()});
+                        }
+                        return pieces;
+                    }
+                }
+                // A recording opened from outside the recordings folder is in no index: its two ends are asked for one by one
+                int first = this.tick(from, start);
+                int last = this.tick(from, end);
+                if (first >= 0 && last >= first) {
+                    pieces.add(new int[]{first, last});
+                }
+                return pieces;
+            }
+        };
+
+        List<MomentsTimeline.Source> sources = new java.util.ArrayList<>();
+        for (String sessionId : storage.listSessionIds()) {
+            MomentsSession session = storage.getSession(sessionId);
+            if (session == null || !madeDuring(session, recordingId, open, host)) {
+                continue;
+            }
+            comedymonkey.dailies.moments.analysis.MomentAnalysis analysis =
+                new comedymonkey.dailies.moments.analysis.MomentAnalysis(session, ongoingInteractions(session), MomentsConfig.contextSeconds());
+            sources.add(new MomentsTimeline.Source(session.id, analysis.events, session.clips(), analysis.dialogue, analysis::score,
+                comedymonkey.dailies.moments.analysis.MomentAnalysis::describe));
+        }
+        int total = open ? host.openRecordingTicks() : Integer.MAX_VALUE;
+        return MomentsTimeline.build(recordingId, sources, mapper, MomentsConfig::isIgnored, total);
+    }
+
+    /** Whether any recording made during a session is this one, or one this one was made from */
+    private static boolean madeDuring(MomentsSession session, String recordingId, boolean open, Host.Mod host) {
+        for (com.google.gson.JsonElement element : MJson.arr(session.meta(), "replays")) {
+            String made = element.getAsString();
+            if (made.equals(recordingId) || (open && host.openRecordingMadeFrom(made))) {
+                return true;
+            }
+            if (!open) {
+                for (Host.ClipLocation location : host.locateClip(made, 0, Integer.MAX_VALUE / 2)) {
+                    if (location.recordingId().equals(recordingId)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Changes whenever {@link #timelineFor} might answer differently: a record was added or changed, or the ignore list was */
+    public static long timelineStamp() {
+        return MomentsSession.changes() * 31 + Host.get().setting("momentsIgnoredEvents", "").hashCode();
+    }
+
     public static boolean voiceChatInstalled() {
         return Host.get().isModLoaded("voicechat");
     }

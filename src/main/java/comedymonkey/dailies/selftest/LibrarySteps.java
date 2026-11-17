@@ -180,6 +180,7 @@ final class LibrarySteps {
             + " should be at tick " + (killTick - keepFrom) + " of the trimmed recording: " + shorten(cued.toString()));
         check(cued.getAsJsonArray("locations").size() == 2, "the kill should be in the original and the trimmed recording: " + cued.get("locations"));
         waitOpen(test, aroundId, killTick - keepFrom);
+        TimelineSteps.trimmed(test, killId, killTick, outside.get("id").getAsString(), clipId, clipStart, keepFrom, keepTo);
         // The world just after the cut is the world the original has there: the snapshot written from playback is a true one
         PlaybackSteps.jump(test, afterCut - keepFrom);
         String trimmedAfterCut = test.onClient(() -> PlaybackSteps.digest(minecraft));
@@ -259,6 +260,7 @@ final class LibrarySteps {
         waitOpen(test, throughId, clipStart);
         JsonObject gone = test.tool("moments_clip_goto", args("session", session, "clip_id", clipId));
         int piecesEnd = secondPiece.get("end_tick").getAsInt();
+        TimelineSteps.cutThrough(test, clipId, clipStart, piecesEnd);
         check(gone.get("cut").getAsBoolean() && gone.getAsJsonArray("stretches").size() == 2 && gone.get("target_tick").getAsInt() == clipStart && gone.get("end_tick").getAsInt() == piecesEnd,
             "moments_clip_goto did not give the clip as its two pieces: " + shorten(gone.toString()));
         // It plays as the edit has it: straight across the cut, into the world the original has after it
