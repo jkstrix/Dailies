@@ -14,7 +14,6 @@ import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -135,8 +134,8 @@ public final class PlayerList {
     }
 
     public static boolean riding(UUID id) {
-        Entity ridden = Viewer.riding();
-        return ridden != null && ridden.getUUID().equals(id);
+        // By the UUID kept across jumps: through a drag of the playhead they are out of the world now and then
+        return id.equals(Viewer.ridingId());
     }
 
     /** Sees through a player's eyes, or leaves them again */

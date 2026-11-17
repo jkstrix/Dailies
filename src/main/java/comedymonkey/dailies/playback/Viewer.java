@@ -37,6 +37,8 @@ public final class Viewer {
     private static @Nullable UUID followed = null;
     /** The follow itself: the same whether someone watches or an export runs, stepped by the frame or by the tick */
     private static final comedymonkey.dailies.smartcamera.PanelFollow PANEL = new comedymonkey.dailies.smartcamera.PanelFollow();
+    /** Whoever the view is through, by UUID and entity id, never by the entity object: a jump puts new entities in the world */
+    private static final RideTarget RIDDEN = new RideTarget();
 
     /** The players panel's Follow, for the export's per-tick steps. Client thread */
     public static comedymonkey.dailies.smartcamera.PanelFollow panel() {
@@ -74,6 +76,7 @@ public final class Viewer {
         fov = 0.0;
         driven = false;
         lastNanos = 0;
+        RIDDEN.clear();
         stopFollowing();
     }
 
@@ -191,14 +194,104 @@ public final class Viewer {
         return camera == null || camera == minecraft.player ? null : camera;
     }
 
+    /**
+     * The UUID of whoever the view is through, or null. It stays while they are out of the world for a moment (a jump
+     * under way, a drag of the playhead), when {@link #riding()} is null, and the view goes back to them when they return
+     */
+    public static @Nullable UUID ridingId() {
+        return RIDDEN.uuid();
+    }
+
     public static void ride(@Nullable Entity entity) {
         Minecraft minecraft = Minecraft.getInstance();
+        RIDDEN.ride(entity == null ? null : entity.getUUID(), entity == null ? -1 : entity.getId());
         if (minecraft.player != null) {
             minecraft.setCameraEntity(entity == null ? minecraft.player : entity);
         }
         if (entity != null) {
             // Through their eyes there is nothing left to keep in view
             stopFollowing();
+        }
+    }
+
+    /**
+     * Keeps the view through the eyes of whoever it rides with. A jump takes every entity out of the world and puts new
+     * ones back, in the same world or a new one, so the game's own camera entity is then one that has been taken out:
+     * left alone, the picture would stand frozen where they were when the jump began, however the playhead moves. Once
+     * a frame, and as each jump lands, the view is put back on whoever has the same UUID now. While they are not in
+     * the world the view is the viewer's own, from where they were last, and nothing of the ride is forgotten. Client thread
+     */
+    private static void keepRiding(Minecraft minecraft) {
+        UUID wanted = RIDDEN.uuid();
+        if (wanted == null || minecraft.player == null || minecraft.level == null) {
+            return;
+        }
+        Entity camera = minecraft.getCameraEntity();
+        if (camera != null && camera != minecraft.player && !camera.isRemoved() && camera.level() == minecraft.level && wanted.equals(camera.getUUID())) {
+            RIDDEN.seen(camera.getId());
+            return;
+        }
+        Entity found = find(minecraft.level, wanted, RIDDEN.id());
+        if (found != null) {
+            RIDDEN.seen(found.getId());
+            minecraft.setCameraEntity(found);
+            return;
+        }
+        // Never drawn from the one taken out, which stands frozen where it was
+        if (camera != minecraft.player) {
+            minecraft.setCameraEntity(minecraft.player);
+        }
+        if (RIDDEN.missing(Playback.position(), Playback.jumping() || Playback.rough())) {
+            leaveRide();
+        }
+    }
+
+    /** Whoever has this UUID in the world now: by the entity id they last had if that is still them, else by the UUID */
+    private static @Nullable Entity find(net.minecraft.client.multiplayer.ClientLevel level, UUID uuid, int id) {
+        Entity byId = id >= 0 ? level.getEntity(id) : null;
+        if (byId != null && !byId.isRemoved() && uuid.equals(byId.getUUID())) {
+            return byId;
+        }
+        Player player = level.getPlayerByUUID(uuid);
+        if (player != null && !player.isRemoved()) {
+            return player;
+        }
+        for (Entity entity : level.entitiesForRendering()) {
+            if (!entity.isRemoved() && uuid.equals(entity.getUUID())) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    /** Gives up riding with someone who is not in the world, and says so */
+    private static void leaveRide() {
+        RIDDEN.clear();
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player != null) {
+            minecraft.setCameraEntity(minecraft.player);
+        }
+        comedymonkey.dailies.ui.EditorScreen.say(net.minecraft.network.chat.Component.translatable("dailies.editor.ride.gone"));
+    }
+
+    /**
+     * A jump has landed. The view goes back through the eyes of whoever it rode with, and the players panel's Follow goes
+     * on after the same player; when either is not in the world at this tick the camera flies free from here, with a
+     * notice. A rough landing, one of the many made while the playhead is dragged, gives up neither: the exact landing
+     * that follows the drag decides. Client thread
+     */
+    static void arrived(Minecraft minecraft, boolean rough) {
+        keepRiding(minecraft);
+        if (rough || minecraft.level == null) {
+            return;
+        }
+        if (RIDDEN.landed(riding() != null, false)) {
+            leaveRide();
+        }
+        UUID wanted = followed;
+        if (wanted != null && minecraft.level.getPlayerByUUID(wanted) == null) {
+            stopFollowing();
+            comedymonkey.dailies.ui.EditorScreen.say(net.minecraft.network.chat.Component.translatable("dailies.editor.follow.gone"));
         }
     }
 
@@ -273,6 +366,7 @@ public final class Viewer {
         long now = System.nanoTime();
         double seconds = lastNanos == 0 ? 0.0 : Math.min(0.25, (now - lastNanos) / 1_000_000_000.0);
         lastNanos = now;
+        keepRiding(minecraft);
         if (!placed) {
             set(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         }
