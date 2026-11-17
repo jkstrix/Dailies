@@ -101,11 +101,15 @@ public final class LibraryIndex {
     private static final class Stored {
         int version = VERSION;
         List<Entry> recordings = new ArrayList<>();
+        /** The sub-folders of the recordings folder, empty ones included, relative with forward slashes */
+        List<String> folders = new ArrayList<>();
     }
 
     private final Path folder;
     /** By relative file */
     private final Map<String, Entry> entries = new HashMap<>();
+    /** The sub-folders, so that a folder a person made and has not filled yet is still offered (REC-5) */
+    private final Set<String> folders = new java.util.TreeSet<>();
     private boolean loaded = false;
     private long lastLook = 0;
 
@@ -135,6 +139,7 @@ public final class LibraryIndex {
         }
         this.loaded = true;
         this.entries.clear();
+        this.folders.clear();
         Path file = this.indexFile();
         if (!Files.isRegularFile(file)) {
             return;
@@ -156,6 +161,9 @@ public final class LibraryIndex {
                         this.entries.put(entry.file, entry);
                     }
                 }
+                if (stored.folders != null) {
+                    stored.folders.stream().filter(folder -> folder != null && !folder.isBlank()).forEach(this.folders::add);
+                }
             }
         } catch (IOException | RuntimeException unreadable) {
             // Built again from the files below
@@ -167,6 +175,7 @@ public final class LibraryIndex {
         Stored stored = new Stored();
         stored.recordings = new ArrayList<>(this.entries.values());
         stored.recordings.sort(Comparator.comparing((Entry entry) -> entry.file));
+        stored.folders = new ArrayList<>(this.folders);
         try {
             Files.createDirectories(this.folder);
             Path temporary = this.folder.resolve(FILE_NAME + ".writing");
@@ -246,10 +255,22 @@ public final class LibraryIndex {
         Set<String> present = new HashSet<>();
         if (Files.isDirectory(this.folder)) {
             List<Path> files;
+            Set<String> found = new java.util.TreeSet<>();
             try (Stream<Path> walk = Files.walk(this.folder, DEPTH)) {
-                files = walk.filter(path -> path.getFileName().toString().endsWith(RecordingFile.EXTENSION) && Files.isRegularFile(path)).toList();
+                List<Path> all = walk.toList();
+                files = all.stream().filter(path -> path.getFileName().toString().endsWith(RecordingFile.EXTENSION) && Files.isRegularFile(path)).toList();
+                for (Path path : all) {
+                    if (!path.equals(this.folder) && Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
+                        found.add(this.relative(path));
+                    }
+                }
             } catch (IOException | RuntimeException e) {
                 return;
+            }
+            if (!found.equals(this.folders)) {
+                this.folders.clear();
+                this.folders.addAll(found);
+                changed = true;
             }
             for (Path file : files) {
                 String relative = this.relative(file);
@@ -304,6 +325,17 @@ public final class LibraryIndex {
         List<Entry> list = new ArrayList<>(this.entries.values());
         list.sort(Comparator.comparingLong((Entry entry) -> entry.created).reversed().thenComparing(entry -> entry.file));
         return list;
+    }
+
+    /** The sub-folders of the recordings folder, empty ones included, relative with forward slashes, in order */
+    public synchronized List<String> folders() {
+        this.refresh();
+        return new ArrayList<>(this.folders);
+    }
+
+    /** A folder was made, renamed or deleted by the mod itself: look again now */
+    public synchronized void foldersChanged() {
+        this.refresh(true);
     }
 
     public synchronized Path fileOf(Entry entry) {

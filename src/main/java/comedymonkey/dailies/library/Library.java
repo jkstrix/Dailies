@@ -62,9 +62,22 @@ public final class Library {
             } catch (Throwable t) {
                 Host.LOGGER.warn("Dailies: the index of recordings could not be checked at start-up. It is checked again when it is next needed", t);
             }
+            try {
+                // The settings file is read a moment after start-up; housekeeping waits for it so it acts on what the person chose
+                long deadline = System.currentTimeMillis() + 30_000;
+                while (!Host.get().settingsLoaded() && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(250);
+                }
+                if (Host.get().settingsLoaded()) {
+                    housekeeping();
+                }
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: the storage settings could not be applied at start-up", t);
+            }
         }, "Dailies-Library-Check");
         check.setDaemon(true);
         check.start();
+        DiskGuard.init();
     }
 
     public static LibraryIndex index() {
@@ -148,9 +161,14 @@ public final class Library {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("A recording needs a name");
         }
-        requireNotOpen(file);
-        try (RecordingFile recording = RecordingFile.openForEditing(file)) {
-            recording.rename(name.trim());
+        RecordingFile open = Playback.active() ? Playback.file() : null;
+        if (open != null && open.file().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+            // The recording being watched is renamed through playback's own handle on it, which can write to it
+            open.rename(name.trim());
+        } else {
+            try (RecordingFile recording = RecordingFile.openForEditing(file)) {
+                recording.rename(name.trim());
+            }
         }
         changed(file);
     }
@@ -177,11 +195,400 @@ public final class Library {
         return wanted;
     }
 
-    /** Deletes a recording's file. Moments recorded in it are still found in any combined or trimmed recording that holds its ticks */
-    public static void delete(Path file) throws IOException {
+    /**
+     * Deletes a recording by moving its file to the bin (REC-9), where it stays for {@code binDays} and can be
+     * restored. From the moment it is there the index no longer finds it, so moments recorded in it are found in any
+     * combined or trimmed recording that holds its ticks, as they would be were it gone for good.
+     *
+     * @return what it is in the bin as
+     */
+    public static Bin.Item delete(Path file) throws IOException {
         requireNotOpen(file);
-        Files.delete(file);
+        String name = file.getFileName().toString();
+        String world = "";
+        String id = "";
+        LibraryIndex.Entry known = index().entryOf(file);
+        if (known != null) {
+            name = known.name.isBlank() ? name : known.name;
+            world = known.world;
+            id = known.id;
+        } else {
+            try {
+                RecordingManifest manifest = RecordingFile.readManifest(file);
+                name = manifest.name.isBlank() ? name : manifest.name;
+                world = manifest.worldName;
+                id = manifest.id;
+            } catch (IOException unreadable) {
+                // Binned under its file name
+            }
+        }
+        Bin.Item item = bin().put(Bin.Kind.RECORDING, file, name, world, id);
         index().forget(file);
+        return item;
+    }
+
+    // --- The bin, stars, folders and storage (REC-5, REC-8, REC-9) ---
+
+    private static volatile Bin bin = null;
+    private static volatile Stars stars = null;
+    private static volatile ExportLog exportLog = null;
+    /** For the small jobs of the bin and the folders, which must not wait behind a long combine */
+    private static final ExecutorService HOUSE = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "Dailies-Library-House");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    public static Bin bin() {
+        Bin known = bin;
+        if (known == null) {
+            synchronized (Library.class) {
+                known = bin;
+                if (known == null) {
+                    known = new Bin(Host.get().dataDirectory(), System::currentTimeMillis);
+                    bin = known;
+                }
+            }
+        }
+        return known;
+    }
+
+    public static Stars stars() {
+        Stars known = stars;
+        if (known == null) {
+            synchronized (Library.class) {
+                known = stars;
+                if (known == null) {
+                    known = new Stars(Recorder.folder());
+                    stars = known;
+                }
+            }
+        }
+        return known;
+    }
+
+    public static ExportLog exportLog() {
+        ExportLog known = exportLog;
+        if (known == null) {
+            synchronized (Library.class) {
+                known = exportLog;
+                if (known == null) {
+                    known = new ExportLog(Recorder.folder());
+                    exportLog = known;
+                }
+            }
+        }
+        return known;
+    }
+
+    public static int binDays() {
+        return Math.max(1, Host.get().setting("binDays", 30));
+    }
+
+    /**
+     * Puts back something from the bin: a recording into the recordings folder, a moments session into the moments
+     * folder, a scene into its recording's editor state (into the editor itself when that recording is open there).
+     *
+     * @return words for the person on where it went
+     */
+    public static String restore(String itemId) throws Exception {
+        Bin.Item item = bin().find(itemId);
+        if (item == null) {
+            throw new IllegalArgumentException("Nothing in the bin has the id '" + itemId + "'");
+        }
+        switch (item.kind()) {
+            case RECORDING -> {
+                Path back = bin().restore(itemId);
+                changed(back);
+                return "'" + item.name + "' is back in the recordings folder as " + Recorder.folder().relativize(back).toString().replace('\\', '/');
+            }
+            case SESSION -> {
+                bin().restore(itemId);
+                return "The moments session '" + item.name + "' is back";
+            }
+            default -> {
+                restoreScene(item);
+                bin().forget(itemId);
+                return "The scene '" + item.name + "' is back in '" + item.world + "'";
+            }
+        }
+    }
+
+    private static void restoreScene(Bin.Item item) throws Exception {
+        com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(bin().sceneJson(item)).getAsJsonObject();
+        comedymonkey.dailies.edit.Scene scene = comedymonkey.dailies.edit.Scene.fromJson(json, item.name);
+        Minecraft minecraft = Minecraft.getInstance();
+        java.util.function.Supplier<Boolean> intoEditor = () -> {
+            if (comedymonkey.dailies.editor.EditorSession.open() && item.recordingId.equals(Playback.recordingId())) {
+                comedymonkey.dailies.editor.EditorSession.history().putBackScene(scene);
+                return true;
+            }
+            return false;
+        };
+        boolean done = minecraft.isSameThread() ? intoEditor.get() : minecraft.submit(intoEditor).get();
+        if (done) {
+            return;
+        }
+        Path file = index().findById(item.recordingId);
+        if (file == null) {
+            throw new IllegalStateException("The recording the scene '" + item.name + "' belongs to is not in the recordings folder. If it is in the bin, restore it first");
+        }
+        requireNotOpen(file);
+        try (RecordingFile recording = RecordingFile.openForEditing(file)) {
+            byte[] stored = recording.editState();
+            EditState state = stored == null ? new EditState() : readEdit(stored);
+            if (state == null) {
+                throw new IllegalStateException("The editor state of '" + item.world + "' cannot be read, so the scene cannot be put back into it");
+            }
+            comedymonkey.dailies.edit.Scene copy = scene.copy();
+            copy.setName(comedymonkey.dailies.edit.EditHistory.restoredName(state, scene.name()));
+            state.addScene(state.scenes().size(), copy);
+            recording.saveEditState(state.toBytes());
+        }
+        changed(file);
+    }
+
+    /**
+     * Keeps a scene that is being taken out of the open recording, in the bin. Called on the client thread just before
+     * the scene is removed; the writing is done away from it. Never throws.
+     */
+    public static void binScene(comedymonkey.dailies.edit.Scene scene) {
+        String recordingId = Playback.recordingId();
+        RecordingManifest manifest = Playback.manifest();
+        if (recordingId == null) {
+            return;
+        }
+        String recordingName = manifest == null ? "" : manifest.name;
+        String json = scene.toJson().toString();
+        String name = scene.name();
+        HOUSE.execute(() -> {
+            try {
+                bin().putScene(recordingId, recordingName, name, json);
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: the scene '{}' could not be kept in the bin. Undo still brings it back", name, t);
+            }
+        });
+    }
+
+    /** Moves a moments session's folder to the bin. The session being written now cannot be */
+    public static Bin.Item binSession(String sessionId) throws IOException {
+        if (sessionId == null || sessionId.isBlank() || sessionId.contains("/") || sessionId.contains("\\") || sessionId.contains("..") || sessionId.equals("firsts")) {
+            throw new IllegalArgumentException("'" + sessionId + "' is not a moments session");
+        }
+        comedymonkey.dailies.moments.storage.MomentsSession current = comedymonkey.dailies.moments.Moments.currentSession();
+        if (current != null && current.id.equals(sessionId)) {
+            throw new IllegalStateException("That moments session is being written now. Leave the world first");
+        }
+        Path folder = Host.get().dataDirectory().resolve("moments").resolve(sessionId);
+        if (!Files.isDirectory(folder)) {
+            throw new IllegalArgumentException("There is no moments session '" + sessionId + "'");
+        }
+        comedymonkey.dailies.moments.storage.MomentsStorage storage = comedymonkey.dailies.moments.Moments.storage();
+        if (storage != null) {
+            storage.release(sessionId);
+        }
+        String world = StorageReport.sessionWorld(folder);
+        return bin().put(Bin.Kind.SESSION, folder, world.isBlank() ? sessionId : sessionId + " (" + world + ")", world, "");
+    }
+
+    /** Deletes everything in the bin for good. Whoever calls this has asked the person first */
+    public static int emptyBin() throws IOException {
+        int count = bin().empty();
+        Host.LOGGER.info("Dailies: the bin was emptied, {} item(s) deleted for good", count);
+        return count;
+    }
+
+    public static boolean starred(String id) {
+        return stars().has(id);
+    }
+
+    public static void star(String id, boolean on) throws IOException {
+        stars().set(id, on);
+    }
+
+    /**
+     * Makes a folder in the recordings folder (a real one, so the files stay ordinary files a person can find).
+     *
+     * @param parent {@link LibraryQuery#TOP} or a folder's relative path
+     * @return its relative path
+     */
+    public static String createFolder(String parent, String name) throws IOException {
+        String bad = LibraryQuery.badFolderName(name);
+        if (bad != null) {
+            throw new IllegalArgumentException(bad);
+        }
+        String relative = parent == null || parent.isBlank() ? name.trim() : parent + "/" + name.trim();
+        Path folder = folderPath(relative);
+        if (Files.exists(folder)) {
+            throw new IllegalArgumentException("There is already a folder called " + name.trim());
+        }
+        Files.createDirectories(folder);
+        index().foldersChanged();
+        return relative;
+    }
+
+    /** Gives a folder another name; the recordings inside it go with it */
+    public static String renameFolder(String relative, String name) throws IOException {
+        String bad = LibraryQuery.badFolderName(name);
+        if (bad != null) {
+            throw new IllegalArgumentException(bad);
+        }
+        Path folder = folderPath(relative);
+        if (!Files.isDirectory(folder)) {
+            throw new IllegalArgumentException("There is no folder " + relative);
+        }
+        RecordingFile open = Playback.active() ? Playback.file() : null;
+        if (open != null && open.file().toAbsolutePath().normalize().startsWith(folder.toAbsolutePath().normalize())) {
+            throw new IllegalStateException("A recording in that folder is open. Close it first");
+        }
+        Path target = folder.resolveSibling(name.trim());
+        if (Files.exists(target)) {
+            throw new IllegalArgumentException("There is already a folder called " + name.trim());
+        }
+        Files.move(folder, target);
+        index().foldersChanged();
+        return Recorder.folder().relativize(target).toString().replace('\\', '/');
+    }
+
+    /** Deletes a folder, which must be empty: a recording is only ever deleted by going to the bin */
+    public static void deleteFolder(String relative) throws IOException {
+        Path folder = folderPath(relative);
+        if (!Files.isDirectory(folder)) {
+            throw new IllegalArgumentException("There is no folder " + relative);
+        }
+        try (java.util.stream.Stream<Path> inside = Files.list(folder)) {
+            if (inside.findAny().isPresent()) {
+                throw new IllegalStateException("Only an empty folder can be deleted. Move or delete what is in it first");
+            }
+        }
+        Files.delete(folder);
+        index().foldersChanged();
+    }
+
+    /**
+     * Moves recordings into a folder. A file whose name is taken there gets a free one beside it.
+     *
+     * @return where each is now
+     */
+    public static List<Path> moveInto(List<Path> files, String relative) throws IOException {
+        Path folder = relative == null || relative.isBlank() ? Recorder.folder() : folderPath(relative);
+        if (!Files.isDirectory(folder)) {
+            throw new IllegalArgumentException("There is no folder " + relative);
+        }
+        for (Path file : files) {
+            requireNotOpen(file);
+        }
+        List<Path> moved = new ArrayList<>();
+        for (Path file : files) {
+            Path target = folder.resolve(file.getFileName().toString());
+            if (target.toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+                moved.add(file);
+                continue;
+            }
+            if (Files.exists(target)) {
+                target = Bin.freeName(target);
+            }
+            moved.add(move(file, target));
+        }
+        return moved;
+    }
+
+    /** A folder of the recordings folder by its relative path, refused when the path would lead out of it */
+    private static Path folderPath(String relative) {
+        Path root = Recorder.folder().toAbsolutePath().normalize();
+        Path folder = root.resolve(relative).normalize();
+        if (!folder.startsWith(root) || folder.equals(root)) {
+            throw new IllegalArgumentException("'" + relative + "' is not a folder of the recordings folder");
+        }
+        return folder;
+    }
+
+    /**
+     * Gives a recording another preview picture (FILE-6), shown in the list. The recording being watched takes it
+     * through playback's own handle on the file. Any thread but the client's.
+     */
+    public static void setPreview(Path file, byte[] png) throws IOException {
+        RecordingFile open = Playback.active() ? Playback.file() : null;
+        if (open != null && open.file().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+            open.savePreview(png);
+        } else {
+            try (RecordingFile recording = RecordingFile.openForEditing(file)) {
+                recording.savePreview(png);
+            }
+        }
+        changed(file);
+    }
+
+    /** Remembers that a stretch of the open recording went into a video, for the retention rule (REC-8). Never throws */
+    public static void exported(String recordingId, String world, List<Spans.Span> sourceMap, int from, int to, @Nullable Path output) {
+        HOUSE.execute(() -> {
+            try {
+                Path data = Host.get().dataDirectory().toAbsolutePath().normalize();
+                String where = "";
+                long size = 0;
+                if (output != null) {
+                    Path absolute = output.toAbsolutePath().normalize();
+                    where = absolute.startsWith(data) ? data.relativize(absolute).toString().replace('\\', '/') : absolute.toString();
+                    size = Bin.sizeOf(absolute);
+                }
+                exportLog().add(recordingId, world, where, size, System.currentTimeMillis(), sourceMap, from, to);
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: the export could not be noted for the storage settings", t);
+            }
+        });
+    }
+
+    /** How much room everything takes, per world. Looks at the folders: not for the client thread */
+    public static StorageReport storage() {
+        return StorageReport.measure(Host.get().dataDirectory(), list(), bin(), exportLog());
+    }
+
+    /**
+     * The storage settings at work (REC-8, REC-9): what has been in the bin too long is deleted for good, recordings
+     * older than {@code retentionDays} go to the bin unless starred or holding exported footage, and voice audio goes
+     * as the voice settings say. Each part is left alone while its setting keeps everything. Not for the client thread.
+     */
+    public static void housekeeping() {
+        long now = System.currentTimeMillis();
+        try {
+            List<Bin.Item> gone = bin().expire(binDays());
+            if (!gone.isEmpty()) {
+                Host.LOGGER.info("Dailies: {} item(s) had been in the bin longer than {} days and were deleted for good", gone.size(), binDays());
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies: the bin could not be tidied", t);
+        }
+        int days = Host.get().setting("retentionDays", 0);
+        if (days > 0) {
+            try {
+                RecordingFile open = Playback.active() ? Playback.file() : null;
+                for (LibraryIndex.Entry entry : Retention.toBin(list(), now, days, stars().all(), exportLog().all())) {
+                    Path file = fileOf(entry);
+                    if (open != null && open.file().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+                        continue;
+                    }
+                    delete(file);
+                    Host.LOGGER.info("Dailies: '{}' is older than {} days and was moved to the bin", entry.name, days);
+                }
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: old recordings could not be moved to the bin", t);
+            }
+        }
+        boolean onceTranscribed = Host.get().setting("voiceAudioOnceTranscribed", false);
+        int voiceDays = Host.get().setting("voiceAudioDays", 0);
+        comedymonkey.dailies.moments.storage.MomentsStorage storage = comedymonkey.dailies.moments.Moments.storage();
+        if (storage != null && (onceTranscribed || voiceDays > 0)) {
+            try {
+                comedymonkey.dailies.moments.voice.VoiceRetention.apply(storage, onceTranscribed, voiceDays, now);
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: voice audio could not be tidied", t);
+            }
+        }
+    }
+
+    /** Runs a small job of the bin or the folders on the library's own thread, away from the client thread */
+    public static java.util.concurrent.CompletableFuture<Void> house(Runnable work) {
+        return java.util.concurrent.CompletableFuture.runAsync(work, HOUSE);
     }
 
     // --- Combine (FILE-9) ---
@@ -420,7 +827,7 @@ public final class Library {
     }
 
     /** How the mods of the later recordings differ from those of the first, one line a difference */
-    static List<String> modDifferences(List<RecordingManifest> manifests) {
+    public static List<String> modDifferences(List<RecordingManifest> manifests) {
         List<String> lines = new ArrayList<>();
         RecordingManifest first = manifests.get(0);
         Map<String, String> base = new TreeMap<>();

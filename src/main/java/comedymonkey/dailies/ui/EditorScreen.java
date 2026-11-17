@@ -269,7 +269,9 @@ public final class EditorScreen extends Screen {
         }).tip(Kit.t("scene.duplicate.tip")));
         this.top.add(new Gadget.Push(Kit.t("scene.remove"), () -> {
             EditorState.selection.clear();
-            EditorState.history().removeScene(EditorState.history().state().currentSceneIndex());
+            int doomed = EditorState.history().state().currentSceneIndex();
+            comedymonkey.dailies.library.Library.binScene(EditorState.history().state().scene(doomed));
+            EditorState.history().removeScene(doomed);
         }).when(() -> EditorState.history().state().scenes().size() > 1).tip(Kit.t("scene.remove.tip")));
 
         this.top.add(new Gadget.Words(() -> Kit.t("range.label"), Controls.PARCHMENT_DIM).tip(Kit.t("range.tip")));
@@ -302,6 +304,9 @@ public final class EditorScreen extends Screen {
         }).tip(Kit.t("range.end_here.tip")));
         this.top.add(new Gadget.Push(Kit.t("range.clear"), () -> EditorState.history().clearExportRange())
                 .when(() -> EditorState.scene().hasExportRange()).tip(Kit.t("range.clear.tip")));
+        // Trimming starts from the export range: what is kept is what would be exported (FILE-10)
+        this.top.add(new Gadget.Push(Kit.t("range.trim"), () -> Minecraft.getInstance().setScreen(TrimScreen.fromEditor(this)))
+                .tip(Kit.t("range.trim.tip")));
 
         this.top.add(new Gadget.Push(Component.translatable("dailies.ui.timeline.undo"), EditorState::undo).liveTip(() -> {
             String what = EditorState.history().undoDescription();
