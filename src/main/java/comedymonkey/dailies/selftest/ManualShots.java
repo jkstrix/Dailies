@@ -38,6 +38,11 @@ final class ManualShots {
         Files.createDirectories(folder);
         JsonObject none = new JsonObject();
 
+        // A GUI scale at which a 1920x1080 window has room for the editor's panels
+        test.onClientRun(() -> {
+            minecraft.options.guiScale().set(2);
+            minecraft.resizeDisplay();
+        });
         test.sleepTicks(40);
         shot(test, "01-title-screen");
 
@@ -98,6 +103,14 @@ final class ManualShots {
         test.tool("camera_set", args("x", 6.5, "y", -52.0, "z", -2.0, "yaw", 0.0, "pitch", 32.0));
         test.sleepTicks(30);
         shot(test, "06-playback");
+        attempt(test, "the machines", () -> {
+            test.tool("camera_set", args("x", 21.0, "y", -53.0, "z", 4.0, "yaw", 165.0, "pitch", 22.0));
+            test.tool("replay_play", none);
+            test.sleepTicks(30);
+            shot(test, "06b-machines");
+            test.tool("replay_pause", none);
+            PlaybackSteps.jump(test, total / 3);
+        });
 
         attempt(test, "the editor", () -> {
             // Two camera keyframes and a field of view keyframe, so the timeline has something on it
