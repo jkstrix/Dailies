@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * The one place where Moments, the Smart Camera and the MCP server reach the rest of the mod. The core implements
@@ -188,6 +189,42 @@ public final class Host {
         default @Nullable AABB getSubLevelBounds(Object subLevel) {
             return null;
         }
+
+        // --- Craft as targets of the Smart Camera ---
+
+        /** Every craft in the level now, in no particular order */
+        default List<CraftInfo> crafts(Level level) {
+            return List.of();
+        }
+
+        /** The craft with this unique id, or null when it is not in the level (never assembled yet, or gone) */
+        default @Nullable Object craftById(Level level, UUID uniqueId) {
+            return null;
+        }
+
+        /** The unique id Sable gives a craft for its whole life, or null when this is not a craft */
+        default @Nullable UUID craftId(Object craft) {
+            return null;
+        }
+
+        /**
+         * The way a craft's nose points: its own forward direction (towards positive Z, where it was built) turned as
+         * the craft is turned, as drawn this frame. Null when it cannot be told
+         */
+        default @Nullable Vec3 craftForward(Object craft, float partialTick) {
+            return null;
+        }
+    }
+
+    /**
+     * One craft, as the Smart Camera's target lists show it.
+     *
+     * @param uniqueId the id Sable keeps for the craft's whole life, which every snapshot of a recording carries
+     * @param name     the name it was given, or empty
+     * @param bounds   its bounds in world coordinates
+     * @param craft    the object itself, for the other questions of {@link Crafts}
+     */
+    public record CraftInfo(UUID uniqueId, String name, AABB bounds, Object craft) {
     }
 
 }

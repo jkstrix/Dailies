@@ -218,16 +218,209 @@ final class CraftSteps {
             return;
         }
         // The burner only heats with redstone against it, and starts as soon as it has it
+        // How this balloon is built and flown, for anyone who wants the same by hand:
+        //  - it is Aeronautics' own demonstration balloon (the "envelope" ponder scene): a five by five basket of andesite
+        //    casing with dark oak rails, an adjustable burner standing in the middle of the basket floor, four fence posts
+        //    up to an envelope of white and orange envelope blocks, open underneath, right above the burner
+        //  - the burner burns no fuel. It gives hot air while it has a redstone signal, in proportion to the signal, up to
+        //    the amount set on its own dial (500 cubic metres here, which is its most). A redstone block against it is a
+        //    full signal: that is "lit". Take the signal away and the air cools and the balloon comes down
+        //  - only the balloon is made into a craft. The scene's floor of snow and concrete is left on the ground: taken
+        //    along, it is far too heavy for the envelope, which is why the balloon would not leave the ground before
         BlockPos power = burner.below();
         test.command("setblock " + power.getX() + " " + power.getY() + " " + power.getZ() + " minecraft:redstone_block");
-        test.sleepTicks(10);
+        // Aboard: a mob sitting in the basket's seat and one standing on its floor
+        String still = "attributes:[{id:\"minecraft:generic.movement_speed\",base:0.0}],PersistenceRequired:1b,Silent:1b";
+        BlockPos seat = origin.offset(2, 2, 4);
+        test.command("summon minecraft:pig " + (seat.getX() + 0.5) + " " + (seat.getY() + 0.8) + " " + (seat.getZ() + 0.5) + " {CustomName:'\"Aeronaut\"'," + still + "}");
+        test.command("summon minecraft:pig " + (origin.getX() + 5.5) + " " + (origin.getY() + 2) + " " + (origin.getZ() + 5.5) + " {CustomName:'\"Ballast\"'," + still + "}");
+        test.sleepTicks(25);
+        boolean aeronautSeated = seated(test, minecraft, "Aeronaut");
+        if (!aeronautSeated) {
+            test.skip("the mob did not sit in the seat of the balloon's basket: a seated mob on a flying craft was not tried");
+        }
         int before = crafts(minecraft);
-        // A region tight around the balloon: a loose one takes in whatever is nearby as a second object
-        test.command("sable assemble area " + origin.getX() + " " + origin.getY() + " " + origin.getZ() + " "
+        // A region tight around the balloon, from the basket floor up: a loose one takes in whatever is nearby as a second
+        // object, and the floor under the basket is dead weight
+        test.command("sable assemble area " + origin.getX() + " " + (origin.getY() + 1) + " " + origin.getZ() + " "
             + (origin.getX() + size.getX() - 1) + " " + (origin.getY() + size.getY() - 1) + " " + (origin.getZ() + size.getZ() - 1));
         test.waitFor(() -> crafts(minecraft) > before, 15, "the balloon to become a physics object");
         builtBalloon = true;
-        test.log("hot air balloon assembled, burner at " + burner.toShortString());
+
+        // Which craft it is, and where its burner now really is (a craft's blocks live in a region of their own)
+        Vec3 burnerCentre = Vec3.atCenterOf(burner);
+        balloon = test.onClient(() -> {
+            java.util.UUID nearest = null;
+            double best = 24.0;
+            for (Host.CraftInfo craft : Host.crafts().crafts(minecraft.level)) {
+                double distance = craft.bounds().getCenter().distanceTo(burnerCentre);
+                if (distance < best) {
+                    best = distance;
+                    nearest = craft.uniqueId();
+                }
+            }
+            return nearest;
+        });
+        SelfTest.check(balloon != null, "the balloon could not be told apart from the other craft");
+        burnerPlot = test.onClient(() -> {
+            Vec3 inPlot = SableCompat.plotPosition(minecraft.level, balloon, burnerCentre);
+            if (inPlot == null) {
+                return null;
+            }
+            // The craft may have stirred since it was assembled: the burner is the block entity of its kind right there
+            for (BlockPos near : BlockPos.betweenClosed(BlockPos.containing(inPlot).offset(-1, -1, -1), BlockPos.containing(inPlot).offset(1, 1, 1))) {
+                net.minecraft.world.level.block.entity.BlockEntity found = minecraft.level.getBlockEntity(near);
+                if (found != null && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(found.getType()).getPath().contains("burner")) {
+                    return near.immutable();
+                }
+            }
+            return null;
+        });
+        SelfTest.check(burnerPlot != null, "the balloon's burner was not found on the craft");
+        balloonAssembledTick = comedymonkey.dailies.capture.Recorder.get().recordingTick();
+        test.log("hot air balloon assembled as craft " + balloon + " at tick " + balloonAssembledTick + ", burner at " + burner.toShortString() + " with a redstone block under it"
+            + (aeronautSeated ? ", a mob in its seat" : "") + " and a mob standing in the basket");
+
+        // The climb: under its own lift, at least ten blocks
+        double ground = test.onClient(() -> balloonBase(minecraft));
+        StringBuilder heights = new StringBuilder();
+        double height = 0.0;
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (height < 12.0 && System.currentTimeMillis() < deadline) {
+            test.sleepTicks(6);
+            RecordingSteps.Note note = test.onClient(() -> flightNote(minecraft));
+            flightNotes.add(note);
+            test.sleepTicks(4);
+            height = test.onClient(() -> balloonBase(minecraft)) - ground;
+            if (flightNotes.size() % 2 == 0) {
+                heights.append(String.format(" %d: %.1f;", note.tick(), height));
+            }
+        }
+        balloonClimbedTick = comedymonkey.dailies.capture.Recorder.get().recordingTick();
+        test.log("balloon " + balloon + " height above where it stood, in blocks by recording tick:" + heights);
+        SelfTest.check(height >= 10.0, "the balloon did not fly: with its burner lit it rose " + String.format("%.1f", height) + " blocks in a minute (" + heights + ")");
+        double climbRate = height / Math.max(1, balloonClimbedTick - balloonAssembledTick) * 20.0;
+
+        // The burner turned down: the redstone block is taken away, as a player would break it
+        test.command("setblock " + burnerPlot.getX() + " " + (burnerPlot.getY() - 1) + " " + burnerPlot.getZ() + " minecraft:air");
+        balloonBurnerOffTick = comedymonkey.dailies.capture.Recorder.get().recordingTick();
+        StringBuilder after = new StringBuilder();
+        double top = height;
+        double last = height;
+        double lastRate = climbRate;
+        for (int i = 0; i < 16; i++) {
+            test.sleepTicks(6);
+            RecordingSteps.Note note = test.onClient(() -> flightNote(minecraft));
+            flightNotes.add(note);
+            test.sleepTicks(4);
+            double now = test.onClient(() -> balloonBase(minecraft)) - ground;
+            lastRate = (now - last) * 2.0;
+            last = now;
+            top = Math.max(top, now);
+            after.append(String.format(" %d: %.1f;", note.tick(), now));
+        }
+        test.log("balloon with its burner turned down at tick " + balloonBurnerOffTick + ":" + after + " (it climbed at " + String.format("%.1f", climbRate)
+            + " blocks a second, and was last moving at " + String.format("%.1f", lastRate) + ")");
+        SelfTest.check(lastRate < climbRate * 0.5, "turning the burner down did not slow the balloon: it climbed at " + climbRate + " blocks a second and still rises at " + lastRate);
+        // The flight is noted; what the two do when the basket bumps down again is not part of it
+        test.command("kill @e[type=minecraft:pig,name=Aeronaut]");
+        test.command("kill @e[type=minecraft:pig,name=Ballast]");
+        test.sleepTicks(30);
+    }
+
+    /** Where everything was at ticks of the balloon's flight, with the balloon's own state. Checked by BalloonSteps */
+    static final java.util.List<RecordingSteps.Note> flightNotes = new java.util.ArrayList<>();
+
+    /** Call on the client thread, so the tick and the positions belong together */
+    static RecordingSteps.Note flightNote(Minecraft minecraft) {
+        return new RecordingSteps.Note(comedymonkey.dailies.capture.Recorder.get().recordingTick(), flightPositions(minecraft, null));
+    }
+
+    /**
+     * {@link #positions} and the balloon's own state: which way it points, and its burner's flame and filling. Those
+     * are not places, but they are held to the same third of a block: the nose within four degrees, the signal exact,
+     * the air within fifteen cubic metres.
+     */
+    static Map<String, Vec3> flightPositions(Minecraft minecraft, String recorderId) {
+        Map<String, Vec3> positions = positions(minecraft, recorderId);
+        Object flying = balloon == null ? null : Host.crafts().craftById(minecraft.level, balloon);
+        if (flying != null) {
+            Vec3 nose = Host.crafts().craftForward(flying, 1.0F);
+            if (nose != null) {
+                positions.put("balloon nose", nose.scale(5.0));
+            }
+            double[] burner = burnerState(minecraft);
+            if (burner != null) {
+                positions.put("balloon burner signal", new Vec3(burner[0], 0.0, 0.0));
+                positions.put("balloon air", new Vec3(burner[1] / 50.0, burner[2] / 50.0, 0.0));
+            }
+        }
+        return positions;
+    }
+
+    /** The balloon's unique id, where its burner is in the craft's own region, and the ticks of its flight */
+    static java.util.UUID balloon = null;
+    static BlockPos burnerPlot = null;
+    static int balloonAssembledTick = -1;
+    static int balloonClimbedTick = -1;
+    static int balloonBurnerOffTick = -1;
+
+    /** The height of the underside of the balloon. Client thread */
+    static double balloonBase(Minecraft minecraft) {
+        Object craft = balloon == null || minecraft.level == null ? null : Host.crafts().craftById(minecraft.level, balloon);
+        net.minecraft.world.phys.AABB bounds = craft == null ? null : Host.crafts().getSubLevelBounds(craft);
+        return bounds == null ? Double.NaN : bounds.minY;
+    }
+
+    /** Everything the burner holds, for the message of a check that failed on it. Client thread */
+    static String burnerDetail(Minecraft minecraft) {
+        try {
+            net.minecraft.world.level.block.entity.BlockEntity burner = burnerPlot == null ? null : minecraft.level.getBlockEntity(burnerPlot);
+            if (burner == null) {
+                return "; there is no block entity at the burner's place " + burnerPlot + ", where the block is " + (burnerPlot == null ? "unknown" : minecraft.level.getBlockState(burnerPlot));
+            }
+            return "; the burner " + burner.getClass().getSimpleName() + " at " + burnerPlot + " holds " + java.util.Arrays.toString(burnerState(minecraft)) + " and saves as "
+                + burner.saveWithoutMetadata(minecraft.level.registryAccess());
+        } catch (Throwable t) {
+            return "; the burner could not be read: " + t;
+        }
+    }
+
+    /** The burner's signal strength (0 is out, 15 full) and the balloon's size and filling as the game was last told, or null */
+    static double[] burnerState(Minecraft minecraft) {
+        if (burnerPlot == null || minecraft.level == null) {
+            return null;
+        }
+        net.minecraft.world.level.block.entity.BlockEntity burner = minecraft.level.getBlockEntity(burnerPlot);
+        if (burner == null) {
+            return null;
+        }
+        try {
+            double signal = ((Number) burner.getClass().getMethod("getSignalStrength").invoke(burner)).doubleValue();
+            double volume = 0.0;
+            double filled = 0.0;
+            for (Class<?> at = burner.getClass(); at != null; at = at.getSuperclass()) {
+                try {
+                    java.lang.reflect.Field field = at.getDeclaredField("clientBalloonInfo");
+                    field.setAccessible(true);
+                    Object info = field.get(burner);
+                    if (info != null) {
+                        java.lang.reflect.Method volumeOf = info.getClass().getMethod("clientBalloonVolume");
+                        java.lang.reflect.Method filledOf = info.getClass().getMethod("clientBalloonFilled");
+                        volumeOf.setAccessible(true);
+                        filledOf.setAccessible(true);
+                        volume = ((Number) volumeOf.invoke(info)).doubleValue();
+                        filled = ((Number) filledOf.invoke(info)).doubleValue();
+                    }
+                    break;
+                } catch (NoSuchFieldException higher) {
+                    // Look further up
+                }
+            }
+            return new double[]{signal, volume, filled};
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     private static int contraptions(Minecraft minecraft) {

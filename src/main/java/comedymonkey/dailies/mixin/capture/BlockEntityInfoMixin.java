@@ -26,11 +26,16 @@ public abstract class BlockEntityInfoMixin {
         try {
             return original.call(blockEntity, registries);
         } catch (Throwable t) {
-            Snapshots.blockEntityFailed(blockEntity, t);
             try {
-                // Its plain saved data is better than nothing: most of what a game draws is in there
-                return blockEntity.saveWithoutMetadata(registries);
+                // Its plain saved data is better than nothing: most of what a game draws is in there. For the kinds
+                // Dailies knows, the rest is added from what the game was last sent, and nothing is missing
+                CompoundTag saved = blockEntity.saveWithoutMetadata(registries);
+                if (!Snapshots.completeBlockEntity(blockEntity, saved)) {
+                    Snapshots.blockEntityFailed(blockEntity, t);
+                }
+                return saved;
             } catch (Throwable again) {
+                Snapshots.blockEntityFailed(blockEntity, t);
                 return new CompoundTag();
             }
         }

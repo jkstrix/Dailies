@@ -89,6 +89,7 @@ public final class SelfTest {
                 this.skip("the resource pack steps were switched off for this run (dailies.test.skipPacks)");
             }
             PlaybackSteps.run(this);
+            BalloonSteps.run(this);
             ExportSteps.run(this);
             SettingsSteps.editorDropdown(this);
             ExportPresetSteps.run(this);
