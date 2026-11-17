@@ -1,14 +1,18 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dailies Manual</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <style>
 /* Layout: a workshop manual in the house style of the Dailies specification. A masthead, a sticky strip of chapters, then
-   chapters that pair short instructions with a picture taken from the running game. Brass, walnut and notice paper. */
+   chapters that pair short instructions with a picture taken from the running game. Brass, walnut and notice paper.
+   No fonts or scripts are fetched: the page works offline. */
 :root {
 	--ground: #e8e6e0; --sheet: #f4f1ea; --ink: #2b1d0e; --muted: #6b5a49; --walnut: #4e3626; --brass: #9a7a34;
 	--verdigris: #3f7f6f; --rust: #8a3412; --rule: #cdbf9f; --key: #fbf9f4;
-	--display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
-	--body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+	--display: "Bahnschrift SemiCondensed", Bahnschrift, "Arial Narrow", Impact, sans-serif;
+	--body: "Segoe UI", system-ui, -apple-system, sans-serif;
 	--mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
@@ -22,9 +26,8 @@
 html { scroll-behavior: smooth }
 body { background: var(--ground); color: var(--ink); font: 17px/1.58 var(--body); margin: 0;
 	padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ground) }
 .wrap { max-width: 1040px; margin: 0 auto }
-h1, h2, h3 { font-family: var(--display); line-height: 1.05; text-wrap: balance; margin: 0 }
+h1, h2, h3 { font-family: var(--display); line-height: 1.08; text-wrap: balance; margin: 0 }
 h1 { font-size: clamp(44px, 8vw, 84px); font-weight: 800; text-transform: uppercase; letter-spacing: .01em }
 h1 span { color: var(--brass) }
 h2 { font-size: clamp(30px, 4vw, 42px); font-weight: 800; text-transform: uppercase; letter-spacing: .01em }
@@ -34,13 +37,13 @@ a { color: var(--verdigris) }
 :focus-visible { outline: 3px solid var(--brass); outline-offset: 2px }
 code { font: 0.86em var(--mono); background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere }
 kbd { font: 700 0.82em var(--mono); background: var(--key); border: 1px solid var(--rule); border-bottom-width: 3px; border-radius: 5px; padding: 1px 7px; white-space: nowrap }
-.eyebrow { font: 700 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
+.eyebrow { font: 700 12px/1.4 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
 .lede { color: var(--muted); font-size: 18px }
 
 .mast { display: grid; gap: 12px; padding-block: 40px 28px }
 .mast p { font-size: 19px; color: var(--muted) }
 
-nav.index { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--ground); border-block: 2px solid var(--rule) }
+nav.index { position: sticky; top: 0; z-index: 5; background: var(--ground); border-block: 2px solid var(--rule) }
 nav.index ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; overflow-x: auto }
 nav.index a { display: block; padding: 11px 10px; color: var(--ink); text-decoration: none; font: 600 16px var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; border-bottom: 3px solid transparent }
 nav.index a:hover { border-bottom-color: var(--brass) }
@@ -54,7 +57,8 @@ ul.plain, ol.plain { margin: 0; padding-left: 22px; display: grid; gap: 7px; max
 
 figure { margin: 0; display: grid; gap: 8px }
 figure img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet) }
-figure.crop img { aspect-ratio: 16 / 4; object-fit: cover; object-position: top }
+figure.top img { aspect-ratio: 1280 / 330; object-fit: cover; object-position: top }
+figure.foot img { aspect-ratio: 1280 / 150; object-fit: cover; object-position: bottom }
 figcaption { color: var(--muted); font-size: 15px }
 
 .tablebox { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px }
@@ -62,7 +66,8 @@ table { width: 100%; border-collapse: collapse; font-size: 16px }
 th { text-align: left; font: 700 12px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 2px solid var(--rule) }
 td { padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
 tr:last-child td { border-bottom: 0 }
-td:first-child { white-space: nowrap; font-weight: 700 }
+td:first-child { font-weight: 700 }
+td.nw, th.nw { white-space: nowrap }
 
 .note { background: var(--sheet); border: 1px dashed var(--brass); border-radius: 6px; padding: 14px 18px; display: grid; gap: 8px }
 .note > b:first-child { font: 700 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--brass) }
@@ -71,345 +76,796 @@ td:first-child { white-space: nowrap; font-weight: 700 }
 footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule); padding-top: 18px }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto } }
 </style>
-
+</head>
+<body>
 <div class="wrap">
 	<header class="mast">
-		<div class="eyebrow">Manual · Minecraft 1.21.1 · NeoForge · version 0.1.0</div>
+		<div class="eyebrow">Manual · Minecraft 1.21.1 · NeoForge 21.1 · version 0.1.0</div>
 		<h1>The <span>Dailies</span></h1>
-		<p>Record what you play, watch it back from any angle, turn it into shots and export them as video. Every picture here was taken from the running mod.</p>
+		<p>Record what you play, watch it back from any angle, turn it into shots and export them as video. Dailies also keeps a log of what happened while you played, so the good bits are easy to find. Every picture here was taken from the running game.</p>
 	</header>
 
 	<nav class="index" aria-label="Chapters">
 		<ul>
 			<li><a href="#install">Install</a></li>
 			<li><a href="#record">Record</a></li>
+			<li><a href="#library">Recordings</a></li>
 			<li><a href="#watch">Watch</a></li>
-			<li><a href="#machines">Machines</a></li>
 			<li><a href="#edit">Edit</a></li>
 			<li><a href="#camera">Smart Camera</a></li>
 			<li><a href="#export">Export</a></li>
 			<li><a href="#moments">Moments</a></li>
+			<li><a href="#mcp">MCP server</a></li>
 			<li><a href="#settings">Settings</a></li>
 			<li><a href="#limits">Not yet checked</a></li>
+			<li><a href="#tests">Tests</a></li>
 		</ul>
 	</nav>
 
+	<!-- ============================================================ Install -->
 	<section id="install">
 		<h2>Install</h2>
 		<div class="two">
 			<div class="stack">
-				<p>Dailies is one jar for the client. A server never needs it, and you can join any server with it installed.</p>
-				<ul class="plain">
-					<li>Build it with <code>gradlew build</code>. The jar is <code>build/libs/dailies-1.21.1-0.1.0.jar</code> (31 MB, because the video encoder is packed inside).</li>
-					<li>Put it in your <code>mods</code> folder with NeoForge 21.1 for Minecraft 1.21.1.</li>
-					<li>Everything it writes goes in <code>dailies/</code> in the game folder: <code>recordings</code>, <code>moments</code>, <code>exports</code> and <code>encoder</code>.</li>
-					<li>Create, Sable, Create Aeronautics, Simple Voice Chat, Sodium and Iris are supported when present and never required.</li>
-				</ul>
+				<h3>To install Dailies</h3>
+				<ol class="plain">
+					<li>Build the jar with <code>gradlew build</code>. It is written to <code>build/libs/dailies-1.21.1-0.1.0.jar</code>. The video encoder is packed inside it, so nothing else needs installing.</li>
+					<li>Put the jar in your <code>mods</code> folder, with NeoForge 21.1 for Minecraft 1.21.1.</li>
+					<li>Start the game. Three small square buttons sit above the language button on the title screen: Recordings, Settings and the moments page.</li>
+				</ol>
+				<p>Dailies is for your own game only. A server never needs it, and you can join any server with it installed.</p>
+				<p>Everything it writes goes in <code>dailies/</code> in the game folder: <code>recordings</code>, <code>moments</code>, <code>exports</code>, the <code>bin</code>, and the <code>shared</code> and <code>import</code> folders for swapping sessions with friends.</p>
 			</div>
-			<figure>
-				<img src="img/01-title-screen.jpg" alt="The title screen with a small brass button above the language button" width="1280" height="720">
-				<figcaption>The small brass button at the bottom left of the title screen opens your recordings.</figcaption>
-			</figure>
+			<div class="stack">
+				<h3>Mods it works beside</h3>
+				<p>None of these is needed. Dailies switches on its support for each only when it is installed.</p>
+				<div class="tablebox"><table>
+					<thead><tr><th>Mod</th><th>What Dailies does with it</th></tr></thead>
+					<tbody>
+						<tr><td>Create</td><td>Contraptions record and play back with all their blocks, turning as they did.</td></tr>
+						<tr><td>Sable, Create Aeronautics</td><td>Physics craft and their passengers play back where they flew. Craft are logged as moments.</td></tr>
+						<tr><td>Sodium, Iris</td><td>Playback and export wait for their terrain and keep shader packs on the video's clock.</td></tr>
+						<tr><td>Simple Voice Chat</td><td>Voice chat can be recorded, heard in playback, exported and written down.</td></tr>
+						<tr><td>Distant Horizons</td><td>Playback shows far terrain from a store of its own, never touching your real worlds' data.</td></tr>
+					</tbody>
+				</table></div>
+				<p>Tested versions: Create 6.0.10, Sable 2.0.6, Create Aeronautics 1.3.2, Iris 1.8.14, Sodium 0.8.13 and Distant Horizons 3.3.3.</p>
+			</div>
+		</div>
+		<div class="note"><b>The Dailies Companion, for servers</b>
+			<p>Some things only a server knows: a boss fight and who fought it, a close call, a totem saving someone, a big fall, an explosion, a lightning strike, taming, breeding, treasure fishing, a skipped night, a player's first join, a craft assembled or lost, and a Create train leaving or reaching a station. The companion is a small separate server mod that tells each player's game about these, so Dailies can log them as moments.</p>
+			<ul class="plain">
+				<li>To use it, put <code>dailies-companion-1.21.1-&lt;version&gt;.jar</code> in the server's <code>mods</code> folder. Players need nothing extra. In singleplayer, put it beside Dailies.</li>
+				<li>It is optional on both sides. A player without Dailies is sent nothing; a server without it simply gives Dailies less to log.</li>
+				<li>Operators and command blocks can send their own moments: <code>/moment send @a town_founded Founded the town of Brasswick</code>.</li>
+				<li>Its settings, which events it raises and how near other players must be, are in <code>config/dailies_companion-common.toml</code>. <code>companion/README.md</code> lists everything.</li>
+			</ul>
 		</div>
 	</section>
 
+	<!-- ============================================================ Record -->
 	<section id="record">
 		<h2>Record</h2>
 		<div class="two">
 			<div class="stack">
-				<p>Open the pause menu in any world or server. The Dailies buttons sit beside the game's own.</p>
-				<ul class="plain">
-					<li><b>Start recording</b> begins at once. A brass plate with a red lamp and a clock shows in the top left while it runs.</li>
-					<li><b>Pause</b> stops the clock; nothing is captured until you resume.</li>
-					<li><b>Finish</b> asks for a name and saves. <b>Cancel</b> deletes what was captured, after asking.</li>
-				</ul>
-				<p>All of these also have key bindings under Options, Controls, Dailies. They are unbound until you choose keys. So are the four marker keys, which drop a coloured flag on the timeline at that moment.</p>
+				<h3>To make a recording</h3>
+				<ol class="plain">
+					<li>Join any world or server and press <kbd>Esc</kbd>.</li>
+					<li>Press <b>Start recording</b> in the Dailies column at the side of the pause menu. A small plate with a red lamp and a clock shows in the top left while it runs.</li>
+					<li>Play as usual. <b>Pause recording</b> stops the clock; nothing is captured until you resume.</li>
+					<li>Press <b>Finish recording</b>. Dailies asks for a name, with the date and time filled in.</li>
+				</ol>
+				<p><b>Cancel recording</b> throws away what was captured, after asking. The column also has <b>Recordings</b>, <b>Moments</b> and <b>Settings</b>. The setting "Pause Menu Buttons" moves the column to the left.</p>
 			</div>
 			<figure>
-				<img src="img/03-pause-menu.jpg" alt="The pause menu with four Dailies buttons on the right: pause, finish, cancel, recordings" width="1280" height="720">
-				<figcaption>The pause menu while recording. The plate in the top left shows the recording's clock.</figcaption>
+				<img src="img/02-recording.jpg" alt="A flat world with a pig and a campfire, a small plate with a red lamp and 0:00 in the top left, and a Recording started notice at the top" width="1280" height="720">
+				<figcaption>Just after starting: the recording plate in the top left and the "Recording started" notice at the top.</figcaption>
 			</figure>
 		</div>
 		<div class="two">
 			<figure>
-				<img src="img/04-name-the-recording.jpg" alt="A small screen asking for the recording's name" width="1280" height="720">
-				<figcaption>Finishing asks for a name. Turn on "Save without asking" in the settings to skip this.</figcaption>
+				<img src="img/03-pause-menu.jpg" alt="The pause menu with a Dailies column on the right: Pause recording, Finish recording, Cancel recording, Recordings, Moments, Settings" width="1280" height="720">
+				<figcaption>The pause menu while recording, with the Dailies column on the right.</figcaption>
 			</figure>
+			<figure>
+				<img src="img/04-name-the-recording.jpg" alt="A small brass-edged box titled Name this recording, with the date and time as the name and Save and Keep recording buttons" width="1280" height="720">
+				<figcaption>Finishing asks for a name. "Keep recording" goes back to the game. Turn on "Save Without Asking" to skip this.</figcaption>
+			</figure>
+		</div>
+
+		<h3>Keys</h3>
+		<p>Find them under Options, Controls, Key Binds, Dailies. The recording keys are unbound until you choose keys for them.</p>
+		<div class="tablebox"><table>
+			<thead><tr><th>Key binding</th><th>Does</th></tr></thead>
+			<tbody>
+				<tr><td>Start or finish recording</td><td>Starts a recording, or finishes the one running.</td></tr>
+				<tr><td>Pause or resume recording</td><td>Pauses or resumes.</td></tr>
+				<tr><td>Drop marker 1 to 4</td><td>Drops a coloured marker on the timeline at this moment. Each has its own colour, description, and whether it stores where you stand, in the settings.</td></tr>
+				<tr><td>Log a moment</td><td>Logs a moment labelled "Good moment" (the setting "Moment Key Label"). The quickest way to flag "that was good" without typing.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The <code>/dailies</code> command</h3>
+		<p>Type it in the chat. It belongs to your own game, so it works on every server and no server ever sees it. Sub-commands and marker colours complete with <kbd>Tab</kbd>, and every one answers in the chat.</p>
+		<div class="tablebox"><table>
+			<thead><tr><th class="nw">Command</th><th>Does</th></tr></thead>
+			<tbody>
+				<tr><td class="nw"><code>/dailies start</code></td><td>Starts a recording.</td></tr>
+				<tr><td class="nw"><code>/dailies finish [name]</code></td><td>Finishes it. With a name, saves under that name without asking.</td></tr>
+				<tr><td class="nw"><code>/dailies pause</code>, <code>resume</code></td><td>Pauses or resumes.</td></tr>
+				<tr><td class="nw"><code>/dailies cancel</code></td><td>Throws the recording away, after asking.</td></tr>
+				<tr><td class="nw"><code>/dailies mark [colour] [yes|no] [words]</code></td><td>Drops a marker. Every part is optional. Colours are red, orange, yellow, green, cyan, blue, purple and white. <code>yes</code> stores where you stand.</td></tr>
+				<tr><td class="nw"><code>/dailies moment &lt;words&gt;</code></td><td>Logs a moment with those words, for example <code>/dailies moment that was good</code>.</td></tr>
+				<tr><td class="nw"><code>/dailies moments</code></td><td>Opens the moments page in your web browser.</td></tr>
+				<tr><td class="nw"><code>/dailies config</code></td><td>Opens Dailies' settings.</td></tr>
+				<tr><td class="nw"><code>/dailies hide</code></td><td>Hides everything of Dailies on the screen. Again brings it back.</td></tr>
+			</tbody>
+		</table></div>
+		<p>While you watch a recording, only <code>hide</code>, <code>config</code> and <code>moments</code> work; the rest say why not. Nothing typed in the chat goes anywhere, and other commands are turned away.</p>
+
+		<div class="two">
 			<div class="stack">
+				<h3>Markers</h3>
+				<ul class="plain">
+					<li>A marker is a coloured flag on the timeline, and a moment on the moments page.</li>
+					<li>A marker that stored your position also shows in playback as a coloured ring on the ground with a short post. Point at it in the editor to read its words; click it to jump to its moment. Rings never appear in exports.</li>
+					<li>"Mark Dimension Changes" (on) drops a marker each time you change dimension.</li>
+				</ul>
+				<h3>Your HUD</h3>
+				<p>Turn on "Record My HUD" to keep your hotbar, selected slot, health, hunger and experience. Playback can then show your HUD, and riding along with yourself shows it as you saw it. It is off by default.</p>
+			</div>
+			<div class="stack">
+				<h3>If the game crashes</h3>
+				<p>Next time you start the game, the title screen offers "Unfinished recordings": <b>Recover all</b>, <b>Discard all</b> or <b>Later</b>. Recovering keeps everything up to the last few seconds before the game closed.</p>
+				<h3>Server resource packs</h3>
+				<p>When a server pushes a resource pack and you accept it, the pack itself is stored inside the recording, once. Playback puts it on at the right moments, above your own packs, and takes it off when you close the recording, leaving your own packs as they were. A pack you declined is never used. The scene look "Server's packs" switches them off for one scene.</p>
 				<h3>Good to know</h3>
 				<ul class="plain">
-					<li>A recording is one <code>.dailies</code> file. Rename it, move it, copy it; everything that refers to it uses an id stored inside.</li>
-					<li>If the game closes or crashes mid-recording, the next launch offers to recover it. At most a couple of seconds are lost.</li>
-					<li>"Start by itself" records every world you join. "Finish on leaving" is on by default.</li>
-					<li>Recording costs no measurable frame time: 8.5 ms a frame with it on and off in the test runs.</li>
+					<li>A recording is one <code>.dailies</code> file. Copy it, move it or rename it on disk; everything that refers to it uses an id stored inside.</li>
+					<li>"Start by Itself" records every world you join. "Finish on Leaving" is on by default.</li>
+					<li>Dailies warns when the disk has less than 20 GB free and pauses the recording below 5 GB, so the file is never cut short.</li>
 				</ul>
 			</div>
 		</div>
 	</section>
 
+	<!-- ============================================================ The recordings list -->
+	<section id="library">
+		<h2>The recordings list</h2>
+		<p class="lede">Open it from the pause menu or the title screen. One plate with three views, chosen from the dropdown at its top left.</p>
+		<figure>
+			<img src="img/05-recordings-list.jpg" alt="The Recordings plate: view, folder, search, sort and Starred along the top; one recording in the list; a details pane on the right; Watch, Edit, Star, Move to, Combine, Trim, Delete, Share, Import, Folders, Open folder and Done along the foot" width="1280" height="720">
+			<figcaption>The Recordings view with one recording, nothing chosen yet. Along the top: view, folder, search, sort and Starred. Along the foot: what can be done to the chosen recordings.</figcaption>
+		</figure>
+		<div class="two">
+			<div class="stack">
+				<h3>To find a recording</h3>
+				<ul class="plain">
+					<li><b>Search:</b> start typing anywhere on the list. Every word must be found in a recording's name, world, players or date (as 2026-11-17 or 17 Nov 2026). A search looks in every folder.</li>
+					<li><b>Sort:</b> newest first, oldest first, by name, longest first or largest first.</li>
+					<li><b>Starred:</b> tick it to see only starred recordings.</li>
+					<li>The arrow keys move the choice, <kbd>Enter</kbd> or a double click watches it.</li>
+					<li>Click to choose one. <kbd>Ctrl</kbd>+click chooses several, <kbd>Shift</kbd>+click a run of them. The pane on the right shows the world, players, when recorded, length, size, folder, mods, and what an edited recording was made from.</li>
+				</ul>
+				<h3>To keep things tidy</h3>
+				<ul class="plain">
+					<li><b>Folders</b> makes a folder, or renames or deletes the one shown (only when empty). Folders are real folders in <code>dailies/recordings</code>.</li>
+					<li><b>Move to</b> puts the chosen recordings in a folder.</li>
+					<li><b>Star</b> marks recordings to find them quickly. A star survives renaming, moving and the bin, and keeps a recording safe from the storage settings.</li>
+					<li><b>Edit</b> changes a recording's name and its preview picture: the one it has, the preview of a recording it was made from, or a still of the view now when it is the recording open.</li>
+				</ul>
+			</div>
+			<div class="stack">
+				<h3>To trim a recording</h3>
+				<ol class="plain">
+					<li>Choose it and press <b>Trim</b>. Its timeline shows clips as bands, events as marks and markers as lines.</li>
+					<li>Drag along the timeline to choose a stretch, then <b>Keep only this</b>, <b>Cut this</b> or <b>Keep this too</b>. What is kept shows in brass and is listed below; type exact times as 1:05.5, 65.5 or 1310t (ticks).</li>
+					<li>Name it and press <b>Trim</b>. A new recording is made; the original is left as it is.</li>
+				</ol>
+				<p>A cut in the middle of a stretch means playing the recording in the game to describe the world there. The trim asks before leaving a world for it. The editor's <b>Trim</b> button opens the same screen with the scene's export range chosen.</p>
+				<h3>To combine recordings</h3>
+				<ol class="plain">
+					<li>Choose two or more and press <b>Combine</b>.</li>
+					<li>Drag them by the dots, or use the arrows, into the order they should play. <b>Add a recording</b> adds another at the end.</li>
+					<li>Name it and press <b>Combine</b>.</li>
+				</ol>
+				<p>At each join the world is rebuilt from the start of the next recording, so different worlds join cleanly. The join adds no time. Recordings of different Minecraft versions cannot be combined; different mods are allowed and listed.</p>
+			</div>
+		</div>
+		<div class="two">
+			<div class="stack">
+				<h3>The bin</h3>
+				<p><b>Delete</b> moves a recording to the bin, without asking. So does removing a scene in the editor or a moments session. Things wait in the bin for 30 days ("Days in the Bin"), then go for good.</p>
+				<p>To get something back, switch the view to <b>Bin</b>, choose it and press <b>Restore</b>. A recording goes back to its folder, a scene back into its recording. <b>Empty bin</b> deletes everything in it for good, after asking; it is the only way anything is deleted for good early.</p>
+			</div>
+			<div class="stack">
+				<h3>Storage</h3>
+				<p>The <b>Storage</b> view shows how much room recordings, moments audio, exports and the bin take, in all and per world, and how much is free on the disk. Beside it are the settings that keep it in check: bin recordings older than a number of days (0 keeps every recording; starred ones and ones with exported footage are spared), remove voice audio once it is written down or after some days, and the disk warning and pause levels. Nothing is deleted for good by these: recordings go to the bin first.</p>
+			</div>
+		</div>
+		<div class="note"><b>To share a session with a friend</b>
+			<ul class="plain">
+				<li>Choose a recording and press <b>Share</b>. It is packed with its moments into one <code>.dailiesshare</code> file in <code>dailies/shared</code>, and the folder opens. Only your own voice lines go in; what others said stays on your computer.</li>
+				<li>To take one in, put your friends' <code>.dailiesshare</code> files in <code>dailies/import</code> and press <b>Import</b>. (If the folder is empty, Import opens it.) Their recording joins your list under <code>shared/&lt;their name&gt;</code>, and their moments join the moments page, marked as theirs.</li>
+				<li>Recordings made by different players on the same server at the same time line up by themselves, tick for tick. See <a href="#pov">points of view</a>.</li>
+			</ul>
+		</div>
+	</section>
+
+	<!-- ============================================================ Watch -->
 	<section id="watch">
 		<h2>Watch</h2>
 		<div class="two">
 			<div class="stack">
-				<p>Pick a recording from the list and choose <b>Watch</b>. You are a free, invisible camera inside the recorded session. The player who made the recording appears like anyone else.</p>
-				<p>Fly with the usual movement keys and the mouse. The bar along the bottom shows the whole recording, where you are, any markers, and whether the camera is free or following a track.</p>
+				<p>Choose a recording and press <b>Watch</b>. You are an invisible camera inside the recorded session. The player who made the recording appears like anyone else. Nothing in the recording can move or hurt you, and nothing you do changes it.</p>
+				<p>The bar along the bottom shows the time, whether it is playing, and whether the camera follows its track or is free. Press <kbd>T</kbd> to open the editor. It puts itself back after a jump or an export.</p>
+				<h3>To fly the camera</h3>
+				<ul class="plain">
+					<li>With no screen open, the movement keys fly and the mouse looks, as in spectator mode.</li>
+					<li>In the editor, the movement keys still fly. Hold the <b>right mouse button</b> over the view to look around.</li>
+					<li>The mouse wheel changes flight speed while you fly; the sprint key triples it.</li>
+				</ul>
 			</div>
 			<figure>
-				<img src="img/05-recordings-list.jpg" alt="The recordings list with one recording and Watch, Rename, Delete, Open folder and Done buttons" width="1280" height="720">
-				<figcaption>The recordings list: name, date, length, world and size.</figcaption>
+				<img src="img/06-playback.jpg" alt="A recording watched from above: the recorder walking beside a stone square with a campfire, a pig nearby, a blue marker ring with a post, and the playback bar along the bottom reading 0:03.3 of 0:09.9, paused, camera: track" width="1280" height="720">
+				<figcaption>Watching, paused at 0:03.3. The blue ring and post mark where a marker was dropped.</figcaption>
 			</figure>
 		</div>
-		<figure>
-			<img src="img/06-playback.jpg" alt="A recording being watched from above, with the playback bar along the bottom showing time, a marker flag and camera state" width="1280" height="720">
-			<figcaption>Watching a recording. The blue flag on the bar is a marker dropped while recording.</figcaption>
-		</figure>
 		<div class="tablebox"><table>
 			<thead><tr><th>Key</th><th>Does</th></tr></thead>
 			<tbody>
 				<tr><td><kbd>P</kbd></td><td>Play or pause</td></tr>
 				<tr><td><kbd>.</kbd></td><td>Forward one tick (a twentieth of a second)</td></tr>
 				<tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Jump back or forward five seconds</td></tr>
-				<tr><td><kbd>-</kbd> <kbd>=</kbd></td><td>Slower or faster, from a tenth of normal speed to eight times</td></tr>
+				<tr><td><kbd>-</kbd> <kbd>=</kbd></td><td>Slower or faster: a tenth, a quarter, half, normal, double, four and eight times</td></tr>
 				<tr><td><kbd>C</kbd></td><td>Follow the camera track, or fly free</td></tr>
 				<tr><td><kbd>T</kbd></td><td>Open or close the editor</td></tr>
+				<tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>In the editor: jump to the start or the end</td></tr>
 				<tr><td><kbd>F7</kbd></td><td>List the mods that differ from when the recording was made</td></tr>
-				<tr><td><kbd>F1</kbd></td><td>Hide everything of Dailies' own</td></tr>
-				<tr><td><kbd>Esc</kbd></td><td>The pause menu, with <b>Close recording</b></td></tr>
+				<tr><td><kbd>F1</kbd></td><td>Hide the interface, the editor included</td></tr>
+				<tr><td><kbd>Esc</kbd></td><td>The pause menu, with <b>Close recording</b>, <b>Moments</b> and <b>Settings</b></td></tr>
 			</tbody>
 		</table></div>
-		<p>Jumping to any moment shows the world exactly as it was then, whether you got there by playing or by jumping forward or back.</p>
-	</section>
+		<p>These keys can be changed under Controls, and work only while you watch. Undo and redo have bindings too, unbound until you choose keys. Jumping to any moment shows the world exactly as it was then, whether you got there by playing or by jumping forward or back.</p>
 
-	<section id="machines">
-		<h2>Machines</h2>
-		<figure>
-			<img src="img/06b-machines.jpg" alt="A hot air balloon, a bearing contraption with pigs sitting in Create seats, and two stone physics platforms with seats" width="1280" height="720">
-			<figcaption>From the test recording: an Aeronautics balloon, a Create bearing contraption with mobs in its seats, and two Sable physics platforms.</figcaption>
-		</figure>
 		<div class="two">
 			<div class="stack">
-				<h3>What plays back</h3>
+				<h3>To follow a player</h3>
+				<p>The <b>Players</b> card in the editor lists everyone in the recording at this moment, with their face, name and distance. For each:</p>
 				<ul class="plain">
-					<li>Create contraptions, with all their blocks, turning as they did.</li>
-					<li>Sable physics objects and Aeronautics craft, following their recorded position and rotation.</li>
-					<li>Mobs and players sitting in Create seats on either.</li>
-					<li>Mobs and players standing loose on a moving deck, carried with it.</li>
+					<li><b>Look</b> turns the camera to face them.</li>
+					<li><b>Follow</b> keeps them in view: the camera moves as they move. The movement keys still fly it round them. Press again to stop.</li>
+					<li><b>Ride</b> sees through their eyes. Press again to leave.</li>
+					<li><b>Hide</b> leaves them out of the picture in this scene, in exports too.</li>
 				</ul>
+				<p>Someone too far away to be in sight is still listed, with only Hide to press. The Viewer card's <b>Ride along</b> does the same for any entity, chosen by clicking it.</p>
 			</div>
+			<div class="stack" id="pov">
+				<h3>Points of view from friends' recordings</h3>
+				<p>When a friend shares their recording of the same session, Dailies lines the two up by the server's game time, to the tick. To cut between them:</p>
+				<ol class="plain">
+					<li>Import their share (see <a href="#library">the recordings list</a>).</li>
+					<li>In the editor's Keyframe tab, press <b>Link other points of view</b>. Each linked recording appears as a lane on the timeline, brightest where the scene shows it.</li>
+					<li>Click a lane, or add a <b>Point of view</b> keyframe, to show that recording from that tick. The camera stays where it was, and your other keyframes and looks carry on.</li>
+				</ol>
+				<p>On the moments page, a clip lists every linked recording that covers it, each with its own cue button.</p>
+			</div>
+		</div>
+
+		<h3>Create contraptions and flying craft</h3>
+		<div class="two">
+			<figure>
+				<img src="img/06b-machines.jpg" alt="A hot air balloon on a white base, a wooden bearing contraption with pigs in Create seats, and two stone platforms with seats and pigs, seen during playback" width="1280" height="720">
+				<figcaption>From the manual's own recording, playing: an Aeronautics balloon, a Create bearing contraption with pigs in its seats, and two Sable platforms.</figcaption>
+			</figure>
 			<div class="stack">
-				<h3>How close</h3>
-				<p>In the test runs, craft were within 0.26 of a block of their live position after a jump, including during a ten-block fall. Seated and standing passengers passed the same check.</p>
-				<p>Dailies needs none of these mods and switches its support on only when they are installed.</p>
+				<ul class="plain">
+					<li>Create contraptions play back with all their blocks, turning as they did.</li>
+					<li>Sable craft and Aeronautics aircraft follow their recorded position and rotation.</li>
+					<li>Players and mobs in seats move with them; players standing loose on a moving deck stay on it.</li>
+				</ul>
+				<p>The scripted run checks craft against where they were live, reached both by playing and by jumping: within a third of a block, and standing passengers within a quarter of a block of the deck.</p>
 			</div>
 		</div>
 	</section>
 
+	<!-- ============================================================ Edit -->
 	<section id="edit">
 		<h2>Edit</h2>
-		<p class="lede">Press <kbd>T</kbd> while watching. The editor leaves the middle of the view clear and does not pause the world.</p>
+		<p class="lede">Press <kbd>T</kbd> while watching. The editor keeps the middle of the view clear, and everything you change is saved into the recording as you go.</p>
 		<figure>
-			<img src="img/07b-editor-keyframe-selected.jpg" alt="The editor: scenes and export range along the top, viewer controls on the left, keyframe fields on the right, timeline with a camera track along the bottom" width="1280" height="720">
-			<figcaption>The editor with a camera keyframe selected. The shaded band on the timeline is the range that will be exported.</figcaption>
+			<img src="img/07-editor-keyframes.jpg" alt="The editor: a one-row bar along the top, Viewer and Players cards on the left, the Keyframe tab on the right with a button for each kind of keyframe, and the timeline along the bottom with events, a clip, voice strips and a camera track" width="1280" height="720">
+			<figcaption>The editor with nothing selected. The Keyframe tab shows a button for each kind of keyframe. The yellow line through the view is the camera path.</figcaption>
 		</figure>
 		<div class="two">
 			<div class="stack">
 				<h3>The parts</h3>
 				<ul class="plain">
-					<li><b>Top bar:</b> scenes (new, rename, duplicate, remove), the export range, undo, redo.</li>
-					<li><b>Viewer</b> (left): flight speed, view angle, roll, ride along with an entity.</li>
+					<li><b>The top bar</b>, one row: the scene, the export range with <b>Start here</b>, <b>End here</b> and <b>Trim</b>, then undo, redo, <b>Moments</b> (the moments page), <b>...</b> and <b>Close</b>.</li>
+					<li><b>Viewer</b> card (left): flight speed, view angle, roll, Ride along, and ticks for the camera path, markers in the world, gliding to a stop, and flying where you look.</li>
+					<li><b>Players</b> card (left): see <a href="#watch">Watch</a>.</li>
 					<li><b>Right panel:</b> three tabs, Keyframe, Looks and Export.</li>
-					<li><b>Timeline</b> (bottom): transport, a ruler in seconds, one row per track, keyframes as diamonds.</li>
+					<li><b>Timeline</b> (bottom): transport, speed, whether the camera follows its track, the time, the ruler, the moments lane, then one row per track.</li>
 				</ul>
-				<h3>Framing a shot</h3>
-				<p>Hold the <b>right mouse button</b> over the view to look around and fly with the movement keys, without closing the editor. The mouse wheel changes flight speed while you fly.</p>
+				<p>Hover over anything for a short explanation.</p>
+			</div>
+			<figure>
+				<img src="img/07h-editor-more-menu.jpg" alt="The editor with the ... menu open below the top bar: New scene, Rename this scene, Duplicate this scene, Remove this scene (greyed), Forget the export range" width="1280" height="720">
+				<figcaption>The "..." menu on the top bar. "Remove this scene" is greyed because the last scene cannot be removed.</figcaption>
+			</figure>
+		</div>
+		<div class="two">
+			<div class="stack">
+				<h3>Scenes</h3>
+				<p>A recording has one or more scenes. Each has its own tracks, looks and export range. Change scene with the dropdown at the left of the top bar. The "..." menu adds, renames, duplicates and removes scenes. A removed scene goes to the bin, and undo brings it back too.</p>
+				<h3>To set what is exported</h3>
+				<ol class="plain">
+					<li>Go to where the video should start and press <b>Start here</b>.</li>
+					<li>Go to where it should end and press <b>End here</b>. Or type ticks into the two boxes and press <kbd>Enter</kbd>.</li>
+				</ol>
+				<p>The range shows as a shaded band on the timeline; drag either end to move it. With no range set, an export runs from the first keyframe to the last. "Forget the export range" in the "..." menu clears it. <b>Trim</b> makes a new recording from the range.</p>
 			</div>
 			<div class="stack">
-				<h3>Working with keyframes</h3>
+				<h3>To add a keyframe</h3>
+				<ol class="plain">
+					<li>Go to the moment you want.</li>
+					<li>For a camera keyframe, fly to where the camera should be.</li>
+					<li>Press the kind you want in the Keyframe tab. It goes on the uppermost track of its kind, made if there is none.</li>
+				</ol>
+				<p>"New ones blend" sets how new keyframes travel to the next one: hold then jump, straight, start slowly, end slowly, slow at both ends, or a smooth curve.</p>
+				<h3>To change keyframes</h3>
 				<ul class="plain">
-					<li><b>Add track</b>, pick a kind, then <b>Add at the playhead</b> in the Keyframe tab.</li>
-					<li>Click a diamond to select it; <kbd>Shift</kbd>-click or drag a box for several.</li>
-					<li>Drag selected diamonds to move them. <kbd>Delete</kbd> removes them.</li>
-					<li><kbd>Ctrl</kbd>+<kbd>C</kbd> and <kbd>Ctrl</kbd>+<kbd>V</kbd> copy and paste at the playhead.</li>
-					<li><kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd> undo and redo, without limit.</li>
-					<li>Mouse wheel over the timeline zooms; <kbd>Shift</kbd>+wheel pans.</li>
+					<li>Click a diamond to select it and edit its fields. <kbd>Shift</kbd>+click or drag a box to select several; <kbd>Ctrl</kbd>+<kbd>A</kbd> selects all.</li>
+					<li>Drag selected diamonds to move them. Double click jumps to one; right click for more.</li>
+					<li><kbd>Ctrl</kbd>+<kbd>C</kbd> copies, <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes at the playhead, <kbd>Delete</kbd> removes.</li>
+					<li><kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd> undo and redo, without limit, each step named.</li>
+					<li>Mouse wheel over the timeline zooms; <kbd>Shift</kbd>+wheel scrolls along it.</li>
 				</ul>
-				<p>Keyframes move the view only while the recording plays or exports, and only while "follow the camera track" is on. Flying off by hand switches it off; <kbd>C</kbd> switches it back on.</p>
 			</div>
 		</div>
-		<div class="tablebox"><table>
-			<thead><tr><th>Kind of keyframe</th><th>What it sets</th></tr></thead>
-			<tbody>
-				<tr><td>Camera</td><td>Position, heading, tilt and roll. Blends between keyframes.</td></tr>
-				<tr><td>Orbit</td><td>Circles a point while looking at it.</td></tr>
-				<tr><td>Follow entity</td><td>Stays beside an entity, or stays put and turns to watch it.</td></tr>
-				<tr><td>Smart Camera</td><td>Films a player by itself. See the next chapter.</td></tr>
-				<tr><td>Field of view</td><td>The view angle in degrees.</td></tr>
-				<tr><td>Camera shake</td><td>A hand-held wobble.</td></tr>
-				<tr><td>Speed</td><td>Playback rate.</td></tr>
-				<tr><td>Timelapse, Freeze</td><td>Squeeze a stretch into a set time, or hold the world still. These apply in exports.</td></tr>
-				<tr><td>Time of day</td><td>Overrides the sky's time.</td></tr>
-				<tr><td>Block change</td><td>Shows a chosen block at a position from that tick on.</td></tr>
-				<tr><td>Audio</td><td>A sound file mixed into the export from that tick.</td></tr>
-			</tbody>
-		</table></div>
 		<div class="two">
 			<figure>
-				<img src="img/07c-editor-looks.jpg" alt="The Looks tab with checkboxes for what is drawn and settings for the world's look" width="1280" height="720">
-				<figcaption>Looks: what is drawn, the weather, fog and sky, night vision, and framing guides.</figcaption>
+				<img src="img/07b-editor-keyframe-selected.jpg" alt="The Keyframe tab with a camera keyframe selected: Tick 66, Blend Smooth curve, X, Y, Z, Yaw, Pitch, Roll, and buttons Take the view, Go there, Jump to it, Copy, Remove, Select nothing" width="1280" height="720">
+				<figcaption>A camera keyframe selected: its tick, blend, position and angles, with Take the view, Go there, Jump to it, Copy and Remove.</figcaption>
 			</figure>
 			<div class="stack">
-				<h3>Looks</h3>
+				<h3>Tracks</h3>
+				<p>A track holds keyframes of one kind. <b>Add track</b> adds one. Each row has a tick box to switch it on or off, arrows to move it, and a "..." menu to rename, switch off, move, clear or remove it. When two tracks of a kind both apply, the upper one wins.</p>
+				<p>Keyframes move the view only while the recording plays or exports, and only while "Camera: on its track" is lit. Flying off by hand turns it off; <kbd>C</kbd> or the button turns it back on.</p>
+			</div>
+		</div>
+
+		<h3>Kinds of keyframe</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th class="nw">Kind</th><th>What it sets</th></tr></thead>
+			<tbody>
+				<tr><td class="nw">Camera</td><td>Where the camera is and how it is turned: position, yaw, pitch and roll. Takes the view as it is now. Blends between keyframes.</td></tr>
+				<tr><td class="nw">Orbit</td><td>Circles a point while looking at it: centre, distance, height and angle. Change the angle between two keyframes to swing round.</td></tr>
+				<tr><td class="nw">Follow entity</td><td>Ties the camera to an entity, measured from its feet, body, head or eyes with an offset. "Keep place" moves with it; "Stay and watch" stays put and turns to watch.</td></tr>
+				<tr><td class="nw">Smart Camera</td><td>Films a player by itself. See <a href="#camera">Smart Camera</a>.</td></tr>
+				<tr><td class="nw">Field of view</td><td>How wide the lens is, 1 to 170 degrees.</td></tr>
+				<tr><td class="nw">Camera shake</td><td>A hand-held wobble: strength and frequency.</td></tr>
+				<tr><td class="nw">Speed</td><td>How fast the recording plays in the video. 20 ticks a second is as recorded, 10 half speed, 40 double.</td></tr>
+				<tr><td class="nw">Timelapse</td><td>Keyframes pair up: the stretch between a pair plays in the number of seconds given on the first.</td></tr>
+				<tr><td class="nw">Freeze</td><td>Holds the world still for some seconds while the camera carries on along its track.</td></tr>
+				<tr><td class="nw">Time of day</td><td>Sets the sky's time: 0 sunrise, 6000 noon, 12000 sunset, 18000 midnight.</td></tr>
+				<tr><td class="nw">Block change</td><td>Shows another block at a position from this tick on. Click the block, then type the new one.</td></tr>
+				<tr><td class="nw">Audio</td><td>An audio file from your disk that starts here, with a volume, and goes into exports.</td></tr>
+				<tr><td class="nw">Point of view</td><td>Shows another linked recording of the same moment from this tick, by a cut. See <a href="#pov">points of view</a>.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The timeline and its moments</h3>
+		<figure class="foot">
+			<img src="img/07f-editor-moments.jpg" alt="The editor's timeline: transport and speed, Camera: on its track, the time, Show moments; below the ruler an Events row of coloured diamonds and numbered squares, a Clips row with one band reading Dev fell from a high place, voice strips, and a Camera track with two keyframes" width="1280" height="720">
+			<figcaption>The foot of the editor: Events (41) as coloured marks, one clip as a band, voice strips for each speaker, and a Camera track with two keyframes.</figcaption>
+		</figure>
+		<div class="two">
+			<div class="stack">
+				<p>Between the ruler and the tracks, the timeline shows this recording's moments:</p>
+				<ul class="plain">
+					<li><b>Events</b> as marks coloured by kind: red a kill or a death, gold an advancement or a first, green somewhere new, lilac laughter or shouting, blue from the server, brass a marker. A number is that many close together; zoom in to tell them apart.</li>
+					<li><b>Clips</b> as bands. Click one to set the export range to it. Right click for "Make a scene from this clip", which makes a scene named after it, with its range and a suggested camera. Undo takes it away.</li>
+					<li><b>Voice</b> as one thin strip per speaker for when they talked. Hover to read the words, when they were written down.</li>
+				</ul>
+				<p>Click a mark or a stretch of talk to go there. The fold arrow shrinks the rows to the events alone; <b>Show moments</b> hides them altogether.</p>
+			</div>
+			<div class="stack">
+				<h3>The camera path</h3>
+				<p>While editing, the camera's path is drawn through the world: a line where the camera and orbit tracks take it, a mark at each keyframe (click one to select it) and small arrows for where it looks. A Smart Camera stretch is drawn as it went the last time it played, paler, and dashed once its keyframe has changed. Untick "Camera path" in the Viewer card to hide it. It never appears in exports.</p>
+				<h3>To fold the panels away</h3>
+				<p>Each card and panel has a small arrow that folds it. Folded, the cards shrink to their titles, the right panel to tabs along the edge, and the timeline to its ruler.</p>
+			</div>
+		</div>
+		<div class="two">
+			<figure>
+				<img src="img/07g-editor-folded.jpg" alt="The editor with everything folded: small Viewer and Players titles at the top left, Keyframe, Looks and Export tabs standing up along the right edge, and the timeline down to its bar and ruler" width="1280" height="720">
+				<figcaption>Everything folded, leaving the view almost clear.</figcaption>
+			</figure>
+			<div class="stack">
+				<h3>To work from the keyboard</h3>
+				<ul class="plain">
+					<li><kbd>Tab</kbd> moves from control to control: along the top bar, down the cards, through the right panel, then the timeline. <kbd>Shift</kbd>+<kbd>Tab</kbd> goes back.</li>
+					<li><kbd>Enter</kbd> or <kbd>Space</kbd> presses the control with the brass ring.</li>
+					<li>In a box, <kbd>Tab</kbd> keeps what you typed and moves on.</li>
+					<li><kbd>Esc</kbd> lets go of the ring first; the next <kbd>Esc</kbd> closes the editor.</li>
+				</ul>
+			</div>
+		</div>
+
+		<h3>Looks</h3>
+		<div class="two">
+			<figure>
+				<img src="img/07c-editor-looks.jpg" alt="The Looks tab: What is drawn, a list of ticked boxes from The recorder's HUD to Beacon beams, then Kinds of entity not drawn, Kinds of particle not drawn and One entity" width="1280" height="720">
+				<figcaption>The Looks tab, What is drawn. The world's look and the frame follow further down.</figcaption>
+			</figure>
+			<div class="stack">
 				<p>Looks belong to a scene and apply in playback and export alike.</p>
 				<ul class="plain">
-					<li>Show or hide the HUD, chat, boss bars, titles, name tags, particles and held items.</li>
-					<li>Hide kinds of entity, or one entity you click: hide it, rename it, force or remove its glow, hide its cape or armour.</li>
-					<li>Weather, fog, sky on or off with a plain background colour for keying, night vision.</li>
-					<li>An aspect guide and rule-of-thirds lines. Guides never appear in exports.</li>
+					<li><b>What is drawn:</b> the recorder's HUD, chat, boss bars, titles, name tags, particles, held items, the block outline, the viewer's shadow, the scoreboard, the action bar, the hotbar, blocks, entities, players and beacon beams. Unticking blocks leaves sky, entities and particles, for keying.</li>
+					<li><b>Kinds not drawn:</b> type an entity or particle id, such as <code>minecraft:bat</code>, and press <b>Hide</b>.</li>
+					<li><b>One entity:</b> press <b>Choose an entity</b> and click it. Then hide it, give it another name, set its glow to always or never, or hide its name tag, cape or armour.</li>
 				</ul>
-				<p>Everything you change is saved into the recording as you go.</p>
+			</div>
+		</div>
+		<div class="two">
+			<div class="stack">
+				<h3>The world's look</h3>
+				<ul class="plain">
+					<li><b>Weather:</b> as recorded, clear, rain or thunder.</li>
+					<li><b>Fog:</b> as recorded, off, or your own start, end and colour.</li>
+					<li><b>Sky:</b> on or off. Off draws a plain background colour instead, for keying.</li>
+					<li><b>Night vision:</b> full brightness without the potion's tint.</li>
+					<li><b>Server's packs:</b> show the scene with the resource packs the server gave the recorder. Off uses only your own.</li>
+				</ul>
+			</div>
+			<div class="stack">
+				<h3>The frame</h3>
+				<ul class="plain">
+					<li><b>Field of view</b> and <b>roll</b> when no track sets them.</li>
+					<li><b>Frame shape:</b> 16:9, 9:16, 4:3, 1:1, 21:9 or your own, drawn over the view as a guide.</li>
+					<li><b>Hold the picture to the frame shape:</b> letterboxing. The view shows black bars, and exports come out in that shape, fitted inside the size asked for. A 21:9 scene asked for at 640×360 exports at 640×274.</li>
+					<li><b>Thirds lines</b> and a <b>centre cross</b>, shown only while editing, never in exports.</li>
+				</ul>
 			</div>
 		</div>
 	</section>
 
+	<!-- ============================================================ Smart Camera -->
 	<section id="camera">
 		<h2>Smart Camera</h2>
-		<p class="lede">A Smart Camera keyframe names a player and a way of filming them. From there until the next keyframe on its track, the camera places and aims itself.</p>
+		<div class="note"><b>Being reworked</b>
+			<p>The Smart Camera is the owner's own part of Dailies and is being reworked by him. This chapter says only what it does today.</p>
+		</div>
+		<p>A Smart Camera keyframe names a player and a way of filming them. From there until the next keyframe on its track, the camera places and aims itself. Add one from the Keyframe tab and click the player, or choose them from a list.</p>
 		<div class="two">
 			<figure>
-				<img src="img/08-smart-camera-chase.jpg" alt="A chase shot from behind and to one side of the walking player, who sits a third of the way across the frame" width="1280" height="720">
-				<figcaption>Chase: five blocks back, thirty degrees to the side, the player on the left third of the frame.</figcaption>
+				<img src="img/08-smart-camera-chase.jpg" alt="The recorder, named Dev, walking across a stone square seen from behind and above, a little to one side, with the balloon and a campfire beyond" width="1280" height="720">
+				<figcaption>Chase, set five blocks back, two up and thirty degrees to the side, with the player a third of the way across from the left.</figcaption>
 			</figure>
 			<figure>
-				<img src="img/09-smart-camera-orbit.jpg" alt="An orbit shot circling the player" width="1280" height="720">
-				<figcaption>Orbit: circling the player at a steady rate.</figcaption>
+				<img src="img/09-smart-camera-orbit.jpg" alt="The recorder walking on grass beside a pig, seen from behind and above, with smoke from a campfire in the foreground" width="1280" height="720">
+				<figcaption>Orbit, set to a seven-block radius three blocks up, a moment after it took over.</figcaption>
 			</figure>
 		</div>
 		<div class="tablebox"><table>
-			<thead><tr><th>Mode</th><th>What the camera does</th></tr></thead>
+			<thead><tr><th class="nw">Way of filming</th><th>What the camera does</th></tr></thead>
 			<tbody>
-				<tr><td>Chase</td><td>Follows from a set distance and angle relative to the way the player is heading.</td></tr>
-				<tr><td>Tripod</td><td>Stands where you put it and turns to keep the player in frame.</td></tr>
-				<tr><td>Orbit</td><td>Circles the player.</td></tr>
-				<tr><td>Director</td><td>Chooses chase, tripod and orbit shots by itself and cuts between them.</td></tr>
+				<tr><td class="nw">Chase</td><td>Follows from a set distance, height and side angle, measured from the way the player is heading.</td></tr>
+				<tr><td class="nw">Tripod</td><td>Stands where you put it ("Stand it where I am") and turns to keep the player in frame.</td></tr>
+				<tr><td class="nw">Orbit</td><td>Circles the player at a set radius and rate.</td></tr>
+				<tr><td class="nw">Director</td><td>Chooses chase, tripod and orbit shots by itself and cuts between them, within a shortest and longest shot. The same seed gives the same shots every time.</td></tr>
 			</tbody>
 		</table></div>
-		<p>Every mode can place the player anywhere in the frame, leave room ahead of them when they move, zoom to keep them the same size, fit a vehicle or craft they ride into the shot, and move in when blocks get in the way. Add one from the Keyframe tab or with the <code>smart_camera_add</code> tool.</p>
+		<p>Every way can place the player anywhere in the frame, leave lead room in front of them, zoom to keep them the same size, fit what they ride into the picture, and move in when blocks get in the way. "Blend in" sets how long it takes to move over from where the camera was; 0 is a cut.</p>
 	</section>
 
+	<!-- ============================================================ Export -->
 	<section id="export">
 		<h2>Export</h2>
 		<div class="two">
 			<div class="stack">
-				<p>Set the export range on the top bar, open the <b>Export</b> tab and press <b>Export</b>. Each frame is drawn at an exact moment of the recording, so a slow computer gives the same video as a fast one, only later. Playback is put back as it was when the export ends.</p>
-				<ul class="plain">
-					<li><b>Size:</b> any, including larger than your screen. Presets from 720p to 4K and a vertical one.</li>
-					<li><b>Frame rate:</b> 1 to 240, presets from 24 to 120.</li>
-					<li><b>With sound:</b> the game's sound, recorded voice chat and audio keyframes, in step with the picture.</li>
-					<li><b>Still picture:</b> one PNG of the view at any size.</li>
-					<li><b>PNG sequence:</b> numbered pictures in place of a video.</li>
-				</ul>
-				<p>While it runs, the window shows the picture scaled to fit, with frames done, speed, time left and <b>Cancel</b>. A cancelled export keeps what was written and still plays.</p>
+				<h3>To export a video</h3>
+				<ol class="plain">
+					<li>Set the export range on the top bar.</li>
+					<li>Open the <b>Export</b> tab and choose a preset, or set the picture, file and sound yourself.</li>
+					<li>Press <b>Export</b>.</li>
+				</ol>
+				<p>Each frame is drawn at an exact moment of the recording, so a slow computer makes the same video as a fast one, only later. The window shows a small plate at its foot with the frame count, speed, time left and <b>Cancel (Esc)</b>; the plate never gets into the video. A cancelled export keeps what was done as a file that plays. Afterwards playback is back where it was, and the editor says how it went: click the message to open the folder.</p>
+				<p><b>Still picture</b> writes one PNG of the view now, at the size set. "More settings" has the rarer ones: an exact size in pixels, a bitrate, the encoder, supersampling, leaving the HUD out, a transparent background (with the sky off), stereo, the sound codec, separate tracks and replacing a file of the same name.</p>
 			</div>
 			<figure>
-				<img src="img/07d-editor-export.jpg" alt="The Export tab: size, frame rate, kind of file, codec, encoder, bitrate, sound, file name, Export and Still picture buttons" width="1280" height="720">
-				<figcaption>The Export tab. Codecs are read from the packed encoder, so only what works on your machine is offered.</figcaption>
+				<img src="img/07d-editor-export.jpg" alt="The Export tab: Preset None; Picture with Size 1080p, Frame rate 60, Kind of file MP4, Video codec, Quality High; Sound; Captions; Output with folder dailies/exports and file name {date}_{time}; Export, Still picture and Add to queue" width="1280" height="720">
+				<figcaption>The Export tab, caught while it was still asking the encoder what it can do, so the codec box is empty for a moment.</figcaption>
 			</figure>
 		</div>
+		<div class="two">
+			<figure>
+				<img src="img/07e-editor-dropdown.jpg" alt="The Size dropdown open in the Export tab: 720p, 1080p ticked, 1440p, 4K, 1080 x 1920 upright, Custom" width="1280" height="720">
+				<figcaption>Every choice is a dropdown. Here, the sizes: 720p, 1080p, 1440p, 4K, 1080 × 1920 upright, or your own.</figcaption>
+			</figure>
+			<div class="stack">
+				<h3>Presets</h3>
+				<p>A preset fills in everything below it. Change anything and it is marked as modified. The "..." beside it saves, adds, renames and removes presets, and brings the built-in ones back.</p>
+				<div class="tablebox"><table>
+					<thead><tr><th>Preset</th><th>What it makes</th></tr></thead>
+					<tbody>
+						<tr><td>YouTube 1080p60</td><td>1920×1080, 60 fps, MP4, H.264 or AV1, stereo AAC</td></tr>
+						<tr><td>YouTube 4K60</td><td>3840×2160, 60 fps, MP4, H.264 or AV1</td></tr>
+						<tr><td>Shorts and Reels</td><td>1080×1920, 60 fps. Warns past 60 seconds and exports anyway.</td></tr>
+						<tr><td>Editing master</td><td>1920×1080, 60 fps, MOV, ProRes 422 HQ or DNxHR HQ, uncompressed sound with separate tracks</td></tr>
+						<tr><td>Smallest</td><td>1280×720, 30 fps, MP4, AV1</td></tr>
+					</tbody>
+				</table></div>
+				<p>A preset whose codec this computer cannot make uses the next it can (AV1, VP9, ProRes, DNxHR) and says so. File names can use <code>{date}</code>, <code>{time}</code>, <code>{preset}</code>, <code>{scene}</code>, <code>{recording}</code>, <code>{size}</code>, <code>{fps}</code> and <code>{codec}</code>.</p>
+			</div>
+		</div>
+
+		<h3>Codecs</h3>
+		<p>Only what this computer can really encode is offered, fastest first. Each says whether a graphics card does the work in hardware, and whose, or software does. Every hardware encoder is tried once before it is listed.</p>
 		<div class="tablebox"><table>
-			<thead><tr><th>Codec</th><th>Files</th><th>On the test machine</th></tr></thead>
+			<thead><tr><th>Codec</th><th>Made by</th><th>Files</th></tr></thead>
 			<tbody>
-				<tr><td>H.264</td><td>MP4, MOV, MKV</td><td>Graphics card first (NVENC, Quick Sync), then OpenH264 in software</td></tr>
-				<tr><td>H.265</td><td>MP4, MKV</td><td>Graphics card only (NVENC, Quick Sync)</td></tr>
-				<tr><td>AV1</td><td>MP4, MKV, WebM</td><td>NVENC, then SVT-AV1 in software</td></tr>
-				<tr><td>VP9</td><td>WebM, MKV</td><td>libvpx in software</td></tr>
+				<tr><td>H.264</td><td>A graphics card only: NVIDIA, AMD, Intel or Apple, or Windows' own when a card backs it</td><td>MP4, MKV, MOV</td></tr>
+				<tr><td>H.265</td><td>A graphics card only, as for H.264</td><td>MP4, MKV, MOV</td></tr>
+				<tr><td>AV1</td><td>A graphics card where there is one, then SVT-AV1 in software, then libaom (slow)</td><td>MP4, MKV, WebM</td></tr>
+				<tr><td>VP9</td><td>Intel graphics where there is one, then libvpx in software</td><td>MP4, MKV, WebM</td></tr>
+				<tr><td>ProRes 422 HQ</td><td>Software, for editing. ProRes 4444 with a transparent background.</td><td>MOV, MKV</td></tr>
+				<tr><td>DNxHR HQ</td><td>Software, for editing</td><td>MOV, MKV</td></tr>
 			</tbody>
 		</table></div>
-		<figure>
-			<img src="img/11-exported-still.jpg" alt="An exported still of the scene with no interface on it" width="1280" height="720">
-			<figcaption>A still exported at 1920×1080 with the HUD left out.</figcaption>
-		</figure>
-		<div class="note"><b>The encoder</b>
-			<p>The video encoder is FFmpeg 8.1.2 in its LGPL build, packed inside the jar and unpacked to <code>dailies/encoder</code> the first time you export. Nothing else needs installing. <code>THIRD-PARTY-NOTICES.md</code> has the details and how to swap in another build.</p>
+		<div class="warn"><b>No software H.264</b>
+			<p>Dailies carries no software encoder for H.264 or H.265. The usual ones, x264 and x265, would force a GPL build of the encoder, which cannot ship inside a mod like this, and Cisco's patent licence for OpenH264 covers only copies downloaded from Cisco. So a computer without a hardware H.264 encoder is offered AV1, VP9 or an editing master, and the Export tab says why H.264 is missing. AV1 plays on YouTube and in current browsers.</p>
 		</div>
-	</section>
+		<div class="note"><b>The encoder</b>
+			<p>The encoder is FFmpeg 8.1.2 in its LGPL build, packed inside the jar for Windows on 64-bit Intel or AMD processors only, for now. On Linux, macOS and Windows on ARM, the Export tab says so and offers numbered PNG pictures instead; everything else works the same. <code>THIRD-PARTY-NOTICES.md</code> has the details.</p>
+		</div>
 
-	<section id="moments">
-		<h2>Moments and the MCP server</h2>
 		<div class="two">
 			<div class="stack">
-				<p>While you play, Dailies logs what happened: kills, deaths, advancements, new biomes, markers, who you were with, and voice chat. It runs whether or not you are recording. Afterwards it proposes clips, each with a suggested camera.</p>
-				<p>Open <code>http://127.0.0.1:25595/</code> in a browser on the same computer while the game runs. <b>Find clips</b> builds them; <b>Cue</b> opens the right recording at the right moment, with the camera if you want it.</p>
-				<p>The same address serves an MCP server at <code>/mcp</code> with 70 tools, so an AI agent can record, open, jump, edit, export and query moments. It listens on this computer only.</p>
+				<h3>Sound</h3>
+				<p>Tick <b>With sound</b> to put the game's sound in the file, with recorded voice chat and the scene's audio keyframes, in step with the picture. The sound codec is AAC for MP4 and MOV, Opus for WebM and MKV, or uncompressed for MOV and MKV.</p>
+				<h3>Separate audio tracks</h3>
+				<p>"Separate tracks" (under More settings) keeps the game, each speaker and the audio keyframes apart as well as mixed, all exactly as long as the video. Choose WAV files beside the video (<code>clip.game.wav</code>, <code>clip.voice-Name.wav</code>, <code>clip.music.wav</code>), named tracks inside an MKV or MOV, or both. The separate tracks add up to the mix, so a video editor can lower music under speech or cut one voice.</p>
 			</div>
-			<figure class="crop">
-				<img src="img/10-moments-page.png" alt="The moments page: a session picker, a strip of the session, and tabs for clips, events, voice and ignored" width="1280" height="320">
-				<figcaption>The moments page in a browser. AI transcription and summaries are off until you turn them on.</figcaption>
+			<div class="stack">
+				<h3>Captions</h3>
+				<p>Captions come from the voice chat Moments wrote down, so they need AI on and a transcription server (see <a href="#moments">Moments</a>). Players on the "Voices Left Out" list never appear.</p>
+				<ul class="plain">
+					<li><b>Caption files:</b> SRT, WebVTT or both, beside the video, timed to it, speed, timelapse and freeze keyframes included.</li>
+					<li><b>Draw captions into the video:</b> burned into the picture, "A line at a time" or "Word by word" as short videos have them.</li>
+					<li><b>Speaker names</b> begins each caption with who said it. <b>Show captions here</b> previews them in the editor.</li>
+					<li>The font, size, colour, outline and position are in the settings' Export group.</li>
+				</ul>
+			</div>
+		</div>
+		<div class="two">
+			<div class="stack">
+				<h3>To queue exports</h3>
+				<ol class="plain">
+					<li>Set up an export as usual and press <b>Add to queue</b> instead of Export. Do the same for as many scenes and recordings as you like.</li>
+					<li>In the Queue panel at the foot of the Export tab, press <b>Run in background</b> or <b>Run here</b>.</li>
+				</ol>
+				<p>Each job can be moved up or down, held back and let go, or removed. One that failed or was stopped runs again from the start. <b>Stop</b> stops the queue, keeping what the current job wrote; <b>Clear finished</b> tidies the list. The queue survives a restart. When it is done, your desktop shows a notification.</p>
+			</div>
+			<div class="stack">
+				<h3>Exporting in the background</h3>
+				<p><b>Run in background</b> starts a second, hidden game with the same mods and settings, which works through the queue while your game stays playable. It can carry on overnight, even after you close your own game. Its small window hides once it has loaded. It never changes your settings, saves or recordings, and writes its log to <code>dailies/worker.log</code>.</p>
+				<p>If a second game cannot start, for example with too little free memory, the queue runs in this game and says why.</p>
+			</div>
+		</div>
+		<figure>
+			<img src="img/11-exported-still.jpg" alt="An exported still: the recorder running beside a pig on grass, a campfire with smoke in the foreground, the machines in the distance, with no interface on it" width="1280" height="720">
+			<figcaption>A still exported at 1920×1080 with the HUD left out, taken during the orbit shot.</figcaption>
+		</figure>
+	</section>
+
+	<!-- ============================================================ Moments -->
+	<section id="moments">
+		<h2>Moments</h2>
+		<p class="lede">While you play, Dailies logs what happened, whether or not you are recording. Afterwards it finds clips worth watching. This is what the mod is named for.</p>
+		<div class="two">
+			<div class="stack">
+				<h3>What is logged</h3>
+				<ul class="plain">
+					<li>Your kills, your deaths, and deaths of other players and bosses close enough to see.</li>
+					<li>Boss encounters and defeats, advancements (yours, and others' from the chat), new biomes, dimensions and structures.</li>
+					<li>Firsts: the first time you craft, place, mine or use something in that world. "Log Repeats" logs every one.</li>
+					<li>Milestones: levels 10, 20 and 30, every 30 minutes of play, the first diamond item and enchanting table.</li>
+					<li>Who you were with: meetings and groups forming, changing and breaking up.</li>
+					<li>Markers, and moments from the moment key or <code>/dailies moment</code>.</li>
+					<li><b>Craft and contraptions:</b> a craft assembled, first boarded, its first flight, altitude and speed records, a craft lost, a Create contraption assembled, and trains leaving and arriving (from the companion).</li>
+					<li><b>Voice bursts:</b> laughter or shouting, found by loudness alone. Two people going loud together make one bigger moment. This needs no AI.</li>
+					<li>Who spoke and when, from Simple Voice Chat. Dailies never opens your microphone itself.</li>
+					<li>Events sent by the server through the companion.</li>
+				</ul>
+				<p>Each event gets a score from 0 to 100. With "Event Pictures" on, an event scoring 50 or more keeps a small picture of the screen, about 320 pixels wide, taken without a hitch. No picture is ever taken while watching or exporting.</p>
+			</div>
+			<div class="stack">
+				<h3>Clips</h3>
+				<p>A clip is a stretch around events worth watching: 15 seconds before an event to 20 after, widened so nobody is cut off mid-sentence, with events close together joined. With transcripts, a lively conversation is a clip on its own. Each clip has a title, a summary, its events, who was there, what was said, a score and a suggested Smart Camera.</p>
+				<h3>To open the moments page</h3>
+				<p>It opens in your web browser, from any of these:</p>
+				<ul class="plain">
+					<li><b>Moments</b> in the pause menu, or the top square button on the title screen.</li>
+					<li><b>Moments</b> on the editor's top bar.</li>
+					<li><code>/dailies moments</code>.</li>
+				</ul>
+				<p>The address is <code>http://127.0.0.1:25595/</code>. It is served by the MCP server, so it needs "Run the MCP Server" on.</p>
+				<h3>To make a scene from a clip</h3>
+				<p>On the page, press <b>Make scene</b> on a clip; or in the editor, right click its band. The scene is named after the clip, exports exactly the clip and has the suggested camera. <b>Export</b> on a clip, or <b>Export selected</b>, puts each on the export queue, and <b>Start queue</b> starts it in the background.</p>
+			</div>
+		</div>
+		<div class="two">
+			<figure class="top">
+				<img src="img/10-moments-page.png" alt="The moments page in a dark browser window: a session picker, Refresh, an auto tick box, in a replay and AI off badges, a strip of the session, and tabs Clips, Events, Voice and Ignored with a Find clips button" width="1280" height="1500">
+				<figcaption>The top of the moments page. This picture comes from an earlier run; the page now also has a Privacy tab.</figcaption>
 			</figure>
+			<div class="stack">
+				<h3>On the page</h3>
+				<ul class="plain">
+					<li><b>Find clips</b> builds them, with a lowest score and a largest number.</li>
+					<li><b>Cue + camera</b> opens the right recording at the clip with its suggested camera; <b>Cue only</b> without. <b>Cue</b> on an event goes five seconds early. It asks before pulling you out of a live world.</li>
+					<li>Tabs: Clips, Events (filter, sort, the full record), Voice, Ignored (the ignore list) and Privacy.</li>
+					<li><b>Live:</b> new events, clips, transcripts and pictures appear the moment they happen. The lamp is green while live, brass while refreshing by the clock, grey when paused.</li>
+					<li><b>Ignore kind</b> hides that kind of event everywhere. Ignored events are still kept, and come back when you take them off the list.</li>
+				</ul>
+			</div>
+		</div>
+		<div class="warn"><b>Voice, privacy and what is sent where</b>
+			<ul class="plain">
+				<li><b>With AI off (the default), nothing is sent anywhere.</b> Who spoke and when is still logged, and voice bursts still work, all on your computer.</li>
+				<li><b>With "Use AI Services" on,</b> the voice audio Moments captures, other players' included, is sent to the "Transcription Server" address to be written down. Each clip's length, player names, event descriptions and transcript (text, not audio) are sent to the "Summary Server" address for a better title and summary. An empty address keeps that service off.</li>
+				<li><b>To leave someone's voice out,</b> add their name to "Voices Left Out" (<code>momentsVoiceExcluded</code>), in the settings or the page's Privacy tab. It takes effect at once. You still hear them, and they are still in a recording's own voice chat when "Record Voice Chat" is on, but nothing of their voice reaches Moments, the voice bursts or the transcription server.</li>
+				<li>A Test button beside an address asks that server once, when pressed, whether it is there.</li>
+				<li>A shared session holds only your own voice lines.</li>
+				<li>Recording other people's voices is yours to agree with them.</li>
+			</ul>
 		</div>
 	</section>
 
+	<!-- ============================================================ MCP -->
+	<section id="mcp">
+		<h2>The MCP server</h2>
+		<div class="two">
+			<div class="stack">
+				<p>Dailies contains a Model Context Protocol server, so an AI agent can do what you can: record, open a recording, jump, edit, export, and search moments. Point an MCP client at:</p>
+				<p><code>http://127.0.0.1:25595/mcp</code></p>
+				<p>It listens on this computer only, unless you open it to others. "Run the MCP Server" switches it off, and "Port" moves it. Changing either takes effect without a restart. The same address serves the moments page at <code>/</code>.</p>
+			</div>
+			<div class="stack">
+				<h3>To reach it from another machine</h3>
+				<ol class="plain">
+					<li>Set "Listen On" to one of this computer's network addresses, or <code>0.0.0.0</code> for all of them.</li>
+					<li>Dailies makes a "Remote Access Token". Treat it as a password: anyone who has it can drive the game. Clear it to have a new one made.</li>
+					<li>On the other machine, connect over HTTPS to this computer's address and port, sending <code>Authorization: Bearer &lt;token&gt;</code>. The certificate is made by Dailies; its "Certificate Fingerprint" is in the settings and the log, for the client to pin.</li>
+				</ol>
+				<p>Only machines on "Allowed Clients" are answered: by default the private local-network ranges. Five wrong tokens from one address within a minute lock it out for a minute. The moments page asks for the token once over HTTPS.</p>
+				<p>This computer keeps plain local access all the while: <code>http://127.0.0.1</code>, no token, as before.</p>
+			</div>
+		</div>
+	</section>
+
+	<!-- ============================================================ Settings -->
 	<section id="settings">
 		<h2>Settings</h2>
 		<div class="two">
 			<div class="stack">
-				<p>Mods, Dailies, Config opens the settings. They live in <code>config/dailies-client.toml</code> and take effect without a restart.</p>
+				<p>Open Dailies' own settings screen from the pause menu, the title screen, the mods list's Config button, or <code>/dailies config</code>. Settings live in <code>config/dailies-client.toml</code> and take effect without a restart. <b>Open the file</b> opens it; a change made there by hand shows on the screen a moment after it is saved.</p>
 				<ul class="plain">
-					<li><b>Recording:</b> start by itself, finish on leaving, notices, save without asking, record my HUD, record voice chat, marker colours.</li>
-					<li><b>Export:</b> default file name, throwaway frames for shader packs that build their image over time.</li>
-					<li><b>Editor:</b> how new keyframes blend, flight options.</li>
-					<li><b>MCP server:</b> on or off, and its port.</li>
-					<li><b>Moments:</b> what is logged, the ignore list, and the one switch for AI services (off by default).</li>
+					<li><b>Groups</b> fold: click a group's title. Each shows how many settings it has and how many are changed.</li>
+					<li><b>Search:</b> start typing anywhere, or <kbd>Ctrl</kbd>+<kbd>F</kbd>. It finds settings by any words of their name or description.</li>
+					<li><b>Reset:</b> each changed setting can go back to its default, and <b>Reset group</b> does a whole group.</li>
+					<li>Every choice is a <b>dropdown</b>. Every number is a slider with a box to type into, both held to the range.</li>
+					<li>Hover over a setting to read what it does.</li>
+					<li>The AI server addresses and "Listen On" are checked as you type, and have a <b>Test</b> button that says whether a server answers.</li>
 				</ul>
 			</div>
 			<figure>
-				<img src="img/12-settings.jpg" alt="The Dailies settings screen" width="1280" height="720">
-				<figcaption>The settings screen.</figcaption>
+				<img src="img/12-settings.jpg" alt="Dailies settings: groups Recording (23 settings), Export (11), Editor (6), Disk Space and the Bin (6), Advanced (2), MCP Server (6 settings, 1 changed, with Reset group), Moments (23); a search box at the top; Open the file and Done at the foot" width="1280" height="720">
+				<figcaption>All groups folded. The MCP Server group has one setting changed, so it offers Reset group.</figcaption>
 			</figure>
 		</div>
-	</section>
-
-	<section id="limits">
-		<h2>Not yet checked</h2>
-		<p class="lede">The scripted test passes in the plain game and in the modded one. These things it cannot judge, or does not cover.</p>
 		<div class="two">
-			<div class="warn"><b>Needs your eye</b>
-				<ul class="plain">
-					<li>The editor has only been seen in still pictures. Dragging keyframes, right-button flight, picking an entity by clicking, and the export progress plate have not been tried by hand.</li>
-					<li>Most scene looks (weather, fog, sky off, night vision, hidden entities, capes, armour) are built but have not been looked at, with or without a shader pack.</li>
-					<li>Export has run with Sodium and Iris installed but with no shader pack switched on.</li>
-					<li>Whether the Smart Camera's shots look good, and how the director cuts on a player moving smoothly.</li>
-					<li>The recorder's HUD when riding along, and skins with the network off. Both are in the recording file; neither has been looked at in playback.</li>
-				</ul>
-			</div>
-			<div class="warn"><b>Needs a server or a second player</b>
-				<ul class="plain">
-					<li>Recording on a dedicated server with Create, Sable and Aeronautics, where Sable's motion channel is a real network path.</li>
-					<li>Real voice chat. The test feeds sound in directly; capture through Simple Voice Chat, voices in playback and voices in exports are untested.</li>
-					<li>Meetings, groups, another player's death, another player on your craft.</li>
-					<li>McpCraft job board moments: the installed McpCraft 0.2.0 does not send the event the specification describes, so that step is skipped.</li>
-				</ul>
-			</div>
+			<figure>
+				<img src="img/12b-settings-search.jpg" alt="A search for marker colour: four Marker Colour settings under Recording, each with a colour dropdown, a text box and a swatch, and Show Markers in the World under Editor; 5 of 77 settings found" width="1280" height="720">
+				<figcaption>A search for "marker colour" finds 5 of the 77 settings.</figcaption>
+			</figure>
+			<figure>
+				<img src="img/12c-settings-dropdown.jpg" alt="The Export and Editor groups unfolded, with the New Keyframes Blend dropdown open: Hold, Straight, Start slowly, End slowly, Slow at both ends, Smooth curve" width="1280" height="720">
+				<figcaption>The Export group, and the Editor group with a dropdown open.</figcaption>
+			</figure>
 		</div>
-		<div class="note"><b>Known gaps</b>
-			<ul class="plain">
-				<li>Timelapse and freeze keyframes apply in exports but not while watching live.</li>
-				<li>A player sitting in a seat on a contraption that is on a physics craft (a helicopter's pilot) has not been scripted.</li>
-				<li>Aeronautics' burner cannot describe itself to a snapshot, so its flame state may reset after a jump to a later part. The balloon itself is unaffected.</li>
-				<li>A few tool arguments from the specification's appendix are accepted but do nothing yet (track colour, six per-entity options). Each tool says so in its reply.</li>
-				<li>Twice in about thirty runs the modded game failed while loading mods, before Dailies had run.</li>
-			</ul>
-		</div>
-		<h3>Running the tests yourself</h3>
+		<h3>The settings that matter most</h3>
 		<div class="tablebox"><table>
-			<thead><tr><th>Command</th><th>Does</th></tr></thead>
+			<thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
 			<tbody>
-				<tr><td><code>gradlew test</code></td><td>88 unit tests: the file format, curves, timing, undo.</td></tr>
-				<tr><td><code>gradlew runTestClient</code></td><td>The scripted run in the plain game. Prints <code>DAILIES TEST PASSED</code> and closes.</td></tr>
-				<tr><td><code>gradlew runTestModded</code></td><td>The same with the built jar beside Create, Sable, Aeronautics, Sodium, Iris and the rest.</td></tr>
-				<tr><td><code>gradlew runHandsOn</code></td><td>Sixty seconds at the controls while recording, then the recording left open for you to watch.</td></tr>
+				<tr><td>Start by Itself</td><td>Off</td><td>Starts a recording on joining any world or server.</td></tr>
+				<tr><td>Finish on Leaving</td><td>On</td><td>Finishes the recording on leaving. Off, the next world joined carries on the same recording.</td></tr>
+				<tr><td>Save Without Asking</td><td>Off</td><td>Saves under the date and time without asking for a name.</td></tr>
+				<tr><td>Show Notices</td><td>On</td><td>On-screen notices when a recording starts, pauses, resumes, finishes or fails.</td></tr>
+				<tr><td>Record My HUD</td><td>Off</td><td>Keeps your hotbar, health, hunger and experience for playback.</td></tr>
+				<tr><td>Record Voice Chat</td><td>Off</td><td>Keeps the voice chat you hear, per speaker (needs Simple Voice Chat).</td></tr>
+				<tr><td>Marker 1 to 4</td><td>Red, saves position</td><td>Each marker key's colour, words, and whether it stores where you stand.</td></tr>
+				<tr><td>Moment Key Label</td><td>Good moment</td><td>The words the moment key logs.</td></tr>
+				<tr><td>Seconds between Stored Worlds</td><td>5</td><td>How often the whole world is stored afresh. Shorter makes going back quicker and the file a little larger.</td></tr>
+				<tr><td>Default File Name</td><td>{date}_{time}</td><td>The name of an exported file.</td></tr>
+				<tr><td>Throwaway Frames</td><td>0</td><td>Extra frames drawn and thrown away before each one kept, for shader packs that build up their picture over time.</td></tr>
+				<tr><td>Caption Style, Font, Size, Colour, Outline, Position</td><td>A line at a time, Minecraft, 5%, white, black, bottom</td><td>How captions drawn into the video look.</td></tr>
+				<tr><td>New Keyframes Blend</td><td>Smooth curve</td><td>How a new keyframe travels to the next.</td></tr>
+				<tr><td>Days in the Bin</td><td>30</td><td>How long deleted things can be restored.</td></tr>
+				<tr><td>Bin Recordings Older Than</td><td>0 (keep all)</td><td>Moves old recordings to the bin, sparing starred and exported ones.</td></tr>
+				<tr><td>Warn Below, Pause Recording Below</td><td>20 GB, 5 GB</td><td>Free disk space at which recording warns, then pauses.</td></tr>
+				<tr><td>Run the MCP Server, Port</td><td>On, 25595</td><td>The MCP server and the moments page.</td></tr>
+				<tr><td>Listen On</td><td>127.0.0.1</td><td>Leave it alone to keep the server on this computer. See <a href="#mcp">the MCP server</a>.</td></tr>
+				<tr><td>Log Moments</td><td>On</td><td>Keeps the log of what happens while you play.</td></tr>
+				<tr><td>Use AI Services</td><td><b>Off</b></td><td>The one switch for transcription and model-written summaries. Off, nothing is sent anywhere.</td></tr>
+				<tr><td>Transcription Server, Summary Server</td><td>The owner's own machines</td><td>Where voice audio and clip text go with AI on. Empty keeps that one off.</td></tr>
+				<tr><td>Voices Left Out</td><td>Empty</td><td>Players whose voice never reaches Moments or the transcription server.</td></tr>
+				<tr><td>Ignored Events</td><td>Empty</td><td>Kinds of event hidden from every list and clip, such as <code>block_mined</code>. <code>*</code> matches anything.</td></tr>
+				<tr><td>Event Pictures</td><td>On</td><td>A small picture with each big moment.</td></tr>
 			</tbody>
 		</table></div>
 	</section>
 
-	<footer>Dailies 0.1.0 manual. Pictures taken from the modded test game on 17 November 2026.</footer>
+	<!-- ============================================================ Not yet checked -->
+	<section id="limits">
+		<h2>Not yet checked</h2>
+		<p class="lede">The last scripted run passed, but some things it cannot do or prove. These are untested until someone tries them.</p>
+		<div class="two">
+			<div class="warn"><b>Needs a person, a second player or a server</b>
+				<ul class="plain">
+					<li><b>Background export in a second game.</b> The run did not start one; it is started only when asked for.</li>
+					<li><b>Captions with real speech.</b> No transcription server was reachable, so the caption files were empty and nothing was burned into the picture.</li>
+					<li><b>A real second player and real voice chat:</b> meetings, groups, another player's death or riding your craft, voice heard, recorded, played back and exported with each speaker's name, and a real burst of laughter. The run feeds in sound and a stand-in friend directly.</li>
+					<li><b>A dedicated server</b> with Create, Sable, Aeronautics and the companion, including one that pushes a resource pack while you join.</li>
+					<li><b>The moments page in a real browser:</b> cueing from a live world and the title screen, falling back when the network drops, and opening it from another machine over HTTPS.</li>
+					<li><b>The eye test:</b> flying the helicopter and balloon by hand and watching them back, and feeling for any hitch when an event picture is taken during an hour's play.</li>
+				</ul>
+			</div>
+			<div class="warn"><b>Not installed, not set or not owned</b>
+				<ul class="plain">
+					<li><b>Distant Horizons:</b> not installed in the test game, so far terrain in playback was not tried.</li>
+					<li><b>A shader pack:</b> none was set. Complementary Shaders - Reimagined was named as the pack to try, but has not been tested.</li>
+					<li><b>Aeronautics effects in a video:</b> whether they move at the video's pace can only be judged by eye.</li>
+					<li><b>AMD, Intel and Apple encoders:</b> only the test computer's own graphics card has made video.</li>
+					<li><b>The encoder build for other platforms:</b> Linux, macOS and Windows on ARM export PNG pictures only until a build of Dailies' own is proven.</li>
+					<li><b>The Smart Camera's new work:</b> the owner's, being reworked; its checks and its frame-time budget are left to him.</li>
+					<li><b>AI on:</b> transcription keeping up in real time was not measured, since AI was off.</li>
+					<li><b>McpCraft job board moments:</b> the installed McpCraft does not tell other mods about its job board, so these were not tried.</li>
+				</ul>
+			</div>
+		</div>
+		<div class="note"><b>Also skipped in the last run</b>
+			<ul class="plain">
+				<li>Exporting the same stretch from every point of view as a batch: the batch was listed but not started.</li>
+				<li>Putting a scene in the bin and back, and opening the trim screen from the editor: no long enough recording was left to do it with.</li>
+				<li>Pausing a recording when the disk is nearly full: only the decision is tested, not a real full disk.</li>
+			</ul>
+		</div>
+	</section>
+
+	<!-- ============================================================ Tests -->
+	<section id="tests">
+		<h2>How it was tested</h2>
+		<p>The last combined scripted run passed on 17 November 2026. It ran in the modded game, with the built jar beside Create, Sable, Create Aeronautics, Simple Voice Chat, Sodium, Iris, McpCraft and the companion, and included both tours. The script drives the real game through Dailies' own tools and checks recording, playback, machines, server resource packs, combining and trimming, editing and export, codecs and presets, moments, the MCP server, privacy, the library, the settings screen, looks and other renderers.</p>
+		<p><b>The tours.</b> The bestiary records the awkward parts of the game: the Wither, the Ender Dragon in The End, creepers, ghast and blaze fireballs, experience orbs and a long list of entities and blocks that do not behave like a walking mob. The real-world tour records a default generated world as people really play it: caves, oceans, mountains, structures, mobs, weather and day, the Nether through a real portal, and a stretch of survival. Both write the live game down as they go, then compare playback with it, reached by playing, by jumping forwards and by jumping backwards, and report every difference at the end.</p>
+		<h3>To run the tests yourself</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th class="nw">Command</th><th>Does</th></tr></thead>
+			<tbody>
+				<tr><td class="nw"><code>gradlew test</code></td><td>The unit tests.</td></tr>
+				<tr><td class="nw"><code>gradlew runTestClient</code></td><td>The scripted run in a plain game, about 2 minutes. Prints <code>DAILIES TEST PASSED</code>, or <code>DAILIES TEST FAILED:</code> and the reason, then closes.</td></tr>
+				<tr><td class="nw"><code>gradlew runTestModded</code></td><td>The same with the built jar beside the other mods and the companion, about 3 minutes. Builds the companion first. <code>-Pdailies.modsFolder=&lt;folder&gt;</code> takes the other mods' jars from another folder.</td></tr>
+				<tr><td class="nw"><code>gradlew runTestModded -PdailiesFlags=dailies.test.bestiary,dailies.test.realWorld</code></td><td>The combined run, with both tours. Much longer.</td></tr>
+				<tr><td class="nw"><code>gradlew runHandsOn</code></td><td>Sixty seconds at the controls while recording, then the recording left open in the editor for you to watch.</td></tr>
+				<tr><td class="nw"><code>gradlew runManualShots</code></td><td>Retakes this manual's pictures.</td></tr>
+			</tbody>
+		</table></div>
+		<p>Steps that could not run, such as a mod not installed or something that needs a second player, are listed as <code>DAILIES TEST skipped:</code> lines. Other flags add steps left out by default: <code>dailies.test.worker</code> starts the background export game, and <code>dailies.test.smartCamera</code> adds the Smart Camera checks.</p>
+	</section>
+
+	<footer>Dailies 0.1.0 manual. Pictures taken from the running game at 1920×1080, GUI scale 2, on 17 November 2026, except the moments page, which is from an earlier run.</footer>
 </div>
+</body>
+</html>
