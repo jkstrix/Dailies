@@ -47,7 +47,7 @@ import java.util.concurrent.TimeUnit;
  * and written to a temporary file, so sound and picture stay together however slowly the export goes.
  * <p>
  * Recorded voice chat is played into the same device by {@link VoicePlayback}, so it is captured with the game's
- * sound, placed where each speaker was. At the end one run of the bundled encoder joins the soundless video, the
+ * sound, as loud as {@link VoiceLevels} says from the export's camera and never placed left or right. At the end one run of the bundled encoder joins the soundless video, the
  * captured sound and the scene's audio keyframes into the finished file.
  * <p>
  * With separate tracks asked for (EXP-12) the same sound is also kept apart: the game's sound alone, each speaker's
@@ -324,13 +324,13 @@ public final class ExportSound {
     }
 
     /**
-     * A piece of one speaker's voice, already placed: it goes into that speaker's own track at the moment of the
-     * export it was spoken in. Client thread. Never throws.
+     * A piece of one speaker's voice: it goes into that speaker's own track at the moment of the export it was
+     * spoken in, the same in both ears. Client thread. Never throws.
      *
-     * @param left  how loud it is in the left ear, 0 to 1 or so
-     * @param right the same for the right
+     * @param gain how loud it is, 0 to 1 or so: the distance from the camera and the volume settings, by
+     *             {@link VoiceLevels}, so that the track carries what the mix would have
      */
-    public static void voice(UUID speaker, String name, short[] mono, float left, float right) {
+    public static void voice(UUID speaker, String name, short[] mono, float gain) {
         if (!keepsVoicesApart() || pcmFile == null || mono.length == 0) {
             return;
         }
@@ -354,12 +354,7 @@ public final class ExportSound {
                 return;
             }
             silence(voice.out, voice.cursor - voice.written);
-            byte[] bytes = new byte[mono.length * BYTES_PER_FRAME];
-            ByteBuffer out = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-            for (short sample : mono) {
-                out.putShort(clamp(Math.round(sample * left))).putShort(clamp(Math.round(sample * right)));
-            }
-            voice.out.write(bytes);
+            voice.out.write(VoiceLevels.stereo(mono, gain));
             voice.cursor += mono.length;
             voice.written = voice.cursor;
         } catch (Throwable t) {
@@ -368,7 +363,7 @@ public final class ExportSound {
     }
 
     private static short clamp(long value) {
-        return (short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, value));
+        return VoiceLevels.clamp(value);
     }
 
     private static void silence(OutputStream out, long frames) throws IOException {
@@ -784,19 +779,7 @@ public final class ExportSound {
                     Arrays.fill(read, got, now * BYTES_PER_FRAME, (byte) 0);
                     ByteBuffer from = ByteBuffer.wrap(read).order(orders.get(i));
                     ByteBuffer to = ByteBuffer.wrap(one).order(ByteOrder.LITTLE_ENDIAN);
-                    for (int frame = 0; frame < now; frame++) {
-                        short left = from.getShort();
-                        short right = from.getShort();
-                        if (channels == 2) {
-                            to.putShort(left).putShort(right);
-                            total[frame * 2] += left;
-                            total[frame * 2 + 1] += right;
-                        } else {
-                            short both = (short) Math.floorDiv(left + right + 1, 2);
-                            to.putShort(both);
-                            total[frame] += both;
-                        }
-                    }
+                    VoiceLevels.accumulate(from, to, total, now, channels);
                     out.get(i).write(one, 0, now * 2 * channels);
                 }
                 ByteBuffer to = ByteBuffer.wrap(one).order(ByteOrder.LITTLE_ENDIAN);

@@ -27,9 +27,21 @@ public final class VoiceFormat {
     public static final int STREAM_START = 2;
     /** The recorder's own voice, as the voice chat sent it */
     public static final int OWN_VOICE = 4;
+    /**
+     * A proximity voice (another player, or a fixed place): a float follows the position, or the speaker's id when
+     * there is none, giving how far the voice chat let it carry. Recordings before this have proximity voices with a
+     * position and no range
+     */
+    public static final int HAS_RANGE = 8;
+    /** Group chat, heard the same wherever the listener is. Before this flag, group chat was the voice without a position */
+    public static final int GROUP = 16;
 
-    /** One piece of voice read back from a recording */
-    public record Frame(int format, int flags, UUID speaker, double x, double y, double z, byte[] audio) {
+    /** One piece of voice read back from a recording; range is 0 when the recording does not say */
+    public record Frame(int format, int flags, UUID speaker, double x, double y, double z, float range, byte[] audio) {
+        public Frame(int format, int flags, UUID speaker, double x, double y, double z, byte[] audio) {
+            this(format, flags, speaker, x, y, z, 0.0F, audio);
+        }
+
         public boolean hasPosition() {
             return (this.flags & HAS_POSITION) != 0;
         }
@@ -43,12 +55,21 @@ public final class VoiceFormat {
     }
 
     public static byte[] write(int format, int flags, UUID speaker, double x, double y, double z, byte[] audio) {
+        return write(format, flags & ~HAS_RANGE, speaker, x, y, z, 0.0F, audio);
+    }
+
+    /** As {@link #write(int, int, UUID, double, double, double, byte[])}, with the range kept when HAS_RANGE is set */
+    public static byte[] write(int format, int flags, UUID speaker, double x, double y, double z, float range, byte[] audio) {
         boolean placed = (flags & HAS_POSITION) != 0;
-        ByteBuffer out = ByteBuffer.allocate(2 + 16 + (placed ? 24 : 0) + audio.length);
+        boolean ranged = (flags & HAS_RANGE) != 0;
+        ByteBuffer out = ByteBuffer.allocate(2 + 16 + (placed ? 24 : 0) + (ranged ? 4 : 0) + audio.length);
         out.put((byte) format).put((byte) flags);
         out.putLong(speaker.getMostSignificantBits()).putLong(speaker.getLeastSignificantBits());
         if (placed) {
             out.putDouble(x).putDouble(y).putDouble(z);
+        }
+        if (ranged) {
+            out.putFloat(range);
         }
         out.put(audio);
         return out.array();
@@ -73,9 +94,16 @@ public final class VoiceFormat {
             y = in.getDouble();
             z = in.getDouble();
         }
+        float range = 0.0F;
+        if ((flags & HAS_RANGE) != 0) {
+            if (in.remaining() < 4) {
+                throw new IllegalArgumentException("A voice record is too short for its range");
+            }
+            range = in.getFloat();
+        }
         byte[] audio = new byte[in.remaining()];
         in.get(audio);
-        return new Frame(format, flags, speaker, x, y, z, audio);
+        return new Frame(format, flags, speaker, x, y, z, range, audio);
     }
 
     public static byte[] pcmBytes(short[] samples) {

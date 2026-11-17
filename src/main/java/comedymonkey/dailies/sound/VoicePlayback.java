@@ -8,7 +8,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.openal.AL10;
-import org.lwjgl.openal.AL11;
 import org.lwjgl.openal.ALC10;
 
 import java.util.ArrayDeque;
@@ -22,10 +21,12 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Plays recorded voice chat while a recording is watched (specification PLAY-16): each speaker is heard from where
- * they stood, and only while the recording runs at its normal speed. It speaks to OpenAL directly, in the game's own
- * sound context, so the game's listener places the voices and nothing of Simple Voice Chat is needed to hear
- * uncompressed pieces. Pieces stored as Opus need that mod's decoder; without it they stay silent.
+ * Plays recorded voice chat while a recording is watched (specification PLAY-16), only while the recording runs at
+ * its normal speed. How loud each piece is follows {@link VoiceLevels}: a nearby speaker by their distance from the
+ * camera, group chat and the recorder's own voice at full volume, and none of them placed left or right. It speaks to
+ * OpenAL directly, in the game's own sound context, with every source in the middle of the listener's head and its
+ * gain set here, so nothing of Simple Voice Chat is needed to hear uncompressed pieces. Pieces stored as Opus need
+ * that mod's decoder; without it they stay silent.
  * <p>
  * Each speaker has one source that is fed 20 millisecond buffers as their records come by. Because the sources live
  * in the game's context, an export that captures the game's sound captures the voices with it.
@@ -40,8 +41,6 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
     private static final int MAX_QUEUED = 25;
     /** Silence put in front of a stretch of speech, so that pieces arriving a tick apart do not leave gaps */
     private static final int LEAD_SAMPLES = VoiceFormat.SAMPLE_RATE * 60 / 1000;
-    /** How far a voice carries, in blocks: the voice chat's usual distance */
-    private static final float REACH = 48.0F;
     private static final int IDLE_TICKS = 100;
     private static final double NORMAL_SPEED = 20.0;
     private static final double SPEED_TOLERANCE = 0.5;
@@ -96,15 +95,8 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
         if (queued >= MAX_QUEUED) {
             return;
         }
-        if (frame.hasPosition()) {
-            AL10.alSourcei(voice.source, AL10.AL_SOURCE_RELATIVE, AL10.AL_FALSE);
-            AL10.alSource3f(voice.source, AL10.AL_POSITION, (float) frame.x(), (float) frame.y(), (float) frame.z());
-        } else {
-            // Heard everywhere: in the middle of the listener's head
-            AL10.alSourcei(voice.source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
-            AL10.alSource3f(voice.source, AL10.AL_POSITION, 0.0F, 0.0F, 0.0F);
-        }
-        AL10.alSourcef(voice.source, AL10.AL_GAIN, Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.VOICE));
+        // The source stays in the middle of the listener's head, where it was put; only its loudness follows the distance
+        AL10.alSourcef(voice.source, AL10.AL_GAIN, Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.VOICE) * cameraGain(frame));
         boolean playing = AL10.alGetSourcei(voice.source, AL10.AL_SOURCE_STATE) == AL10.AL_PLAYING;
         if (!playing && queued == 0) {
             this.queue(voice, new short[LEAD_SAMPLES]);
@@ -121,9 +113,9 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
 
     /**
      * An export that keeps each speaker on a track of their own (EXP-12): the voice is not played into the game's
-     * sound device, where it would be mixed with everything else for good, but placed here the way that device
-     * would place it and handed to the export. As loud as the distance allows, fading evenly to nothing at the end
-     * of its reach, and to the left or right as the speaker stood from the camera.
+     * sound device, where it would be mixed with everything else for good, but given its loudness here, exactly as
+     * {@link #play} gives it to the sound device, and handed to the export. The same in both ears, so a speaker's
+     * track carries the distance and the tracks still add up to the mix.
      */
     private void keepApart(VoiceFormat.Frame frame) {
         Voice voice = this.apart.computeIfAbsent(frame.speaker(), speaker -> new Voice());
@@ -133,20 +125,13 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
         }
         Minecraft minecraft = Minecraft.getInstance();
         float gain = minecraft.options.getSoundSourceVolume(SoundSource.VOICE) * minecraft.options.getSoundSourceVolume(SoundSource.MASTER);
-        double side = 0.0;
-        if (frame.hasPosition()) {
-            net.minecraft.client.Camera camera = minecraft.gameRenderer.getMainCamera();
-            net.minecraft.world.phys.Vec3 to = new net.minecraft.world.phys.Vec3(frame.x(), frame.y(), frame.z()).subtract(camera.getPosition());
-            double distance = to.length();
-            gain *= (float) Math.max(0.0, 1.0 - distance / REACH);
-            if (distance > 1.0e-3) {
-                org.joml.Vector3f left = camera.getLeftVector();
-                side = -(to.x * left.x() + to.y * left.y() + to.z * left.z()) / distance;
-            }
-        }
-        side = Math.max(-1.0, Math.min(1.0, side));
-        // Equal power: a voice straight ahead is as loud in each ear as one to the side is in one
-        ExportSound.voice(frame.speaker(), speakerName(frame.speaker()), samples, (float) (gain * Math.sqrt((1.0 - side) / 2.0)), (float) (gain * Math.sqrt((1.0 + side) / 2.0)));
+        ExportSound.voice(frame.speaker(), speakerName(frame.speaker()), samples, gain * cameraGain(frame));
+    }
+
+    /** How loud a piece is from the camera being watched or exported from, by {@link VoiceLevels} */
+    private static float cameraGain(VoiceFormat.Frame frame) {
+        net.minecraft.world.phys.Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+        return (float) VoiceLevels.gain(frame, camera.x, camera.y, camera.z);
     }
 
     /** What a speaker is called: the player of that id in the recording, else the start of the id */
@@ -239,11 +224,11 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
             this.warnOnce("no free sound source for recorded voice", null);
             return null;
         }
-        // The game switches on a distance model per source: voices fade evenly to nothing at the end of their reach
-        AL10.alSourcei(source, AL10.AL_DISTANCE_MODEL, AL11.AL_LINEAR_DISTANCE);
-        AL10.alSourcef(source, AL10.AL_REFERENCE_DISTANCE, 0.0F);
-        AL10.alSourcef(source, AL10.AL_MAX_DISTANCE, REACH);
-        AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 1.0F);
+        // Never placed in the world: in the middle of the listener's head, with no fading by OpenAL. The distance is
+        // taken into account in the gain set for every piece, and neither ear is favoured
+        AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
+        AL10.alSource3f(source, AL10.AL_POSITION, 0.0F, 0.0F, 0.0F);
+        AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0.0F);
         AL10.alSourcei(source, AL10.AL_LOOPING, AL10.AL_FALSE);
         voice = new Voice();
         voice.source = source;

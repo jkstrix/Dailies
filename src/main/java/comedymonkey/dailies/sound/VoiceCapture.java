@@ -24,7 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * What happens to voice chat sound once Simple Voice Chat hands it over (specification REC-18, MOM-30). Every piece
  * goes to Moments, which keeps its own dialogue log. When the recordVoiceChat setting is on and a recording is
- * running, every piece is also written into the recording with its speaker and where the voice came from.
+ * running, every piece is also written into the recording with its speaker, where the voice came from, what kind
+ * of voice it is (another player or a fixed place, heard by distance; group chat; the recorder's own) and, for the
+ * first kind, how far the voice chat lets it carry, so that playback and export can follow {@link VoiceLevels}.
  * <p>
  * The voice chat's client events carry plain samples, so pieces are packed with the voice chat's own Opus encoder
  * before they are stored; a piece that cannot be packed is stored as it is. This class names the voice chat's
@@ -48,7 +50,7 @@ final class VoiceCapture {
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
 
     private enum Place {
-        ENTITY, FIXED, OWN, NONE
+        ENTITY, FIXED, OWN, GROUP, NONE
     }
 
     private VoiceCapture() {
@@ -56,7 +58,7 @@ final class VoiceCapture {
 
     static void heardEntity(ClientReceiveSoundEvent.EntitySound event) {
         try {
-            heard(event.getId(), event.getRawAudio(), Place.ENTITY, event.getEntityId(), 0.0, 0.0, 0.0);
+            heard(event.getId(), event.getRawAudio(), Place.ENTITY, event.getEntityId(), 0.0, 0.0, 0.0, event.getDistance());
         } catch (Throwable t) {
             warnOnce("heard", t);
         }
@@ -66,9 +68,9 @@ final class VoiceCapture {
         try {
             Position position = event.getPosition();
             if (position == null) {
-                heard(event.getId(), event.getRawAudio(), Place.NONE, null, 0.0, 0.0, 0.0);
+                heard(event.getId(), event.getRawAudio(), Place.NONE, null, 0.0, 0.0, 0.0, event.getDistance());
             } else {
-                heard(event.getId(), event.getRawAudio(), Place.FIXED, null, position.getX(), position.getY(), position.getZ());
+                heard(event.getId(), event.getRawAudio(), Place.FIXED, null, position.getX(), position.getY(), position.getZ(), event.getDistance());
             }
         } catch (Throwable t) {
             warnOnce("heard", t);
@@ -77,7 +79,7 @@ final class VoiceCapture {
 
     static void heardEverywhere(ClientReceiveSoundEvent.StaticSound event) {
         try {
-            heard(event.getId(), event.getRawAudio(), Place.NONE, null, 0.0, 0.0, 0.0);
+            heard(event.getId(), event.getRawAudio(), Place.GROUP, null, 0.0, 0.0, 0.0, 0.0F);
         } catch (Throwable t) {
             warnOnce("heard", t);
         }
@@ -89,13 +91,13 @@ final class VoiceCapture {
             Minecraft minecraft = Minecraft.getInstance();
             var player = minecraft.player;
             UUID self = player != null ? player.getUUID() : minecraft.getUser().getProfileId();
-            heard(self, event.getRawAudio(), Place.OWN, null, 0.0, 0.0, 0.0);
+            heard(self, event.getRawAudio(), Place.OWN, null, 0.0, 0.0, 0.0, 0.0F);
         } catch (Throwable t) {
             warnOnce("spoke", t);
         }
     }
 
-    private static void heard(@Nullable UUID speaker, @Nullable short[] samples, Place place, @Nullable UUID entity, double x, double y, double z) {
+    private static void heard(@Nullable UUID speaker, @Nullable short[] samples, Place place, @Nullable UUID entity, double x, double y, double z, float range) {
         if (speaker == null || samples == null || samples.length == 0) {
             // An empty piece only marks the end of a stretch of speech
             return;
@@ -105,7 +107,12 @@ final class VoiceCapture {
         if (!Host.get().setting("recordVoiceChat", false) || Recorder.get().state() != Recorder.State.RECORDING) {
             return;
         }
-        int flags = place == Place.OWN ? VoiceFormat.OWN_VOICE : 0;
+        int flags = switch (place) {
+            case OWN -> VoiceFormat.OWN_VOICE;
+            case GROUP -> VoiceFormat.GROUP;
+            // Another player, or a fixed place: heard by distance, and the voice chat says how far it carries
+            case ENTITY, FIXED, NONE -> range > 0.0F ? VoiceFormat.HAS_RANGE : 0;
+        };
         int format = VoiceFormat.PCM;
         byte[] audio = null;
         if (copy.length == VoiceFormat.FRAME_SAMPLES) {
@@ -136,7 +143,7 @@ final class VoiceCapture {
         int finalFlags = flags;
         byte[] finalAudio = audio;
         // Records may only be written on the client thread, and that is also where positions can be read
-        Minecraft.getInstance().execute(() -> write(finalFormat, finalFlags, speaker, place, entity, x, y, z, finalAudio));
+        Minecraft.getInstance().execute(() -> write(finalFormat, finalFlags, speaker, place, entity, x, y, z, range, finalAudio));
     }
 
     private static @Nullable Packer packer(UUID speaker, long now) {
@@ -166,19 +173,19 @@ final class VoiceCapture {
         return packer;
     }
 
-    private static void write(int format, int flags, UUID speaker, Place place, @Nullable UUID entity, double x, double y, double z, byte[] audio) {
+    private static void write(int format, int flags, UUID speaker, Place place, @Nullable UUID entity, double x, double y, double z, float range, byte[] audio) {
         try {
             Minecraft minecraft = Minecraft.getInstance();
             Vec3 where = switch (place) {
                 case FIXED -> new Vec3(x, y, z);
                 case OWN -> minecraft.player == null ? null : minecraft.player.getEyePosition();
                 case ENTITY -> entity == null ? null : eyes(minecraft.level, entity);
-                case NONE -> null;
+                case GROUP, NONE -> null;
             };
             if (where == null) {
-                Recorder.get().writeExtension(VoiceFormat.ID, VoiceFormat.write(format, flags, speaker, 0.0, 0.0, 0.0, audio));
+                Recorder.get().writeExtension(VoiceFormat.ID, VoiceFormat.write(format, flags, speaker, 0.0, 0.0, 0.0, range, audio));
             } else {
-                Recorder.get().writeExtension(VoiceFormat.ID, VoiceFormat.write(format, flags | VoiceFormat.HAS_POSITION, speaker, where.x, where.y, where.z, audio));
+                Recorder.get().writeExtension(VoiceFormat.ID, VoiceFormat.write(format, flags | VoiceFormat.HAS_POSITION, speaker, where.x, where.y, where.z, range, audio));
             }
         } catch (Throwable t) {
             warnOnce("write", t);

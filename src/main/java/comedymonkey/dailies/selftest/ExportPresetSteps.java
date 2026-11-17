@@ -324,13 +324,14 @@ final class ExportPresetSteps {
             spoken[1] = frame;
             // As much speech as the video has had time for, in the voice chat's 20 millisecond pieces
             while (spoken[0] < (frame + 1) * RATE / 30) {
-                // Three blocks to the right of the camera
+                // A proximity voice 24 blocks to the right of the camera, in a range of 48: about half as loud, the same in both ears
                 Vec3 camera = minecraft.gameRenderer.getMainCamera().getPosition();
                 org.joml.Vector3f left = minecraft.gameRenderer.getMainCamera().getLeftVector();
-                byte[] near = VoiceFormat.write(VoiceFormat.PCM, VoiceFormat.HAS_POSITION | (spoken[0] == 0 ? VoiceFormat.STREAM_START : 0), recorder,
-                    camera.x - left.x() * 3.0, camera.y - left.y() * 3.0, camera.z - left.z() * 3.0,
+                byte[] near = VoiceFormat.write(VoiceFormat.PCM, VoiceFormat.HAS_POSITION | VoiceFormat.HAS_RANGE | (spoken[0] == 0 ? VoiceFormat.STREAM_START : 0), recorder,
+                    camera.x - left.x() * 24.0, camera.y - left.y() * 24.0, camera.z - left.z() * 24.0, 48.0F,
                     VoiceFormat.pcmBytes(tone(spoken[0], VoiceFormat.FRAME_SAMPLES, 330.0, 9000)));
-                byte[] everywhere = VoiceFormat.write(VoiceFormat.PCM, spoken[0] == 0 ? VoiceFormat.STREAM_START : 0, stranger, 0, 0, 0,
+                // Group chat: full volume
+                byte[] everywhere = VoiceFormat.write(VoiceFormat.PCM, VoiceFormat.GROUP | (spoken[0] == 0 ? VoiceFormat.STREAM_START : 0), stranger, 0, 0, 0,
                     VoiceFormat.pcmBytes(tone(spoken[0], VoiceFormat.FRAME_SAMPLES, 550.0, 7000)));
                 VoicePlayback.INSTANCE.play(near, 0, near.length, false);
                 VoicePlayback.INSTANCE.play(everywhere, 0, everywhere.length, false);
@@ -445,12 +446,13 @@ final class ExportPresetSteps {
         }
         long wanted = (long) musicTicks * RATE / 20;
         check(Math.abs(first / channels - wanted) <= 4, "the music starts at sample " + first / channels + " of " + video.getFileName() + ", not at " + wanted + " where its keyframe is");
-        // The speaker near the camera, to its side, is louder in one ear; the one heard everywhere is the same in both
+        // No voice is placed left or right; the one 24 blocks away is quieter for it (9000 at about 0.55 against 7000 at full)
         if (channels == 2) {
             short[] near = tracks.get(2);
             short[] everywhere = tracks.get(3);
-            check(peak(near, 1) > peak(near, 0) + 2000, "a voice from the right is not louder in the right ear: left " + peak(near, 0) + ", right " + peak(near, 1));
-            check(Math.abs(peak(everywhere, 0) - peak(everywhere, 1)) <= 2, "a voice without a place is not the same in both ears");
+            check(Math.abs(peak(near, 0) - peak(near, 1)) <= 2, "a voice from the right is not the same in both ears: left " + peak(near, 0) + ", right " + peak(near, 1));
+            check(Math.abs(peak(everywhere, 0) - peak(everywhere, 1)) <= 2, "group chat is not the same in both ears");
+            check(peak(near, 0) > 0 && peak(near, 0) < peak(everywhere, 0) * 0.9, "a voice 24 blocks away is not quieter than group chat: " + peak(near, 0) + " against " + peak(everywhere, 0));
         }
         // The WAV files beside the video hold the same samples as the tracks inside it
         int files = 0;
