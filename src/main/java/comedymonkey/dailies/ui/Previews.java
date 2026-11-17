@@ -66,6 +66,38 @@ public final class Previews {
         EditorState.sideFolded = false;
     }
 
+    /** Folds or unfolds the editor's viewer card, players card, inspector panel and timeline rows */
+    public static void editorFolds(boolean viewer, boolean players, boolean side, boolean timeline) {
+        EditorState.viewerFolded = viewer;
+        EditorState.playersFolded = players;
+        EditorState.sideFolded = side;
+        EditorState.timelineFolded = timeline;
+    }
+
+    /** Opens the editor's "..." menu as a click on it would; whether it opened */
+    public static boolean editorMore() {
+        return Minecraft.getInstance().screen instanceof EditorScreen editor && editor.openMore();
+    }
+
+    /** What is wrong with the editor's layout as it stands, in words: overlaps, parts off the screen, controls with no room */
+    public static List<String> editorLayoutProblems() {
+        return Minecraft.getInstance().screen instanceof EditorScreen editor ? editor.layoutProblems() : List.of("the editor is not on screen");
+    }
+
+    /** The share of the window the editor's view has, or -1 when the editor is not on screen */
+    public static double editorViewShare() {
+        return Minecraft.getInstance().screen instanceof EditorScreen editor ? editor.viewShare() : -1.0;
+    }
+
+    /** The kind of control the keys act on in a Dailies screen, or "" when none has the ring */
+    public static String focusedControl() {
+        Gadget focus = Gadget.focus;
+        if (focus != null) {
+            return focus.getClass().getSimpleName();
+        }
+        return Entry.typing() ? "Entry" : "";
+    }
+
     /** Unfolds or folds the rarer settings of the editor's export tab */
     public static void exportMore(boolean unfolded) {
         ExportForms.showMore(unfolded);

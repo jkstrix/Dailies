@@ -109,6 +109,7 @@ public final class SelfTest {
             BalloonSteps.run(this);
             ExportSteps.run(this);
             SettingsSteps.editorDropdown(this);
+            EditorDesignSteps.run(this);
             ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
             // While the recording with the machines in it is still there: the library steps take it apart

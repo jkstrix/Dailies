@@ -34,6 +34,8 @@ public final class Controls {
     static final int PARCHMENT_DIM = 0xFFA89878;
     /** A panel of the editor: walnut, less see-through than the playback bar so that small print stays readable */
     static final int PANEL = 0xEC2B1D0E;
+    /** The editor's cards, which lie over the view: the world still shows through */
+    static final int CARD = 0xC82B1D0E;
     /** The inside of a box to type in */
     static final int FIELD = 0xFF1A1108;
     /** Something refused or wrong */
