@@ -1,0 +1,45 @@
+// Moments Companion: a small server-side mod that sends custom events to players' games, where a recorder
+// logs them as moments. Build it with  gradlew build
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = project.mod_version
+group = 'comedymonkey.momentscompanion'
+
+base {
+    archivesName = 'moments-companion-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        moments_companion {
+            sourceSet sourceSets.main
+        }
+    }
+
+    runs {
+        // A bare dedicated server with only this mod, for testing against a client that does not have it
+        server {
+            server()
+            gameDirectory = file('run-server')
+            programArgument '--nogui'
+        }
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

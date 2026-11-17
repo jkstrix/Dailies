@@ -1,0 +1,9 @@
+.gradle/
+build/
+bin/
+run/
+run-test/
+run-server/
+.eclipse/
+.vscode/
+*.class

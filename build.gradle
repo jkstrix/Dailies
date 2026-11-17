@@ -1,0 +1,57 @@
+// Dailies: a client-only replay mod for Minecraft 1.21.1 on NeoForge. Built from design/dailies-spec.html
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = project.mod_version
+group = 'comedymonkey.dailies'
+
+base {
+    archivesName = 'dailies-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+sourceSets {
+    main {
+        // The owner's provided features (specification chapters VIII to XII) are compiled from where they were handed over
+        java.srcDir 'reference/src/main/java'
+        resources.srcDir 'reference/src/main/resources'
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies {
+            sourceSet sourceSets.main
+        }
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = file('run')
+        }
+        // The scripted run of specification chapter XIV. It drives itself and exits with PASSED or FAILED in the log
+        testClient {
+            client()
+            gameDirectory = file('run-test')
+            systemProperty 'dailies.test.script', 'auto'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

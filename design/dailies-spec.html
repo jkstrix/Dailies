@@ -1,0 +1,1220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dailies: the build specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Pixelify+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a works specification in the Clockwork Commonwealth house style. A brass-ruled masthead with the Dailies seal, a sticky index
+   of chapters, then numbered chapters. Each chapter is a short lede, then requirement tables (every row has an id the builder and the
+   tester can point at), rule cards for the musts and must-nots, and steps where order matters. Brass, walnut and notice paper. */
+:root {
+	--ground: #e8e6e0; --sheet: #f4f1ea; --ink: #2b1d0e; --muted: #6b5a49; --walnut: #4e3626; --brass: #9a7a34; --brass-hi: #c9a75a;
+	--verdigris: #3f7f6f; --rust: #8a3412; --rule: #cdbf9f;
+	--display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+	--body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+	--pixel: "Pixelify Sans", "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+	--ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #d2b48c; --brass: #c9a75a; --brass-hi: #e0c27a;
+	--verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; color-scheme: dark } }
+:root[data-theme="dark"] {
+	--ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #d2b48c; --brass: #c9a75a; --brass-hi: #e0c27a;
+	--verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+body { background: var(--ground); color: var(--ink); font: 17px/1.58 var(--body); margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px }
+.wrap { max-width: 1080px; margin: 0 auto }
+h1, h2, h3 { font-family: var(--display); line-height: 1.05; text-wrap: balance; margin: 0 }
+h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; letter-spacing: .01em; text-transform: uppercase }
+h3 { font-size: 23px; font-weight: 600; letter-spacing: .02em; margin-top: 8px }
+p { margin: 0; max-width: 70ch }
+a { color: var(--verdigris) }
+kbd, .cmd, code { font: 0.84em ui-monospace, "Cascadia Mono", Consolas, monospace; background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere }
+:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px }
+.eyebrow { font: 700 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
+.lede { color: var(--muted); font-size: 18px }
+
+.mast { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; padding-block: 40px 30px }
+.mast h1 { font-size: clamp(44px, 8vw, 86px); font-weight: 800; text-transform: uppercase; letter-spacing: .01em }
+.mast h1 span { color: var(--brass) }
+.mast p { margin-top: 12px; font-size: 19px; color: var(--muted) }
+.seal { width: clamp(92px, 15vw, 140px); height: auto; display: block }
+@media (max-width: 620px) { .mast { grid-template-columns: 1fr } }
+
+nav.index { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--ground); border-block: 2px solid var(--rule) }
+nav.index ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; overflow-x: auto }
+nav.index a { display: block; padding: 11px 10px; color: var(--ink); text-decoration: none; font: 600 16px var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; border-bottom: 3px solid transparent }
+nav.index a:hover { border-bottom-color: var(--brass) }
+nav.index a i { font-style: normal; color: var(--brass); margin-right: 5px }
+
+section { display: grid; gap: 20px; padding-block: 44px 36px; border-top: 2px solid var(--rule); scroll-margin-top: 56px }
+section:first-of-type { border-top: 0 }
+.chapter { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap }
+.chapter .no { font: 800 clamp(30px, 4vw, 44px)/1 var(--display); color: var(--brass) }
+.owner { font: 600 11px var(--pixel); letter-spacing: .06em; padding: 1px 6px; border: 2px solid currentColor; text-transform: uppercase; transform: rotate(-3deg); align-self: center }
+.owner.new { color: var(--rust) } .owner.yours { color: var(--verdigris) }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px }
+.card { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; min-width: 0; align-content: start }
+.card h3 { margin-top: 0 }
+.card ul, .card ol { margin: 0; padding-left: 20px; display: grid; gap: 6px }
+.card p, .card li { font-size: 16px }
+
+ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 10px }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 40px 1fr; gap: 14px; align-items: start; background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--brass); border-radius: 4px; padding: 14px 16px }
+ol.steps > li::before { content: counter(s); font: 800 26px/40px var(--display); text-align: center; width: 40px; height: 40px; background: var(--walnut); color: var(--sheet) }
+ol.steps h3 { margin: 0 0 3px; font-size: 21px }
+ol.steps p { color: var(--muted); font-size: 16px }
+
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+.rule { background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--verdigris); border-radius: 4px; padding: 13px 16px; display: grid; gap: 4px; align-content: start }
+.rule.no { border-left-color: var(--rust) }
+.rule b { font-size: 16px }
+.rule span { color: var(--muted); font-size: 15px }
+
+.tablebox { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px }
+table { width: 100%; border-collapse: collapse; font-size: 16px }
+th { text-align: left; font: 700 12px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 2px solid var(--rule) }
+td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
+tr:last-child td { border-bottom: 0 }
+td:first-child { white-space: nowrap; font-weight: 700 }
+/* requirement tables: the first cell is the id */
+table.req td:first-child { font: 600 13px/1.9 var(--pixel); color: var(--brass); letter-spacing: .03em }
+table.req td:nth-child(2) { min-width: 300px }
+table.req td:nth-child(3) { color: var(--muted); font-size: 15px; min-width: 200px }
+
+.notice { background: var(--sheet); border: 2px solid var(--rust); border-radius: 6px; padding: 16px 20px; display: grid; gap: 8px }
+.notice h3 { margin: 0; color: var(--rust) }
+.fact { background: var(--sheet); border: 1px dashed var(--brass); border-radius: 6px; padding: 14px 18px; display: grid; gap: 8px }
+.fact > b:first-child { font: 700 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--brass) }
+.fact ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 16px }
+
+details { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 16px }
+details + details { margin-top: 8px }
+summary { cursor: pointer; font-weight: 700 }
+details p { margin-top: 8px; color: var(--muted) }
+details .tablebox { margin-top: 12px; border: 0 }
+pre { margin: 0; padding: 12px 14px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; overflow-x: auto; font: 14px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace }
+footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule); padding-top: 18px }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto } }
+</style>
+</head>
+<body>
+<div class="wrap">
+	<header class="mast">
+		<svg class="seal" viewBox="0 0 200 200" role="img" aria-label="The Dailies seal: a brass cog ring around a film reel">
+			<circle cx="100" cy="100" r="88" fill="none" stroke="var(--brass)" stroke-width="16" stroke-dasharray="14 9"/>
+			<circle cx="100" cy="100" r="82" fill="var(--brass)"/>
+			<circle cx="100" cy="100" r="70" fill="var(--sheet)" stroke="var(--walnut)" stroke-width="3"/>
+			<circle cx="100" cy="100" r="46" fill="none" stroke="var(--walnut)" stroke-width="6"/>
+			<g fill="var(--walnut)">
+				<circle cx="100" cy="72" r="10"/><circle cx="126.6" cy="91.3" r="10"/><circle cx="116.5" cy="122.7" r="10"/>
+				<circle cx="83.5" cy="122.7" r="10"/><circle cx="73.4" cy="91.3" r="10"/>
+			</g>
+			<circle cx="100" cy="100" r="6" fill="var(--brass)"/>
+			<path d="M138 136 q22 10 34 -8" fill="none" stroke="var(--walnut)" stroke-width="6" stroke-linecap="round"/>
+		</svg>
+		<div>
+			<div class="eyebrow">Works specification · Minecraft 1.21.1 · NeoForge</div>
+			<h1>The <span>Dailies</span></h1>
+			<p>A replay mod that records what you played, plays it back from any angle, and tells you which moments are worth cutting into a video. This is the document a builder works from.</p>
+		</div>
+	</header>
+
+	<nav class="index" aria-label="Chapters">
+		<ul>
+			<li><a href="#rules"><i>I</i>Ground rules</a></li>
+			<li><a href="#recording"><i>II</i>Recording</a></li>
+			<li><a href="#file"><i>III</i>The file</a></li>
+			<li><a href="#playback"><i>IV</i>Playback</a></li>
+			<li><a href="#editor"><i>V</i>Editor</a></li>
+			<li><a href="#export"><i>VI</i>Export</a></li>
+			<li><a href="#crafts"><i>VII</i>Create</a></li>
+			<li><a href="#camera"><i>VIII</i>Smart Camera</a></li>
+			<li><a href="#moments"><i>IX</i>Moments</a></li>
+			<li><a href="#mcp"><i>X</i>MCP</a></li>
+			<li><a href="#page"><i>XI</i>The page</a></li>
+			<li><a href="#server"><i>XII</i>Server side</a></li>
+			<li><a href="#config"><i>XIII</i>Settings</a></li>
+			<li><a href="#tests"><i>XIV</i>Proving it</a></li>
+			<li><a href="#provided"><i>XV</i>Provided</a></li>
+			<li><a href="#tools"><i>A</i>Tools</a></li>
+			<li><a href="#records"><i>B</i>Records</a></li>
+		</ul>
+	</nav>
+
+	<!-- ============================================================ I -->
+	<section id="rules">
+		<div class="chapter"><span class="no">I</span><h2>Ground rules</h2></div>
+		<p class="lede">Dailies is a new mod, written from this document and from nothing else. Other replay mods exist, and none of their code, names or designs may end up in it. This chapter says how that is kept true.</p>
+
+		<div class="notice">
+			<h3>Read this before anything else</h3>
+			<p><b>What this is.</b> A description of what a replay mod must do, as a player or a tester would see it. It contains requirements, facts about Minecraft and other mods, and test steps. It contains no code and no internal design to copy.</p>
+			<p><b>Who may build from it.</b> Only someone who has never read the source of another Minecraft replay mod, in any form. The author of this document and the owner of the project are both ruled out as builders of the core.</p>
+		</div>
+
+		<h3>What the builder may and may not use</h3>
+		<div class="rules">
+			<div class="rule"><b>This document</b><span>Everything in it. Where it says "must", build it; where it says "suggested", you may do it another way.</span></div>
+			<div class="rule"><b>Public documentation</b><span>Minecraft's own code as mapped by NeoForge's toolchain, NeoForge's docs and source, and the public docs of Create, Sable, Create Aeronautics and Simple Voice Chat.</span></div>
+			<div class="rule"><b>The parts marked "yours"</b><span>Chapters VIII to XII describe features written by the project's owner. Their source is provided in <code>reference/</code> and <code>companion/</code> and is used as it stands (chapter XV).</span></div>
+			<div class="rule"><b>When something is unclear</b><span>Ask for this document to be corrected. Do not go and study how another replay mod behaves.</span></div>
+			<div class="rule no"><b>No other replay mod's source</b><span>Not a repository, not a decompiled jar, not snippets quoted in forums or issue trackers.</span></div>
+			<div class="rule no"><b>No borrowed names or look</b><span>Design your own class names, file layout, screens, labels, icons and wording. Do not imitate another mod's editor.</span></div>
+			<div class="rule no"><b>No borrowed file format</b><span>Dailies has its own recording format (chapter III). It does not read or write any other mod's recordings.</span></div>
+			<div class="rule no"><b>No "how" from the author</b><span>The author may clarify what must happen, never how to build it.</span></div>
+		</div>
+
+		<h3>What is being built</h3>
+		<div class="cols">
+			<div class="card"><h3>The mod</h3>
+				<ul>
+					<li><b>Name:</b> Dailies. <b>Mod id:</b> <code>dailies</code>.</li>
+					<li><b>Java package root:</b> <code>comedymonkey.dailies</code>. Everything the owner publishes sits under <code>comedymonkey</code>.</li>
+					<li><b>Game:</b> Minecraft Java 1.21.1 on NeoForge 21.1, Java 21.</li>
+					<li><b>Side:</b> client only. It must load on a client that joins any server, modded or vanilla, and must never be required on a server.</li>
+					<li><b>Data folder:</b> <code>&lt;game dir&gt;/dailies/</code> for recordings, moments and exports.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>The pieces</h3>
+				<ul>
+					<li><b>Core</b> (chapters II to VII): record, store, play back, edit, export. <i>New work.</i></li>
+					<li><b>Smart Camera, Moments, MCP, the page</b> (VIII to XI): the owner's features. Their source is provided and plugs into the new core through one interface.</li>
+					<li><b>Server companion</b> (XII): the owner's separate server mod, provided complete.</li>
+					<li><b>What is provided</b> (XV) and two appendices: every tool's arguments, and the stored records.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>How to read a requirement</h3>
+				<ul>
+					<li>Every requirement has an id such as <code>REC-4</code>. Tests in chapter XIV point back at them.</li>
+					<li><b>Must</b> is binding. <b>Should</b> is expected unless there is a stated reason. <b>May</b> is allowed.</li>
+					<li>Boxes headed <b>Facts</b> are things that are true of Minecraft or of other mods. They are there so you don't have to rediscover them, and you should verify them.</li>
+				</ul>
+			</div>
+		</div>
+
+		<h3>Words used throughout</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Word</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td>Recording</td><td>The act of capturing a play session, and the file it produces.</td></tr>
+				<tr><td>Tick</td><td>One game tick, a twentieth of a second. Recordings are measured in ticks from 0.</td></tr>
+				<tr><td>Recorder</td><td>The player whose game made the recording.</td></tr>
+				<tr><td>Viewer</td><td>The invisible, free-flying camera a person controls while watching a recording.</td></tr>
+				<tr><td>Segment</td><td>A stretch of a recording that begins with a full snapshot of the world, so playback can start there.</td></tr>
+				<tr><td>Scene</td><td>One edit of a recording: a set of tracks and an export range.</td></tr>
+				<tr><td>Track, keyframe</td><td>A track holds keyframes of one kind (camera, speed, time of day...). A keyframe is a value at a tick.</td></tr>
+				<tr><td>Moment</td><td>Something logged while playing: an event, a stretch of players being together, or a line of voice chat.</td></tr>
+				<tr><td>Clip</td><td>A proposed stretch of a recording, built from moments, with a title, a summary and a score.</td></tr>
+				<tr><td>Craft</td><td>A moving structure made of blocks: a Create contraption or a Sable physics object such as a Create Aeronautics aeroplane.</td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ II -->
+	<section id="recording">
+		<div class="chapter"><span class="no">II</span><h2>Recording</h2><span class="owner new">new work</span></div>
+		<p class="lede">While a recording runs, Dailies keeps everything needed to show the session again exactly as the recorder's game received it, and adds the few things the game never receives about its own player.</p>
+
+		<div class="fact"><b>Facts</b>
+			<ul>
+				<li>A Minecraft client learns about the world only from what the server sends it: chunks, block changes, entities and their movement, particles, sounds, weather, time, chat and so on. This is true in singleplayer too, where the server runs inside the same program.</li>
+				<li>The server does not send a client its own player's movement, look direction, pose, arm swings or held item, because the client already knows them. A recording that is only "what was received" has no recorder in it.</li>
+				<li>Some of what arrives is about the connection, not the world: keep-alives, pings, resource pack prompts, login and configuration steps, chat signing data, the player's own open screens and inventory windows.</li>
+				<li>Mods send their own messages over the same connection ("custom payloads"), each with a namespaced id. NeoForge attaches extra spawn data to some modded entities in a payload of its own that arrives with the entity's spawn.</li>
+				<li>A connection can pass back through the configuration phase mid-session (some servers do this when moving a player between worlds). Registries may change when it does.</li>
+			</ul>
+		</div>
+
+		<h3>Starting and stopping</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>REC-1</td><td>A recording can be started and finished from the pause menu, from key bindings, and through MCP (chapter X). It can be paused, resumed and cancelled the same three ways.</td><td>Cancel discards the file after a confirmation.</td></tr>
+				<tr><td>REC-2</td><td>An option starts a recording automatically on joining any world or server. Another finishes it automatically on leaving. Defaults: auto start off, auto finish on.</td><td>With auto finish off, leaving a world keeps the recording open so the next world joined continues it.</td></tr>
+				<tr><td>REC-3</td><td>While paused, nothing is captured and the recording's clock does not advance. Resuming must leave playback correct: the world shown after the gap must be the world as it was at resume, not as it was at pause.</td><td>In practice a resume starts a new segment.</td></tr>
+				<tr><td>REC-4</td><td>The player is told when a recording starts, pauses, resumes, finishes or fails, by an on-screen notice that can be turned off. A small indicator shows while recording.</td><td>Design your own notices.</td></tr>
+				<tr><td>REC-5</td><td>Finishing asks for a name (with a default built from date and time) unless a "save without asking" option is on. The finished file appears in a list of recordings on the title screen and pause menu.</td><td></td></tr>
+				<tr><td>REC-6</td><td>If the game closes or crashes mid-recording, the next launch finds the unfinished recording and offers to recover or discard it. Recovery keeps everything up to the last data safely written.</td><td>At most a few seconds may be lost.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>What is captured</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>REC-10</td><td>Everything the game receives about the world is kept, in order, with the tick it arrived on.</td><td>World, blocks, entities, effects, sound, weather, time, scoreboard, boss bars, titles, chat.</td></tr>
+				<tr><td>REC-11</td><td>Nothing about the connection or the recorder's private screens is kept: keep-alives, pings, login and resource pack steps, chat signing and session data, container windows, recipe books, advancement screens, statistics replies.</td><td>The test is "would showing this again need the original server or leak the recorder's account?"</td></tr>
+				<tr><td>REC-12</td><td>The recorder's own player is captured so that it appears in playback like any other player: position, look and head direction, pose (sneaking, swimming, gliding, sleeping, riding), arm swings, held and worn items, item use, hurt and death, and the vehicle it rides.</td><td>Update rate is an option, 1 to 20 per second; default 20.</td></tr>
+				<tr><td>REC-13</td><td>An option also captures the recorder's hotbar, selected slot, health, hunger and experience, so playback can show their HUD. Default off.</td><td></td></tr>
+				<tr><td>REC-14</td><td>Other players' skins and names are captured as the recorder's game knew them, so playback needs no network.</td><td>Playback must work offline.</td></tr>
+				<tr><td>REC-15</td><td>Custom payloads from mods are kept as raw bytes with their id, without understanding them. A payload that cannot be kept is skipped and reported once per id in the log, never per message.</td><td>See PLAY-12 for how they are shown again.</td></tr>
+				<tr><td>REC-16</td><td>NeoForge's extra spawn data for an entity is kept with that entity's spawn and survives into every later snapshot that contains the entity.</td><td>Without it, Create contraptions cannot be rebuilt.</td></tr>
+				<tr><td>REC-17</td><td>Recording continues unbroken across dimension changes, respawns and a return to the configuration phase. A dimension change is, optionally, marked (default on).</td><td></td></tr>
+				<tr><td>REC-18</td><td>If Simple Voice Chat is installed, an option captures the voice audio the recorder heard, per speaker, with positions. Default off.</td><td>Use that mod's public API only. Also feeds Moments (MOM-30).</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Segments and snapshots</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>REC-20</td><td>A recording is cut into segments of a fixed length, five minutes by default. Each segment begins with a snapshot: everything a freshly joined client would need to show the world as it is at that tick.</td><td>Snapshots make seeking fast and bound the damage of a corrupt segment.</td></tr>
+				<tr><td>REC-21</td><td>A snapshot is built from the recorder's own view of the world at that tick: loaded chunks with block entities, every known entity with its full state and passengers, players and their skins, time, weather, world border, scoreboard, boss bars, and the recorder's own player.</td><td>The client has no server to ask, so it must describe what it holds.</td></tr>
+				<tr><td>REC-22</td><td>Building a snapshot must not throw away the recording if one block entity or entity cannot describe itself. That one is skipped or stored with what can be had, and a warning names its type once.</td><td>Some modded block entities assume they are only ever asked on a server and fail on a client.</td></tr>
+				<tr><td>REC-23</td><td>Mods can add to a snapshot through a small extension point, so state that lives outside the vanilla world (chapter VII) is included.</td><td></td></tr>
+				<tr><td>REC-24</td><td>The segment length can be shortened by a system property for automated tests.</td><td><code>dailies.test.segmentTicks</code></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Markers</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>REC-30</td><td>Four key bindings each drop a marker at the current tick. Each has its own settings: colour (a preset or custom RGB), an optional description, and whether to store the recorder's position.</td><td>Unbound by default.</td></tr>
+				<tr><td>REC-31</td><td>Markers are stored in the recording and shown on the timeline in playback. Each is also logged as a moment of type <code>marker</code> (chapter IX).</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Doing no harm</h3>
+		<div class="rules">
+			<div class="rule"><b>Never stall the game</b><span>Compression and disk writes happen off the game thread. Recording must cost no visible frame time in normal play.</span></div>
+			<div class="rule"><b>Never crash the game</b><span>A failure anywhere in recording ends the recording, tells the player, and leaves the game running.</span></div>
+			<div class="rule"><b>Bounded memory</b><span>If the disk cannot keep up, the queue has a limit; reaching it pauses capture and says so, it does not eat memory.</span></div>
+			<div class="rule no"><b>Never change what the player sees</b><span>Recording is invisible to gameplay, to other mods and to the server.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ III -->
+	<section id="file">
+		<div class="chapter"><span class="no">III</span><h2>The recording file</h2><span class="owner new">new work</span></div>
+		<p class="lede">Dailies has its own format. The layout below is original to this document and is only a suggestion; what the format must be able to do is binding.</p>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>FILE-1</td><td>One recording is one file with the extension <code>.dailies</code>, which a person can copy, rename and delete.</td><td>Recordings live in <code>dailies/recordings/</code>, sub-folders allowed.</td></tr>
+				<tr><td>FILE-2</td><td>The header can be read without reading the rest: a unique id for the recording, format version, name, when it was made, game and data version, total ticks, the recorder's name and id, the world or server name, the list of segments with their start ticks, the markers, and every mod present with its version.</td><td>Lists and menus need this to be instant.</td></tr>
+				<tr><td>FILE-3</td><td>Renaming or moving the file must not break anything that refers to it. Everything refers to the recording by its unique id.</td><td>Moments and editor state both do.</td></tr>
+				<tr><td>FILE-4</td><td>Segments are independently readable and compressed. A damaged segment makes that stretch unplayable and no more.</td><td></td></tr>
+				<tr><td>FILE-5</td><td>Identical chunk data repeated across snapshots is stored once.</td><td>Most chunks do not change between snapshots; without this, long recordings are enormous.</td></tr>
+				<tr><td>FILE-6</td><td>A small preview image can be stored and shown in the list.</td><td></td></tr>
+				<tr><td>FILE-7</td><td>The format version is checked on open. A newer file than the mod understands is refused with a clear message. Older versions keep opening for as long as is practical.</td><td></td></tr>
+				<tr><td>FILE-8</td><td>Editor state (chapter V) is stored beside the recorded data in the same file, and can be rewritten without rewriting the recorded data.</td><td>Editing a two-hour recording must not copy gigabytes on every save.</td></tr>
+			</tbody>
+		</table></div>
+
+		<details><summary>Suggested layout (yours to change)</summary>
+			<p>A zip archive without archive-level compression, so each entry can be read by seeking:</p>
+			<div class="tablebox"><table>
+				<thead><tr><th>Entry</th><th>Holds</th></tr></thead>
+				<tbody>
+					<tr><td>manifest.json</td><td>Everything in FILE-2.</td></tr>
+					<tr><td>preview.png</td><td>The preview image.</td></tr>
+					<tr><td>seg/000001.bin ...</td><td>One per segment, each compressed by itself. A snapshot block, then a stream of records: a tick advance, a received game packet in the game's own wire encoding, a recorder-player update, a custom payload, a voice frame, an extension record with an id and a length.</td></tr>
+					<tr><td>chunks/&lt;hash&gt;.bin</td><td>Chunk data shared between snapshots, named by a hash of its content.</td></tr>
+					<tr><td>edit/state.json</td><td>The editor state.</td></tr>
+				</tbody>
+			</table></div>
+			<p>Give every record kind a numeric id and a length, so a reader can skip kinds it does not know. That one decision is what lets the format grow.</p>
+		</details>
+	</section>
+
+	<!-- ============================================================ IV -->
+	<section id="playback">
+		<div class="chapter"><span class="no">IV</span><h2>Playback</h2><span class="owner new">new work</span></div>
+		<p class="lede">Opening a recording puts the viewer inside the recorded session as a free camera. Nothing is simulated: everything that moves does so because the recording says it did.</p>
+
+		<div class="fact"><b>Facts</b>
+			<ul>
+				<li>The simplest way to show recorded data again is to give the real client a real connection to something that speaks the server's side of the protocol and sends the recorded data at the recorded times. The client then draws it with all its normal code, mods included.</li>
+				<li>A client connected this way expects a player of its own. That player can be the viewer: invisible, in spectator-like flight, and never sent anywhere by the recording.</li>
+				<li>NeoForge fires its server lifecycle and tick events for any integrated server. Other mods react to those and may try to run their gameplay logic on a playback world.</li>
+				<li>Entity movement arrives at most once a tick. Smooth motion between ticks is the client's own interpolation.</li>
+			</ul>
+		</div>
+
+		<h3>Opening and the viewer</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>PLAY-1</td><td>A recording opens from the list, by MCP, or from the moments page. Opening needs no network and never reads or writes any saved world.</td><td></td></tr>
+				<tr><td>PLAY-2</td><td>The viewer is a camera the person flies freely, through blocks, at an adjustable speed. It is not part of the recording and nothing in the recording can move, hurt or teleport it.</td><td>Flight options: momentum, axis locks, horizontal or look-relative movement.</td></tr>
+				<tr><td>PLAY-3</td><td>The recorder appears as an ordinary player in the world. The viewer can ride along with any entity, seeing through its eyes with its HUD where that was captured (REC-13), and leave again.</td><td></td></tr>
+				<tr><td>PLAY-4</td><td>The viewer cannot change the world: no breaking, placing, using, attacking or chatting into it. Commands other than Dailies' own are unavailable.</td><td></td></tr>
+				<tr><td>PLAY-5</td><td>If the mods installed differ from those in the recording's header, opening still works where it can, and the differences are listed for the person once. Unknown blocks, items and entities are shown as placeholders or skipped, never a crash.</td><td></td></tr>
+				<tr><td>PLAY-6</td><td>Other mods are able to tell a playback world from a real one through a documented, stable check, and gameplay logic that would alter the world (world generation changes, mob spawning, ticking of block entities' server logic) does not run.</td><td>State the check in the mod's public docs so other mods can stand down.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Time</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>PLAY-10</td><td>Playback can be paused, played, stepped a tick at a time, and run at any rate from a twentieth of normal speed to many times it.</td><td>Speed is expressed as ticks per second; 20 is normal.</td></tr>
+				<tr><td>PLAY-11</td><td>The viewer can jump to any tick. The world shown at tick N is the same whether N was reached by playing, by jumping forward or by jumping back.</td><td>This is the single most important property of playback. Jumping back means restarting from the latest snapshot at or before N and running forward silently.</td></tr>
+				<tr><td>PLAY-12</td><td>Recorded custom payloads are handed to the same mod's own client handler at the recorded tick, unless their id or namespace is on the ignore list (CFG-7). A payload whose mod is missing is dropped silently.</td><td>Ship defaults that ignore payloads known to act on the recorder's own connection or body.</td></tr>
+				<tr><td>PLAY-13</td><td>During a jump, no sounds play and no particles accumulate from the skipped stretch; particles from before the jump are cleared.</td><td></td></tr>
+				<tr><td>PLAY-14</td><td>Motion is smooth at every playback rate and at any export frame rate, including rates far below normal speed.</td><td>Interpolate in recording time, not wall-clock time.</td></tr>
+				<tr><td>PLAY-15</td><td>A jump across one segment takes at most a few seconds on ordinary hardware, and the game stays responsive while it happens.</td><td></td></tr>
+				<tr><td>PLAY-16</td><td>Where recorded, voice chat is heard in playback at normal speed, placed in the world where each speaker was.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The screen during playback</h3>
+		<div class="rules">
+			<div class="rule"><b>A timeline</b><span>Shows the whole recording, the current tick, segment boundaries and markers. Click or drag to jump.</span></div>
+			<div class="rule"><b>Transport</b><span>Play, pause, step, speed. The usual keys work when the editor is hidden.</span></div>
+			<div class="rule"><b>Hide everything</b><span>One key hides all of Dailies' own interface, leaving the plain game view.</span></div>
+			<div class="rule no"><b>No surprises on exit</b><span>Leaving playback returns to the title screen. Editor changes are already saved.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ V -->
+	<section id="editor">
+		<div class="chapter"><span class="no">V</span><h2>The editor</h2><span class="owner new">new work</span></div>
+		<p class="lede">The editor turns a recording into shots. It is a timeline of tracks, each holding keyframes of one kind, laid over the recording's ticks. Design the screens yourself; what they must let a person do is below.</p>
+
+		<h3>Scenes, tracks and keyframes</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>EDIT-1</td><td>A recording has one or more scenes. A scene has a name, its own tracks and an export range (start and end tick). Scenes can be added, renamed, duplicated, removed and switched between.</td><td>A recording always has at least one scene.</td></tr>
+				<tr><td>EDIT-2</td><td>A track holds keyframes of exactly one kind. A scene may hold several tracks of the same kind; each can be named, disabled and removed. When two enabled tracks of a kind both apply at a tick, the upper one wins.</td><td></td></tr>
+				<tr><td>EDIT-3</td><td>A keyframe sits on a whole tick. Keyframes can be added, edited, moved, copied, pasted, removed singly or as a selection, and a whole track can be cleared.</td><td></td></tr>
+				<tr><td>EDIT-4</td><td>Between two keyframes of a kind that blends, the value is interpolated by the mode set on the earlier keyframe: hold, linear, ease in, ease out, ease in and out, or a smooth curve through the neighbouring keyframes. The default mode is an option.</td><td>The smooth curve must pass through every keyframe and must not overshoot wildly on uneven spacing.</td></tr>
+				<tr><td>EDIT-5</td><td>Keyframes only take effect while playing or exporting, and for the camera only while the viewer has not taken manual control. A clear control toggles "follow the camera track" on and off.</td><td>The viewer must always be able to fly away and look around.</td></tr>
+				<tr><td>EDIT-6</td><td>Every change in the editor can be undone and redone, without limit within a session, each step described in words.</td><td>MCP uses the same undo stack (MCP-4).</td></tr>
+				<tr><td>EDIT-7</td><td>Editor state saves itself as it changes (FILE-8). Closing the game mid-edit loses nothing.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Kinds of keyframe</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Kind</th><th>What it sets</th><th>Blends</th></tr></thead>
+			<tbody>
+				<tr><td>Camera</td><td>Viewer position, yaw, pitch and roll. Adding one captures where the viewer is now.</td><td>Yes. Angles take the short way round.</td></tr>
+				<tr><td>Orbit</td><td>A centre point, distance, height and angle: the camera circles the point while looking at it.</td><td>Yes</td></tr>
+				<tr><td>Follow entity</td><td>An entity and a part of its body (feet, body, head, eyes), with an offset. The camera keeps its place relative to that entity, or stays put and turns to watch it.</td><td>Offset blends</td></tr>
+				<tr><td>Smart Camera</td><td>A player and a way of filming them; the camera places itself. See chapter VIII.</td><td>No; it has its own transition</td></tr>
+				<tr><td>Field of view</td><td>The viewer's field of view in degrees.</td><td>Yes</td></tr>
+				<tr><td>Camera shake</td><td>Strength and frequency of a hand-held wobble added on top of the camera.</td><td>Yes</td></tr>
+				<tr><td>Speed</td><td>Playback rate, as ticks per second.</td><td>Yes; the timeline must account for it when showing durations</td></tr>
+				<tr><td>Timelapse</td><td>A pair of keyframes: the stretch of recording between them is played in a stated amount of real time.</td><td>n/a</td></tr>
+				<tr><td>Freeze</td><td>Holds the world still for a stated time while the camera track carries on moving.</td><td>n/a</td></tr>
+				<tr><td>Time of day</td><td>Overrides the sky's time.</td><td>Yes</td></tr>
+				<tr><td>Block change</td><td>Shows a chosen block at a position from this tick on, without the recording having changed it.</td><td>No</td></tr>
+				<tr><td>Audio</td><td>An audio file from disk that starts playing at this tick, with a volume. Included in exports.</td><td>No</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Looks that are not on the timeline</h3>
+		<p>These are settings of a scene, changed in a panel, saved with it and applied in playback and export.</p>
+		<div class="cols">
+			<div class="card"><h3>What is drawn</h3>
+				<ul>
+					<li>Show or hide: the recorder's HUD, chat, boss bars, titles, name tags, particles, held items in first person, the block outline, the viewer's own shadow.</li>
+					<li>A filter that hides whole kinds of entity, and individual entities picked by clicking them.</li>
+					<li>Per-entity changes: hide, rename, force or remove the glowing outline, hide its name tag, hide its cape or armour.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>The world's look</h3>
+				<ul>
+					<li>Weather override: as recorded, clear, rain, thunder.</li>
+					<li>Fog: as recorded, off, or a chosen start and end distance and colour.</li>
+					<li>Sky on or off, with a plain background colour when off (for keying).</li>
+					<li>Night vision without the potion's tint.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>The frame</h3>
+				<ul>
+					<li>Field of view when no track sets it, and camera roll.</li>
+					<li>An aspect ratio guide (16:9, 9:16, 4:3, 1:1, 21:9, custom) drawn over the view.</li>
+					<li>Rule-of-thirds and centre guides, shown only in the editor, never in exports.</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- ============================================================ VI -->
+	<section id="export">
+		<div class="chapter"><span class="no">VI</span><h2>Export</h2><span class="owner new">new work</span></div>
+		<p class="lede">Export renders a scene's range to a video file, one frame at a time, however long each frame takes. The result must be identical however fast or slow the computer is.</p>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>EXP-1</td><td>Settings: resolution (any, including larger than the window or the monitor), frame rate (1 to 240, fractions allowed), start and end tick, container (MP4, MKV, MOV, WebM), video codec (H.264, H.265, AV1, VP9), bitrate or quality, and an output file name with date and time placeholders.</td><td>Offer a hardware encoder where the machine has one, with a software fallback.</td></tr>
+				<tr><td>EXP-2</td><td>Every frame is rendered at an exact point in recording time, computed from the frame number. Frames are never dropped or duplicated because of real-time speed.</td><td>Frame <i>n</i> of an <i>f</i> fps export shows recording time <i>n</i>/<i>f</i> seconds from the start, adjusted by speed, timelapse and freeze keyframes.</td></tr>
+				<tr><td>EXP-3</td><td>Game sound is captured into the file in step with the picture, in stereo, with a choice of audio codec (AAC, Opus, uncompressed). Audio keyframes and recorded voice chat are mixed in. Sound can be left out.</td><td></td></tr>
+				<tr><td>EXP-4</td><td>Options: supersampling (render larger, scale down), a transparent background where the sky is switched off and the codec supports it, a numbered PNG sequence in place of a video, and a single still image of the current view at any resolution.</td><td></td></tr>
+				<tr><td>EXP-5</td><td>Chunks and anything else that loads over several frames are fully loaded before each frame is captured. An option renders extra throwaway frames before each captured one, for shader packs that build up their image over time.</td><td>Default 0.</td></tr>
+				<tr><td>EXP-6</td><td>While exporting, a progress display shows frames done, frames total, speed and time remaining, and offers cancel. A cancelled export leaves a playable file of what was done, or removes the file; say which.</td><td>Show progress on the taskbar where the platform allows.</td></tr>
+				<tr><td>EXP-7</td><td>An export changes nothing: afterwards playback is at the tick, speed and pause state it was in before.</td><td></td></tr>
+				<tr><td>EXP-8</td><td>The encoder is a library shipped inside the mod. No separate install. Its licence must allow redistribution in a mod, and the codecs offered must match what that build of it contains.</td><td>Record the library, its version and its licence in the mod's notices.</td></tr>
+				<tr><td>EXP-9</td><td>Smart Camera (chapter VIII) and every keyframe kind behave in export exactly as in playback at the same recording time.</td><td></td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ VII -->
+	<section id="crafts">
+		<div class="chapter"><span class="no">VII</span><h2>Create and flying machines</h2><span class="owner new">new work</span></div>
+		<p class="lede">The video series this mod exists for is about Create contraptions and Create Aeronautics aircraft. They must record and play back correctly, including people riding them. This is the hardest part of the core, so the facts are spelled out.</p>
+
+		<div class="rules">
+			<div class="rule"><b>No hard dependency</b><span>Dailies loads and works without Create, Sable or Aeronautics. All support for them switches on only when they are present.</span></div>
+			<div class="rule"><b>No copied code</b><span>Reach these mods through their public APIs, or by reflection on their public classes. Never bundle their code.</span></div>
+			<div class="rule"><b>Tested versions</b><span>Create 6.0.10, Sable 2.0.6, Create Aeronautics 1.3.2 for Minecraft 1.21.1.</span></div>
+		</div>
+
+		<div class="fact"><b>Facts: Create contraptions</b>
+			<ul>
+				<li>A contraption (the thing a mechanical bearing, piston or cart carries) is an entity. Its blocks travel in NeoForge's extra spawn data (REC-16), not in the world.</li>
+				<li>Rebuilding that spawn data from an entity on a playback world fails, because the entity there is an empty shell. The recorded spawn data must be sent again as it was recorded.</li>
+				<li>Contraption movement and assembly state arrive as ordinary entity data and as Create's custom payloads.</li>
+			</ul>
+		</div>
+
+		<div class="fact"><b>Facts: Sable physics objects (Create Aeronautics)</b>
+			<ul>
+				<li>Sable keeps the blocks of each physics object (a "sub-level") in a hidden region of the same world, tens of millions of blocks from where it appears. The client draws those blocks moved and rotated into place.</li>
+				<li>Sable creates, resizes and removes sub-levels with its own custom payloads over the normal connection. Chunk data for the hidden region arrives as ordinary chunk packets.</li>
+				<li>The object's position and rotation are sent many times a second over a separate UDP channel that Sable opens beside the normal connection. It does this even in singleplayer. A recording that only watches the normal connection gets objects that never move.</li>
+				<li>Sable's client smooths motion using recent poses and ignores a pose it considers too old. After a jump in playback, the first poses must still be accepted.</li>
+				<li>Entities that belong to an object (seats, glue, rotor contraptions) have positions inside the hidden region. Sable marks packets for such entities so its client keeps them there; an unmarked position inside the region is read as "standing on the object" and moved out into the visible world.</li>
+				<li>A player standing loose on a moving object is carried by Sable's client-side logic, not by position packets alone.</li>
+				<li>Some of Sable's payloads act on the recorder's own connection or body (opening the UDP channel, freezing the player, entering an editing mode). Playing them back is harmful.</li>
+			</ul>
+		</div>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOD-1</td><td>A Create contraption that exists when recording starts, or is assembled during it, appears in playback with all its blocks and moves as it did, including after any jump.</td><td></td></tr>
+				<tr><td>MOD-2</td><td>A Sable physics object appears in playback with all its blocks and follows its recorded position and rotation, to within a third of a block during steady motion, including after any jump and across segment boundaries.</td><td>Needs the UDP data recorded, and the object and its hidden chunks included in every snapshot (REC-23).</td></tr>
+				<tr><td>MOD-3</td><td>Entities that are part of a physics object (rotors, seats, glue) stay on the object in playback, whether they were created with it or joined it later.</td><td></td></tr>
+				<tr><td>MOD-4</td><td>A player seated on a craft moves with it in playback. A player standing on a craft stays on its deck, to within a quarter of a block, while it climbs, turns or accelerates.</td><td>The hard case. With position updates alone, a standing passenger trails about a block behind a fast climb.</td></tr>
+				<tr><td>MOD-5</td><td>Jumping backwards never leaves duplicate or stale physics objects, and never produces errors about an object that already exists.</td><td>Clear the client's objects before replaying a snapshot.</td></tr>
+				<tr><td>MOD-6</td><td>The three harmful Sable payloads named in the facts are on the default ignore list.</td><td></td></tr>
+				<tr><td>MOD-7</td><td>All of the above also holds when the recording was made on a dedicated server.</td><td>Needs its own test (chapter XIV).</td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ VIII -->
+	<section id="camera">
+		<div class="chapter"><span class="no">VIII</span><h2>Smart Camera</h2><span class="owner yours">yours</span></div>
+		<p class="lede">A Smart Camera keyframe names a player and a way of filming them. From that tick until the next keyframe on its track, the camera places and aims itself every frame.</p>
+
+		<h3>The four modes</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Mode</th><th>What the camera does</th><th>Settings and defaults</th></tr></thead>
+			<tbody>
+				<tr><td>Chase</td><td>Follows the player from a fixed distance and angle relative to the way they are heading.</td><td>distance 6 · height 2 · side angle 0° (0 behind, 90 right, 180 in front) · position smoothing 0.35 s · heading from movement (falls back to body direction when nearly still) or from body</td></tr>
+				<tr><td>Tripod</td><td>Stays at a fixed position and turns to keep the player in frame.</td><td>position (where the viewer is when the keyframe is made) · aim smoothing 0.25 s</td></tr>
+				<tr><td>Orbit</td><td>Circles the player at a steady rate.</td><td>radius 8 · height 2 · 20° per second (sign is direction) · start angle</td></tr>
+				<tr><td>Director</td><td>Chooses chase, tripod and orbit shots by itself and cuts between them.</td><td>min shot 3 s · max shot 8 s · allow chase / tripod / orbit · seed</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Framing, in every mode</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>CAM-1</td><td><b>Composition.</b> The player sits at a chosen point of the frame: <code>screen_x</code> and <code>screen_y</code>, each from −1 to 1, 0 being the centre.</td><td>±0.333 is the rule of thirds.</td></tr>
+				<tr><td>CAM-2</td><td><b>Lead room.</b> When the player moves across the frame, the aim shifts ahead of them by <code>lead_room</code> (0 to 1, default 0.25) so there is space in front.</td><td></td></tr>
+				<tr><td>CAM-3</td><td><b>Auto zoom.</b> When on, the field of view changes so the subject fills <code>subject_screen_height</code> of the frame's height (default 0.3), within <code>min_fov</code> 30 and <code>max_fov</code> 90. When off, <code>fixed_fov</code> applies, or the field of view is left alone when that is 0.</td><td></td></tr>
+				<tr><td>CAM-4</td><td><b>Vehicles.</b> With <code>frame_vehicle</code> on (default), a player riding something is framed together with it: a vanilla vehicle, a Create contraption or a physics craft. The subject's size becomes the craft's size, which pushes the camera out to fit it.</td><td></td></tr>
+				<tr><td>CAM-5</td><td><b>Blocked views.</b> With <code>avoid_obstructions</code> on (default), when blocks lie between camera and subject the camera moves in along its line of sight to just in front of them, never closer than one block to the subject. Blocks of the subject's own craft do not count.</td><td>A tripod never moves; the director cuts away from a blocked one.</td></tr>
+				<tr><td>CAM-6</td><td><b>Transitions.</b> When a Smart Camera keyframe takes effect, the camera blends from wherever it was over <code>transition_seconds</code> (default 0.5; 0 is a cut).</td><td></td></tr>
+				<tr><td>CAM-7</td><td>The camera's state advances with recording time, not wall-clock time, so playback at any speed and export give the same pictures. A jump, or the subject teleporting, resets it with no blend.</td><td></td></tr>
+				<tr><td>CAM-8</td><td>One subject per keyframe: a player, chosen by name or id. The default is the recorder.</td><td></td></tr>
+				<tr><td>CAM-9</td><td>While playback is paused the Smart Camera does not move the viewer, like every other keyframe (EDIT-5).</td><td>A status query reports the pose it would take.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>How the director decides</h3>
+		<ol class="steps">
+			<li><div><h3>Read the situation</h3><p>Three yes-or-no facts about the subject: riding something, flying (gliding, or off the ground for more than a second), and moving. "Fast" means faster than 6 blocks a second, or riding, or flying. "Still" means not moving and not fast.</p></div></li>
+			<li><div><h3>Decide whether to cut</h3><p>Always cut when a shot reaches the maximum length. After the minimum length, cut when the view has been blocked for more than 0.3 s, when a tripod's subject has gone beyond that shot's range, or when the situation has been different from the one the shot started in for more than 0.5 s. A single hop does not count.</p></div></li>
+			<li><div><h3>Pick the kind of shot</h3><p>By weighted chance. Fast: chase 3, tripod 3, orbit 0.5. Still: chase 2, tripod 1, orbit 3. Otherwise: chase 3, tripod 2, orbit 1. Kinds switched off get 0. The kind just used has its weight quartered.</p></div></li>
+			<li><div><h3>Vary the shot</h3><p>Chase: distance ×1.3 to 1.9 and side angle within ±70° when fast; ×0.55 to 0.85 and ±160° when still; ×0.9 to 1.2 and ±45° otherwise; height ×0.5 to 1.5. Orbit: radius ×0.6 to 1.0 when still, ×1.0 to 1.4 otherwise; height ×0.5 to 1.25; either direction; any start angle. Tripod: placed ahead on the subject's path and off to one side, so they pass it.</p></div></li>
+			<li><div><h3>Stay repeatable</h3><p>All chance comes from the keyframe's seed and the tick the shot starts on. Playing the same stretch again gives the same edit. Cuts are instant. A jump or a settings change restarts the sequence.</p></div></li>
+		</ol>
+		<details><summary>Exact behaviour (the provided solver does all of this)</summary>
+			<div class="tablebox"><table>
+				<thead><tr><th>Part</th><th>Rule</th></tr></thead>
+				<tbody>
+					<tr><td>Subject velocity</td><td>Estimated from position change, smoothed with a 0.25 s time constant. "Moving" starts above 1.2 blocks a second and stops below 0.4.</td></tr>
+					<tr><td>Heading</td><td>The body's direction below 0.5 blocks a second, the direction of travel above 1.5, blended between. Smoothed: 0.15 s for the body, 0.35 s for travel.</td></tr>
+					<tr><td>Aim point</td><td>A player alone: three quarters of the way up their bounding box. With a vehicle or craft framed: the centre of the combined bounds. Its offset from the player and its size are smoothed over 0.3 s.</td></tr>
+					<tr><td>Size and distance</td><td>The subject's size is the largest extent of what is framed. When more than the player is framed, camera distances are measured from the edge: half the size is added.</td></tr>
+					<tr><td>Chase position</td><td>A critically damped spring with the position smoothing as its time. The goal is moved ahead by velocity × smoothing, so the camera keeps its distance at speed.</td></tr>
+					<tr><td>Orbit position</td><td>Angle = start angle + rate × seconds since the keyframe.</td></tr>
+					<tr><td>Blocked view</td><td>A ray from the edge of what is framed to the camera. On a hit the camera may sit no further than 0.35 short of it, and no nearer than 1 block. It moves in at once and eases back out over 0.4 s. The director only counts a view as blocked when the camera has been pulled in to less than 60% of its intended distance.</td></tr>
+					<tr><td>Auto zoom</td><td>Field of view = 2 × atan(size ÷ (2 × distance × screen fraction)), clamped to the limits, smoothed over 0.35 s.</td></tr>
+					<tr><td>Lead room</td><td>Above 0.3 blocks a second, the subject is shifted on screen opposite to its on-screen travel by lead room × 0.5 × (speed ÷ 4, at most 1). Smoothed over 0.5 s. The final screen position is kept within ±0.95.</td></tr>
+					<tr><td>Aiming</td><td>The rotation, without roll, that puts the aim point at the wanted screen position. A tripod turns with a spring (aim smoothing); the other modes aim exactly.</td></tr>
+					<tr><td>Transition</td><td>Position, rotation and field of view blend from the old pose with a smooth-step curve.</td></tr>
+					<tr><td>Resets</td><td>A time step over 0.5 s, or backwards by more than 0.1 s, is a jump. The subject moving more than 3 blocks at over 100 blocks a second is a teleport. Both restart with no blend.</td></tr>
+					<tr><td>Director's tripod</td><td>Up to six candidate spots, keeping the one with the clearest view. For a subject moving faster than 1 block a second: ahead on its path by 1 to 2 seconds of travel (5 to 48 blocks) and 3 to 7 blocks to one side. Otherwise 4 to 8 blocks away in any direction. 1.2 to 2.6 blocks above the ground there. The shot ends when the subject is further than the larger of 40 blocks and twice the starting distance plus 16.</td></tr>
+				</tbody>
+			</table></div>
+		</details>
+		<div class="card"><h3>Status</h3><p>A status query (MCP <code>smart_camera_status</code>) reports: whether a Smart Camera is active, its mode, the director's current shot and the reason for each cut so far (start, seek, subject jumped, settings changed, max duration, obstructed, too far, situation changed), the subject's position and size, the camera pose and field of view, where the subject sits on screen, whether the view is blocked and whether a vehicle is framed.</p></div>
+	</section>
+
+	<!-- ============================================================ IX -->
+	<section id="moments">
+		<div class="chapter"><span class="no">IX</span><h2>Moments</h2><span class="owner yours">yours</span></div>
+		<p class="lede">While you play, Dailies keeps a log of what happened: events, who you were with, and what was said. Afterwards it turns that log into clip candidates. This is what the mod is named for.</p>
+
+		<h3>Sessions and storage</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOM-1</td><td>A session starts when the player joins a world or server and ends when they leave. It runs whether or not a recording is running. Playback worlds never start a session.</td><td>Off switch: <code>momentsEnabled</code>.</td></tr>
+				<tr><td>MOM-2</td><td>Each session is a folder <code>dailies/moments/&lt;session id&gt;/</code> holding <code>session.json</code>, <code>events.jsonl</code>, <code>interactions.jsonl</code>, <code>dialogue.jsonl</code>, <code>clips.json</code> and <code>audio/</code>. One JSON object per line; a person can read them.</td><td>Writes happen off the game thread and are flushed on exit.</td></tr>
+				<tr><td>MOM-3</td><td><code>session.json</code> holds: start and end time, world name, world type (singleplayer, server), a stable key for the world, the server address, the local player's name and id, the ids of recordings made during the session, and the mod version.</td><td></td></tr>
+				<tr><td>MOM-4</td><td>Every record carries: an id unique in the session, real time (epoch milliseconds and ISO text), game time, time of day, dimension, biome, the player's position and, when a recording was running, the recording's id and tick.</td><td>The only link to playback. Stored as <code>replay_uuid</code> and <code>replay_tick</code> (with <code>start_</code> and <code>end_</code> in front for voice segments and clips). Appendix B shows every record.</td></tr>
+				<tr><td>MOM-5</td><td>"Firsts" are remembered per world across sessions, in <code>dailies/moments/firsts/&lt;world key&gt;.json</code>. An event's <code>first</code> flag is true the first time that type and subject occur in that world.</td><td></td></tr>
+				<tr><td>MOM-6</td><td>An error anywhere in tracking ends the session cleanly and is logged. It never affects play.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Events the player's own game detects</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Type</th><th>Subject</th><th>When, and what is stored</th></tr></thead>
+			<tbody>
+				<tr><td>mob_kill</td><td>entity type</td><td>The player killed a mob. Stores how it was attributed: <code>death_message</code>, <code>stats</code> (the kill count rose), <code>heuristic</code> (hit it, then it died) or <code>heuristic_unconfirmed</code>.</td></tr>
+				<tr><td>player_kill</td><td>victim</td><td>The player killed another player. Victim, weapon where known.</td></tr>
+				<tr><td>player_death</td><td>cause</td><td>The player died. The death message, killer where named.</td></tr>
+				<tr><td>nearby_player_death</td><td>cause</td><td>Another player died close enough to be in view. The victim, the death message and the killer where named.</td></tr>
+				<tr><td>pet_death</td><td>entity type</td><td>A tamed animal of the player's died.</td></tr>
+				<tr><td>boss_encounter<br>boss_defeated</td><td>entity type</td><td>A boss came within 64 blocks; a boss died within range. A boss is any entity on the notable list, or with at least <code>momentsBossHealthThreshold</code> (150) max health. Players within 48 blocks are listed as participants. One encounter per boss per minute.</td></tr>
+				<tr><td>advancement</td><td>advancement id</td><td>The player earned an advancement that has a display. Title, description, frame; <code>rare</code> for challenges. Ones already held at login are skipped.</td></tr>
+				<tr><td>advancement_other</td><td>title</td><td>Another player's advancement, read from the chat announcement.</td></tr>
+				<tr><td>biome_discovered</td><td>biome</td><td>The player entered a biome for the first time in this session. Flagged a first when it is also new to the world.</td></tr>
+				<tr><td>dimension_entered</td><td>dimension</td><td>The player changed dimension.</td></tr>
+				<tr><td>structure_interaction</td><td>block</td><td>First use of a block that only occurs in structures (the <code>momentsStructureBlocks</code> list), or an advancement that means "at a structure".</td></tr>
+				<tr><td>item_crafted<br>block_placed<br>block_mined<br>tool_first_use</td><td>item or block</td><td>Logged only when it is a first, unless <code>momentsLogRepeats</code> is on.</td></tr>
+				<tr><td>milestone</td><td>milestone id</td><td>Experience levels 10, 20 and 30; every 30 minutes of play in the session (logged every time); the first diamond item and the first enchanting table crafted in the world.</td></tr>
+				<tr><td>marker</td><td>description</td><td>A marker key was pressed (REC-30).</td></tr>
+				<tr><td>custom</td><td>caller's type</td><td>Added through MCP (<code>source: mcp</code>) or sent by the server (<code>source: server</code>, chapter XII).</td></tr>
+				<tr><td>job_*</td><td>kind of job</td><td>McpCraft job board events (chapter XII).</td></tr>
+			</tbody>
+		</table></div>
+		<div class="rules">
+			<div class="rule"><b>Only what the player saw or did</b><span>Their own events, plus deaths of players and notable mobs close enough to be in view. Nothing about players elsewhere.</span></div>
+			<div class="rule"><b>Kills are confirmed where possible</b><span>The game's statistics are requested every <code>momentsStatsPollSeconds</code> (5; 0 turns it off) to confirm kills that had no death message.</span></div>
+			<div class="rule"><b>Kill rules</b><span>A mob or player that dies within 5 s of the player's last hit is their kill (<code>heuristic</code>). The statistics confirm it (<code>stats</code>); unconfirmed after 15 s it is <code>heuristic_unconfirmed</code>. A kill the statistics show that nothing hinted at (arrows, pets, explosions) is logged with <code>timing: approximate</code>.</span></div>
+			<div class="rule"><b>One death, several sources</b><span>The chat message, the death screen and seeing it happen arrive within 10 s of each other and become one event; each adds what it knows.</span></div>
+			<div class="rule"><b>History is not a first</b><span>The first statistics reply of a session marks everything already done in that world as "not a first" without logging it.</span></div>
+			<div class="rule"><b>Death messages are parsed</b><span>From the translatable chat message, so victim, killer and cause are read reliably in any language.</span></div>
+		</div>
+
+		<h3>Who was together</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOM-20</td><td>Players within <code>momentsProximityRadius</code> (10 blocks) of each other count as together. Two players together for at least <code>momentsProximityMinSeconds</code> (20) are a <code>meeting</code>, stored with start, end, who, and where.</td><td>Ten seconds apart ends it; shorter gaps do not.</td></tr>
+				<tr><td>MOM-21</td><td>Three or more is a group: <code>group_formed</code>, <code>group_changed</code> when someone joins or leaves, <code>group_dissolved</code>. A player who leaves one group and joins another within two minutes is logged as a <code>group_move</code>, with the group they left.</td><td></td></tr>
+				<tr><td>MOM-22</td><td>Interactions still going on are included in queries, flagged <code>ongoing</code>.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>What was said</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOM-30</td><td>Voice comes only from Simple Voice Chat, through its public API: the audio the player heard, and their own voice as that mod sends it. Dailies never opens the microphone and never captures game sound for this.</td><td>The owner's rule. Do not weaken it.</td></tr>
+				<tr><td>MOM-31</td><td>Audio is cut into segments per speaker. A gap of <code>momentsVoiceGapMillis</code> (800) ends a segment; a segment is at most 30 s and at least 0.4 s. Each is stored as a 16 kHz mono WAV in <code>audio/</code> with a dialogue record: speaker, start and end (time, game time, recording tick), duration, file, status <code>pending</code>.</td><td>Works with no AI service at all: who spoke and when is still logged.</td></tr>
+				<tr><td>MOM-32</td><td><b>AI services are optional and off by default.</b> One switch, <code>momentsAiEnabled</code>, turns on both transcription and model-written summaries. While it is off, nothing is sent to any server.</td><td>The owner's rule.</td></tr>
+				<tr><td>MOM-33</td><td>Transcription posts each segment to an OpenAI-compatible endpoint, <code>POST &lt;momentsWhisperUrl&gt;/v1/audio/transcriptions</code>, with the model name, <code>response_format=verbose_json</code>, <code>vad_filter=true</code> and the language (default <code>en</code>; empty means detect). Parts whose <code>no_speech_prob</code> is 0.6 or more, or whose <code>avg_logprob</code> is −1.0 or less, are dropped. A segment with nothing left is <code>empty</code>.</td><td>Fixing the language matters: auto-detect turns laughter into other languages.</td></tr>
+				<tr><td>MOM-34</td><td>An unreachable server is not an error: the segment stays <code>pending</code> and is retried with growing waits (5 s up to 2 min). Three real failures mark it <code>failed</code>. A tool queues pending and failed segments again.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Importance</h3>
+		<p>Every event gets a score from 0 to 100 when it is queried: a base weight by type, plus bonuses. Keep all of these in one table in the code.</p>
+		<div class="cols">
+			<div class="card"><h3>Base weights</h3>
+				<ul>
+					<li>80 boss_defeated</li>
+					<li>60 player_kill · marker</li>
+					<li>50 boss_encounter · player_death · custom</li>
+					<li>45 job_finished</li>
+					<li>40 nearby_player_death · milestone</li>
+					<li>35 pet_death · advancement</li>
+					<li>30 dimension_entered · structure_interaction · job_posted · job_materials_complete</li>
+					<li>25 job_claimed · job_help_asked</li>
+					<li>20 advancement_other</li>
+					<li>15 biome_discovered · mob_kill</li>
+					<li>12 job_delivered · 10 item_crafted · job_dropped · anything unlisted</li>
+					<li>8 tool_first_use · job_removed · 6 block_mined · 5 block_placed</li>
+				</ul>
+			</div>
+			<div class="card"><h3>Bonuses</h3>
+				<ul>
+					<li>+15 when it is a first</li>
+					<li>+30 for a challenge advancement</li>
+					<li>+25 when a boss mob is involved</li>
+					<li>+5 for each player involved beyond the first, up to +20</li>
+					<li>+0.15 per word per minute of speech around it, up to +25 (lively talk is about 150 words a minute)</li>
+					<li>The total is capped at 100.</li>
+				</ul>
+			</div>
+		</div>
+
+		<h3>Building clips</h3>
+		<ol class="steps">
+			<li><div><h3>Choose the triggers</h3><p>Every event that scores at least the minimum (default 25), after the ignore list and any filters (player, type, time range, keyword).</p></div></li>
+			<li><div><h3>Give each a window</h3><p>From <code>momentsClipPreRollSeconds</code> (15) before to <code>momentsClipPostRollSeconds</code> (20) after.</p></div></li>
+			<li><div><h3>Cluster</h3><p>Events whose windows overlap become one clip.</p></div></li>
+			<li><div><h3>Keep sentences whole</h3><p>Widen a clip by up to 30 s on each side so no voice segment is cut. Merge clips that grow into each other.</p></div></li>
+			<li><div><h3>Add conversations</h3><p>A stretch with at least 25 words within 20 s from at least two speakers is a clip even with no event. Segments less than 10 s apart are one conversation. This step needs transcripts, so it only finds anything with AI on.</p></div></li>
+			<li><div><h3>Score, rank, cap</h3><p>An event clip scores its best event plus 3 per extra event (up to +20). A conversation scores 25, plus half a point per word (up to +45), plus 5 per speaker beyond the first. Keep the best 20 by default.</p></div></li>
+			<li><div><h3>Describe</h3><p>Each clip stores: title, summary, start and end time, duration, recording id with start and end tick, its events, players, full transcript and score. The built-in title is the best event described in a sentence; the built-in summary lists up to six events and how many words were spoken by whom.</p></div></li>
+			<li><div><h3>Optionally, ask a model</h3><p>With AI on and <code>momentsSummarizeClips</code> on, each clip is sent to <code>POST &lt;momentsOllamaUrl&gt;/api/chat</code> (JSON output, reasoning off, temperature 0.2) for a better title and summary. The built-in text is shown at once with <code>summary_pending</code>; the model's replaces it when ready. An unchanged clip keeps its model-written text. An unreachable server is noted once, not per clip.</p></div></li>
+		</ol>
+
+		<h3>Suggested camera</h3>
+		<p>Every clip in a listing carries a suggested Smart Camera, chosen from its events. Cueing a clip can add it as a keyframe at the clip's start (MCP-7).</p>
+		<div class="tablebox"><table>
+			<thead><tr><th>In the clip</th><th>Suggestion</th><th>Settings</th></tr></thead>
+			<tbody>
+				<tr><td>Action</td><td>Director, quick cuts</td><td>min shot 2 s, max shot 5 s. Action is any kill, death, boss event, <code>close_call</code>, <code>totem_saved</code>, <code>explosion</code> or <code>lightning_strike</code>.</td></tr>
+				<tr><td>Travel</td><td>Chase, wide</td><td>distance 8, height 3, side angle 25°, lead room 0.35. Travel is a new dimension or biome, a structure, or <code>big_fall</code>.</td></tr>
+				<tr><td>Conversation only</td><td>Orbit, slow and wide</td><td>radius 10, height 3, 8° per second.</td></tr>
+				<tr><td>Anything else</td><td>Orbit, slow</td><td>radius 6, 12° per second.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The ignore list</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOM-50</td><td>A list of entries (<code>momentsIgnoredEvents</code>) hides matching events from every query, milestone list, clip and the page. An entry is a type (<code>block_mined</code>), a type and subject (<code>mob_kill:minecraft:zombie</code>), or the name of a custom or server event (<code>close_call</code>). <code>*</code> matches any run of characters (<code>job_*</code>). Case is ignored.</td><td></td></tr>
+				<tr><td>MOM-51</td><td>Ignored events are still stored. Removing an entry brings them back, in old sessions too.</td><td>Filter when reading, not when writing.</td></tr>
+				<tr><td>MOM-52</td><td>The list is editable in the settings screen, over MCP and on the page.</td><td></td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ X -->
+	<section id="mcp">
+		<div class="chapter"><span class="no">X</span><h2>The MCP server</h2><span class="owner yours">yours</span></div>
+		<p class="lede">Dailies contains a Model Context Protocol server, so an AI agent can do everything a person can: record, open, seek, edit, export, and query moments. It listens only on the player's own machine.</p>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MCP-1</td><td>Transport is MCP Streamable HTTP at <code>POST /mcp</code>, JSON-RPC 2.0, single messages and batches. Every request is answered in full with a Content-Length; there is no event stream. <code>GET /mcp</code> answers 405.</td><td>Methods: initialize, ping, tools/list, tools/call; notifications answer 202.</td></tr>
+				<tr><td>MCP-2</td><td>It binds to 127.0.0.1 only, on <code>mcpPort</code> (default 25595), and can be switched off with <code>mcpEnabled</code>. Changing either in settings restarts it without restarting the game. A port already in use is reported in the log and is not fatal.</td><td>Another mod's MCP server in the same game must be able to run beside it on its own port.</td></tr>
+				<tr><td>MCP-3</td><td>A request with an <code>Origin</code> that is not localhost is refused (403), and so is one whose <code>Host</code> is not localhost. Headers are limited to 16 KB and bodies to 1 MB. Chunked bodies are refused.</td><td>Stops web pages and DNS rebinding from driving the game.</td></tr>
+				<tr><td>MCP-4</td><td>Tools that touch the game run on the client thread and the HTTP thread waits for them, with a timeout. Tools that only read files run on the HTTP thread. Editing tools go through the editor's undo stack.</td><td>No dependency on an MCP library: a plain socket and the JSON library the game already ships.</td></tr>
+				<tr><td>MCP-5</td><td>A tool's result is one JSON object as text. A tool failure is a normal result with <code>isError</code> and a message that says what to do next. Unknown argument names are rejected with the list of valid ones; out-of-range numbers are rejected with the nearest allowed value.</td><td></td></tr>
+				<tr><td>MCP-6</td><td>Tools that start slow work (opening a recording, exporting, jumping) return at once and say how to poll for the result.</td><td></td></tr>
+				<tr><td>MCP-7</td><td><code>moments_cue</code> takes a clip id or an event id. If the right recording is open it jumps there (for an event, <code>lead_seconds</code> earlier, default 5) and pauses. If not, it opens that recording and jumps once it has loaded. It refuses to leave a live world unless <code>leave_world</code> is true. With <code>camera</code> true it also adds the clip's suggested Smart Camera at the cue point, following the recorder.</td><td>The refusal message starts with <code>LEAVE_WORLD_NEEDED</code> so the page can ask the person.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The tools</h3>
+		<details open><summary>Status and settings (3)</summary><div class="tablebox"><table><tbody>
+			<tr><td>dailies_status</td><td>Whether a recording is active or paused; whether a recording is open in playback, its tick, length, speed and whether it has finished loading; whether an export is running.</td></tr>
+			<tr><td>config_get · config_set</td><td>Read every setting with its type, range and current value; change one and save.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Recording (6)</summary><div class="tablebox"><table><tbody>
+			<tr><td>recording_start · recording_finish</td><td>Start; finish with an optional name.</td></tr>
+			<tr><td>recording_pause · recording_resume · recording_cancel</td><td>As the buttons.</td></tr>
+			<tr><td>recording_add_marker</td><td>Drop a marker with a colour and description.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Playback and camera (11)</summary><div class="tablebox"><table><tbody>
+			<tr><td>replay_list</td><td>The recordings in the folder, newest first: name, path, size, date, length.</td></tr>
+			<tr><td>replay_open · replay_close</td><td>Open by path or name; leave playback.</td></tr>
+			<tr><td>replay_play · replay_pause · replay_seek · replay_set_speed</td><td>Transport. Seek is clamped to the recording's length.</td></tr>
+			<tr><td>camera_get · camera_set</td><td>The viewer's position, rotation and field of view.</td></tr>
+			<tr><td>replay_list_entities</td><td>Entities near the viewer: id, type, name, position.</td></tr>
+			<tr><td>camera_spectate</td><td>Ride along with an entity, or stop.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Editing (21)</summary><div class="tablebox"><table><tbody>
+			<tr><td>editor_state_get</td><td>The whole editor state of the open recording as JSON.</td></tr>
+			<tr><td>scene_list · scene_add · scene_select · scene_rename · scene_remove · scene_set_export_range</td><td>Scenes.</td></tr>
+			<tr><td>track_add · track_remove · track_update</td><td>Tracks: kind, name, enabled.</td></tr>
+			<tr><td>keyframe_types · keyframes_list</td><td>What kinds exist with their fields; every track and keyframe in the scene.</td></tr>
+			<tr><td>keyframe_add_camera · keyframe_add · keyframe_set</td><td>Add a camera keyframe from the viewer's pose; add or replace a keyframe of any kind from JSON.</td></tr>
+			<tr><td>keyframe_remove · keyframes_clear · keyframe_move · keyframe_set_interpolation</td><td>Edit keyframes.</td></tr>
+			<tr><td>editor_undo · editor_redo</td><td>The shared undo stack.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Looks (6)</summary><div class="tablebox"><table><tbody>
+			<tr><td>visuals_get · visuals_set</td><td>The scene's look settings (chapter V).</td></tr>
+			<tr><td>entity_overrides_get · entity_overrides_set</td><td>Per-entity changes.</td></tr>
+			<tr><td>render_filter_get · render_filter_set</td><td>Which kinds of entity are drawn.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Export (4)</summary><div class="tablebox"><table><tbody>
+			<tr><td>export_start · export_status · export_cancel</td><td>Start with any setting of EXP-1; poll; cancel.</td></tr>
+			<tr><td>export_screenshot</td><td>A still of the current view at a chosen resolution.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Smart Camera (2)</summary><div class="tablebox"><table><tbody>
+			<tr><td>smart_camera_add</td><td>Add a Smart Camera keyframe: tick, target, mode and any setting of chapter VIII, in snake_case.</td></tr>
+			<tr><td>smart_camera_status</td><td>What the Smart Camera is doing now.</td></tr>
+		</tbody></table></div></details>
+		<details><summary>Moments (17)</summary><div class="tablebox"><table><tbody>
+			<tr><td>moments_status</td><td>Whether a session is running, record counts, whether voice is available, and for each AI service: configured, reachable, queue, last error.</td></tr>
+			<tr><td>moments_sessions_list</td><td>Sessions, newest first.</td></tr>
+			<tr><td>moments_events_query</td><td>Events, filtered by type, subject, player, time, keyword, firsts only; paged; each with its score and a one-sentence description.</td></tr>
+			<tr><td>moments_firsts · moments_milestones · moments_notable</td><td>Firsts grouped by type; the big moments; the best moments with their context.</td></tr>
+			<tr><td>moments_dialogue_query · moments_transcripts_search</td><td>Voice segments; search the transcripts with lines of context.</td></tr>
+			<tr><td>moments_interactions_query</td><td>Who was together with whom.</td></tr>
+			<tr><td>moments_context</td><td>Everything around one event or one time: speech, interactions, other events, place.</td></tr>
+			<tr><td>moments_clips_generate · moments_clips_list</td><td>Build and store clip candidates; list them with suggested cameras.</td></tr>
+			<tr><td>moments_cue · moments_clip_goto</td><td>Cue up a clip or event (MCP-7); jump within the open recording only.</td></tr>
+			<tr><td>moments_event_add</td><td>Log a custom event now.</td></tr>
+			<tr><td>moments_transcribe_pending</td><td>Queue untranscribed segments again. Says so plainly when AI is off.</td></tr>
+			<tr><td>moments_ignored_events</td><td>list, add, remove, set or clear the ignore list.</td></tr>
+		</tbody></table></div></details>
+		<p>The server itself and all 17 moments tools are provided in <code>reference/</code>. The other 53 tools belong to the new core; appendix A gives every argument of all 70.</p>
+		<p>Every query tool takes <code>session</code>: an id, <code>current</code> or <code>latest</code>. The default is the running session, else the latest.</p>
+	</section>
+
+	<!-- ============================================================ XI -->
+	<section id="page">
+		<div class="chapter"><span class="no">XI</span><h2>The moments page</h2><span class="owner yours">yours</span></div>
+		<p class="lede">The same local server answers <code>GET /</code> with a web page for browsing a session's moments and cueing them up. It is one self-contained file that talks to <code>/mcp</code> from the same origin, and it is provided: <code>reference/src/main/resources/assets/dailies/web/moments.html</code>.</p>
+
+		<div class="cols">
+			<div class="card"><h3>What it shows</h3>
+				<ul>
+					<li>A session picker, a refresh button, and whether tracking and AI are on.</li>
+					<li>A strip of the whole session: clips as bands, events as bars whose height is their score. Clicking one scrolls to it.</li>
+					<li><b>Clips:</b> best first, with title, summary, time, length, players, the events inside, what was said, and the suggested camera with its reason.</li>
+					<li><b>Events:</b> each with time, type, a "first" badge, where it came from, position and tick; filters for type, minimum score, text and firsts only; sort by time or score; the full record on request.</li>
+					<li><b>Voice:</b> the lines in order, or a note that they are not transcribed.</li>
+					<li><b>Ignored:</b> the ignore list, with add and remove.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>What it does</h3>
+				<ul>
+					<li><b>Find clips</b> with a minimum score and a maximum count.</li>
+					<li><b>Cue + camera</b> and <b>Cue only</b> on a clip; <b>Cue</b> on an event (five seconds early).</li>
+					<li>Asks before pulling the player out of a live world.</li>
+					<li><b>Ignore kind</b> on an event adds its type (or, for a custom event, its name) to the ignore list.</li>
+					<li>Refreshes every ten seconds while the session is running, but not under an open details box or a half-typed search.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>Rules</h3>
+				<ul>
+					<li>No external scripts, fonts or requests: it must work offline.</li>
+					<li>Everything shown comes from other players' names and chat, so it is inserted as text, never as markup. This page can drive the game.</li>
+					<li>Light and dark by the browser's preference; usable on a phone-width window.</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- ============================================================ XII -->
+	<section id="server">
+		<div class="chapter"><span class="no">XII</span><h2>The server side</h2><span class="owner yours">yours</span></div>
+		<p class="lede">Some things a player's own game cannot know. Two server mods can tell it: the Moments Companion, which exists for this, and McpCraft, the owner's town mod. Both are optional, and a player never needs either installed to connect.</p>
+
+		<h3>Moments Companion</h3>
+		<p>A small separate server mod, the owner's own code, MIT licensed. Its complete source is in <code>companion/</code> beside this document (package <code>comedymonkey.momentscompanion</code>) and builds with <code>gradlew build</code> once given a Gradle 9 wrapper. Dailies' side of it, and of McpCraft below, is provided in <code>reference/</code> under <code>compat</code>.</p>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>SRV-1</td><td>The companion sends a moment to a player's game on an optional NeoForge channel, <code>moments_companion:event</code>, version <code>1</code>, server to client. The message is three strings: type (up to 64 characters), label (up to 256) and a JSON object as text (up to 32,767).</td><td>The ids keep their current names so the copied source works unchanged.</td></tr>
+				<tr><td>SRV-2</td><td>Dailies registers that channel itself, as optional, when the companion is not installed in the player's game. When the companion is installed there too (singleplayer), the companion owns the channel and re-posts each message as a NeoForge event, <code>comedymonkey.momentscompanion.MomentClientEvent</code>, with <code>type()</code>, <code>label()</code> and <code>json()</code>; Dailies listens for that by reflection.</td><td>Two mods must never register the same channel in one game.</td></tr>
+				<tr><td>SRV-3</td><td>A received moment becomes an event of type <code>custom</code>: the subject is its type, the label its description, the JSON its metadata, with <code>source: server</code>. The first of each type in a world is a first.</td><td></td></tr>
+				<tr><td>SRV-4</td><td>Messages are ignored during playback, and the <code>moments_companion</code> namespace is on the default playback ignore list.</td><td>Otherwise watching a recording would log its moments again.</td></tr>
+				<tr><td>SRV-5</td><td>A player without Dailies is simply not sent anything. A server without the companion works as any other.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<div class="cols">
+			<div class="card"><h3>Ways in</h3>
+				<ul>
+					<li><code>/moment send &lt;players&gt; &lt;type&gt; &lt;label...&gt;</code></li>
+					<li><code>/moment data &lt;players&gt; &lt;type&gt; &lt;{nbt}&gt; &lt;label...&gt;</code>, the NBT becoming the JSON.</li>
+					<li>Both need permission level 2, so command blocks, functions and datapacks can use them.</li>
+					<li>For other server mods: <code>MomentsCompanion.send</code>, <code>sendAll</code> and <code>sendNear</code>.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>Its settings</h3>
+				<ul>
+					<li><code>config/moments_companion-common.toml</code></li>
+					<li><code>disabledEvents</code>: built-in events to switch off for everyone.</li>
+					<li><code>closeCallHealth</code> 4 · <code>bigFallDistance</code> 15 · <code>bossHealth</code> 150 · <code>explosionMinBlocks</code> 10 · <code>nearbyRadius</code> 48.</li>
+				</ul>
+			</div>
+		</div>
+
+		<h3>The events it raises by itself</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Type</th><th>When</th><th>Who is told</th><th>Data</th></tr></thead>
+			<tbody>
+				<tr><td>boss_fight</td><td>A boss dies. A boss is in the <code>c:bosses</code> tag or has at least <code>bossHealth</code> max health. The ender dragon counts from the hit that starts its death.</td><td>Everyone who damaged it, and players within twice the nearby radius</td><td>boss, boss name, max health, fighters with damage and share, seconds, killer</td></tr>
+				<tr><td>close_call</td><td>A player survives a hit with <code>closeCallHealth</code> or less. Once per 30 s.</td><td>That player</td><td>health left, damage, cause, attacker</td></tr>
+				<tr><td>totem_saved</td><td>A totem of undying saves a player.</td><td>Them and players nearby</td><td>player, cause, attacker</td></tr>
+				<tr><td>big_fall</td><td>A player survives a fall of at least <code>bigFallDistance</code> blocks.</td><td>That player</td><td>blocks, damage, health left</td></tr>
+				<tr><td>explosion</td><td>An explosion destroys at least <code>explosionMinBlocks</code> blocks. Once per 10 s per player.</td><td>Players nearby</td><td>blocks, source, who set it off</td></tr>
+				<tr><td>lightning_strike</td><td>A player is struck.</td><td>Them and players nearby</td><td>player</td></tr>
+				<tr><td>animal_tamed</td><td>A player tames an animal.</td><td>That player</td><td>animal</td></tr>
+				<tr><td>animal_bred</td><td>A player breeds animals. Once per two minutes per kind.</td><td>That player</td><td>animal</td></tr>
+				<tr><td>treasure_fished</td><td>A player fishes up something that is not a fish.</td><td>That player</td><td>items</td></tr>
+				<tr><td>night_skipped</td><td>The night is slept through.</td><td>Everyone in that world</td><td>sleepers, players in world</td></tr>
+				<tr><td>first_join</td><td>A player joins who has never played on the server.</td><td>Everyone</td><td>player</td></tr>
+			</tbody>
+		</table></div>
+		<p>Machines acting as players (Create's deployers and the like) never count as players.</p>
+
+		<h3>McpCraft</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>SRV-10</td><td>McpCraft tells each player's game about the job board events they have a part in, and their game posts a NeoForge event <code>dev.mcpcraft.map.event.JobBoardClientEvent</code> with <code>event()</code> and <code>json()</code>. Dailies listens for it by reflection when McpCraft is present.</td><td>Already in McpCraft. Works in singleplayer and on a server.</td></tr>
+				<tr><td>SRV-11</td><td>The events posted, help_asked, claimed, dropped, delivered, materials_complete, finished and removed become moments of type <code>job_posted</code> ... <code>job_removed</code>. The subject is the kind of job (track, structure, supply, custom). The metadata is the event's JSON (job id, title, creator, private, roles, and by event: player, helper, claimer, by, item, count, last_by) plus <code>source: mcpcraft</code>.</td><td></td></tr>
+				<tr><td>SRV-12</td><td>Deliveries to one job by one player within 60 s are one moment: the count adds up and an <code>items</code> map keeps the total per item.</td><td>Emptying an inventory into a store is many deliveries.</td></tr>
+				<tr><td>SRV-13</td><td>McpCraft's job board advancements arrive like any other advancement and need nothing special.</td><td></td></tr>
+				<tr><td>SRV-14</td><td>The <code>mcpcraft</code> namespace is on the default playback ignore list.</td><td></td></tr>
+				<tr><td>SRV-15</td><td>McpCraft stands down while a recording is being played back: it starts no map, bots or jobs for the playback world and its tools refuse. It needs a small change to use Dailies' documented check (PLAY-6).</td><td>A change in McpCraft, not in Dailies.</td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ XIII -->
+	<section id="config">
+		<div class="chapter"><span class="no">XIII</span><h2>Settings</h2></div>
+		<p class="lede">Settings follow the pattern Create uses: one NeoForge client config, in named groups, every value with a comment, a range and a translated label, edited in NeoForge's own config screen.</p>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>CFG-1</td><td>All settings live in <code>config/dailies-client.toml</code>, defined with NeoForge's config spec through a small set of helpers (one line per boolean, integer, float, enum and string value; groups for structure).</td><td>The mods list's Config button opens NeoForge's screen for it.</td></tr>
+				<tr><td>CFG-2</td><td>A setting changed in the screen, in the file, or over MCP takes effect without restarting the game wherever that is possible.</td><td></td></tr>
+				<tr><td>CFG-3</td><td>Reading a setting is safe from any thread and before the file has loaded; the default is returned then.</td><td></td></tr>
+			</tbody>
+		</table></div>
+
+		<div class="tablebox"><table>
+			<thead><tr><th>Group</th><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+			<tbody>
+				<tr><td>recording</td><td>autoStart · autoFinish</td><td>off · on</td><td>REC-2</td></tr>
+				<tr><td></td><td>showNotices · saveWithoutAsking</td><td>on · off</td><td>REC-4, REC-5</td></tr>
+				<tr><td></td><td>controlsLocation</td><td>right</td><td>Where the pause menu buttons sit</td></tr>
+				<tr><td></td><td>markDimensionChanges</td><td>on</td><td>REC-17</td></tr>
+				<tr><td></td><td>recordHud · recorderUpdatesPerSecond · recordVoiceChat</td><td>off · 20 · off</td><td>REC-13, REC-12, REC-18</td></tr>
+				<tr><td></td><td>marker 1 to 4</td><td>red, save position</td><td>REC-30</td></tr>
+				<tr><td>export</td><td>defaultFileName · throwawayFrames</td><td>date and time · 0</td><td>EXP-1, EXP-5</td></tr>
+				<tr><td>editor</td><td>defaultInterpolation · flight options</td><td>smooth</td><td>EDIT-4, PLAY-2</td></tr>
+				<tr><td>advanced</td><td>ignoredPayloads</td><td>empty</td><td><b>CFG-7.</b> Ids or <code>namespace:*</code>, one per line, added to the built-in list; a leading <code>+</code> allows one the built-in list ignores</td></tr>
+				<tr><td>mcp</td><td>mcpEnabled · mcpPort</td><td>on · 25595</td><td>MCP-2</td></tr>
+				<tr><td>moments</td><td>momentsEnabled · momentsLogRepeats · momentsStatsPollSeconds</td><td>on · off · 5</td><td>MOM-1, events</td></tr>
+				<tr><td></td><td>momentsAiEnabled</td><td><b>off</b></td><td>MOM-32</td></tr>
+				<tr><td></td><td>momentsWhisperUrl · momentsWhisperModel · momentsWhisperLanguage · momentsTranscribeLive</td><td>http://192.168.188.50:8000 · Systran/faster-whisper-large-v3 · en · on</td><td>MOM-33</td></tr>
+				<tr><td></td><td>momentsOllamaUrl · momentsOllamaModel · momentsSummarizeClips</td><td>http://192.168.188.50:11434 · gemma4:e4b · on</td><td>Clips, step 8</td></tr>
+				<tr><td></td><td>momentsProximityRadius · momentsProximityMinSeconds</td><td>10 · 20</td><td>MOM-20</td></tr>
+				<tr><td></td><td>momentsVoiceGapMillis · momentsContextSeconds</td><td>800 · 30</td><td>MOM-31, moments_context</td></tr>
+				<tr><td></td><td>momentsClipPreRollSeconds · momentsClipPostRollSeconds</td><td>15 · 20</td><td>Clips, step 2</td></tr>
+				<tr><td></td><td>momentsBossHealthThreshold · momentsNotableEntities · momentsStructureBlocks</td><td>150 · ender dragon, wither, warden, elder guardian · spawner, trial spawner, vault, end portal frame, reinforced deepslate, suspicious sand and gravel</td><td>Events</td></tr>
+				<tr><td></td><td>momentsIgnoredEvents</td><td>empty</td><td>MOM-50</td></tr>
+			</tbody>
+		</table></div>
+		<div class="card"><h3>The AI addresses</h3><p>The two server addresses default to the owner's own machines, so turning on the one switch is all the owner has to do. An empty address keeps that one service off even with the switch on.</p></div>
+	</section>
+
+	<!-- ============================================================ XIV -->
+	<section id="tests">
+		<div class="chapter"><span class="no">XIV</span><h2>Proving it</h2></div>
+		<p class="lede">Dailies is finished when one scripted run passes. The run uses the real built jar in a real game, drives itself, and exits with a clear pass or fail.</p>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>TEST-1</td><td>A Gradle task builds the jar, installs it into a test game folder beside Create, Sable, Create Aeronautics, McpCraft and the companion, starts the game at 1920×1080 with a system property that switches the script on, and reports <code>PASSED</code> or <code>FAILED: reason</code> in the log before exiting.</td><td>Test with the jar, not the dev classes: bundled libraries behave differently.</td></tr>
+				<tr><td>TEST-2</td><td>The test window does not pause when it loses focus.</td><td>The owner watches runs and types elsewhere.</td></tr>
+				<tr><td>TEST-3</td><td>A second task places the same test world, then gives the person 60 seconds at the controls while recording, and leaves the recording open in playback afterwards.</td><td>For judging by eye.</td></tr>
+				<tr><td>TEST-4</td><td>Every check that needs an optional mod or service is skipped, with a line saying so, when that mod or service is absent. The run passes with none of them.</td><td>Including with AI off, which is the default.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>What the scripted run must show</h3>
+		<ol class="steps">
+			<li><div><h3>Record</h3><p>Create a flat creative world, start recording, summon a named animal, place and break a block, kill a mob, drop a marker, feed in a known voice clip as if from voice chat, and cross at least two segment boundaries (with short test segments). <i>REC-1, 10, 12, 20, 30; MOM-31.</i></p></div></li>
+			<li><div><h3>Build machines</h3><p>Place a bearing contraption driven by a motor, a Sable platform, a helicopter with a seat (sit in it before assembling), and a hot air balloon with a lit burner (stand in it before assembling). Note the live position of each at several ticks. <i>MOD-1 to 4, REC-22.</i></p></div></li>
+			<li><div><h3>Play back</h3><p>Open the recording. At each noted tick, reached once by playing and once by jumping, each machine is within a third of a block of its live position, the seated player is on the seat and the standing player is on the deck. Jump backwards twice; nothing is duplicated. <i>PLAY-11, MOD-2 to 5.</i></p></div></li>
+			<li><div><h3>Edit and export</h3><p>Add camera keyframes, undo and redo them, export ten seconds at 1080p with sound, and check the file's length, frame count and that its frames are not blank or scrambled. Export a still. <i>EDIT-3, 6; EXP-1, 2, 7.</i></p></div></li>
+			<li><div><h3>Smart Camera</h3><p>For each mode, play a stretch and check: chase holds its distance and composition, orbit turns at its rate, a tripod stays put and pans, auto zoom changes the field of view with distance, the director cuts and gives reasons, a wall between camera and subject is detected, and a craft is framed whole. Same stretch twice gives the same director shots. <i>CAM-1 to 8.</i></p></div></li>
+			<li><div><h3>Moments</h3><p>The kill, the placed and mined blocks, the biome and the marker are logged with recording ticks in the order they happened. The voice segment is logged with its length. Clips are built; the kill's clip contains the voice segment whole and has a suggested camera. <i>MOM-2 to 5, clips.</i></p></div></li>
+			<li><div><h3>Ignore list and cue</h3><p>Ignoring a type hides its events from a query and removing the entry brings them back. Cueing the clip with a camera jumps, pauses and adds a Smart Camera track; undo removes it. <i>MOM-50, 51; MCP-7.</i></p></div></li>
+			<li><div><h3>MCP</h3><p>Every tool is listed. Bad origin and bad host are refused. GET on <code>/mcp</code> is 405. <code>GET /</code> returns the page. A batch of two calls returns two results. An unknown tool and a bad argument give useful errors. <i>MCP-1, 3, 5.</i></p></div></li>
+			<li><div><h3>Server side</h3><p>With the companion: <code>/moment data</code> arrives as a custom moment with its data, and a stand-in boss killed by command arrives as <code>boss_fight</code> with the fighter's share. With McpCraft: a job posted, claimed and finished arrives as three <code>job_*</code> moments and the matching advancements; opening playback makes McpCraft stand down. <i>SRV-1 to 3, 10, 11, 15.</i></p></div></li>
+			<li><div><h3>AI, when on</h3><p>The voice clip is transcribed and found by a transcript search; the clip gets a model-written title and summary. When off or unreachable, the same steps report "skipped" and everything else passes. <i>MOM-32 to 34.</i></p></div></li>
+		</ol>
+
+		<h3>Needs a person or a second machine</h3>
+		<div class="rules">
+			<div class="rule"><b>A dedicated server</b><span>Record on a real server running Create, Sable, Aeronautics and the companion, with a client that has only Dailies. <i>MOD-7, SRV-2, SRV-5.</i></span></div>
+			<div class="rule"><b>Two players</b><span>Meetings, groups, another player's death, another player on your craft, real voice chat. <i>MOM-20 to 22, 30.</i></span></div>
+			<div class="rule"><b>The eye test</b><span>Fly the helicopter and the balloon by hand, then watch them. Judge whether the Smart Camera's shots look good. No script can.</span></div>
+			<div class="rule"><b>The page in a browser</b><span>Open it, browse a real session, cue a clip from a live world and from the title screen.</span></div>
+		</div>
+
+		<h3>Decisions still open</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Decision</th><th>Whose</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>Review of this document</td><td>Owner, with a lawyer</td><td>Before any builder reads it. See chapter I.</td></tr>
+				<tr><td>Who builds the core</td><td>Owner</td><td>Someone who has never read another replay mod's source.</td></tr>
+				<tr><td>Dailies' own licence</td><td>Owner</td><td>The companion is MIT. The encoder library's licence constrains the choice (EXP-8).</td></tr>
+				<tr><td>The name</td><td>Owner</td><td>Check that "Dailies" and <code>dailies</code> are free on the mod sites.</td></tr>
+				<tr><td>Companion ids</td><td>Owner</td><td>It keeps <code>moments_companion</code> for now. Renaming it to match is a small change on both sides.</td></tr>
+				<tr><td>Old recordings</td><td>Decided: no</td><td>Dailies opens only its own recordings.</td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ XV -->
+	<section id="provided">
+		<div class="chapter"><span class="no">XV</span><h2>What is provided</h2><span class="owner yours">yours</span></div>
+		<p class="lede">The owner's features come as source, not only as description. It was compiled against Minecraft 1.21.1 and NeoForge 21.1.266 before being handed over, and reaches the rest of the mod through one interface that the new core has to implement.</p>
+
+		<div class="tablebox"><table>
+			<thead><tr><th>Where</th><th>What</th></tr></thead>
+			<tbody>
+				<tr><td>design/dailies-spec.html</td><td>This document.</td></tr>
+				<tr><td>companion/</td><td>The Moments Companion server mod, complete: build files, six classes, mod metadata.</td></tr>
+				<tr><td>reference/src/main/java/<br>comedymonkey/dailies/</td><td>38 classes, about 9,000 lines:
+					<br><code>Host</code>: the interface to the core (below).
+					<br><code>moments/</code>: sessions, storage, the event tracker, bosses, deaths, who-was-together, voice segments, transcription, scoring, clips, summaries, settings access.
+					<br><code>smartcamera/</code>: the settings, the maths, the subject (player, vehicle, craft) and the solver with the director.
+					<br><code>mcp/</code>: the HTTP server, the protocol, the tool, argument and schema types, and <code>tools/MomentsTools</code>.
+					<br><code>compat/</code>: the listeners for the companion and for McpCraft.
+					<br><code>mixin/moments/</code>: the three hooks Moments needs that NeoForge has no event for.</td></tr>
+				<tr><td>reference/src/main/resources/<br>assets/dailies/web/moments.html</td><td>The moments page.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The interface the core implements</h3>
+		<p><code>comedymonkey.dailies.Host</code> holds two interfaces. The core calls <code>Host.install(...)</code> at start-up, before anything else here runs.</p>
+		<div class="tablebox"><table>
+			<thead><tr><th>Host.Mod</th><th>Must answer</th></tr></thead>
+			<tbody>
+				<tr><td>dataDirectory · modVersion · isModLoaded</td><td>The <code>dailies/</code> folder; the mod's version; whether another mod is present.</td></tr>
+				<tr><td>settingsLoaded · setting · saveSetting</td><td>Settings by the names in chapter XIII. <code>setting(name, fallback)</code> returns the fallback until the file has loaded; the fallback also gives the type.</td></tr>
+				<tr><td>recordingId · recordingTick</td><td>While a recording is being made: its unique id and how many ticks it holds so far. Null and -1 otherwise. Every moment is stamped with these.</td></tr>
+				<tr><td>inPlayback · openRecordingId · openRecordingTicks</td><td>Whether a recording is being watched, which one, and its length.</td></tr>
+				<tr><td>seek · findRecording · openRecording</td><td>Jump within the open recording, optionally pausing; find a recording's file by its id; open a recording, leaving whatever is open.</td></tr>
+				<tr><td>exportRunning · exportAspectRatio · sceneFov</td><td>Whether an export is running and its width over height; the field of view the open scene forces, if any.</td></tr>
+				<tr><td>addSmartCamera</td><td>Add a Smart Camera keyframe from tool arguments, through the editor's undo stack.</td></tr>
+				<tr><td>registerTools</td><td>Register the core's own 53 tools with the MCP server.</td></tr>
+			</tbody>
+		</table></div>
+		<div class="tablebox"><table>
+			<thead><tr><th>Host.Crafts</th><th>Must answer (only with Sable installed; the defaults suit its absence)</th></tr></thead>
+			<tbody>
+				<tr><td>isInPlot</td><td>Whether a position lies in Sable's hidden region.</td></tr>
+				<tr><td>projectOutOfSubLevel · projectDirectionOutOfSubLevel</td><td>Where a position, or a direction, in the hidden region appears in the world, at a tick or between two.</td></tr>
+				<tr><td>getSubLevel · getSubLevelAt · getSubLevelBounds · isNearSubLevel</td><td>The physics object an entity is on, the one that owns a hidden position, an object's bounds in the world, and whether a point is near them.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>What the core still has to do for these parts</h3>
+		<ol class="steps">
+			<li><div><h3>Call the entry points</h3><p><code>Moments.init()</code>, <code>McpCraftCompat.init()</code> and <code>ServerMoments.init()</code> once at start-up; <code>ServerMoments.registerPayload(...)</code> when payloads are registered; <code>McpHttpServer.applyConfig()</code> whenever settings load or change.</p></div></li>
+			<li><div><h3>Register the three mixins</h3><p>Advancements received, statistics and death-screen packets, and block breaking and item use by the local player. List them in the mod's mixin configuration.</p></div></li>
+			<li><div><h3>Feed in voice and markers</h3><p>Call <code>Moments.onVoiceChatAudio(speaker, samples)</code> with 48 kHz mono 16-bit audio from the voice chat capture, and <code>Moments.onMarker(description, colour)</code> when a marker key is pressed.</p></div></li>
+			<li><div><h3>Give the Smart Camera a keyframe</h3><p>A keyframe kind whose value is a <code>SmartCameraSettings</code>, an editor panel for its fields, and a call to <code>SmartCameraSolver</code> each frame while playing or exporting, applying the pose it returns to the viewer.</p></div></li>
+			<li><div><h3>Define the settings</h3><p>Every setting of chapter XIII, under the same names, with a label for the settings screen.</p></div></li>
+			<li><div><h3>Write the other 53 tools</h3><p>As appendix A describes them, in the pattern <code>MomentsTools</code> shows.</p></div></li>
+		</ol>
+		<div class="rules">
+			<div class="rule"><b>Use it as it stands</b><span>Change the provided code where the core needs it to, and keep its behaviour as chapters VIII to XII describe.</span></div>
+			<div class="rule no"><b>Compiled, not run</b><span>The provided code compiled in this form but has only ever run inside a different mod. Chapter XIV's run is what proves it here.</span></div>
+			<div class="rule no"><b>Not a model for the core</b><span>It shows nothing about how to record, store, play back, edit or export. Those are built from chapters II to VII.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ A -->
+	<section id="tools">
+		<div class="chapter"><span class="no">A</span><h2>Every tool</h2><span class="owner yours">yours</span></div>
+		<p class="lede">All 70 MCP tools with their arguments. A star marks a required argument. Where an argument offers more than chapters V and VI require (extra containers or codecs, say), that part is optional.</p>
+		<details><summary><code>dailies_status</code></summary><p>Overall state of the Dailies mod: whether a recording is active/paused, whether a replay is open (current tick, total ticks, paused, tick rate), whether a video export is running (with progress), and the mod version. Call this first, and poll it after replay_open or export_start.</p><p>No arguments.</p></details>
+		<details><summary><code>config_get</code></summary><p>Get Dailies&#x27; user-facing options (recording controls, what gets recorded, export defaults, keyframe defaults, editor camera movement, marker keybinds, advanced, MCP server). Returns every option with its value and type, or just one when &#x27;key&#x27; is given.</p><div class="tablebox"><table><tbody><tr><td>key</td><td>string</td><td>Option key, eg. &#x27;quicksave&#x27; or &#x27;the marker settings.color&#x27;. Omit to get all options</td></tr></tbody></table></div></details>
+		<details><summary><code>config_set</code></summary><p>Change one of Dailies&#x27; user-facing options and save it to the config file. Use config_get to see the keys, types and current values. Changing mcpPort or mcpEnabled restarts or stops this MCP server after the reply.</p><div class="tablebox"><table><tbody><tr><td>key *</td><td>string</td><td>Option key from config_get</td></tr><tr><td>value *</td><td>any</td><td>New value: boolean, number, string, or the name of an enum constant</td></tr></tbody></table></div></details>
+		<details><summary><code>recording_start</code></summary><p>Start recording a replay of the world/server the player is currently in. Fails if no world is open, a replay is open, or a recording is already active.</p><p>No arguments.</p></details>
+		<details><summary><code>recording_finish</code></summary><p>Finish the active recording and save it into the replay folder straight away (the Save Replay screen is not opened). Returns the path of the saved replay file.</p><div class="tablebox"><table><tbody><tr><td>name</td><td>string</td><td>Optional replay name, also used as the file name. Defaults to the current date and time</td></tr></tbody></table></div></details>
+		<details><summary><code>recording_pause</code></summary><p>Pause the active recording. Nothing is recorded until recording_resume is called.</p><p>No arguments.</p></details>
+		<details><summary><code>recording_resume</code></summary><p>Resume a paused recording.</p><p>No arguments.</p></details>
+		<details><summary><code>recording_cancel</code></summary><p>Stop the active recording and delete everything recorded so far. This cannot be undone.</p><p>No arguments.</p></details>
+		<details><summary><code>recording_add_marker</code></summary><p>Add a marker to the recording at the current moment. Markers show up on the replay timeline.</p><div class="tablebox"><table><tbody><tr><td>color</td><td>string</td><td>Marker colour as hex RGB, eg. #FF5555 (the default)</td></tr><tr><td>description</td><td>string</td><td>Optional text shown with the marker</td></tr><tr><td>save_position</td><td>boolean</td><td>Store the camera position in the marker (default true)</td></tr></tbody></table></div></details>
+		<details><summary><code>replay_list</code></summary><p>List the replay files (.zip) in the Dailies replay folder, newest first, with name, path, size, modified time and length in ticks/seconds.</p><p>No arguments.</p></details>
+		<details><summary><code>replay_open</code></summary><p>Open a replay in the replay viewer/editor. Give either &#x27;path&#x27; or &#x27;name&#x27;. Returns as soon as loading has been scheduled; poll dailies_status until replay.loaded is true before using the other replay tools. Leaves the current world or replay.</p><div class="tablebox"><table><tbody><tr><td>path</td><td>string</td><td>Path of the replay .zip, absolute or relative to the replay folder</td></tr><tr><td>name</td><td>string</td><td>File name (with or without .zip) or replay name of a replay in the replay folder, as shown by replay_list</td></tr></tbody></table></div></details>
+		<details><summary><code>replay_close</code></summary><p>Leave the open replay and go back to the title screen. Editor changes are saved automatically.</p><p>No arguments.</p></details>
+		<details><summary><code>replay_play</code></summary><p>Start playing the replay from the current tick (restarts from tick 0 if it is at the end).</p><p>No arguments.</p></details>
+		<details><summary><code>replay_pause</code></summary><p>Pause replay playback.</p><p>No arguments.</p></details>
+		<details><summary><code>replay_seek</code></summary><p>Jump to a replay tick (20 ticks per second). The jump happens asynchronously, dailies_status shows the tick once it has been reached. Does not change whether the replay is paused.</p><div class="tablebox"><table><tbody><tr><td>tick *</td><td>integer</td><td>Tick to jump to, clamped to 0..total_ticks</td></tr></tbody></table></div></details>
+		<details><summary><code>replay_set_speed</code></summary><p>Set the playback speed of the replay as a tick rate. 20 is normal speed, 10 is half speed, 40 is double speed.</p><div class="tablebox"><table><tbody><tr><td>tick_rate *</td><td>number</td><td>Ticks per second, between 0.1 and 2000</td></tr></tbody></table></div></details>
+		<details><summary><code>camera_get</code></summary><p>Get the replay viewer&#x27;s camera: position, yaw, pitch, FOV and roll, and which entity is being spectated (null when the camera is free).</p><p>No arguments.</p></details>
+		<details><summary><code>camera_set</code></summary><p>Move the replay viewer&#x27;s free camera. Omitted values keep their current value. Stops spectating an entity if needed. Note that camera keyframes override this while the replay plays.</p><div class="tablebox"><table><tbody><tr><td>x</td><td>number</td><td>X position</td></tr><tr><td>y</td><td>number</td><td>Y position (feet of the camera, eyes are 1.62 higher)</td></tr><tr><td>z</td><td>number</td><td>Z position</td></tr><tr><td>yaw</td><td>number</td><td>Yaw in degrees (0 = south/+Z, 90 = west/-X)</td></tr><tr><td>pitch</td><td>number</td><td>Pitch in degrees (-90 = straight up, 90 = straight down)</td></tr><tr><td>fov</td><td>number</td><td>Optional field of view in degrees (1-110). Turns on the editor&#x27;s FOV override</td></tr></tbody></table></div></details>
+		<details><summary><code>replay_list_entities</code></summary><p>List the entities currently loaded in the replay (or world) around the camera: id, uuid, type, name and position. Use the id or uuid with camera_spectate.</p><div class="tablebox"><table><tbody><tr><td>type</td><td>string</td><td>Only list entities of this type, eg. &#x27;minecraft:player&#x27; or &#x27;cow&#x27;</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of entities to return (default 100)</td></tr></tbody></table></div></details>
+		<details><summary><code>camera_spectate</code></summary><p>Spectate an entity in the replay (view through its eyes), or return to the free camera by passing neither argument (or null).</p><div class="tablebox"><table><tbody><tr><td>entity_id</td><td>integer</td><td>Numeric entity id from replay_list_entities</td></tr><tr><td>uuid</td><td>string</td><td>Entity UUID from replay_list_entities</td></tr></tbody></table></div></details>
+		<details><summary><code>editor_state_get</code></summary><p>The complete editor state of the open replay as JSON, in the form Dailies saves it: scenes with their tracks and keyframes, the look settings, and all per-entity changes and filters. Keyframes appear here in exactly the shape keyframe_set accepts.</p><div class="tablebox"><table><tbody><tr><td>scene</td><td>integer</td><td>Only include the scene with this index (see scene_list). Default: all scenes</td></tr><tr><td>include_block_overrides</td><td>boolean</td><td>Include the (very large) block data of block override keyframes. Default false</td></tr></tbody></table></div></details>
+		<details><summary><code>visuals_get</code></summary><p>Get the editor&#x27;s visual settings (the Visuals window): what is rendered (blocks, entities, players, particles, sky, nametags), GUI elements (chat, boss bar, hotbar...), overrides for fog, FOV, time of day, weather, night vision, camera shake and roll, and the composition guides / aspect ratio. Returns each field with its type.</p><p>No arguments.</p></details>
+		<details><summary><code>visuals_set</code></summary><p>Change one or more of the editor&#x27;s visual settings. Pass &#x27;values&#x27; as an object of field name to new value, using the field names from visuals_get. Enums are given by name, colours as [r, g, b] floats from 0 to 1. Nothing is changed if any value is invalid.</p><div class="tablebox"><table><tbody><tr><td>values *</td><td>object</td><td>Field name -&gt; new value</td></tr></tbody></table></div></details>
+		<details><summary><code>entity_overrides_get</code></summary><p>Get the per-entity/player overrides of the editor: hidden entities, hidden nametags, name overrides, glowing, hidden capes and team/below-name text, muted voice chat, and the audio source entity. Either for one entity (&#x27;uuid&#x27;) or everything that has an override.</p><div class="tablebox"><table><tbody><tr><td>uuid</td><td>string</td><td>Entity UUID (see replay_list_entities). Omit to list all overrides</td></tr></tbody></table></div></details>
+		<details><summary><code>entity_overrides_set</code></summary><p>Change the editor&#x27;s overrides for one entity/player (the options in the editor&#x27;s entity popup). Only the given options change. Skin overrides and hidden equipment/model parts are not supported over MCP.</p><div class="tablebox"><table><tbody><tr><td>uuid</td><td>string</td><td>Entity UUID (see replay_list_entities). Not needed when only hide_all_spectators is given</td></tr><tr><td>hide_during_export</td><td>boolean</td><td>Don&#x27;t render this entity in exported videos</td></tr><tr><td>hide_nametag</td><td>boolean</td><td>Hide the entity&#x27;s nametag</td></tr><tr><td>name_override</td><td>string</td><td>Replace the entity&#x27;s displayed name. Empty string removes the override</td></tr><tr><td>glowing</td><td>string</td><td>default, force_glow or force_no_glow</td></tr><tr><td>hide_cape</td><td>boolean</td><td>Hide the player&#x27;s cape</td></tr><tr><td>hide_team_prefix</td><td>boolean</td><td>Hide the scoreboard team prefix in the player&#x27;s name</td></tr><tr><td>hide_team_suffix</td><td>boolean</td><td>Hide the scoreboard team suffix in the player&#x27;s name</td></tr><tr><td>hide_below_name</td><td>boolean</td><td>Hide the scoreboard text below the player&#x27;s name</td></tr><tr><td>mute_voice</td><td>boolean</td><td>Mute this player&#x27;s recorded Simple Voice Chat audio</td></tr><tr><td>audio_source</td><td>boolean</td><td>true: use this entity as the audio listener instead of the camera. false: go back to the camera</td></tr><tr><td>hide_all_spectators</td><td>boolean</td><td>Global option: hide every player that is in spectator mode</td></tr></tbody></table></div></details>
+		<details><summary><code>render_filter_get</code></summary><p>Get the ids of the entity types and particle types that are filtered out (not rendered) in the replay.</p><p>No arguments.</p></details>
+		<details><summary><code>render_filter_set</code></summary><p>Set which entity types and/or particle types are filtered out (not rendered) in the replay. Each given list replaces the current one; pass an empty list to show everything again.</p><div class="tablebox"><table><tbody><tr><td>entities</td><td>string[]</td><td>Entity type ids to hide, eg. [&quot;minecraft:item&quot;, &quot;minecraft:bat&quot;]</td></tr><tr><td>particles</td><td>string[]</td><td>Particle type ids to hide, eg. [&quot;minecraft:rain&quot;]</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframes_list</code></summary><p>List the keyframe tracks of the current scene and their keyframes: track index, keyframe type, enabled flag, and for every keyframe its tick, interpolation and value.</p><p>No arguments.</p></details>
+		<details><summary><code>keyframe_types</code></summary><p>List every keyframe type that can be used in tracks (camera, camera orbit, track entity, camera shake, FOV, speed, timelapse, time of day, freeze, block override, audio, smart camera) with an example of the keyframe JSON that keyframe_set expects for it.</p><p>No arguments.</p></details>
+		<details><summary><code>keyframe_set</code></summary><p>Add or replace a keyframe of any type. Give &#x27;track&#x27; (index from keyframes_list) or &#x27;type&#x27; (id from keyframe_types); with &#x27;type&#x27; the first track of that type is used and a new track is created if there is none. &#x27;keyframe&#x27; is the keyframe JSON in the shape shown by keyframe_types / editor_state_get. Undoable with editor_undo.</p><div class="tablebox"><table><tbody><tr><td>track</td><td>integer</td><td>Track index in the current scene</td></tr><tr><td>type</td><td>string</td><td>Keyframe type id, eg. CAMERA, FOV, SPEED, TIME_OF_DAY (case-insensitive)</td></tr><tr><td>tick *</td><td>integer</td><td>Replay tick of the keyframe</td></tr><tr><td>keyframe *</td><td>object</td><td>Keyframe JSON, eg. {&quot;fov&quot;: 30} for an FOV track</td></tr><tr><td>interpolation</td><td>string</td><td>Interpolation towards the neighbouring keyframes: smooth, linear, ease_in, ease_out, ease_in_out, hold or hermite. Defaults to the &#x27;defaultInterpolation&#x27; config option</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframe_add_camera</code></summary><p>Add a camera keyframe (camera position and rotation at a tick) to the camera track, creating the track if needed. Position and rotation default to where the camera currently is, so a camera path can be built with camera_set + keyframe_add_camera.</p><div class="tablebox"><table><tbody><tr><td>tick *</td><td>integer</td><td>Replay tick of the keyframe</td></tr><tr><td>x</td><td>number</td><td>X position (default: current camera)</td></tr><tr><td>y</td><td>number</td><td>Y position (default: current camera)</td></tr><tr><td>z</td><td>number</td><td>Z position (default: current camera)</td></tr><tr><td>yaw</td><td>number</td><td>Yaw in degrees (default: current camera)</td></tr><tr><td>pitch</td><td>number</td><td>Pitch in degrees (default: current camera)</td></tr><tr><td>roll</td><td>number</td><td>Roll in degrees (default: the editor&#x27;s roll override, normally 0)</td></tr><tr><td>track</td><td>integer</td><td>Optional camera track index, when the scene has more than one</td></tr><tr><td>interpolation</td><td>string</td><td>Interpolation towards the neighbouring keyframes: smooth, linear, ease_in, ease_out, ease_in_out, hold or hermite. Defaults to the &#x27;defaultInterpolation&#x27; config option</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframe_add</code></summary><p>Add a keyframe of a simple single-value type, creating the track if needed. Types: &#x27;fov&#x27; (value = degrees, 1-110), &#x27;speed&#x27; (value = speed multiplier, 1 = normal, 0.5 = half speed), &#x27;time_of_day&#x27; (value = time in ticks, 0-24000, 6000 = noon), &#x27;freeze&#x27; (value = true/false, freezes the world while the camera keeps moving), &#x27;timelapse&#x27; (value = elapsed real time in ticks at this point; needs two keyframes).</p><div class="tablebox"><table><tbody><tr><td>type *</td><td>string</td><td>fov, speed, time_of_day, freeze or timelapse</td></tr><tr><td>tick *</td><td>integer</td><td>Replay tick of the keyframe</td></tr><tr><td>value *</td><td>any</td><td>The value, see the tool description</td></tr><tr><td>track</td><td>integer</td><td>Optional track index, when the scene has more than one track of this type</td></tr><tr><td>interpolation</td><td>string</td><td>Interpolation towards the neighbouring keyframes: smooth, linear, ease_in, ease_out, ease_in_out, hold or hermite. Defaults to the &#x27;defaultInterpolation&#x27; config option</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframe_remove</code></summary><p>Remove the keyframe at a tick from a track. Undoable.</p><div class="tablebox"><table><tbody><tr><td>track *</td><td>integer</td><td>Track index from keyframes_list</td></tr><tr><td>tick *</td><td>integer</td><td>Tick of the keyframe to remove</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframes_clear</code></summary><p>Remove all keyframes from one track, or from every track of the current scene when &#x27;track&#x27; is omitted. The tracks themselves stay. Undoable.</p><div class="tablebox"><table><tbody><tr><td>track</td><td>integer</td><td>Track index from keyframes_list. Omit to clear every track</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframe_move</code></summary><p>Move a keyframe to another tick on the same track, replacing a keyframe that is already there. Undoable.</p><div class="tablebox"><table><tbody><tr><td>track *</td><td>integer</td><td>Track index from keyframes_list</td></tr><tr><td>from_tick *</td><td>integer</td><td>Tick the keyframe is at</td></tr><tr><td>to_tick *</td><td>integer</td><td>Tick to move it to</td></tr></tbody></table></div></details>
+		<details><summary><code>keyframe_set_interpolation</code></summary><p>Change the interpolation of one keyframe, or of every keyframe on the track when &#x27;tick&#x27; is omitted. Undoable.</p><div class="tablebox"><table><tbody><tr><td>track *</td><td>integer</td><td>Track index from keyframes_list</td></tr><tr><td>tick</td><td>integer</td><td>Tick of the keyframe. Omit to change all keyframes on the track</td></tr><tr><td>interpolation *</td><td>string</td><td>smooth, linear, ease_in, ease_out, ease_in_out, hold or hermite</td></tr></tbody></table></div></details>
+		<details><summary><code>track_add</code></summary><p>Add an empty keyframe track of the given type to the current scene. Returns its index. Undoable.</p><div class="tablebox"><table><tbody><tr><td>type *</td><td>string</td><td>Keyframe type id from keyframe_types, eg. CAMERA</td></tr></tbody></table></div></details>
+		<details><summary><code>track_remove</code></summary><p>Delete a keyframe track and all its keyframes from the current scene. Later tracks move up by one index. Undoable.</p><div class="tablebox"><table><tbody><tr><td>track *</td><td>integer</td><td>Track index from keyframes_list</td></tr></tbody></table></div></details>
+		<details><summary><code>track_update</code></summary><p>Change a track&#x27;s settings: enable/disable it (disabled tracks are ignored during playback and export), or set a custom name or colour.</p><div class="tablebox"><table><tbody><tr><td>track *</td><td>integer</td><td>Track index from keyframes_list</td></tr><tr><td>enabled</td><td>boolean</td><td>Whether the track is applied</td></tr><tr><td>name</td><td>string</td><td>Custom name shown in the timeline. Empty string resets it</td></tr><tr><td>colour</td><td>string</td><td>Custom colour as hex RGB, eg. #55FF55. Empty string resets it</td></tr></tbody></table></div></details>
+		<details><summary><code>scene_list</code></summary><p>List the editor&#x27;s scenes. Each scene has its own keyframe tracks and export range; one scene is current.</p><p>No arguments.</p></details>
+		<details><summary><code>scene_add</code></summary><p>Create a new empty scene and make it the current scene.</p><div class="tablebox"><table><tbody><tr><td>name</td><td>string</td><td>Scene name (default &#x27;Scene N&#x27;)</td></tr></tbody></table></div></details>
+		<details><summary><code>scene_select</code></summary><p>Make another scene the current scene. Keyframe and track tools always work on the current scene.</p><div class="tablebox"><table><tbody><tr><td>index *</td><td>integer</td><td>Scene index from scene_list</td></tr></tbody></table></div></details>
+		<details><summary><code>scene_rename</code></summary><p>Rename a scene.</p><div class="tablebox"><table><tbody><tr><td>index</td><td>integer</td><td>Scene index from scene_list (default: the current scene)</td></tr><tr><td>name *</td><td>string</td><td>New name</td></tr></tbody></table></div></details>
+		<details><summary><code>scene_remove</code></summary><p>Delete a scene permanently (cannot be undone). Like the editor, this refuses to delete the last scene or a scene that still has tracks unless &#x27;force&#x27; is true.</p><div class="tablebox"><table><tbody><tr><td>index</td><td>integer</td><td>Scene index from scene_list (default: the current scene)</td></tr><tr><td>force</td><td>boolean</td><td>Delete the scene even if it still has keyframe tracks</td></tr></tbody></table></div></details>
+		<details><summary><code>scene_set_export_range</code></summary><p>Set the tick range of the current scene that gets exported (the in/out points on the timeline), or clear it. export_start uses this range by default.</p><div class="tablebox"><table><tbody><tr><td>start_tick</td><td>integer</td><td>First tick to export</td></tr><tr><td>end_tick</td><td>integer</td><td>Last tick to export</td></tr><tr><td>clear</td><td>boolean</td><td>Remove the range so that the whole replay / keyframed section is exported</td></tr></tbody></table></div></details>
+		<details><summary><code>editor_undo</code></summary><p>Undo the last keyframe/track edit in the current scene (made in the editor UI or over MCP). Returns a description of what was undone.</p><p>No arguments.</p></details>
+		<details><summary><code>editor_redo</code></summary><p>Redo the last undone keyframe/track edit in the current scene.</p><p>No arguments.</p></details>
+		<details><summary><code>export_start</code></summary><p>Export the open replay to a video file, like the editor&#x27;s &#x27;Export Video&#x27; window but without the file dialog. Camera movement comes from the keyframes of the current scene (without camera keyframes the camera stays where it is now). The game window is busy rendering until the export finishes: poll export_status, stop it with export_cancel. Unspecified capture options default to the values last used in the export window.</p><div class="tablebox"><table><tbody><tr><td>output_path *</td><td>string</td><td>File to write, absolute or relative to the game directory. For the png_sequence container this is a folder</td></tr><tr><td>width</td><td>integer</td><td>Video width in pixels (default: last used, initially 1920). Rounded up to an even number</td></tr><tr><td>height</td><td>integer</td><td>Video height in pixels (default: last used, initially 1080). Rounded up to an even number</td></tr><tr><td>framerate</td><td>number</td><td>Frames per second (default: last used, initially 60)</td></tr><tr><td>start_tick</td><td>integer</td><td>First replay tick to export (default: the scene&#x27;s export range, else the first keyframe, else 0)</td></tr><tr><td>end_tick</td><td>integer</td><td>Last replay tick to export (default: the scene&#x27;s export range, else the last keyframe, else the end of the replay)</td></tr><tr><td>container</td><td>string</td><td>mp4 (default), mkv, avi, mov, webm, webp, gif or png_sequence</td></tr><tr><td>video_codec</td><td>string</td><td>h264 (default), h265, av1, vp9, pro_res, quick_time, webp or gif. Must be supported by the container</td></tr><tr><td>encoder</td><td>string</td><td>Encoder name. Default: the first available one for the codec (hardware encoders first). An unknown name lists the available ones</td></tr><tr><td>bitrate</td><td>any</td><td>Video bitrate in bits per second, or a string like &#x27;20m&#x27; / &#x27;800k&#x27;. Default 20m. 0 lets the encoder use its maximum</td></tr><tr><td>record_audio</td><td>boolean</td><td>Record game audio into the video (default false)</td></tr><tr><td>stereo_audio</td><td>boolean</td><td>Record stereo instead of mono audio (default false)</td></tr><tr><td>no_gui</td><td>boolean</td><td>Hide the HUD/GUI in the video (default: last used, initially false)</td></tr><tr><td>ssaa</td><td>boolean</td><td>Supersampling anti-aliasing: render at double resolution and downscale (default: last used, initially false)</td></tr><tr><td>transparent</td><td>boolean</td><td>Transparent background. Only works when the sky is disabled (a look setting, see visuals_set) and the codec supports alpha (default false)</td></tr><tr><td>reset_rng</td><td>boolean</td><td>Reset random number generators so particles etc. are identical between exports (default: last used, initially false)</td></tr><tr><td>overwrite</td><td>boolean</td><td>Replace output_path if it already exists (default false)</td></tr></tbody></table></div></details>
+		<details><summary><code>export_screenshot</code></summary><p>Save a PNG screenshot of the replay at the current tick from the current camera, rendered at any resolution (like the editor&#x27;s &#x27;Export Screenshot&#x27; window). Runs as a short export job: poll export_status until it is no longer running.</p><div class="tablebox"><table><tbody><tr><td>output_path *</td><td>string</td><td>PNG file to write, absolute or relative to the game directory</td></tr><tr><td>width</td><td>integer</td><td>Image width in pixels (default: last used export resolution, initially 1920)</td></tr><tr><td>height</td><td>integer</td><td>Image height in pixels (default: last used export resolution, initially 1080)</td></tr><tr><td>no_gui</td><td>boolean</td><td>Hide the HUD/GUI (default: last used, initially false)</td></tr><tr><td>ssaa</td><td>boolean</td><td>Supersampling anti-aliasing (default: last used, initially false)</td></tr><tr><td>transparent</td><td>boolean</td><td>Transparent background. Only works when the sky is disabled (default false)</td></tr><tr><td>overwrite</td><td>boolean</td><td>Replace output_path if it already exists (default false)</td></tr></tbody></table></div></details>
+		<details><summary><code>export_status</code></summary><p>Whether a video export is running and how far along it is (frames done / total). After it has finished, reports the output file of the last export started over MCP.</p><p>No arguments.</p></details>
+		<details><summary><code>export_cancel</code></summary><p>Stop the running export after the current frame. Like holding ESC during an export: the frames encoded so far are kept and the video file is finalised.</p><p>No arguments.</p></details>
+		<details><summary><code>smart_camera_add</code></summary><p>Add a smart camera keyframe: from this tick on the camera follows one player and frames them automatically, until the next keyframe on the track. Modes: &#x27;chase&#x27; follows behind the player, &#x27;tripod&#x27; stands still and turns to keep the player in frame, &#x27;orbit&#x27; circles the player, &#x27;director&#x27; cuts between its own chase, tripod and orbit shots. Only the settings of the chosen mode and the framing settings matter. Creates the smart camera track if needed. Undoable with editor_undo. The camera only moves while the replay is playing or exporting; see smart_camera_status.</p><div class="tablebox"><table><tbody><tr><td>tick *</td><td>integer</td><td>Replay tick of the keyframe</td></tr><tr><td>target</td><td>string</td><td>Player to follow, by name or UUID (default: the player who made the recording)</td></tr><tr><td>mode</td><td>string</td><td>chase, tripod, orbit or director (default chase)</td></tr><tr><td>track</td><td>integer</td><td>Optional smart camera track index, when the scene has more than one</td></tr><tr><td>distance</td><td>number</td><td>Chase: blocks behind the player (default 6). Director: base distance of its chase shots</td></tr><tr><td>height</td><td>number</td><td>Chase and orbit: blocks above the point the camera aims at (default 2)</td></tr><tr><td>side_angle</td><td>number</td><td>Chase: degrees around the player relative to their heading. 0 = directly behind, 90 = to their right, 180 = in front</td></tr><tr><td>position_smoothing</td><td>number</td><td>Chase: seconds the camera takes to catch up with the player (default 0.35, 0 = rigid)</td></tr><tr><td>heading_source</td><td>string</td><td>Chase: &#x27;movement&#x27; (direction of travel, body direction when nearly still) or &#x27;body&#x27;</td></tr><tr><td>position</td><td>any</td><td>Tripod: camera position as [x, y, z] or {x, y, z} (default: where the camera is now)</td></tr><tr><td>aim_smoothing</td><td>number</td><td>Tripod: seconds the camera takes to turn after the player (default 0.25)</td></tr><tr><td>radius</td><td>number</td><td>Orbit: horizontal distance from the player (default 8)</td></tr><tr><td>degrees_per_second</td><td>number</td><td>Orbit: speed, the sign is the direction (default 20)</td></tr><tr><td>start_angle</td><td>number</td><td>Orbit: the camera&#x27;s yaw at the keyframe&#x27;s tick</td></tr><tr><td>min_shot_seconds</td><td>number</td><td>Director: a shot lasts at least this long (default 3)</td></tr><tr><td>max_shot_seconds</td><td>number</td><td>Director: a shot lasts at most this long (default 8)</td></tr><tr><td>allow_chase</td><td>boolean</td><td>Director: may use chase shots</td></tr><tr><td>allow_tripod</td><td>boolean</td><td>Director: may use tripod shots</td></tr><tr><td>allow_orbit</td><td>boolean</td><td>Director: may use orbit shots</td></tr><tr><td>seed</td><td>integer</td><td>Director: the same seed gives the same shots</td></tr><tr><td>screen_x</td><td>number</td><td>Where the player sits in the frame, -1 (left edge) to 1 (right edge). 0 = centre, -0.333 / 0.333 = rule of thirds</td></tr><tr><td>screen_y</td><td>number</td><td>Where the player sits in the frame, -1 (bottom) to 1 (top)</td></tr><tr><td>lead_room</td><td>number</td><td>0 to 1: how much room to leave in front of a moving player (default 0.25)</td></tr><tr><td>auto_zoom</td><td>boolean</td><td>Change the FOV so the player keeps the same size on screen</td></tr><tr><td>subject_screen_height</td><td>number</td><td>Auto zoom: fraction of the frame&#x27;s height the player fills (default 0.3)</td></tr><tr><td>min_fov</td><td>number</td><td>Auto zoom: smallest FOV (default 30)</td></tr><tr><td>max_fov</td><td>number</td><td>Auto zoom: largest FOV (default 90)</td></tr><tr><td>fixed_fov</td><td>number</td><td>FOV while auto zoom is off. 0 leaves the FOV alone (default)</td></tr><tr><td>frame_vehicle</td><td>boolean</td><td>Also frame what the player rides: a vehicle, a Create contraption or a Create Aeronautics craft (default true)</td></tr><tr><td>avoid_obstructions</td><td>boolean</td><td>Move the camera in when blocks are between it and the player (default true)</td></tr><tr><td>transition_seconds</td><td>number</td><td>Blend from the previous camera over this time when this keyframe takes effect, 0 = cut (default 0.5)</td></tr></tbody></table></div></details>
+		<details><summary><code>smart_camera_status</code></summary><p>What the smart camera is doing at the current replay time: whether one is active, its mode (and for the director the current shot and the shots so far), the subject&#x27;s position, the camera pose and FOV, where the subject is on screen (-1 to 1, 0 = centre), whether blocks are in the way and whether a vehicle or craft is framed. &#x27;applied&#x27; is false while the replay is paused: the pose is then what the camera will be when playback continues.</p><p>No arguments.</p></details>
+		<details><summary><code>moments_status</code></summary><p>State of the moments tracker: whether a session is being tracked, record counts, voice chat availability, pending transcriptions, and whether the configured Whisper and Ollama servers answer. Call this first when working with the moments_* tools.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_ignored_events</code></summary><p>Read or change the list of events that are left out of every moments query, milestone list and clip, to cut noise. An entry is an event type (block_mined), a type with a subject (mob_kill:minecraft:zombie, advancement:minecraft:story/root) or the name of a custom or server event (close_call, animal_bred). * matches anything (job_*). Ignored events are still stored: removing an entry brings them back. Saved in the mod&#x27;s config (momentsIgnoredEvents). Always returns the list as it now is.</p><div class="tablebox"><table><tbody><tr><td>action</td><td>string</td><td>list (default), add, remove, set (replace the whole list) or clear</td></tr><tr><td>entries</td><td>string[]</td><td>The entries to add, remove or set</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_sessions_list</code></summary><p>List the recorded play sessions, newest first: id, start/end time, world or server, local player, the replays recorded during the session and record counts.</p><div class="tablebox"><table><tbody><tr><td>limit</td><td>integer</td><td>Maximum number of sessions (default 20)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_events_query</code></summary><p>Query the gameplay events of a session (mob_kill, player_kill, player_death, nearby_player_death, pet_death, biome_discovered, advancement, advancement_other, item_crafted, block_placed, block_mined, tool_first_use, dimension_entered, structure_interaction, boss_encounter, boss_defeated, milestone, marker, custom, and with McpCraft installed its job board: job_posted, job_help_asked, job_claimed, job_dropped, job_delivered, job_materials_complete, job_finished, job_removed, with the job in metadata). Every event has real time, game time, position, dimension, biome, an importance score and, when a replay was being recorded, replay_uuid and replay_tick. Kill and death events say how they were attributed in metadata.attribution (death_message, stats, heuristic, heuristic_unconfirmed).</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>type</td><td>any</td><td>Event type, or an array of types</td></tr><tr><td>subject</td><td>string</td><td>Only events with this subject, eg. an entity type id (minecraft:zombie), item id, block id, biome id or advancement id</td></tr><tr><td>first_only</td><td>boolean</td><td>Only events that were the first of their kind in this world</td></tr><tr><td>keyword</td><td>string</td><td>Only events whose type, subject or metadata contains this text (case-insensitive)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_firsts</code></summary><p>First occurrences in a session, grouped by event type: first kill of each mob, first craft of each item, new biomes, new dimensions, ...</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_milestones</code></summary><p>The big moments of a session: milestones, advancements (own and other players&#x27;), boss encounters and defeats, player kills and deaths, and first entries into dimensions.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_dialogue_query</code></summary><p>Query the voice chat segments of a session: speaker, start/end time, replay ticks, audio file, transcription status (pending, done, failed, empty) and text.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>speaker</td><td>string</td><td>Only segments of this speaker (name or uuid). Same as &#x27;player&#x27;</td></tr><tr><td>status</td><td>string</td><td>Only segments with this status: pending, done, failed or empty</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_transcripts_search</code></summary><p>Search the voice chat transcripts of a session for a word or phrase (case-insensitive). Returns the matching lines with the lines spoken around them.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>query *</td><td>string</td><td>Word or phrase to look for</td></tr><tr><td>context_lines</td><td>integer</td><td>How many lines before and after each match to include (default 2)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_interactions_query</code></summary><p>Query who was together with whom: meetings (two players staying close), group_formed / group_changed / group_dissolved (three or more) and group_move. Includes the ones still going on (ongoing = true).</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>type</td><td>any</td><td>Interaction type, or an array of types</td></tr><tr><td>players</td><td>string[]</td><td>Only interactions that involve all of these players (names or uuids)</td></tr><tr><td>min_duration</td><td>number</td><td>Only interactions that lasted at least this many seconds</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_notable</code></summary><p>The most important moments of a session, best first, each with its enriched context: what was said around it, who was there, what else happened and where.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>min_importance</td><td>number</td><td>Only events with at least this importance (0-100, default 0)</td></tr><tr><td>type</td><td>any</td><td>Event type, or an array of types</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_context</code></summary><p>Enriched context for one event or one point in time: the dialogue in the seconds before and after, overlapping interactions, other events, location and the most recent advancements.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>event_id</td><td>string</td><td>Event id from moments_events_query</td></tr><tr><td>time</td><td>any</td><td>Real time (ISO-8601 or epoch millis), instead of event_id</td></tr><tr><td>seconds</td><td>integer</td><td>Seconds before and after to look at (default: the momentsContextSeconds option)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_clips_generate</code></summary><p>Build clip candidates for a session and store them (replacing the previous candidates). Events whose windows overlap become one clip, clips are widened so they don&#x27;t cut a sentence in half, and dense conversations without events become clips of their own. Each clip has a title, summary, times, replay uuid and ticks, the events, players, the full transcript and an importance score. With summarize the heuristic title/summary is returned right away with summary_pending = true and the Ollama model&#x27;s version shows up in moments_clips_list once it is ready (summary_source = ollama).</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>pre_roll</td><td>number</td><td>Seconds before an event that the clip starts (default: momentsClipPreRollSeconds)</td></tr><tr><td>post_roll</td><td>number</td><td>Seconds after an event that the clip continues (default: momentsClipPostRollSeconds)</td></tr><tr><td>min_importance</td><td>number</td><td>Only events with at least this importance start a clip (default 25)</td></tr><tr><td>max_clips</td><td>integer</td><td>Keep at most this many clips, the most important ones (default 20)</td></tr><tr><td>summarize</td><td>boolean</td><td>Ask the Ollama model for titles and summaries (default: the momentsSummarizeClips option)</td></tr><tr><td>type</td><td>any</td><td>Only these event types start a clip: a type or an array of types. Also leaves out the conversation-only clips</td></tr><tr><td>keyword</td><td>string</td><td>Only clips whose events or transcript contain this text</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_clips_list</code></summary><p>List the stored clip candidates of a session (from the last moments_clips_generate), with the Ollama titles and summaries where they are ready.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>type</td><td>any</td><td>Only clips containing an event of this type (or one of an array of types)</td></tr><tr><td>min_importance</td><td>number</td><td>Only clips with at least this importance</td></tr><tr><td>keyword</td><td>string</td><td>Only clips whose title, summary, events or transcript contain this text</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_transcribe_pending</code></summary><p>Queue the pending and failed voice segments of a session for transcription again, eg. after the Whisper server came back or when live transcription is off. Returns counts.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_event_add</code></summary><p>Add a custom event at the current moment of the running session (position, game time and replay tick are filled in).</p><div class="tablebox"><table><tbody><tr><td>label *</td><td>string</td><td>What happened, in a few words</td></tr><tr><td>type</td><td>string</td><td>Optional category for the event, stored as its subject (eg. &#x27;funny&#x27;, &#x27;build_finished&#x27;)</td></tr><tr><td>metadata</td><td>object</td><td>Optional extra data to store with the event</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_cue</code></summary><p>Cue up a clip candidate or a single event for viewing: opens the replay it was recorded in if that is not the open one, jumps to it and pauses there, ready to play. Give clip_id or event_id. Opening a replay takes a while: the reply says so (opening = true) and the jump follows by itself once the replay has loaded. Refuses to pull the player out of a live world unless leave_world is true. The moments web page (GET / on this server) uses this for its Cue buttons.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>clip_id</td><td>string</td><td>Clip id from moments_clips_generate / moments_clips_list</td></tr><tr><td>event_id</td><td>string</td><td>Event id from moments_events_query, instead of clip_id</td></tr><tr><td>lead_seconds</td><td>number</td><td>For an event: how long before it to start (default 5)</td></tr><tr><td>pause</td><td>boolean</td><td>Pause at the cue point (default true)</td></tr><tr><td>camera</td><td>boolean</td><td>Also add the suggested smart camera (suggested_camera in moments_clips_list) as a keyframe at the cue point, following the player who recorded. Undo with editor_undo (default false)</td></tr><tr><td>leave_world</td><td>boolean</td><td>Allow leaving the world that is being played right now to open the replay (default false)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_clip_goto</code></summary><p>Jump to the start of a clip candidate in the open replay. Works when the open replay is the one the clip was recorded in; otherwise says which replay to open.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>clip_id *</td><td>string</td><td>Clip id from moments_clips_generate / moments_clips_list</td></tr></tbody></table></div></details>
+	</section>
+
+	<!-- ============================================================ B -->
+	<section id="records">
+		<div class="chapter"><span class="no">B</span><h2>The stored records</h2><span class="owner yours">yours</span></div>
+		<p class="lede">What the moments files hold, as they are written. Names are fixed: the page and the tools read them.</p>
+
+		<h3>session.json</h3>
+<pre>{
+  "id": "20261117-015237",
+  "start_real_time": 1794880357796, "start_real_time_iso": "2026-11-17T01:52:37.796Z",
+  "end_real_time": 1794880393487,   "end_real_time_iso": "2026-11-17T01:53:13.487Z",
+  "world_name": "My World", "world_type": "singleplayer", "world_key": "sp_My_World",
+  "server_address": null,
+  "local_player": { "uuid": "380df991-f603-344c-a090-369bad2a924a", "name": "Dev" },
+  "replays": [ "49b0b73d-033f-4772-b96e-89076f469cc0" ],
+  "mod_version": "1.0.0"
+}</pre>
+
+		<h3>events.jsonl, one event per line</h3>
+<pre>{"id":"e10","type":"mob_kill","subject":"minecraft:pig","first":true,
+ "player":{"uuid":"380df991-...","name":"Dev"},
+ "real_time":1794880363983,"real_time_iso":"2026-11-17T01:52:43.983Z",
+ "game_time":156,"day_time":156,"dimension":"minecraft:overworld","biome":"minecraft:plains",
+ "replay_uuid":"49b0b73d-033f-4772-b96e-89076f469cc0","replay_tick":70,
+ "position":{"x":2.5,"y":-60.0,"z":6.5},
+ "metadata":{"attribution":"heuristic","entity_uuid":"08f4dbd2-...","weapon":"minecraft:stone"}}
+
+{"id":"e2","type":"advancement","subject":"minecraft:story/mine_stone","first":true, ...,
+ "metadata":{"title":"Stone Age","description":"Mine Stone with your new Pickaxe","frame":"task"}}
+
+{"id":"e7","type":"marker","subject":"Good bit","first":false, ...,
+ "metadata":{"label":"Good bit","colour":"#55FF55"}}
+
+{"id":"e12","type":"custom","subject":"boss_fight","first":true, ...,
+ "metadata":{"boss":"minecraft:warden","boss_name":"Warden","max_health":500.0,
+   "fighters":[{"name":"Dev","damage":310.0,"share":0.62},{"name":"Sam","damage":190.0,"share":0.38}],
+   "seconds":94,"killer":"Dev","label":"Warden was defeated by Dev and Sam after 94 seconds","source":"server"}}
+
+{"id":"e21","type":"job_finished","subject":"custom","first":true, ...,
+ "metadata":{"by":"Dev","claimer":"Dev","job_id":"j1","kind":"custom","title":"Help dig the cutting",
+   "creator":"Sam","private":false,"player":"Dev","roles":["actor","claimer"],"source":"mcpcraft"}}</pre>
+		<p><code>replay_uuid</code> and <code>replay_tick</code> are absent when nothing was being recorded. Queries add <code>importance</code> and <code>description</code> to each event; they are not stored.</p>
+
+		<h3>interactions.jsonl</h3>
+<pre>{"id":"i3","type":"meeting","players":[{"uuid":"...","name":"Dev"},{"uuid":"...","name":"Sam"}],
+ "real_time":1794880400000,"start_real_time":1794880400000,"end_real_time":1794880465000,
+ "start_game_time":900,"end_game_time":2200,"start_replay_uuid":"49b0b73d-...","start_replay_tick":800,
+ "end_replay_uuid":"49b0b73d-...","end_replay_tick":2100,
+ "duration_seconds":65.0,"dimension":"minecraft:overworld","position":{"x":12.4,"y":64.0,"z":-3.1},"metadata":{}}</pre>
+		<p>Group records add <code>group_id</code>, and by type <code>joined</code>, <code>left</code>, <code>from_group_id</code> and <code>from_members</code>. This example is illustrative: check the field names against <code>InteractionTracker</code>, which writes them.</p>
+
+		<h3>dialogue.jsonl</h3>
+<pre>{"id":"d1","speaker":{"uuid":"380df991-...","name":"Dev"},
+ "real_time":1794880361448,
+ "start_real_time":1794880361448,"start_real_time_iso":"2026-11-17T01:52:41.448Z",
+ "start_game_time":108,"start_replay_uuid":"49b0b73d-...","start_replay_tick":20,
+ "end_real_time":1794880369768,"end_real_time_iso":"2026-11-17T01:52:49.768Z",
+ "end_game_time":274,"end_replay_uuid":"49b0b73d-...","end_replay_tick":185,
+ "day_time":108,"dimension":"minecraft:overworld","duration_seconds":8.32,
+ "audio_file":"audio/380df991-..._1794880361448.wav",
+ "status":"pending","text":"","language":null,"avg_logprob":null,"no_speech_prob":null,
+ "segments":[],"whisper_model":null,"attempts":0,"metadata":{}}</pre>
+		<p>Status is <code>pending</code>, <code>done</code>, <code>empty</code> or <code>failed</code>. When done, <code>text</code>, <code>language</code>, the two probabilities, <code>segments</code> (each with start, end and text) and <code>whisper_model</code> are filled in.</p>
+
+		<h3>clips.json</h3>
+<pre>{
+  "session": "20261117-015237", "generated_at": 1794880400000,
+  "parameters": { "pre_roll": 15, "post_roll": 20, "min_importance": 25, "max_clips": 20, "summarize": true },
+  "clips": [ {
+    "id": "c1794880343491", "kind": "event",
+    "title": "First Warden down", "summary": "Dev and Sam fought the Warden for a minute and a half...",
+    "summary_source": "ollama", "summary_model": "gemma4:e4b", "summary_pending": false,
+    "heuristic_title": "Warden was defeated by Dev and Sam after 94 seconds", "heuristic_summary": "...",
+    "importance": 100.0,
+    "real_time": 1794880343491,
+    "start_real_time": 1794880343491, "start_real_time_iso": "2026-11-17T01:52:23.491Z",
+    "end_real_time": 1794880398492,   "end_real_time_iso": "2026-11-17T01:53:18.492Z",
+    "duration_seconds": 55.0, "start_game_time": 0, "end_game_time": 858, "dimension": "minecraft:overworld",
+    "replay_uuid": "49b0b73d-033f-4772-b96e-89076f469cc0", "start_replay_tick": 0, "end_replay_tick": 761,
+    "players": [ "Dev", "Sam" ],
+    "events": [ { "id": "e12", "type": "custom", "subject": "boss_fight", "first": true, "player": "Dev",
+                  "description": "Warden was defeated by Dev and Sam after 94 seconds", "importance": 90.0, "real_time": 1794880363983 } ],
+    "transcript": [ { "dialogue_id": "d1", "speaker": "Dev", "offset_seconds": 17.96, "duration_seconds": 8.32,
+                      "text": "Watch out, it is right behind you." } ],
+    "word_count": 7
+  } ]
+}</pre>
+		<p><code>kind</code> is <code>event</code> or <code>conversation</code>. <code>summary_source</code> is <code>heuristic</code> until a model has written the text. Listings add <code>suggested_camera</code> (mode, label, reason, settings); it is not stored.</p>
+
+		<h3>firsts/&lt;world key&gt;.json</h3>
+<pre>{ "scopes": {
+    "380df991-f603-344c-a090-369bad2a924a|biome_discovered": [ "minecraft:plains" ],
+    "380df991-f603-344c-a090-369bad2a924a|mob_kill": [ "minecraft:pig", "minecraft:zombie" ]
+} }</pre>
+		<p>One list per player and event type: the subjects that have already happened in that world.</p>
+	</section>
+
+	<footer>
+		<p>Dailies build specification, first issue, 17 November 2026. Chapters II to VII describe new work to be written from this document alone. Chapters VIII to XII describe the project owner's own features, whose source is in <code>reference/</code> and <code>companion/</code> beside this document.</p>
+	</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dailies Moments</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --panel: #ffffff; --ink: #1d1c1a; --muted: #6b6861; --line: #dedad2;
+    --accent: #b4571c; --accent-ink: #ffffff; --soft: #f0e6dc; --good: #2f7d4f; --bad: #b3261e;
+    --first: #8a6a00; --first-bg: #f7ecc4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17161a; --panel: #212026; --ink: #ece9e4; --muted: #9a968f; --line: #35333b;
+      --accent: #e08a4c; --accent-ink: #1b1206; --soft: #2e2925; --good: #6cc08d; --bad: #f2867f;
+      --first: #f0d36a; --first-bg: #3a3214;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 8px 0 0; letter-spacing: .01em; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  select, input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  select { max-width: 100%; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 5px 11px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.small { padding: 2px 8px; font-size: 13px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+  .pill.on { color: var(--good); } .pill.off { color: var(--muted); } .pill.first { background: var(--first-bg); color: var(--first); font-weight: 600; }
+  .tabs { display: flex; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 14px; color: var(--muted); font-weight: 600; }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+  .controls label { display: flex; gap: 6px; align-items: center; }
+  .strip { position: relative; height: 46px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+  .strip .band { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: .18; cursor: pointer; }
+  .strip .band:hover { opacity: .35; }
+  .strip .dot { position: absolute; bottom: 6px; width: 3px; background: var(--accent); border-radius: 2px; cursor: pointer; transform: translateX(-1px); }
+  .strip .dot:hover { background: var(--ink); }
+  .strip .ends { position: absolute; top: 3px; font-size: 11px; color: var(--muted); padding: 0 6px; pointer-events: none; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .card.flash { outline: 2px solid var(--accent); }
+  .row { display: flex; gap: 12px; align-items: flex-start; }
+  .grow { flex: 1; min-width: 0; }
+  .score { flex: none; width: 46px; text-align: center; }
+  .score b { display: block; font-size: 19px; line-height: 1.1; }
+  .score i { display: block; height: 4px; border-radius: 2px; background: var(--soft); margin-top: 4px; overflow: hidden; }
+  .score i u { display: block; height: 100%; background: var(--accent); }
+  .title { font-weight: 650; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .summary { margin: 6px 0 0; overflow-wrap: anywhere; }
+  .actions { flex: none; display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+  details { margin-top: 8px; } summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .lines { margin: 6px 0 0; padding: 0; list-style: none; font-size: 14px; }
+  .lines li { padding: 2px 0; overflow-wrap: anywhere; } .lines .who { font-weight: 600; } .lines .when { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; color: var(--muted); }
+  .chip.sel { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; max-width: 90vw; display: none; z-index: 9; }
+  #toast.bad { background: var(--bad); color: #fff; }
+  @media (max-width: 640px) { .row { flex-wrap: wrap; } .actions { flex-direction: row; width: 100%; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Moments</h1>
+    <select id="session" title="Play session"></select>
+    <button id="refresh">Refresh</button>
+    <label style="font-size:13px;color:var(--muted)"><input type="checkbox" id="auto" checked> auto</label>
+    <span id="status" class="meta" style="margin:0 0 0 auto"></span>
+  </div>
+</header>
+<main>
+  <div class="strip" id="strip" title="The session from start to end. Bands are clips, bars are events"></div>
+  <div class="tabs">
+    <button data-tab="clips" class="active">Clips</button>
+    <button data-tab="events">Events</button>
+    <button data-tab="dialogue">Voice</button>
+    <button data-tab="ignored">Ignored</button>
+  </div>
+
+  <section id="tab-clips">
+    <div class="controls">
+      <button class="primary" id="generate">Find clips</button>
+      <label>min importance <input type="number" id="clipMin" value="25" min="0" max="100" style="width:70px"></label>
+      <label>up to <input type="number" id="clipMax" value="20" min="1" max="200" style="width:70px"> clips</label>
+      <span id="clipInfo"></span>
+    </div>
+    <div id="clips"></div>
+  </section>
+
+  <section id="tab-events" hidden>
+    <div class="controls">
+      <input type="text" id="search" placeholder="Search events" style="flex:1;min-width:160px">
+      <label>min importance <input type="number" id="evMin" value="0" min="0" max="100" style="width:70px"></label>
+      <label><input type="checkbox" id="firsts"> firsts only</label>
+      <label>sort <select id="sort"><option value="time">by time</option><option value="importance">by importance</option></select></label>
+    </div>
+    <div class="chips" id="types"></div>
+    <div id="events"></div>
+  </section>
+
+  <section id="tab-dialogue" hidden>
+    <div id="dialogue"></div>
+  </section>
+
+  <section id="tab-ignored" hidden>
+    <p class="meta" style="margin-bottom:12px">Ignored events are hidden from this page, from queries and from clips. Nothing is deleted: remove an entry and they come back.</p>
+    <div class="controls">
+      <input type="text" id="ignoreEntry" placeholder="block_mined, mob_kill:minecraft:zombie, close_call, job_*" style="flex:1;min-width:200px">
+      <button id="ignoreAdd">Ignore</button>
+    </div>
+    <div id="ignored"></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let rpcId = 0;
+const state = { session: null, sessions: [], events: [], clips: [], dialogue: [], ignored: [], types: new Set(), meta: null };
+
+async function tool(name, args) {
+  const response = await fetch('/mcp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args || {} } })
+  });
+  const json = await response.json();
+  if (json.error) throw new Error(json.error.message);
+  const text = json.result.content[0].text;
+  if (json.result.isError) throw new Error(text);
+  return JSON.parse(text);
+}
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (key === 'class') node.className = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else if (value !== null && value !== undefined && value !== false) node.setAttribute(key, value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child.nodeType ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+let toastTimer = null;
+function toast(message, bad) {
+  const node = $('toast');
+  node.textContent = message;
+  node.className = bad ? 'bad' : '';
+  node.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.style.display = 'none', bad ? 7000 : 3500);
+}
+
+const clock = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const day = ms => new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+function span(seconds) {
+  seconds = Math.round(seconds);
+  return seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + (seconds % 60 ? (seconds % 60) + ' s' : '');
+}
+const pretty = text => String(text || '').replace(/^minecraft:/, '').replace(/[_:/.]+/g, ' ');
+
+function scoreBox(value) {
+  const score = Math.round(value || 0);
+  return el('div', { class: 'score', title: 'Importance, 0 to 100' }, el('b', {}, score), el('i', {}, el('u', { style: 'width:' + Math.min(100, score) + '%' })));
+}
+
+async function cue(args, label) {
+  try {
+    let result;
+    try {
+      result = await tool('moments_cue', Object.assign({ session: state.session }, args));
+    } catch (error) {
+      if (!String(error.message).startsWith('LEAVE_WORLD_NEEDED')) throw error;
+      if (!confirm('You are in a world right now.\n\nCueing this will leave it and open the replay. Carry on?')) return;
+      result = await tool('moments_cue', Object.assign({ session: state.session, leave_world: true }, args));
+    }
+    const camera = result.camera_added && result.suggested_camera ? ' with a ' + result.suggested_camera.label.toLowerCase() + ' camera' : '';
+    toast(result.opening ? 'Opening the replay, it will jump to "' + label + '" once loaded' + camera : 'Cued' + camera + ': ' + label);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+// ---- Loading ----
+
+async function loadSessions() {
+  const list = await tool('moments_sessions_list', { limit: 100 });
+  state.sessions = list.sessions;
+  const select = $('session');
+  const wanted = state.session;
+  select.replaceChildren(...list.sessions.map(session => {
+    const name = session.world_name || session.server_address || session.id;
+    const when = session.start_real_time ? day(session.start_real_time) + ' ' + clock(session.start_real_time) : '';
+    return el('option', { value: session.id }, (session.running ? '● ' : '') + name + '  ·  ' + when);
+  }));
+  if (!list.sessions.length) { state.session = null; return; }
+  state.session = list.sessions.some(session => session.id === wanted) ? wanted : list.sessions[0].id;
+  select.value = state.session;
+}
+
+async function loadStatus() {
+  try {
+    const status = await tool('moments_status');
+    const ai = status.transcription && status.transcription.configured;
+    $('status').replaceChildren(
+      el('span', { class: 'pill ' + (status.tracking ? 'on' : 'off') }, status.tracking ? 'tracking' : (status.in_replay ? 'in a replay' : 'not tracking')),
+      el('span', { class: 'pill ' + (ai ? 'on' : 'off'), title: 'momentsAiEnabled in the config' }, ai ? 'AI on' : 'AI off'));
+  } catch (error) {
+    $('status').replaceChildren(el('span', { class: 'pill' }, 'no status'));
+  }
+}
+
+async function loadAll() {
+  await loadStatus();
+  if (!state.session) {
+    for (const id of ['clips', 'events', 'dialogue']) $(id).replaceChildren(el('div', { class: 'empty' }, 'No play sessions have been recorded yet. One starts when you join a world.'));
+    return;
+  }
+  const args = { session: state.session };
+  const [events, clips, dialogue, ignored] = await Promise.all([
+    tool('moments_events_query', Object.assign({ limit: 5000 }, args)),
+    tool('moments_clips_list', Object.assign({ limit: 500 }, args)),
+    tool('moments_dialogue_query', Object.assign({ limit: 2000 }, args)),
+    tool('moments_ignored_events')
+  ]);
+  state.events = events.events;
+  state.clips = clips.clips;
+  state.dialogue = dialogue.dialogue;
+  state.ignored = ignored.ignored;
+  state.meta = state.sessions.find(session => session.id === state.session) || null;
+  render();
+}
+
+// ---- Rendering ----
+
+function render() { renderStrip(); renderClips(); renderTypes(); renderEvents(); renderDialogue(); renderIgnored(); }
+
+function bounds() {
+  const times = state.events.map(event => event.real_time).concat(state.dialogue.map(line => line.real_time));
+  let start = state.meta && state.meta.start_real_time ? state.meta.start_real_time : Math.min(...times);
+  let end = state.meta && state.meta.end_real_time ? state.meta.end_real_time : Math.max(...times, start + 60000);
+  if (!isFinite(start)) { start = Date.now(); end = start + 60000; }
+  return [start, Math.max(end, start + 1000)];
+}
+
+function renderStrip() {
+  const [start, end] = bounds();
+  const at = time => (100 * (time - start) / (end - start)).toFixed(3) + '%';
+  const nodes = [el('span', { class: 'ends', style: 'left:0' }, clock(start)), el('span', { class: 'ends', style: 'right:0' }, clock(end))];
+  for (const clip of state.clips) {
+    nodes.push(el('div', { class: 'band', title: clip.title, style: 'left:' + at(clip.start_real_time) + ';width:' + (100 * (clip.end_real_time - clip.start_real_time) / (end - start)).toFixed(3) + '%',
+      onclick: () => reveal('clips', 'clip-' + clip.id) }));
+  }
+  for (const event of state.events) {
+    const score = event.importance || 0;
+    if (score < 10) continue;
+    nodes.push(el('div', { class: 'dot', title: clock(event.real_time) + '  ' + (event.description || event.type), style: 'left:' + at(event.real_time) + ';height:' + (6 + score * 0.28).toFixed(0) + 'px',
+      onclick: () => reveal('events', 'event-' + event.id) }));
+  }
+  $('strip').replaceChildren(...nodes);
+}
+
+function reveal(tab, id) {
+  showTab(tab);
+  if (tab === 'events') { $('search').value = ''; $('evMin').value = 0; $('firsts').checked = false; state.types.clear(); renderTypes(); renderEvents(); }
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  node.classList.add('flash');
+  setTimeout(() => node.classList.remove('flash'), 1600);
+}
+
+function renderClips() {
+  const clips = state.clips.slice().sort((a, b) => (b.importance || 0) - (a.importance || 0));
+  $('clipInfo').textContent = clips.length ? clips.length + ' clip' + (clips.length === 1 ? '' : 's') + ', best first' : '';
+  if (!clips.length) {
+    $('clips').replaceChildren(el('div', { class: 'empty' }, 'No clips yet for this session. Press "Find clips" to build them from the events and voice chat.'));
+    return;
+  }
+  $('clips').replaceChildren(...clips.map(clip => {
+    const hasReplay = clip.replay_uuid != null;
+    const transcript = clip.transcript || [];
+    const events = clip.events || [];
+    return el('div', { class: 'card', id: 'clip-' + clip.id },
+      el('div', { class: 'row' },
+        scoreBox(clip.importance),
+        el('div', { class: 'grow' },
+          el('div', { class: 'title' }, clip.title || 'Clip'),
+          el('div', { class: 'meta' },
+            el('span', {}, clock(clip.start_real_time) + ' · ' + span(clip.duration_seconds || 0)),
+            (clip.players || []).length ? el('span', {}, (clip.players || []).map(player => player.name || player).join(', ')) : null,
+            clip.summary_pending ? el('span', { class: 'pill' }, 'summary being written') : null,
+            clip.summary_source === 'ollama' ? el('span', { class: 'pill on' }, 'AI summary') : null,
+            hasReplay ? null : el('span', { class: 'pill' }, 'not recorded')),
+          el('p', { class: 'summary' }, clip.summary || ''),
+          clip.suggested_camera ? el('div', { class: 'meta', title: clip.suggested_camera.reason }, el('span', { class: 'pill' }, 'camera'), el('span', {}, clip.suggested_camera.label + ': ' + clip.suggested_camera.reason)) : null,
+          events.length ? el('details', {}, el('summary', {}, events.length + ' event' + (events.length === 1 ? '' : 's')),
+            el('ul', { class: 'lines' }, events.map(event => el('li', {}, el('span', { class: 'when' }, event.real_time ? clock(event.real_time) : ''), event.description || pretty(event.type))))) : null,
+          transcript.length ? el('details', {}, el('summary', {}, 'What was said (' + transcript.length + ' line' + (transcript.length === 1 ? '' : 's') + ')'),
+            el('ul', { class: 'lines' }, transcript.map(line => el('li', {}, el('span', { class: 'who' }, (line.speaker && line.speaker.name || line.speaker || 'Someone') + ': '), line.text || '(not transcribed)')))) : null),
+        el('div', { class: 'actions' },
+          el('button', { class: 'primary', disabled: !hasReplay, title: hasReplay ? 'Open the replay at the start of this clip, paused, and add the suggested smart camera there' : 'No replay was being recorded', onclick: () => cue({ clip_id: clip.id, camera: true }, clip.title || 'clip') }, 'Cue + camera'),
+          el('button', { disabled: !hasReplay, title: 'Open the replay at the start of this clip, paused, without touching the cameras', onclick: () => cue({ clip_id: clip.id }, clip.title || 'clip') }, 'Cue only'))));
+  }));
+}
+
+function renderTypes() {
+  const counts = new Map();
+  for (const event of state.events) counts.set(event.type, (counts.get(event.type) || 0) + 1);
+  const types = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  $('types').replaceChildren(...types.map(([type, count]) => el('span', {
+    class: 'chip' + (state.types.has(type) ? ' sel' : ''),
+    onclick: () => { state.types.has(type) ? state.types.delete(type) : state.types.add(type); renderTypes(); renderEvents(); }
+  }, pretty(type) + ' ' + count)));
+}
+
+function ignoreEntryFor(event) { return event.type === 'custom' && event.subject ? event.subject : event.type; }
+
+function renderEvents() {
+  const search = $('search').value.trim().toLowerCase();
+  const min = Number($('evMin').value) || 0;
+  const firsts = $('firsts').checked;
+  let events = state.events.filter(event => {
+    if (state.types.size && !state.types.has(event.type)) return false;
+    if ((event.importance || 0) < min) return false;
+    if (firsts && !event.first) return false;
+    return !search || JSON.stringify(event).toLowerCase().includes(search);
+  });
+  events.sort($('sort').value === 'importance' ? (a, b) => (b.importance || 0) - (a.importance || 0) : (a, b) => a.real_time - b.real_time);
+  const total = events.length;
+  events = events.slice(0, 600);
+  if (!total) {
+    $('events').replaceChildren(el('div', { class: 'empty' }, state.events.length ? 'Nothing matches these filters.' : 'No events in this session yet.'));
+    return;
+  }
+  const nodes = events.map(event => {
+    const hasReplay = event.replay_uuid != null;
+    const place = event.position ? Math.round(event.position.x) + ', ' + Math.round(event.position.y) + ', ' + Math.round(event.position.z) : null;
+    const entry = ignoreEntryFor(event);
+    return el('div', { class: 'card', id: 'event-' + event.id },
+      el('div', { class: 'row' },
+        scoreBox(event.importance),
+        el('div', { class: 'grow' },
+          el('div', { class: 'title' }, event.description || pretty(event.type)),
+          el('div', { class: 'meta' },
+            el('span', {}, clock(event.real_time)),
+            el('span', { class: 'pill' }, pretty(event.type)),
+            event.first ? el('span', { class: 'pill first' }, 'first') : null,
+            event.metadata && event.metadata.source ? el('span', { class: 'pill' }, 'from ' + event.metadata.source) : null,
+            place ? el('span', {}, place + (event.dimension ? ' · ' + pretty(event.dimension) : '')) : null,
+            event.biome ? el('span', {}, pretty(event.biome)) : null,
+            hasReplay ? el('span', {}, 'tick ' + event.replay_tick) : null),
+          el('details', {}, el('summary', {}, 'Details'), el('pre', {}, JSON.stringify(event, null, 2)))),
+        el('div', { class: 'actions' },
+          el('button', { class: 'primary', disabled: !hasReplay, title: hasReplay ? 'Open the replay five seconds before this, paused' : 'No replay was being recorded', onclick: () => cue({ event_id: event.id }, event.description || event.type) }, 'Cue'),
+          el('button', { class: 'small', title: 'Hide every "' + entry + '" event. Undo on the Ignored tab', onclick: () => changeIgnored('add', [entry]) }, 'Ignore kind'))));
+  });
+  if (total > events.length) nodes.push(el('div', { class: 'empty' }, 'Showing the first ' + events.length + ' of ' + total + '. Narrow the filters to see the rest.'));
+  $('events').replaceChildren(...nodes);
+}
+
+function renderDialogue() {
+  if (!state.dialogue.length) {
+    $('dialogue').replaceChildren(el('div', { class: 'empty' }, 'No voice chat was captured in this session. Voice comes from Simple Voice Chat.'));
+    return;
+  }
+  const lines = state.dialogue.slice().sort((a, b) => a.real_time - b.real_time);
+  $('dialogue').replaceChildren(el('div', { class: 'card' }, el('ul', { class: 'lines' }, lines.map(line => {
+    const text = line.status === 'done' && line.text ? line.text : line.status === 'empty' ? '(no speech)' : line.status === 'failed' ? '(transcription failed)' : '(not transcribed, ' + span(line.duration_seconds || 0) + ' of audio kept)';
+    return el('li', {}, el('span', { class: 'when' }, clock(line.real_time)), el('span', { class: 'who' }, (line.speaker && line.speaker.name || 'Someone') + ': '), text);
+  }))));
+}
+
+function renderIgnored() {
+  if (!state.ignored.length) {
+    $('ignored').replaceChildren(el('div', { class: 'empty' }, 'Nothing is ignored.'));
+    return;
+  }
+  $('ignored').replaceChildren(el('div', { class: 'chips' }, state.ignored.map(entry =>
+    el('span', { class: 'chip', title: 'Stop ignoring', onclick: () => changeIgnored('remove', [entry]) }, entry + '  ×'))));
+}
+
+async function changeIgnored(action, entries) {
+  try {
+    await tool('moments_ignored_events', { action, entries });
+    toast(action === 'add' ? 'Ignoring ' + entries.join(', ') : 'No longer ignoring ' + entries.join(', '));
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
+}
+
+function showTab(tab) {
+  for (const button of document.querySelectorAll('.tabs button')) button.classList.toggle('active', button.dataset.tab === tab);
+  for (const name of ['clips', 'events', 'dialogue', 'ignored']) $('tab-' + name).hidden = name !== tab;
+}
+
+// ---- Wiring ----
+
+async function refresh(withSessions) {
+  try {
+    if (withSessions) await loadSessions();
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
+}
+
+for (const button of document.querySelectorAll('.tabs button')) button.addEventListener('click', () => showTab(button.dataset.tab));
+$('session').addEventListener('change', () => { state.session = $('session').value; state.types.clear(); refresh(false); });
+$('refresh').addEventListener('click', () => refresh(true));
+for (const id of ['search', 'evMin', 'firsts', 'sort']) $(id).addEventListener('input', renderEvents);
+$('ignoreAdd').addEventListener('click', () => {
+  const entries = $('ignoreEntry').value.split(',').map(entry => entry.trim()).filter(Boolean);
+  if (entries.length) { $('ignoreEntry').value = ''; changeIgnored('add', entries); }
+});
+$('generate').addEventListener('click', async () => {
+  $('generate').disabled = true;
+  try {
+    const result = await tool('moments_clips_generate', { session: state.session, min_importance: Number($('clipMin').value) || 0, max_clips: Number($('clipMax').value) || 20 });
+    toast('Found ' + result.total + ' clip' + (result.total === 1 ? '' : 's'));
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
+  $('generate').disabled = false;
+});
+
+// Keeps a running session up to date, without redrawing under an open details box or a half-typed search
+setInterval(() => {
+  const running = state.meta && state.meta.running;
+  const busy = document.querySelector('details[open]') || document.activeElement === $('search') || document.activeElement === $('ignoreEntry');
+  if ($('auto').checked && running && !busy && !document.hidden) refresh(false);
+}, 10000);
+
+refresh(true);
+</script>
+</body>
+</html>

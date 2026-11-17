@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "comedymonkey.dailies.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "moments.MixinClientAdvancements",
+    "moments.MixinClientPacketListenerMoments",
+    "moments.MixinMultiPlayerGameModeMoments"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
