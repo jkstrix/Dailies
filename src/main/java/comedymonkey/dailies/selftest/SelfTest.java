@@ -55,6 +55,8 @@ public final class SelfTest {
         try {
             this.waitForGame();
             this.checkMcp();
+            WorldSteps.createWorld(this);
+            RecordingSteps.run(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
@@ -234,6 +236,80 @@ public final class SelfTest {
             check(parts.length >= 2, "the server sent no status line for " + method + " " + path);
             return new Reply(Integer.parseInt(parts[1]), headEnd < 0 ? "" : reply.substring(headEnd + 4));
         }
+    }
+
+    // --- Helpers for the steps ---
+
+    /** Runs something on the client thread and waits for it */
+    <T> T onClient(java.util.concurrent.Callable<T> action) throws Exception {
+        java.util.concurrent.CompletableFuture<T> done = new java.util.concurrent.CompletableFuture<>();
+        Minecraft.getInstance().execute(() -> {
+            try {
+                done.complete(action.call());
+            } catch (Throwable t) {
+                done.completeExceptionally(t);
+            }
+        });
+        try {
+            return done.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.ExecutionException e) {
+            if (e.getCause() instanceof Exception cause) {
+                throw cause;
+            }
+            throw e;
+        }
+    }
+
+    void onClientRun(Runnable action) throws Exception {
+        this.onClient(() -> {
+            action.run();
+            return null;
+        });
+    }
+
+    void waitFor(java.util.function.BooleanSupplier condition, int seconds, String what) throws Exception {
+        long deadline = System.currentTimeMillis() + seconds * 1000L;
+        while (!condition.getAsBoolean()) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new Failure("gave up after " + seconds + " seconds waiting for " + what);
+            }
+            Thread.sleep(50);
+        }
+    }
+
+    void sleepTicks(int ticks) throws InterruptedException {
+        Thread.sleep(ticks * 50L);
+    }
+
+    /** Runs a command as the player, on the built-in server, and waits until it has run */
+    void command(String command) throws Exception {
+        net.minecraft.client.server.IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        check(server != null, "there is no built-in server to run '" + command + "' on");
+        server.submit(() -> {
+            net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput(), command);
+        }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    void log(String message) {
+        Host.LOGGER.info("Dailies self test: {}", message);
+    }
+
+    static JsonObject args(Object... pairs) {
+        JsonObject json = new JsonObject();
+        for (int i = 0; i < pairs.length; i += 2) {
+            Object value = pairs[i + 1];
+            if (value instanceof Boolean flag) {
+                json.addProperty((String) pairs[i], flag);
+            } else if (value instanceof Number number) {
+                json.addProperty((String) pairs[i], number);
+            } else if (value instanceof JsonElement element) {
+                json.add((String) pairs[i], element);
+            } else {
+                json.addProperty((String) pairs[i], String.valueOf(value));
+            }
+        }
+        return json;
     }
 
     // --- Outcomes ---

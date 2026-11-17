@@ -1,5 +1,6 @@
 package comedymonkey.dailies;
 
+import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.compat.companion.ServerMoments;
 import comedymonkey.dailies.compat.mcpcraft.McpCraftCompat;
 import comedymonkey.dailies.config.DailiesConfig;
@@ -7,6 +8,7 @@ import comedymonkey.dailies.core.CoreHost;
 import comedymonkey.dailies.mcp.McpHttpServer;
 import comedymonkey.dailies.moments.Moments;
 import comedymonkey.dailies.selftest.SelfTest;
+import comedymonkey.dailies.ui.Notices;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -34,11 +36,14 @@ public final class Dailies {
         Moments.init();
         McpCraftCompat.init();
         ServerMoments.init();
+        Recorder.init();
 
         // Optional, so a server without the Moments Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));
         modBus.addListener((ModConfigEvent.Loading event) -> settingsChanged(event));
         modBus.addListener((ModConfigEvent.Reloading event) -> settingsChanged(event));
+
+        modBus.addListener(Notices::register);
 
         SelfTest.startIfAsked();
     }

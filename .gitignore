@@ -7,3 +7,4 @@ run-server/
 .eclipse/
 .vscode/
 *.class
+.claude/

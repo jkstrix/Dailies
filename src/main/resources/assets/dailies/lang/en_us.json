@@ -2,7 +2,6 @@
   "dailies.configuration.title": "Dailies Settings",
   "dailies.configuration.section.dailies.client.toml": "Dailies",
   "dailies.configuration.section.dailies.client.toml.title": "Dailies Settings",
-
   "dailies.configuration.recording": "Recording",
   "dailies.configuration.autoStart": "Start by Itself",
   "dailies.configuration.autoFinish": "Finish on Leaving",
@@ -25,23 +24,18 @@
   "dailies.configuration.marker4Colour": "Marker 4 Colour",
   "dailies.configuration.marker4Description": "Marker 4 Description",
   "dailies.configuration.marker4SavePosition": "Marker 4 Saves Position",
-
   "dailies.configuration.export": "Export",
   "dailies.configuration.defaultFileName": "Default File Name",
   "dailies.configuration.throwawayFrames": "Throwaway Frames",
-
   "dailies.configuration.editor": "Editor",
   "dailies.configuration.defaultInterpolation": "New Keyframes Blend",
   "dailies.configuration.flightMomentum": "Viewer Glides to a Stop",
   "dailies.configuration.flightLookRelative": "Fly Where I Look",
-
   "dailies.configuration.advanced": "Advanced",
   "dailies.configuration.ignoredPayloads": "Ignored Mod Messages",
-
   "dailies.configuration.mcp": "MCP Server",
   "dailies.configuration.mcpEnabled": "Run the MCP Server",
   "dailies.configuration.mcpPort": "Port",
-
   "dailies.configuration.moments": "Moments",
   "dailies.configuration.momentsEnabled": "Log Moments",
   "dailies.configuration.momentsLogRepeats": "Log Repeats",
@@ -63,5 +57,12 @@
   "dailies.configuration.momentsBossHealthThreshold": "Boss Health",
   "dailies.configuration.momentsNotableEntities": "Always Bosses",
   "dailies.configuration.momentsStructureBlocks": "Structure Blocks",
-  "dailies.configuration.momentsIgnoredEvents": "Ignored Events"
+  "dailies.configuration.momentsIgnoredEvents": "Ignored Events",
+  "dailies.notice.started": "Recording started",
+  "dailies.notice.paused": "Recording paused",
+  "dailies.notice.resumed": "Recording resumed",
+  "dailies.notice.finished": "Recording saved as %s",
+  "dailies.notice.cancelled": "Recording discarded",
+  "dailies.notice.failed": "Recording failed. What was captured is kept and can be recovered",
+  "dailies.notice.disk_slow": "Recording paused: the disk cannot keep up"
 }

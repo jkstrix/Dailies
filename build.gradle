@@ -40,6 +40,7 @@ neoForge {
             client()
             gameDirectory = file('run-test')
             systemProperty 'dailies.test.script', 'auto'
+            systemProperty 'dailies.test.segmentTicks', '100'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
     }

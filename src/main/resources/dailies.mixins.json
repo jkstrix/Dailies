@@ -5,7 +5,9 @@
   "client": [
     "moments.MixinClientAdvancements",
     "moments.MixinClientPacketListenerMoments",
-    "moments.MixinMultiPlayerGameModeMoments"
+    "moments.MixinMultiPlayerGameModeMoments",
+    "capture.ConnectionMixin",
+    "capture.LocalPlayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

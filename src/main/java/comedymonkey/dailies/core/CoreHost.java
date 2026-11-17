@@ -2,6 +2,7 @@ package comedymonkey.dailies.core;
 
 import com.google.gson.JsonObject;
 import comedymonkey.dailies.Host;
+import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.config.Setting;
 import comedymonkey.dailies.mcp.McpProtocol;
@@ -94,12 +95,12 @@ public final class CoreHost implements Host.Mod {
 
     @Override
     public @Nullable String recordingId() {
-        return null;
+        return Recorder.get().recordingId();
     }
 
     @Override
     public int recordingTick() {
-        return -1;
+        return Recorder.get().recordingTick();
     }
 
     // --- Playback ---

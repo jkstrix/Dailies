@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import comedymonkey.dailies.Host;
+import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.config.Setting;
 import comedymonkey.dailies.mcp.McpArgs;
@@ -45,6 +46,8 @@ public final class CoreTools {
                 .any("value", "The new value: true or false, a number, text, or the name of a choice")
                 .required("key", "value"),
             McpTool.ThreadMode.HTTP, McpTool.DEFAULT_TIMEOUT_SECONDS, CoreTools::configSet);
+
+        RecordingTools.register(registrar);
     }
 
     /** Refuses arguments the tool does not have, naming the ones it does */
@@ -64,8 +67,13 @@ public final class CoreTools {
         json.addProperty("version", mod.modVersion());
 
         JsonObject recording = new JsonObject();
-        recording.addProperty("active", mod.recordingId() != null);
-        recording.addProperty("paused", false);
+        Recorder recorder = Recorder.get();
+        recording.addProperty("active", recorder.state() != Recorder.State.IDLE);
+        recording.addProperty("paused", recorder.state() == Recorder.State.PAUSED);
+        if (recorder.recordingId() != null) {
+            recording.addProperty("recording_id", recorder.recordingId());
+            recording.addProperty("tick", recorder.recordingTick());
+        }
         json.add("recording", recording);
 
         JsonObject playback = new JsonObject();
