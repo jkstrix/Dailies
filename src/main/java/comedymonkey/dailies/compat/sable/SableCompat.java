@@ -556,7 +556,7 @@ public final class SableCompat implements Host.Crafts {
                     int loose = 0;
                     if (craft == null && last != null && last.loose < LOOSE_TICKS) {
                         // In the air over the deck they were just on: still aboard for a moment
-                        Object held = this.craftById(level, last.craft);
+                        Object held = this.craftWithId(level, last.craft);
                         AABB bounds = held == null ? null : this.getSubLevelBounds(held);
                         if (bounds != null && bounds.inflate(2.0).contains(player.position())) {
                             craft = held;
@@ -629,7 +629,7 @@ public final class SableCompat implements Host.Crafts {
         return (float) Math.toDegrees(Math.atan2(-south.x, south.z));
     }
 
-    private @Nullable Object craftById(Level level, UUID id) throws Exception {
+    private @Nullable Object craftWithId(Level level, UUID id) throws Exception {
         Object container = this.getContainer.invoke(null, level);
         if (container == null) {
             return null;
@@ -669,7 +669,7 @@ public final class SableCompat implements Host.Crafts {
             for (java.util.Iterator<java.util.Map.Entry<UUID, Rider>> each = this.riders.entrySet().iterator(); each.hasNext(); ) {
                 java.util.Map.Entry<UUID, Rider> entry = each.next();
                 Rider rider = entry.getValue();
-                Object craft = this.craftById(level, rider.craft);
+                Object craft = this.craftWithId(level, rider.craft);
                 if (craft == null) {
                     // The craft is gone; its riders are on their own again
                     each.remove();
@@ -700,7 +700,7 @@ public final class SableCompat implements Host.Crafts {
             if (rider == null || player == Minecraft.getInstance().player || player.isPassenger()) {
                 return;
             }
-            Object craft = this.craftById(player.level(), rider.craft);
+            Object craft = this.craftWithId(player.level(), rider.craft);
             if (craft == null) {
                 this.riders.remove(player.getUUID());
                 return;
@@ -731,7 +731,7 @@ public final class SableCompat implements Host.Crafts {
                 Rider rider = entry.getValue();
                 rider.from = rider.local;
                 rider.to = rider.local;
-                Object craft = this.craftById(level, rider.craft);
+                Object craft = this.craftWithId(level, rider.craft);
                 net.minecraft.world.entity.LivingEntity player = this.riderEntity(level, entry.getKey());
                 if (craft != null && player != null) {
                     Vec3 place = (Vec3) this.transformPosition.invoke(this.logicalPose.invoke(craft), rider.local);
@@ -940,6 +940,67 @@ public final class SableCompat implements Host.Crafts {
         return ((Number) value).doubleValue();
     }
 
+    // --- Craft as targets of the Smart Camera ---
+
+    @Override
+    public List<Host.CraftInfo> crafts(Level level) {
+        List<Host.CraftInfo> found = new ArrayList<>();
+        try {
+            Object container = this.getContainer.invoke(null, level);
+            if (container == null) {
+                return found;
+            }
+            for (Object subLevel : new ArrayList<>((Collection<?>) this.getAllSubLevels.invoke(container))) {
+                if ((boolean) this.isRemoved.invoke(subLevel)) {
+                    continue;
+                }
+                AABB bounds = this.getSubLevelBounds(subLevel);
+                UUID id = (UUID) this.getUniqueId.invoke(subLevel);
+                if (bounds != null && id != null) {
+                    Object name = this.getName.invoke(subLevel);
+                    found.add(new Host.CraftInfo(id, name == null ? "" : name.toString(), bounds, subLevel));
+                }
+            }
+        } catch (Throwable t) {
+            failOnce("listing craft for the camera", t);
+        }
+        return found;
+    }
+
+    @Override
+    public @Nullable Object craftById(Level level, UUID uniqueId) {
+        try {
+            return this.craftWithId(level, uniqueId);
+        } catch (Throwable t) {
+            failOnce("finding a craft by its id", t);
+            return null;
+        }
+    }
+
+    @Override
+    public @Nullable UUID craftId(Object craft) {
+        try {
+            return craft != null && this.getUniqueId.getDeclaringClass().isInstance(craft) ? (UUID) this.getUniqueId.invoke(craft) : null;
+        } catch (Throwable t) {
+            failOnce("reading the id of a craft", t);
+            return null;
+        }
+    }
+
+    @Override
+    public @Nullable Vec3 craftForward(Object craft, float partialTick) {
+        try {
+            if (craft == null || !this.getUniqueId.getDeclaringClass().isInstance(craft)) {
+                return null;
+            }
+            // A craft has no nose of its own: forward is the way positive Z pointed when it was put together
+            return (Vec3) this.transformNormal.invoke(this.poseNow(craft, partialTick), new Vec3(0.0, 0.0, 1.0));
+        } catch (Throwable t) {
+            failOnce("finding which way a craft points", t);
+            return null;
+        }
+    }
+
     // --- For the scripted test: where every craft is, in world coordinates ---
 
     /** Each craft's id and the world position of its plot's centre, or an empty list without Sable */
@@ -987,6 +1048,24 @@ public final class SableCompat implements Host.Crafts {
             return bounds == null ? null : entity.position().subtract(bounds.getCenter());
         } catch (Throwable t) {
             failOnce("measuring where someone stands on a craft", t);
+            return null;
+        }
+    }
+
+    /**
+     * Where a place in the world lies in a craft's own hidden region, which is where its blocks really are: for the
+     * scripted test to find a block of a craft (a burner) again, live and in playback. Null without Sable or the craft
+     */
+    public static @Nullable Vec3 plotPosition(Level level, UUID craftId, Vec3 worldPosition) {
+        SableCompat compat = instance;
+        if (compat == null) {
+            return null;
+        }
+        try {
+            Object craft = compat.craftWithId(level, craftId);
+            return craft == null ? null : (Vec3) compat.transformPositionInverse.invoke(compat.logicalPose.invoke(craft), worldPosition);
+        } catch (Throwable t) {
+            failOnce("finding a place on a craft", t);
             return null;
         }
     }

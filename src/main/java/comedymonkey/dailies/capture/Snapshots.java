@@ -77,6 +77,36 @@ public final class Snapshots {
         return taking;
     }
 
+    /** Knows how to finish the description of a block entity that could not give its own on a client */
+    public interface BlockEntityHelper {
+        /**
+         * @param tag the block entity's plain saved data, to add to
+         * @return whether the tag now holds all a game needs to show the block entity as it is
+         */
+        boolean complete(BlockEntity blockEntity, net.minecraft.nbt.CompoundTag tag);
+    }
+
+    private static final java.util.List<BlockEntityHelper> HELPERS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** For the parts of the mod that know another mod's block entities: asked when one fails to describe itself */
+    public static void helpBlockEntities(BlockEntityHelper helper) {
+        HELPERS.add(helper);
+    }
+
+    /** Whether some helper made the plain saved data of a block entity whole */
+    public static boolean completeBlockEntity(BlockEntity blockEntity, net.minecraft.nbt.CompoundTag tag) {
+        for (BlockEntityHelper helper : HELPERS) {
+            try {
+                if (helper.complete(blockEntity, tag)) {
+                    return true;
+                }
+            } catch (Throwable t) {
+                // The next one may know it
+            }
+        }
+        return false;
+    }
+
     public static void blockEntityFailed(BlockEntity blockEntity, Throwable problem) {
         warnOnce("block entity " + BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType()), problem);
     }

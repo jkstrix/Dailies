@@ -45,6 +45,7 @@ public final class Dailies {
         comedymonkey.dailies.library.Library.init();
         comedymonkey.dailies.compat.sable.SableCompat.init();
         comedymonkey.dailies.compat.create.CreateCompat.init();
+        comedymonkey.dailies.compat.aeronautics.AeronauticsCompat.init();
         Playback.init();
         Viewer.init();
         comedymonkey.dailies.export.Export.init();
