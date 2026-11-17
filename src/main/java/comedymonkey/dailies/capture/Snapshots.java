@@ -115,6 +115,92 @@ public final class Snapshots {
         return false;
     }
 
+    /**
+     * Describes a block entity for a snapshot in place of its own update data, for kinds that answer wrongly when asked
+     * on a client: some work out what they send from inventories only a server holds, and overwrite what the client was
+     * told with nothing as they do so, both in the snapshot and in the live game.
+     */
+    public interface BlockEntityDescriber {
+        /**
+         * @param own the block entity's own answer, to start from
+         * @return the description, or null when this is not a kind this describer knows
+         */
+        @org.jetbrains.annotations.Nullable
+        net.minecraft.nbt.CompoundTag describe(BlockEntity blockEntity, net.minecraft.core.HolderLookup.Provider registries,
+                                               java.util.function.Supplier<net.minecraft.nbt.CompoundTag> own) throws Exception;
+    }
+
+    private static final java.util.List<BlockEntityDescriber> DESCRIBERS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** For the parts of the mod that know another mod's block entities: asked first, whenever a client one is described */
+    public static void describeBlockEntities(BlockEntityDescriber describer) {
+        DESCRIBERS.add(describer);
+    }
+
+    /** What a block entity of this game would send of itself, as a snapshot (and the tests) describe it */
+    public static net.minecraft.nbt.CompoundTag updateTag(BlockEntity blockEntity, net.minecraft.core.HolderLookup.Provider registries,
+                                                          java.util.function.Supplier<net.minecraft.nbt.CompoundTag> own) {
+        // Only block entities of a client: a server building its own chunk packets meanwhile is answered as it always was
+        if (!DESCRIBERS.isEmpty() && blockEntity.getLevel() != null && blockEntity.getLevel().isClientSide()) {
+            for (BlockEntityDescriber describer : DESCRIBERS) {
+                try {
+                    net.minecraft.nbt.CompoundTag described = describer.describe(blockEntity, registries, own);
+                    if (described != null) {
+                        return described;
+                    }
+                } catch (Throwable t) {
+                    warnOnce("describer of block entity " + BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType()), t);
+                }
+            }
+        }
+        return own.get();
+    }
+
+    /** The same, with the block entity's own answer as the start */
+    public static net.minecraft.nbt.CompoundTag updateTag(BlockEntity blockEntity, net.minecraft.core.HolderLookup.Provider registries) {
+        return updateTag(blockEntity, registries, () -> blockEntity.getUpdateTag(registries));
+    }
+
+    /** Lid controllers of modded block entities that open like a chest's but are not one, by class; empty for none */
+    private static final Map<Class<?>, Optional<java.lang.reflect.Field>> LIDS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Whether a block entity's lid is meant to stand open: a vanilla chest's, or a modded container's that keeps a chest's
+     * lid controller of its own and opens it with the same block event. Null when it has no such lid
+     */
+    @org.jetbrains.annotations.Nullable
+    public static Boolean lidOpen(BlockEntity entity) {
+        if (entity instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
+            return chest.chestLidController.shouldBeOpen;
+        }
+        Optional<java.lang.reflect.Field> field = LIDS.computeIfAbsent(entity.getClass(), Snapshots::lidField);
+        if (field.isEmpty()) {
+            return null;
+        }
+        try {
+            Object controller = field.get().get(entity);
+            return controller instanceof net.minecraft.world.level.block.entity.ChestLidController lid ? lid.shouldBeOpen : null;
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+    }
+
+    private static Optional<java.lang.reflect.Field> lidField(Class<?> type) {
+        for (Class<?> at = type; at != null && at != BlockEntity.class; at = at.getSuperclass()) {
+            for (java.lang.reflect.Field field : at.getDeclaredFields()) {
+                if (field.getType() == net.minecraft.world.level.block.entity.ChestLidController.class && !java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                    try {
+                        field.setAccessible(true);
+                        return Optional.of(field);
+                    } catch (RuntimeException e) {
+                        return Optional.empty();
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     public static void blockEntityFailed(BlockEntity blockEntity, Throwable problem) {
         warnOnce("block entity " + BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType()), problem);
     }
@@ -290,6 +376,16 @@ public final class Snapshots {
             settleLight(level);
             int chunks = playback == null ? writeChunks(out, minecraft, listener, level, codec) : writePlaybackChunks(out, level, codec, playback);
             long chunksDone = System.nanoTime();
+            SnapshotExtensions.beforeEntities().forEach((id, extension) -> {
+                if (playback != null && !SnapshotExtensions.describesPlayback(id)) {
+                    return;
+                }
+                try {
+                    extension.write(out, codec);
+                } catch (Throwable t) {
+                    warnOnce("snapshot extension " + id, t);
+                }
+            });
             int entities = writeEntities(out, level, codec, playback);
             long entitiesDone = System.nanoTime();
             (playback == null ? SnapshotExtensions.all() : SnapshotExtensions.inPlayback()).forEach((id, extension) -> {
@@ -416,10 +512,11 @@ public final class Snapshots {
      */
     private static void openLids(LevelChunk chunk, List<Packet<? super ClientGamePacketListener>> lids) {
         for (BlockEntity entity : chunk.getBlockEntities().values()) {
-            boolean open = entity instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest ? chest.chestLidController.shouldBeOpen
-                : entity instanceof net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity box
-                && (box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENING
-                || box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENED);
+            // A modded chest with a vanilla chest's lid (an upgraded chest, say) is opened by the same event, so it is told the same
+            boolean open = entity instanceof net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity box
+                ? box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENING
+                || box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENED
+                : Boolean.TRUE.equals(lidOpen(entity));
             if (open) {
                 lids.add(new ClientboundBlockEventPacket(entity.getBlockPos(), entity.getBlockState().getBlock(), 1, 1));
             }
@@ -490,7 +587,7 @@ public final class Snapshots {
             long hash;
             try {
                 HASHER.reset();
-                net.minecraft.nbt.NbtIo.write(blockEntity.getUpdateTag(level.registryAccess()), HASHER_OUT);
+                net.minecraft.nbt.NbtIo.write(updateTag(blockEntity, level.registryAccess()), HASHER_OUT);
                 hash = HASHER.hash;
             } catch (Throwable t) {
                 hash = ++cannotSay * 0x632BE59BD9B4E019L;

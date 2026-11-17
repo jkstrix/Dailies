@@ -20,7 +20,25 @@ public final class SnapshotExtensions {
     /** Those that can also describe a world that is being played back, for a snapshot written into a trimmed recording */
     private static final Map<String, Extension> IN_PLAYBACK = new ConcurrentHashMap<>();
 
+    /** Those written before the entities, for state that entities look up as they arrive (a train their carriages belong to) */
+    private static final Map<String, Extension> BEFORE_ENTITIES = new ConcurrentHashMap<>();
+
     private SnapshotExtensions() {
+    }
+
+    /**
+     * An extension whose part is written after the chunks and before the entities: for state a mod's entities look for
+     * the moment they are spawned, and do not look for again
+     */
+    public static void registerBeforeEntities(String id, Extension extension, boolean inPlayback) {
+        BEFORE_ENTITIES.put(id, extension);
+        if (inPlayback) {
+            IN_PLAYBACK.put(id, extension);
+        }
+    }
+
+    static Map<String, Extension> beforeEntities() {
+        return BEFORE_ENTITIES;
     }
 
     public static void register(String id, Extension extension) {
@@ -44,7 +62,13 @@ public final class SnapshotExtensions {
     }
 
     static Map<String, Extension> inPlayback() {
-        return IN_PLAYBACK;
+        Map<String, Extension> after = new java.util.HashMap<>(IN_PLAYBACK);
+        after.keySet().removeAll(BEFORE_ENTITIES.keySet());
+        return after;
+    }
+
+    static boolean describesPlayback(String id) {
+        return IN_PLAYBACK.containsKey(id);
     }
 
 }

@@ -186,7 +186,7 @@ tasks.withType(JavaCompile).configureEach {
 def modsSource = file(providers.gradleProperty('dailies.modsFolder').getOrElse("${System.getenv('APPDATA')}/ModrinthApp/profiles/Clockwork Commonwealth/mods"))
 // The mods the scripted run needs or has to prove it works with; their own requirements are added as the game asks for them
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
-    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*').split(',')
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*').split(',')
 
 // The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
 tasks.register('buildCompanion', GradleBuild) {

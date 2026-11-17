@@ -46,6 +46,8 @@ public final class Dailies {
         comedymonkey.dailies.compat.sable.SableCompat.init();
         comedymonkey.dailies.compat.create.CreateCompat.init();
         comedymonkey.dailies.compat.aeronautics.AeronauticsCompat.init();
+        comedymonkey.dailies.compat.create.CreateTrains.init();
+        comedymonkey.dailies.compat.createaddons.CreateAddonsCompat.init();
         Playback.init();
         comedymonkey.dailies.editor.CameraSteps.init();
         // Other renderers (specification chapter XVI): each does nothing unless its mod is installed

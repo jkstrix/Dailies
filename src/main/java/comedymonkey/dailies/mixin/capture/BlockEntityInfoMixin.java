@@ -24,7 +24,8 @@ public abstract class BlockEntityInfoMixin {
             return original.call(blockEntity, registries);
         }
         try {
-            return original.call(blockEntity, registries);
+            // A kind Dailies knows to answer wrongly on a client is described by what knows it (Snapshots.describeBlockEntities)
+            return Snapshots.updateTag(blockEntity, registries, () -> original.call(blockEntity, registries));
         } catch (Throwable t) {
             try {
                 // Its plain saved data is better than nothing: most of what a game draws is in there. For the kinds
