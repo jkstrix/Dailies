@@ -269,6 +269,16 @@ public final class Viewer {
                 keepInView(minecraft);
             }
         }
+        Entity ridden = riding();
+        if (ridden != null) {
+            // The game draws the terrain around its own player, wherever the picture is taken from. A server moves a
+            // spectator along with whoever they watch; here there is none, so the viewer is carried along, or the ground
+            // would vanish as soon as the one ridden with had gone further than the eye can see from where the viewer was left
+            Vec3 at = ridden.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
+            x = at.x;
+            y = at.y;
+            z = at.z;
+        }
         apply(player);
     }
 

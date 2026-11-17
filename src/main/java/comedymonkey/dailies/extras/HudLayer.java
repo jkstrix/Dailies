@@ -146,6 +146,10 @@ final class HudLayer implements PlaybackExtensions.Extension {
         }
         try {
             Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.options.hideGui) {
+                // Hidden with the rest of the HUD: F1, or a picture asked for without it
+                return;
+            }
             RecordingManifest manifest = Playback.manifest();
             Entity riding = Viewer.riding();
             if (manifest == null || !(riding instanceof Player recorder) || !recorder.getUUID().toString().equalsIgnoreCase(manifest.recorderId)) {

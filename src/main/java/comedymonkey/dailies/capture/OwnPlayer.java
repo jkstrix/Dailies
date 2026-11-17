@@ -101,12 +101,38 @@ final class OwnPlayer {
         }
     }
 
+    private net.minecraft.core.BlockPos crackedAt = null;
+    private int crackedStage = -1;
+    private int crackedTick = 0;
+
+    /**
+     * Whether this is news about the block the player is mining. The game repeats the same stage on every tick of
+     * mining; only a change is worth writing. After a snapshot the stage is news again, since cracks are no part of one,
+     * and so it is every ten seconds: a game forgets cracks it has not been told of for twenty, and a hard block
+     * mined by hand holds one stage for longer than that
+     */
+    boolean cracked(net.minecraft.core.BlockPos pos, int stage) {
+        if (stage == this.crackedStage && pos.equals(this.crackedAt) && (stage < 0 || this.ticks - this.crackedTick < 200)) {
+            return false;
+        }
+        this.crackedAt = pos.immutable();
+        this.crackedStage = stage;
+        this.crackedTick = this.ticks;
+        return true;
+    }
+
     /** Forget everything, so the next tick describes the player in full */
     void reset() {
+        this.crackedAt = null;
         this.known = false;
-        this.equipment.clear();
+        // What was last said to be held is kept, and all of it is said again on the next tick, empty hands included. A
+        // snapshot describes the player as they are, but plain play runs straight past a snapshot; if what was held were
+        // forgotten here, a hand emptied on the very tick of a snapshot would never be emptied for anyone watching
+        this.sayHeld = true;
         this.ticks = 0;
     }
+
+    private boolean sayHeld = false;
 
     /**
      * @param every write movement once in this many ticks (1 is every tick)
@@ -160,7 +186,7 @@ final class OwnPlayer {
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemStack now = player.getItemBySlot(slot);
             ItemStack before = this.equipment.get(slot);
-            if (before == null ? !now.isEmpty() : !ItemStack.matches(before, now)) {
+            if (before == null ? !now.isEmpty() : this.sayHeld || !ItemStack.matches(before, now)) {
                 if (changed == null) {
                     changed = new ArrayList<>();
                 }
@@ -169,6 +195,7 @@ final class OwnPlayer {
                 this.equipment.put(slot, copy);
             }
         }
+        this.sayHeld = false;
         if (changed != null) {
             out.accept(new ClientboundSetEquipmentPacket(player.getId(), changed));
         }

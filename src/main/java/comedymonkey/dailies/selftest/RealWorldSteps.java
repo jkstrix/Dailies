@@ -124,6 +124,13 @@ final class RealWorldSteps {
     private static boolean driven = false;
     private static Snapshots.Cost lastCost = null;
     private static volatile int frames = 0;
+    private static volatile int lastSnapshotAt = 0;
+    private static volatile int handChangedAt = -1;
+    private static boolean handWasEmpty = true;
+
+    private static Minecraft minecraft() {
+        return Minecraft.getInstance();
+    }
 
     /** Keys held down for the player, and where they look, until it is set to null */
     private record Drive(float yaw, float pitch, boolean forward, boolean sprint, boolean jump, boolean attack, boolean use) {
@@ -132,7 +139,21 @@ final class RealWorldSteps {
     private RealWorldSteps() {
     }
 
+    /** Fails the run if the tour found differences. For when the tour was run first and the rest of the test after it */
+    static void verdict() {
+        if (!faults.isEmpty()) {
+            check(false, faults.size() + " things differ between the live game and playback in generated terrain; the first: " + faults.get(0));
+        }
+    }
+
     static void run(SelfTest test) throws Exception {
+        run(test, false);
+    }
+
+    /**
+     * @param later whether to leave the verdict until {@link #verdict} is asked for it
+     */
+    static void run(SelfTest test, boolean later) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         if (Playback.active()) {
             test.tool("replay_close", new JsonObject());
@@ -167,12 +188,18 @@ final class RealWorldSteps {
         for (String line : table) {
             test.log("real world: | " + line);
         }
-        test.log("real world: " + notes.size() + " live notes compared three ways, " + faults.size() + " differences");
+        test.log("real world: " + notes.size() + " live notes compared three ways, " + faults.size() + " differences; in " + leftoverNotes
+            + " comparisons playback lacked chunks the live game had kept after the server stopped sending them, which is let off (see WorldProbe)");
+        Map<String, Integer> kinds = new java.util.TreeMap<>();
         for (String fault : faults) {
-            test.log("real world: FAULT " + fault);
+            int at = fault.indexOf(": ", Math.max(0, fault.indexOf(") ")));
+            String rest = at < 0 ? fault : fault.substring(at + 2);
+            int end = rest.indexOf(':');
+            kinds.merge(end < 0 || end > 40 ? "other" : rest.substring(0, end).replaceAll("'[^']*'", "a named entity"), 1, Integer::sum);
         }
-        if (!faults.isEmpty()) {
-            check(false, faults.size() + " things differ between the live game and playback in generated terrain; the first: " + faults.get(0));
+        test.log("real world: differences by kind: " + kinds);
+        if (!later) {
+            verdict();
         }
     }
 
@@ -191,8 +218,14 @@ final class RealWorldSteps {
             if (hud != null) {
                 hudAtTick.put(Recorder.get().recordingTick(), hud);
             }
+            if (minecraft().player != null && minecraft().player.getMainHandItem().isEmpty() != handWasEmpty) {
+                handWasEmpty = !handWasEmpty;
+                // Seen by the recorder at the end of the tick before this hook's
+                handChangedAt = Recorder.get().recordingTick() - 1;
+            }
             Snapshots.Cost cost = Snapshots.last;
             if (cost != null && cost != lastCost) {
+                lastSnapshotAt = Recorder.get().recordingTick() - 1;
                 lastCost = cost;
                 snapshotCosts.computeIfAbsent(phase, key -> new ArrayList<>()).add(cost);
             }
@@ -250,7 +283,7 @@ final class RealWorldSteps {
 
     private static void fault(SelfTest test, String what) {
         test.log("real world: FAULT " + what);
-        if (faults.size() < 500) {
+        if (faults.size() < 5000) {
             faults.add(what);
         }
     }
@@ -599,22 +632,38 @@ final class RealWorldSteps {
         BlockPos cold = peak != null ? peak : biome(test, hub, 6400, "snowy ground",
             found -> found.is(Biomes.SNOWY_SLOPES) || found.is(Biomes.GROVE) || found.is(Biomes.SNOWY_PLAINS) || found.is(Biomes.SNOWY_TAIGA) || found.is(Biomes.ICE_SPIKES));
 
-        // What the game's frames cost here with nothing being recorded, standing still
         boolean[] vsync = new boolean[1];
-        uncapped(test, true, vsync);
-        test.sleepTicks(20);
-        FrameTimes.Result idleStill = FrameTimes.measure(test, 100);
-        uncapped(test, false, vsync);
-
         test.tool("config_set", args("key", "recordHud", "value", true));
         JsonObject started = test.tool("recording_start", none);
         check(started.get("active").getAsBoolean(), "the recording in the generated world did not start");
         test.waitFor(() -> Recorder.get().recordingTick() >= 5, 30, "the generated world's recording to get going");
+
+        // What recording costs a frame, standing still: four turns each of paused and recording, a few seconds at a time,
+        // so that the machine warming up or another program waking does not pass for a cost
         uncapped(test, true, vsync);
         test.sleepTicks(20);
-        FrameTimes.Result recordingStill = FrameTimes.measure(test, 100);
+        double idleSum = 0, recordingSum = 0;
+        int idleFrames = 0, recordingFrames = 0;
+        double idleWorst = 0, recordingWorst = 0;
+        for (int turn = 0; turn < 4; turn++) {
+            test.tool("recording_pause", none);
+            test.sleepTicks(10);
+            FrameTimes.Result idle = FrameTimes.measure(test, 70);
+            test.tool("recording_resume", none);
+            test.sleepTicks(10);
+            FrameTimes.Result recording = FrameTimes.measure(test, 70);
+            idleSum += idle.average() * idle.frames();
+            idleFrames += idle.frames();
+            idleWorst = Math.max(idleWorst, idle.worst());
+            recordingSum += recording.average() * recording.frames();
+            recordingFrames += recording.frames();
+            recordingWorst = Math.max(recordingWorst, recording.worst());
+        }
         uncapped(test, false, vsync);
-        table.add("frames, standing still at spawn: idle " + idleStill + "; recording " + recordingStill);
+        FrameTimes.Result idleStill = new FrameTimes.Result(idleSum / Math.max(1, idleFrames), idleWorst, 0, idleFrames);
+        FrameTimes.Result recordingStill = new FrameTimes.Result(recordingSum / Math.max(1, recordingFrames), recordingWorst, 0, recordingFrames);
+        table.add(String.format(Locale.ROOT, "frames, standing still at spawn, four turns each: idle (recording paused) %.3f ms average, %.1f ms worst over %d frames; recording %.3f ms average, %.1f ms worst over %d frames",
+            idleStill.average(), idleStill.worst(), idleFrames, recordingStill.average(), recordingStill.worst(), recordingFrames));
         overhead(test, "standing still", idleStill, recordingStill);
 
         part(test, "travel", () -> travel(test, spawn, hub, vsync));
@@ -677,40 +726,7 @@ final class RealWorldSteps {
             double minutes = manifest.totalTicks / 1200.0;
             table.add(String.format(Locale.ROOT, "recording: %d ticks (%.1f min) in %d segments, %.1f MB, %.2f MB a minute over the whole tour (%.0f MB an hour); %d chunk uses stored as %d pieces",
                 manifest.totalTicks, minutes, manifest.segments.size(), size / 1048576.0, size / 1048576.0 / minutes, size / 1048576.0 / minutes * 60, audit.sharedPackets, file.sharedCount()));
-            // The recorder's own mining: a server tells the miner neither of the cracks nor of the block breaking up
-            if (minedBlock != null) {
-                int ownId = minecraft.player.getId();
-                int cracks = 0;
-                int breaks = 0;
-                for (RecordingManifest.Segment segment : file.segments()) {
-                    try (comedymonkey.dailies.file.Records.Reader reader = new comedymonkey.dailies.file.Records.Reader(file.openSegment(segment.number))) {
-                        while (reader.next()) {
-                            if (reader.kind() != comedymonkey.dailies.file.Records.PACKET || reader.length() > 48) {
-                                continue;
-                            }
-                            net.minecraft.network.protocol.Packet<?> packet;
-                            try {
-                                packet = codec.decode(reader.payload(), 0, reader.length());
-                            } catch (RuntimeException unreadable) {
-                                continue;
-                            }
-                            if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket cracking && cracking.getId() == ownId
-                                && cracking.getPos().equals(minedBlock) && cracking.getProgress() >= 0) {
-                                cracks++;
-                            } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLevelEventPacket event && event.getType() == 2001 && event.getPos().equals(minedBlock)) {
-                                breaks++;
-                            }
-                        }
-                    }
-                }
-                test.log("real world: the recording holds " + cracks + " stages of cracks on the log the recorder mined, and " + breaks + " breaking of it");
-                if (minedByHand && cracks < 3) {
-                    fault(test, "the recorder mined a log by hand and the recording holds " + cracks + " stages of its cracks: playback shows the block whole until it vanishes");
-                }
-                if (minedByHand && breaks == 0) {
-                    fault(test, "the recorder mined a log and the recording does not hold its breaking: playback shows no fragments and plays no sound when it goes");
-                }
-            }
+            whatItHolds(test, file, codec, minecraft.player.getId());
             if (manifest.markers.stream().noneMatch(marker -> marker.description.contains("the_nether"))) {
                 fault(test, "no marker was dropped on the change to the Nether: " + manifest.markers.stream().map(marker -> marker.description).toList());
             }
@@ -737,11 +753,126 @@ final class RealWorldSteps {
         }
     }
 
+    /**
+     * Reads the whole recording once: where its bytes go, and whether it holds what a server never tells a player about
+     * themselves (their footsteps, the cracks on the block they mine, the block breaking up).
+     */
+    private static int ordinaryFrom = -1;
+    private static int ordinaryTo = -1;
+
+    private static void whatItHolds(SelfTest test, RecordingFile file, GameCodec codec, int ownId) throws Exception {
+        Map<String, long[]> byKind = new java.util.HashMap<>();
+        Map<String, long[]> ordinary = new java.util.HashMap<>();
+        java.util.Set<String> ordinaryPieces = new java.util.HashSet<>();
+        int ordinaryNames = 0;
+        java.util.Set<String> pieces = new java.util.HashSet<>();
+        int namedInSnapshots = 0, namedInTicks = 0;
+        int ownSounds = 0, cracks = 0, breaks = 0;
+        long other = 0;
+        for (RecordingManifest.Segment segment : file.segments()) {
+            boolean inSnapshot = false;
+            int tick = segment.startTick;
+            try (comedymonkey.dailies.file.Records.Reader reader = new comedymonkey.dailies.file.Records.Reader(file.openSegment(segment.number))) {
+                while (reader.next()) {
+                    int kind = reader.kind();
+                    boolean inOrdinary = tick >= ordinaryFrom && tick < ordinaryTo;
+                    if (kind == comedymonkey.dailies.file.Records.TICK) {
+                        tick += reader.number();
+                    } else if (kind == comedymonkey.dailies.file.Records.SNAPSHOT_BEGIN) {
+                        inSnapshot = true;
+                    } else if (kind == comedymonkey.dailies.file.Records.SNAPSHOT_END) {
+                        inSnapshot = false;
+                    } else if (kind == comedymonkey.dailies.file.Records.SHARED_PACKET) {
+                        String piece = java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length());
+                        if (pieces.add(piece) && inOrdinary) {
+                            ordinaryPieces.add(piece);
+                        }
+                        if (inOrdinary) {
+                            ordinaryNames++;
+                        }
+                        if (inSnapshot) {
+                            namedInSnapshots++;
+                        } else {
+                            namedInTicks++;
+                        }
+                        other += reader.length();
+                    } else if (kind == comedymonkey.dailies.file.Records.PACKET) {
+                        net.minecraft.network.protocol.Packet<?> packet;
+                        try {
+                            packet = codec.decode(reader.payload(), 0, reader.length());
+                        } catch (RuntimeException unreadable) {
+                            continue;
+                        }
+                        String name = (inSnapshot ? "snapshot " : "") + packet.getClass().getSimpleName().replace("Clientbound", "").replace("Packet", "");
+                        long[] sum = byKind.computeIfAbsent(name, key -> new long[2]);
+                        sum[0] += reader.length();
+                        sum[1]++;
+                        if (inOrdinary) {
+                            long[] here = ordinary.computeIfAbsent(name, key -> new long[2]);
+                            here[0] += reader.length();
+                            here[1]++;
+                        }
+                        if (packet instanceof net.minecraft.network.protocol.game.ClientboundSoundPacket sound && sound.getSource() == net.minecraft.sounds.SoundSource.PLAYERS) {
+                            ownSounds++;
+                        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket cracking && cracking.getId() == ownId
+                            && cracking.getPos().equals(minedBlock) && cracking.getProgress() >= 0) {
+                            cracks++;
+                        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLevelEventPacket event && event.getType() == 2001 && event.getPos().equals(minedBlock)) {
+                            breaks++;
+                        }
+                    } else {
+                        other += reader.length();
+                    }
+                }
+            }
+        }
+        long chunkBytes = 0;
+        for (String piece : pieces) {
+            chunkBytes += file.shared(piece).length;
+        }
+        long packetBytes = byKind.values().stream().mapToLong(sum -> sum[0]).sum();
+        StringBuilder biggest = new StringBuilder();
+        byKind.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0])).limit(9).forEach(entry -> biggest.append(String.format(Locale.ROOT, " %s %.1f MB (%d);",
+            entry.getKey(), entry.getValue()[0] / 1048576.0, entry.getValue()[1])));
+        table.add(String.format(Locale.ROOT, "what the recording holds, before packing: %d stored chunks %.1f MB, named %d times by snapshots and %d times as they arrived; packets %.1f MB; the rest %.1f MB. The largest kinds of packet:%s",
+            pieces.size(), chunkBytes / 1048576.0, namedInSnapshots, namedInTicks, packetBytes / 1048576.0, other / 1048576.0, biggest));
+
+        if (ordinaryTo > ordinaryFrom) {
+            long fresh = 0;
+            for (String piece : ordinaryPieces) {
+                fresh += file.shared(piece).length;
+            }
+            StringBuilder most = new StringBuilder();
+            ordinary.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0])).limit(7).forEach(entry -> most.append(String.format(Locale.ROOT, " %s %.0f KB (%d);",
+                entry.getKey(), entry.getValue()[0] / 1024.0, entry.getValue()[1])));
+            table.add(String.format(Locale.ROOT, "where ordinary play's bytes go (the walk round the village, ticks %d to %d, before packing): %d chunks stored that were not stored before, %.1f MB; chunks named %d times, %.0f KB; packets %.0f KB, the largest kinds:%s",
+                ordinaryFrom, ordinaryTo, ordinaryPieces.size(), fresh / 1048576.0, ordinaryNames, ordinaryNames * 33 / 1024.0,
+                ordinary.values().stream().mapToLong(sum -> sum[0]).sum() / 1024.0, most));
+        }
+        test.log("real world: the recording holds " + ownSounds + " sounds of players' own bodies (footsteps and the like)");
+        if (ownSounds < 10) {
+            fault(test, "the recorder walked across country and through a village and the recording holds " + ownSounds + " footsteps: in playback they walk in silence");
+        }
+        if (minedBlock != null) {
+            test.log("real world: the recording holds " + cracks + " stages of cracks on the log the recorder mined, and " + breaks + " breaking of it");
+            if (minedByHand && cracks < 3) {
+                fault(test, "the recorder mined a log by hand and the recording holds " + cracks + " stages of its cracks: playback shows the block whole until it vanishes");
+            }
+            if (minedByHand && breaks == 0) {
+                fault(test, "the recorder mined a log and the recording does not hold its breaking: playback shows no fragments and plays no sound when it goes");
+            }
+        }
+    }
+
     /** Recording must not cost more than half as much again plus 2 ms a frame: a gross breach of the 3 % and 1 ms the plan asks for, which are logged */
     private static void overhead(SelfTest test, String what, FrameTimes.Result idle, FrameTimes.Result recording) {
         double added = recording.average() - idle.average();
-        table.add(String.format(Locale.ROOT, "recording overhead, %s: %.2f ms a frame added (%.1f %%); the plan asks for under 1 ms and under 3 %%%s", what, added,
-            idle.average() > 0 ? added / idle.average() * 100 : 0, added > 1.0 && added / Math.max(0.01, idle.average()) > 0.03 ? " -- OVER" : ""));
+        // The game ran uncapped for this, at a thousand frames a second or so; three per cent of such a frame is a few
+        // hundredths of a millisecond, less than two runs of the same thing differ by. So the cost is also given against
+        // the frame of a game running at 60 and at 144 frames a second, which is what a person would lose
+        table.add(String.format(Locale.ROOT, "recording overhead, %s: %.3f ms a frame added to %.2f ms (%.1f %% at this uncapped rate of %.0f frames a second; %.2f %% of a frame at 144 a second, %.2f %% at 60); the plan asks for under 1 ms and under 3 %%%s",
+            what, added, idle.average(), idle.average() > 0 ? added / idle.average() * 100 : 0, 1000.0 / Math.max(0.01, idle.average()), added / (1000.0 / 144) * 100, added / (1000.0 / 60) * 100,
+            added > 1.0 || added / (1000.0 / 144) > 0.03 ? " -- OVER" : ""));
         if (recording.average() > idle.average() * 1.5 + 2.0) {
             fault(test, "recording slowed the game while " + what + ": frames averaged " + recording.average() + " ms against " + idle.average() + " ms idle");
         }
@@ -897,6 +1028,7 @@ final class RealWorldSteps {
         ticks(test, 10);
         long size = workingSize();
         int from = Recorder.get().recordingTick();
+        ordinaryFrom = from;
         FrameTimes.begin();
         wander(test, 600);
         FrameTimes.Result recorded = FrameTimes.end();
@@ -904,6 +1036,7 @@ final class RealWorldSteps {
         ticks(test, 45);
         long bytes = workingSize() - size;
         int length = Recorder.get().recordingTick() - from;
+        ordinaryTo = Recorder.get().recordingTick();
         table.add("frames, on foot in a village in the rain: idle (recording paused) " + idle + "; recording " + recorded);
         overhead(test, "on foot in a village", idle, recorded);
         double hourly = bytes / 1048576.0 / (length / 1200.0) * 60;
@@ -932,8 +1065,8 @@ final class RealWorldSteps {
         int z = village.getZ() - 20;
         int ground = surface(x, z, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES);
         flying(test, true, 0.05F);
-        goTo(test, x + 0.5, ground + 10, z + 0.5, -45, 35);
-        test.command("time set 13500");
+        goTo(test, x + 0.5, ground + 7, z + 0.5, -45, 22);
+        test.command("time set 12800");
         test.command("weather thunder");
 
         // Some of everything the night brings, named so each can be followed; the rest spawn by themselves
@@ -952,7 +1085,7 @@ final class RealWorldSteps {
         }
         command(test, "setblock %d %d %d minecraft:bee_nest", x + 2, surface(x + 2, z + 2, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES), z + 2);
         ticks(test, 40);
-        WorldProbe first = note(test, "nightfall with thunder coming on");
+        WorldProbe first = noteWithStill(test, "nightfall with thunder coming on", "night-thunder");
         for (String name : new String[]{"Burny", "Bones", "Hiss", "Climber", "Carrier", "Daisy", "Trader", "Larry"}) {
             if (!first.named.containsKey(name)) {
                 test.log("real world: " + name + " is not there to be followed (it may have wandered off or been killed)");
@@ -961,8 +1094,9 @@ final class RealWorldSteps {
         if (first.named.containsKey("Larry") && !first.named.get("Larry").state().contains("leashed")) {
             test.skip("the wandering trader's llama was not on its lead in the live game, so leads in playback were not checked");
         }
+        test.command("time set 13800");
         ticks(test, 100);
-        noteWithStill(test, "night, thunder", "night-thunder");
+        note(test, "night, thunder");
 
         // The night passed quickly: three jumps of the clock, the world noted between them
         for (int i = 0; i < 3; i++) {
@@ -1042,16 +1176,16 @@ final class RealWorldSteps {
         // Fire on wool, a tree with its trunk cut out, ice beside a torch: all three are slow, so the world is hurried along
         flying(test, true, 0.05F);
         goTo(test, x + 0.5, y + 14, z + 0.5, 0, 75);
-        command(test, "setblock %d %d %d minecraft:fire", x + 12, y + 2, z + 11);
+        command(test, "fill %d %d %d %d %d %d minecraft:fire", x + 11, y + 2, z + 10, x + 13, y + 2, z + 12);
         command(test, "fill %d %d %d %d %d %d minecraft:air replace #minecraft:logs", x - 15, y, z + 3, x - 9, y + 12, z + 9);
         test.command("gamerule randomTickSpeed 300");
         ticks(test, 12);
         note(test, "leaves starting to go, fire catching");
         ticks(test, 60);
         note(test, "leaves going, ice melting");
-        test.command("tick sprint 300");
+        test.command("tick sprint 900");
         IntegratedServer server = minecraft.getSingleplayerServer();
-        test.waitFor(() -> !server.tickRateManager().isSprinting(), 120, "the hurried ticks in the laboratory");
+        test.waitFor(() -> !server.tickRateManager().isSprinting(), 180, "the hurried ticks in the laboratory");
         test.command("gamerule randomTickSpeed 3");
         ticks(test, 40);
         WorldProbe after = note(test, "after the fire");
@@ -1158,7 +1292,7 @@ final class RealWorldSteps {
         test.command("give @s minecraft:cooked_beef 8");
         test.command("give @s minecraft:oak_planks 16");
         ticks(test, 20);
-        note(test, "survival: standing in the yard");
+        note(test, "standing in the yard");
 
         // Mining a block with the bare hand: the cracks spread over it for a second and a half
         BlockPos target = new BlockPos(x + 3, y + 1, z - 2);
@@ -1166,14 +1300,14 @@ final class RealWorldSteps {
         // Whether there are any, not how far they have spread: the stage moves on a tick that live and playback count a tick apart
         askers.put("cracks in the block being mined", game -> cracks(game, target) >= 0 ? "cracked" : "whole");
         ticks(test, 10);
-        note(test, "survival: a log to mine, untouched");
+        note(test, "a log to mine, untouched");
         Vec3 eyes = test.onClient(() -> minecraft.player.getEyePosition());
         Vec3 aim = Vec3.atCenterOf(target).subtract(eyes);
         float yaw = (float) Math.toDegrees(Math.atan2(-aim.x, aim.z));
         float pitch = (float) -Math.toDegrees(Math.atan2(aim.y, Math.sqrt(aim.x * aim.x + aim.z * aim.z)));
         drive = new Drive(yaw, pitch, false, false, false, true, false);
         ticks(test, 30);
-        WorldProbe mining = note(test, "survival: half way through a log");
+        WorldProbe mining = note(test, "half way through a log");
         int stage = test.onClient(() -> cracks(minecraft, target));
         int swingsBefore = Recorder.get().recordingTick();
         try {
@@ -1189,7 +1323,7 @@ final class RealWorldSteps {
         }
         drive = null;
         ticks(test, 12);
-        note(test, "survival: the log mined");
+        note(test, "the log mined");
         askers.remove("cracks in the block being mined");
         minedBlock = target;
         minedByHand = stage >= 0;
@@ -1206,7 +1340,7 @@ final class RealWorldSteps {
             ticks(test, 5);
         }
         ticks(test, 8);
-        note(test, "survival: three planks placed");
+        note(test, "three planks placed");
 
         // Hunger, then a meal
         onServer(() -> {
@@ -1217,25 +1351,55 @@ final class RealWorldSteps {
         });
         test.command("item replace entity @s weapon.mainhand with minecraft:cooked_beef 4");
         ticks(test, 10);
-        note(test, "survival: hungry");
+        note(test, "hungry");
         drive = new Drive(180, 0, false, false, false, false, true);
         ticks(test, 16);
-        WorldProbe eating = note(test, "survival: eating");
+        WorldProbe eating = note(test, "eating");
         ticks(test, 30);
         drive = null;
         ticks(test, 8);
-        WorldProbe fed = note(test, "survival: fed");
+        WorldProbe fed = note(test, "fed");
         if (!eating.recorder.state().contains("using")) {
             test.skip("the script could not eat by holding the use key: the recorder's eating in playback was not checked");
         }
         test.log("real world: hunger went " + (eating.hud == null ? "?" : eating.hud[3]) + " to " + (fed.hud == null ? "?" : fed.hud[3]));
 
+        // What is in the hand, and the HUD, changing on the very tick a snapshot is taken. A snapshot holds the change, but
+        // plain play never reads a snapshot it runs past, so the change has to be in the ticks as well
+        int hits = 0;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            test.command("item replace entity @s weapon.mainhand with minecraft:stick");
+            ticks(test, 12);
+            int boundary = lastSnapshotAt + 100;
+            if (boundary - Recorder.get().recordingTick() < 8) {
+                boundary += 100;
+            }
+            // A command sent while the recording stands at one tick reaches the game during that same tick, or the next
+            int sendAt = boundary;
+            long deadline = System.currentTimeMillis() + 15_000;
+            while (Recorder.get().recordingTick() < sendAt && System.currentTimeMillis() < deadline) {
+                Thread.sleep(1);
+            }
+            test.command("item replace entity @s weapon.mainhand with minecraft:air");
+            test.command("experience add @s 1 levels");
+            ticks(test, 30);
+            boolean hit = handChangedAt == lastSnapshotAt;
+            hits += hit ? 1 : 0;
+            note(test, "the hand emptied and a level gained " + (hit ? "on the very tick of a snapshot" : "near a snapshot") + " (hand at tick " + handChangedAt + ", snapshot at "
+                + lastSnapshotAt + ")");
+        }
+        if (hits == 0) {
+            test.skip("in five tries no change of the recorder's hand landed on the very tick of a snapshot, so that such a change survives plain play was not shown this run");
+        }
+        test.command("item replace entity @s weapon.mainhand with minecraft:cooked_beef 2");
+        ticks(test, 10);
+
         // A fall
         command(test, "tp @s %.2f %d %.2f", x + 3.5, y + 9, z + 0.5);
         ticks(test, 6);
-        note(test, "survival: falling");
+        note(test, "falling");
         ticks(test, 30);
-        WorldProbe fallen = note(test, "survival: landed, hurt");
+        WorldProbe fallen = note(test, "landed, hurt");
         test.log("real world: health after the fall " + (fallen.hud == null ? "?" : fallen.hud[0]));
 
         // Running out of air at the bottom of a well
@@ -1248,9 +1412,9 @@ final class RealWorldSteps {
             return null;
         });
         ticks(test, 12);
-        note(test, "survival: the last bubbles");
+        note(test, "the last bubbles");
         ticks(test, 50);
-        WorldProbe drowning = note(test, "survival: drowning");
+        WorldProbe drowning = note(test, "drowning");
         test.log("real world: air " + (drowning.hud == null ? "?" : drowning.hud[4]) + ", health " + (drowning.hud == null ? "?" : drowning.hud[0]) + " while drowning");
         command(test, "tp @s %.2f %d %.2f 180 0", x + 3.5, y, z + 0.5);
         command(test, "fill %d %d %d %d %d %d minecraft:air", x - 1, y, z - 1, x + 1, y + 3, z + 1);
@@ -1266,14 +1430,14 @@ final class RealWorldSteps {
             test.skip("the zombie did not hit the recorder within fifteen seconds: a mob's blow was not staged");
         }
         ticks(test, 3);
-        note(test, "survival: bitten");
+        note(test, "bitten");
         test.command("kill @e[type=minecraft:zombie,distance=..24]");
         ticks(test, 30);
 
         // Experience
         test.command("experience add @s 37 points");
         ticks(test, 10);
-        WorldProbe wiser = note(test, "survival: with experience");
+        WorldProbe wiser = note(test, "with experience");
         test.log("real world: experience level " + (wiser.hud == null ? "?" : wiser.hud[6]) + " progress " + (wiser.hud == null ? "?" : wiser.hud[7]));
 
         // A furnace lit and a crafting table looked at: their screens are the recorder's own business, the blocks are not
@@ -1285,7 +1449,7 @@ final class RealWorldSteps {
         ticks(test, 10);
         useOn(test, furnace.east(), Direction.NORTH);
         ticks(test, 15);
-        WorldProbe crafting = note(test, "survival: at the crafting table");
+        WorldProbe crafting = note(test, "at the crafting table");
         test.onClientRun(() -> minecraft.player.closeContainer());
         ticks(test, 5);
         useOn(test, furnace, Direction.NORTH);
@@ -1293,10 +1457,10 @@ final class RealWorldSteps {
         command(test, "item replace block %d %d %d container.0 with minecraft:raw_iron 4", furnace.getX(), y, furnace.getZ());
         command(test, "item replace block %d %d %d container.1 with minecraft:coal 2", furnace.getX(), y, furnace.getZ());
         ticks(test, 20);
-        WorldProbe smelting = note(test, "survival: the furnace lit, its screen open");
+        WorldProbe smelting = note(test, "the furnace lit, its screen open");
         test.onClientRun(() -> minecraft.player.closeContainer());
         ticks(test, 10);
-        note(test, "survival: the furnace burning by itself");
+        note(test, "the furnace burning by itself");
         test.log("real world: live screens were '" + crafting.screen + "' at the crafting table and '" + smelting.screen + "' at the furnace");
 
         // A bed, and the night slept through
@@ -1306,10 +1470,10 @@ final class RealWorldSteps {
         command(test, "tp @s %.2f %d %.2f 0 40", bed.getX() + 0.5, y, bed.getZ() - 1.2);
         test.command("time set 13000");
         ticks(test, 20);
-        note(test, "survival: bedtime");
+        note(test, "bedtime");
         useOn(test, bed, Direction.UP);
         ticks(test, 40);
-        WorldProbe asleep = note(test, "survival: asleep");
+        WorldProbe asleep = note(test, "asleep");
         if (!asleep.recorder.state().contains("asleep")) {
             test.skip("the recorder could not get to sleep in the live game (" + asleep.recorder.state() + "): sleeping in playback was not checked");
         }
@@ -1319,7 +1483,7 @@ final class RealWorldSteps {
             test.onClientRun(() -> minecraft.player.stopSleeping());
         }
         ticks(test, 20);
-        WorldProbe woken = note(test, "survival: woken in the morning");
+        WorldProbe woken = note(test, "woken in the morning");
         test.log("real world: time of day asleep " + asleep.dayTime % 24000 + ", on waking " + woken.dayTime % 24000);
 
         // Death, the things dropped, and the respawn
@@ -1328,7 +1492,7 @@ final class RealWorldSteps {
         test.command("damage @s 1000 minecraft:generic");
         test.waitFor(() -> minecraft.screen instanceof DeathScreen, 15, "the death screen");
         ticks(test, 15);
-        WorldProbe dead = note(test, "survival: dead");
+        WorldProbe dead = note(test, "dead");
         long dropped = dead.entities.values().stream().filter(kind -> kind.equals("item")).count();
         test.log("real world: " + dropped + " dropped items lying about, live screen '" + dead.screen + "', recorder " + dead.recorder.state());
         ticks(test, 25);
@@ -1340,9 +1504,9 @@ final class RealWorldSteps {
         ticks(test, 10);
         settle(test);
         ticks(test, 30);
-        note(test, "survival: respawned");
+        note(test, "respawned");
         ticks(test, 110);
-        note(test, "survival: a while after respawning");
+        note(test, "a while after respawning");
         test.command("gamemode creative");
         noteHud = false;
         ticks(test, 10);
@@ -1391,12 +1555,19 @@ final class RealWorldSteps {
                         if (!level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir() || !level.getBlockState(pos.below()).isSolidRender(level, pos.below())) {
                             continue;
                         }
+                        if (level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, pos) > 6) {
+                            // Dark enough that a torch makes a difference
+                            continue;
+                        }
                         int score = -py * 2;
                         for (Direction side : Direction.Plane.HORIZONTAL) {
-                            for (int far = 1; far <= 5; far++) {
+                            for (int far = 1; far <= 14; far++) {
                                 BlockState there = level.getBlockState(pos.relative(side, far).below());
                                 if (there.getFluidState().is(Fluids.LAVA) || level.getBlockState(pos.relative(side, far)).getFluidState().is(Fluids.LAVA)) {
                                     score += 60;
+                                    break;
+                                }
+                                if (!level.getBlockState(pos.relative(side, far)).isAir()) {
                                     break;
                                 }
                             }
@@ -1416,6 +1587,7 @@ final class RealWorldSteps {
         }
         flying(test, false, 0.05F);
         goTo(test, spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, 0, 10);
+        goTo(test, spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, openYaw(test), 10);
         Region region = Region.around("cave", spot, 9, 5, 6, true);
         regions.add(region);
         ticks(test, 30);
@@ -1663,10 +1835,15 @@ final class RealWorldSteps {
         flying(test, true, 0.05F);
         command(test, "summon minecraft:ghast %.1f %.1f %.1f {CustomName:'\"Casper\"',PersistenceRequired:1b}", arrived.x + 12, arrived.y + 10, arrived.z + 12);
         command(test, "summon minecraft:piglin %.1f %.1f %.1f {CustomName:'\"Porky\"',PersistenceRequired:1b,IsImmuneToZombification:1b}", arrived.x + 2, arrived.y, arrived.z + 1);
-        command(test, "tp @s %.2f %.2f %.2f -90 10", arrived.x + 2, arrived.y + 3, arrived.z);
-        ticks(test, 10);
-        drive = new Drive(-90, 5, true, true, false, false, false);
         for (int i = 0; i < 3; i++) {
+            // The Nether is mostly rock: each leg starts from the nearest open place thirty blocks on, facing the way that is clearest
+            BlockPos from = openSpot(test, BlockPos.containing(arrived.x + 30 * (i + 1), arrived.y, arrived.z), 14);
+            if (from != null) {
+                command(test, "tp @s %.2f %.2f %.2f", from.getX() + 0.5, from.getY() + 1.0, from.getZ() + 0.5);
+                test.sleepTicks(5);
+            }
+            flying(test, true, 0.05F);
+            drive = new Drive(openYaw(test), 0, true, true, false, false, false);
             ticks(test, 50);
             note(test, "flying through the Nether " + (i + 1));
         }
@@ -1711,27 +1888,67 @@ final class RealWorldSteps {
         note(test, "home, a snapshot later");
     }
 
-    private static void visitNether(SelfTest test, BlockPos where, String what, String still) throws Exception {
+    /** The nearest place in the Nether with a floor, three blocks of air over it and some room around; null when there is none within reach */
+    private static BlockPos openSpot(SelfTest test, BlockPos near, int reach) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
-        flying(test, true, 0.05F);
-        goTo(test, where.getX() + 0.5, Math.max(40, Math.min(110, where.getY())), where.getZ() + 0.5, 0, 20);
-        // Somewhere open to look from, if the place the search gave is inside the rock
-        BlockPos open = test.onClient(() -> {
+        return test.onClient(() -> {
+            ClientLevel level = minecraft.level;
             BlockPos best = null;
-            BlockPos at = minecraft.player.blockPosition();
-            for (BlockPos pos : BlockPos.betweenClosed(at.offset(-12, -30, -12), at.offset(12, 40, 12))) {
-                if (pos.getY() < 34 || pos.getY() > 118 || !minecraft.level.getBlockState(pos).isAir() || !minecraft.level.getBlockState(pos.above()).isAir()
-                    || !minecraft.level.getBlockState(pos.above(2)).isAir() || !minecraft.level.getBlockState(pos.below()).isSolidRender(minecraft.level, pos.below())) {
+            double bestScore = Double.MAX_VALUE;
+            for (BlockPos pos : BlockPos.betweenClosed(near.offset(-reach, -40, -reach), near.offset(reach, 40, reach))) {
+                if (pos.getY() < 33 || pos.getY() > 116 || !level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir() || !level.getBlockState(pos.above(2)).isAir()
+                    || !level.getBlockState(pos.below()).isSolidRender(level, pos.below())) {
                     continue;
                 }
-                if (best == null || pos.distSqr(at) < best.distSqr(at)) {
+                int room = 0;
+                for (Direction side : Direction.Plane.HORIZONTAL) {
+                    for (int far = 1; far <= 8 && level.getBlockState(pos.above().relative(side, far)).isAir(); far++) {
+                        room++;
+                    }
+                }
+                // Near, but a roomy place a little further off is better than a crack in the rock close by
+                double score = Math.sqrt(pos.distSqr(near)) - room * 1.5;
+                if (score < bestScore) {
+                    bestScore = score;
                     best = pos.immutable();
                 }
             }
             return best;
         });
+    }
+
+    /** The way to face, of eight, that looks furthest before meeting anything solid */
+    private static float openYaw(SelfTest test) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        return test.onClient(() -> {
+            Vec3 eyes = minecraft.player.getEyePosition();
+            float best = 0;
+            int furthest = -1;
+            for (int turn = 0; turn < 8; turn++) {
+                float yaw = turn * 45.0F;
+                Vec3 ahead = Vec3.directionFromRotation(0, yaw);
+                int clear = 0;
+                while (clear < 64 && !minecraft.level.getBlockState(BlockPos.containing(eyes.add(ahead.scale(clear + 1)))).isSolidRender(minecraft.level, BlockPos.containing(eyes.add(ahead.scale(clear + 1))))) {
+                    clear++;
+                }
+                if (clear > furthest) {
+                    furthest = clear;
+                    best = yaw;
+                }
+            }
+            return best;
+        });
+    }
+
+    private static void visitNether(SelfTest test, BlockPos where, String what, String still) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        flying(test, true, 0.05F);
+        goTo(test, where.getX() + 0.5, Math.max(40, Math.min(110, where.getY())), where.getZ() + 0.5, 0, 20);
+        // Somewhere open to look from, if the place the search gave is inside the rock
+        BlockPos open = openSpot(test, playerBlock(test), 20);
         if (open != null) {
             goTo(test, open.getX() + 0.5, open.getY() + 1, open.getZ() + 0.5, 0, 15);
+            goTo(test, open.getX() + 0.5, open.getY() + 1, open.getZ() + 0.5, openYaw(test), 15);
         }
         regions.clear();
         regions.add(Region.around(what, playerBlock(test), 8, 5, 6, true));
@@ -1746,6 +1963,7 @@ final class RealWorldSteps {
     // ------------------------------------------------------------------ Playback
 
     private static int recorderEntity = -1;
+    private static int leftoverNotes = 0;
 
     private static void play(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
@@ -1821,6 +2039,10 @@ final class RealWorldSteps {
         table.add("jumps backwards between noted ticks: " + backwards);
         table.add("short hops of 20 to 25 ticks: " + hops);
         table.add("jump from the last noted tick to the end of the recording: " + toEnd + " ms");
+        if (rebuilds > 0) {
+            table.add(String.format(Locale.ROOT, "jumps that read a snapshot: %d, the reading %.0f ms on average; of the snapshots' chunks %.0f %% were left as they were and %.1f a jump were built again; the slowest jump %s",
+                rebuilds, rebuildMillis / rebuilds, rebuildKept * 100.0 / Math.max(1, rebuildKept + rebuildBuilt), rebuildBuilt / (double) rebuilds, slowestJumpWas));
+        }
         long longest = Math.max(Math.max(forwards.longest, backwards.longest), hops.longest);
         table.add("longest jump of all: " + longest + " ms; the plan asks for under 2000, and under 500 inside one stretch" + (longest > 2000 || hops.longestWithin > 500 ? " -- OVER" : ""));
         if (longest > 6000) {
@@ -1896,6 +2118,14 @@ final class RealWorldSteps {
         }
     }
 
+    private static double[] lastRebuild = null;
+    private static int rebuilds = 0;
+    private static double rebuildMillis = 0;
+    private static long rebuildKept = 0;
+    private static long rebuildBuilt = 0;
+    private static long slowestJump = 0;
+    private static String slowestJumpWas = "";
+
     /** Jumps, waits until the recording stands at exactly that tick, and says how long that took */
     private static long jump(SelfTest test, int tick) throws Exception {
         long started = System.nanoTime();
@@ -1907,6 +2137,19 @@ final class RealWorldSteps {
             Thread.sleep(2);
         }
         long took = (System.nanoTime() - started) / 1_000_000;
+        double[] rebuild = Playback.lastRebuild();
+        if (rebuild != null && rebuild != lastRebuild) {
+            lastRebuild = rebuild;
+            rebuilds++;
+            rebuildMillis += rebuild[0];
+            rebuildKept += (long) rebuild[1];
+            rebuildBuilt += (long) rebuild[2];
+            if (took > slowestJump) {
+                slowestJump = took;
+                slowestJumpWas = String.format(Locale.ROOT, "to tick %d: %d ms, of which reading the snapshot %.0f ms (%d chunks left as they were, %d built)", tick, took, rebuild[0],
+                    (int) rebuild[1], (int) rebuild[2]);
+            }
+        }
         // A few drawn frames, so what is compared is what a person would see
         int before = frames;
         long until = System.currentTimeMillis() + 2000;
@@ -1935,7 +2178,30 @@ final class RealWorldSteps {
             differences.add("a screen is open in playback: " + played.screen);
         }
         for (String difference : differences) {
-            fault(test, "tick " + live.tick + " (" + live.label + ") " + how + ": " + difference);
+            if (difference.startsWith(WorldProbe.LET_OFF)) {
+                leftoverNotes++;
+                test.log("real world: tick " + live.tick + " (" + live.label + ") " + how + ": " + difference);
+            } else {
+                fault(test, "tick " + live.tick + " (" + live.label + ") " + how + ": " + difference);
+                if (difference.contains("in playback that the live game did not hold")) {
+                    // Which they are and what playback knows of them, for whoever has to find out why
+                    double[] rebuild = Playback.lastRebuild();
+                    StringBuilder which = new StringBuilder();
+                    int listed = 0, all = 0;
+                    for (long key : played.blocks.keySet()) {
+                        if (!live.blocks.containsKey(key)) {
+                            all++;
+                            boolean lists = Playback.listsChunk(net.minecraft.world.level.ChunkPos.getX(key), net.minecraft.world.level.ChunkPos.getZ(key));
+                            listed += lists ? 1 : 0;
+                            if (all <= 6) {
+                                which.append(' ').append(net.minecraft.world.level.ChunkPos.getX(key)).append(',').append(net.minecraft.world.level.ChunkPos.getZ(key)).append(lists ? " listed;" : " not listed;");
+                            }
+                        }
+                    }
+                    test.log("real world: of those " + all + " chunks playback lists " + listed + ":" + which + " the last snapshot read was of tick "
+                        + (rebuild == null ? "none" : (int) rebuild[4] + ", with " + (int) rebuild[1] + " chunks left as they were, " + (int) rebuild[2] + " built and " + (int) rebuild[3] + " let go"));
+                }
+            }
         }
     }
 
@@ -1945,8 +2211,17 @@ final class RealWorldSteps {
         Files.deleteIfExists(file);
         try {
             test.tool("camera_spectate", args("entity_id", recorderEntity));
-            int before = frames;
-            test.waitFor(() -> frames >= before + 4, 10, "frames through the recorder's eyes");
+            // The ground is built over many frames once the view has moved somewhere new: wait until some is drawn and no more is coming
+            long until = System.currentTimeMillis() + 20_000;
+            int steady = 0;
+            int last = -1;
+            while (System.currentTimeMillis() < until && steady < 12) {
+                int before = frames;
+                test.waitFor(() -> frames >= before + 2, 10, "frames through the recorder's eyes");
+                int[] drawn = test.onClient(() -> new int[]{minecraft().levelRenderer.countRenderedSections(), minecraft().levelRenderer.hasRenderedAllSections() ? 1 : 0});
+                steady = drawn[0] > 0 && drawn[1] == 1 && drawn[0] == last ? steady + 1 : 0;
+                last = drawn[0];
+            }
             test.tool("export_screenshot", args("output_path", file.toString(), "width", STILL_WIDTH, "height", STILL_HEIGHT, "overwrite", true, "no_gui", true));
             test.waitFor(() -> !Export.active(), 60, "the still " + name);
             test.tool("camera_spectate", new JsonObject());

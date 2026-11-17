@@ -42,6 +42,13 @@ import java.util.function.Function;
  * <ul>
  * <li>Loaded chunks, blocks, biomes, block entities, the set of entities: exact. A recording holds every packet that
  * changed them, so nothing excuses a difference.</li>
+ * <li>One kind of chunk is let off, and counted: a chunk the live game still held although the server had stopped
+ * sending it. When a player is teleported the server moves the centre of their chunks first and lists the chunks to
+ * forget afterwards; by then they are out of the game's reach and it keeps them, unseen, until the player comes back
+ * that way or something else takes their place in its table. A snapshot describes the chunks within reach, so a jump
+ * that starts from a snapshot taken elsewhere does not have these leftovers. They lie beyond the server's view distance
+ * from the recorder, so they are drawn only by a game whose render distance is greater than that, and they are stale:
+ * the server sends nothing more about them.</li>
  * <li>Blocks in the seven-by-seven chunks around the recorder are compared place by place; further out, by how many of
  * each block state every sixteen-block section holds, which misses only two blocks swapping places.</li>
  * <li>Light: exact, at a lattice of places in every chunk and at every block of a watched box.</li>
@@ -90,6 +97,8 @@ final class WorldProbe {
     String label;
     String dimension;
     int centreX, centreZ;
+    /** How far, in chunks, the server sends chunks to this player */
+    int sendDistance;
     long dayTime;
     float rain, thunder;
     /** Null while lightning lights the sky, which each game times for itself */
@@ -133,6 +142,8 @@ final class WorldProbe {
         ChunkPos centre = recorder != null ? recorder.chunkPosition() : new ChunkPos(0, 0);
         probe.centreX = like != null ? like.centreX : centre.x;
         probe.centreZ = like != null ? like.centreZ : centre.z;
+        probe.sendDistance = like != null ? like.sendDistance
+            : minecraft.getConnection() == null ? 12 : ((comedymonkey.dailies.mixin.access.ClientPacketListenerAccess) minecraft.getConnection()).dailies$serverChunkRadius();
         probe.dayTime = level.getDayTime();
         probe.rain = level.getRainLevel(1.0F);
         probe.thunder = level.getThunderLevel(1.0F);
@@ -346,10 +357,18 @@ final class WorldProbe {
         // Chunks: none missing, none left over
         TreeSet<String> missing = new TreeSet<>();
         TreeSet<String> extra = new TreeSet<>();
+        int leftovers = 0;
         for (long key : live.blocks.keySet()) {
             if (!played.blocks.containsKey(key)) {
-                missing.add(chunkName(key, live));
+                if (live.sends(ChunkPos.getX(key), ChunkPos.getZ(key))) {
+                    missing.add(chunkName(key, live));
+                } else {
+                    leftovers++;
+                }
             }
+        }
+        if (leftovers > 0) {
+            found.add(LET_OFF + leftovers + " chunks the live game still held, beyond where the server was sending any, are not in playback");
         }
         for (long key : played.blocks.keySet()) {
             if (!live.blocks.containsKey(key)) {
@@ -386,7 +405,7 @@ final class WorldProbe {
             byte[] lit = live.light.get(key);
             byte[] litThere = played.light.get(key);
             perColumn = lit.length / (LIGHT_COLUMNS.length / 2);
-            for (int i = 0; i < lit.length; i++) {
+            for (int i = 0; i < lit.length && live.sends(ChunkPos.getX(key), ChunkPos.getZ(key)); i++) {
                 if (lit[i] != litThere[i]) {
                     wrongLight.add(chunkName(key, live) + " column " + i / perColumn + (i % perColumn == 0 ? " above ground" : " rung " + i % perColumn)
                         + " live sky " + (lit[i] >> 4 & 15) + " block " + (lit[i] & 15) + ", playback sky " + (litThere[i] >> 4 & 15) + " block " + (litThere[i] & 15));
@@ -533,6 +552,21 @@ final class WorldProbe {
     /** A spawner counts down to its next mob on every tick of each game for itself; the count is left out */
     private static String steady(String said) {
         return said.replaceAll("Delay:-?[0-9]+s", "Delay");
+    }
+
+    /** Begins a line that is counted and logged but is not a fault: see the note on leftover chunks above */
+    static final String LET_OFF = "(let off) ";
+
+    /**
+     * Whether the server sends this chunk to a player whose chunks are centred where the recorder is, by the game's own
+     * rule for it. A leftover chunk has had its light taken away in the live game and is given light again by a snapshot, so its light is not compared either
+     */
+    private boolean sends(int x, int z) {
+        int across = Math.max(0, Math.abs(x - this.centreX) - 1);
+        int along = Math.max(0, Math.abs(z - this.centreZ) - 1);
+        long far = Math.max(0, Math.max(across, along) - 1);
+        long near = Math.min(across, along);
+        return near * near + far * far < (long) this.sendDistance * this.sendDistance;
     }
 
     private static String chunkName(long key, WorldProbe live) {

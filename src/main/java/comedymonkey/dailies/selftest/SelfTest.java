@@ -81,6 +81,12 @@ public final class SelfTest {
                 this.finish("PASSED");
                 return;
             }
+            // The tour first and everything else after it, with the tour's verdict at the end: one long run that tells both
+            // what the tour found and whether the rest still passes. -PdailiesFlags=dailies.test.realWorldFirst
+            boolean tourFirst = Boolean.getBoolean("dailies.test.realWorldFirst");
+            if (tourFirst) {
+                RealWorldSteps.run(this, true);
+            }
             this.checkMcp();
             SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
@@ -98,8 +104,15 @@ public final class SelfTest {
             LibrarySteps.run(this);
             ResourcePackSteps.play(this);
             WatchingSteps.watch(this);
-            // Last, in a world and with a recording of its own: everything above is in a flat world, this is in generated terrain
-            RealWorldSteps.run(this);
+            // In a world and with a recording of its own: everything above is in a flat world, this is in generated terrain. It
+            // takes about seventeen minutes, so it runs only when asked for: -PdailiesFlags=dailies.test.realWorld
+            if (tourFirst) {
+                RealWorldSteps.verdict();
+            } else if (Boolean.getBoolean("dailies.test.realWorld")) {
+                RealWorldSteps.run(this);
+            } else {
+                this.skip("the tour of generated terrain was not asked for (dailies.test.realWorld)");
+            }
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
