@@ -72,7 +72,7 @@ final class WatchingSteps {
     private WatchingSteps() {
     }
 
-    /** The settings screen of the mod */
+    /** Dailies' own settings screen (CFG-4) */
     private static boolean settingsOpen(Minecraft minecraft) {
         return minecraft.screen instanceof comedymonkey.dailies.ui.SettingsScreen;
     }
@@ -131,13 +131,9 @@ final class WatchingSteps {
         expect(test, "start", "already_recording");
         test.sleepTicks(20);
         expect(test, "cancel", "cancel_asking");
-        test.waitFor(() -> minecraft.screen != null && minecraft.screen.getClass().getSimpleName().equals("AskScreen"), 10, "the question before a recording is thrown away");
+        test.waitFor(comedymonkey.dailies.ui.Previews::asking, 10, "the question before a recording is thrown away");
         check(Recorder.get().state() != Recorder.State.IDLE, "'/dailies cancel' threw the recording away without asking");
-        // The keys start on the answer that changes nothing; one step back is "yes"
-        test.onClientRun(() -> {
-            minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_TAB, 0, org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT);
-            minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER, 0, 0);
-        });
+        test.onClientRun(() -> comedymonkey.dailies.ui.Previews.answerAsk(true));
         test.waitFor(() -> Recorder.get().state() == Recorder.State.IDLE, 10, "the cancelled recording to stop");
         test.sleepTicks(20);
         check(Recorder.unfinished().isEmpty(), "a recording cancelled by command left its file behind");

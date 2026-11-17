@@ -37,9 +37,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * close and never streams, which the transport allows for servers that only ever reply to requests. The moments page
  * has a small stream of its own at GET /live, which is not part of MCP.
  * <p>
- * With mcpBind set to anything but localhost (specification MCP-8) the same server speaks HTTPS with a certificate of
- * its own, lets in only the addresses of mcpAllowedClients, and wants the token of mcpToken on every request but the
- * page itself, which has to load before it can ask for one.
+ * With mcpBind set to anything but localhost (specification MCP-8) the same port also speaks HTTPS with a certificate
+ * of its own, to the addresses of mcpAllowedClients only, and wants the token of mcpToken on every HTTPS request but
+ * the page itself, which has to load before it can ask for one. This computer's own agents and page carry on as they
+ * were, over plain HTTP at 127.0.0.1 without a token: {@link McpConnection} tells the two kinds of connection apart.
  */
 public class McpHttpServer {
 
@@ -109,8 +110,8 @@ public class McpHttpServer {
                 server.start();
                 instance = server;
                 if (remote) {
-                    Host.LOGGER.info("Dailies MCP server listening on https://{}:{}/mcp for {} allowed address range(s). Certificate SHA-256 fingerprint: {}",
-                        bind, wanted.port, server.addressRules.size(), server.certificate.fingerprint());
+                    Host.LOGGER.info("Dailies MCP server listening on https://{}:{}/mcp for {} allowed address range(s), and still on http://127.0.0.1:{}/mcp for this computer. Certificate SHA-256 fingerprint: {}",
+                        bind, wanted.port, server.addressRules.size(), wanted.port, server.certificate.fingerprint());
                 } else {
                     Host.LOGGER.info("Dailies MCP server listening on http://127.0.0.1:{}/mcp", wanted.port);
                 }
@@ -126,7 +127,7 @@ public class McpHttpServer {
         return instance == null ? -1 : instance.config.port;
     }
 
-    /** Whether the running server listens beyond this computer, and so speaks HTTPS and wants the token */
+    /** Whether the running server listens beyond this computer, and so speaks HTTPS and wants the token from other machines */
     public static synchronized boolean isRemote() {
         return instance != null && instance.config.remote;
     }
@@ -139,6 +140,9 @@ public class McpHttpServer {
     private final Config config;
     private final McpProtocol protocol = new McpProtocol();
     private ServerSocket serverSocket;
+    /** With remote access on a single address: the listener at 127.0.0.1 that this computer's own clients go on using */
+    private @Nullable ServerSocket loopbackSocket = null;
+    private @Nullable javax.net.ssl.SSLContext tls = null;
     private ExecutorService workers;
     private volatile boolean stopped = false;
     private HostRules hostRules = HostRules.local();
@@ -170,9 +174,15 @@ public class McpHttpServer {
         executor.allowCoreThreadTimeOut(true);
         this.workers = executor;
 
-        Thread acceptThread = new Thread(this::acceptLoop, "Dailies-MCP-Accept");
+        Thread acceptThread = new Thread(() -> this.acceptLoop(this.serverSocket), "Dailies-MCP-Accept");
         acceptThread.setDaemon(true);
         acceptThread.start();
+        ServerSocket loopback = this.loopbackSocket;
+        if (loopback != null) {
+            Thread localThread = new Thread(() -> this.acceptLoop(loopback), "Dailies-MCP-Accept-Local");
+            localThread.setDaemon(true);
+            localThread.start();
+        }
     }
 
     /** Beyond this computer: HTTPS, the allowed addresses, the token, and Host and Origin widened to the bound address */
@@ -214,7 +224,18 @@ public class McpHttpServer {
 
         Path file = Host.get().dataDirectory().resolve("mcp").resolve("certificate.p12");
         this.certificate = ServerCertificate.loadOrCreate(file, names, own, wildcard ? null : address);
-        this.serverSocket = this.certificate.context().getServerSocketFactory().createServerSocket(this.config.port, 16, address);
+        this.tls = this.certificate.context();
+        // A plain listener: each connection says by its first byte whether it is HTTPS or this computer's plain HTTP
+        this.serverSocket = new ServerSocket(this.config.port, 16, address);
+        if (!wildcard) {
+            // Bound to one network address, the port is not open at 127.0.0.1 at all, and that is where local clients look
+            try {
+                this.loopbackSocket = new ServerSocket(this.config.port, 16, InetAddress.getByAddress(new byte[]{127, 0, 0, 1}));
+            } catch (IOException e) {
+                this.serverSocket.close();
+                throw e;
+            }
+        }
     }
 
     private void stop() {
@@ -222,6 +243,11 @@ public class McpHttpServer {
         try {
             this.serverSocket.close();
         } catch (IOException ignored) {}
+        if (this.loopbackSocket != null) {
+            try {
+                this.loopbackSocket.close();
+            } catch (IOException ignored) {}
+        }
         for (Socket live : this.liveSockets) {
             closeQuietly(live);
         }
@@ -229,11 +255,11 @@ public class McpHttpServer {
         this.workers.shutdown();
     }
 
-    private void acceptLoop() {
+    private void acceptLoop(ServerSocket listener) {
         while (!this.stopped) {
             Socket socket;
             try {
-                socket = this.serverSocket.accept();
+                socket = listener.accept();
             } catch (IOException e) {
                 if (!this.stopped) {
                     Host.LOGGER.warn("Dailies MCP server stopped accepting connections", e);
@@ -259,18 +285,26 @@ public class McpHttpServer {
         }
     }
 
-    private void handleConnection(Socket socket) {
+    private void handleConnection(Socket accepted) {
         boolean handedOver = false;
+        Socket socket = accepted;
         try {
-            socket.setSoTimeout(SOCKET_TIMEOUT_MILLIS);
-            socket.setTcpNoDelay(true);
+            accepted.setSoTimeout(SOCKET_TIMEOUT_MILLIS);
+            accepted.setTcpNoDelay(true);
 
-            InputStream in = socket.getInputStream();
-            OutputStream out = socket.getOutputStream();
+            javax.net.ssl.SSLContext context = this.tls;
+            McpConnection connection = context == null ? McpConnection.plain(accepted) : McpConnection.open(accepted, context);
+            socket = connection.socket();
+            InputStream in = connection.in();
+            OutputStream out = connection.out();
 
             Response response;
             try {
-                response = this.handleRequest(in, socket);
+                if (context != null && !connection.secure() && !connection.plainAllowed()) {
+                    // Plain HTTP is for this computer alone; nothing of the request is looked at
+                    throw new HttpError(400, McpConnection.USE_HTTPS);
+                }
+                response = this.handleRequest(in, socket, connection.secure());
             } catch (HttpError e) {
                 response = Response.text(e.status, e.getMessage());
                 response.headers.putAll(e.headers);
@@ -342,7 +376,8 @@ public class McpHttpServer {
         thread.start();
     }
 
-    private Response handleRequest(InputStream in, Socket socket) throws IOException, HttpError {
+    /** @param secure whether the request came over HTTPS, and so from (or as if from) another machine */
+    private Response handleRequest(InputStream in, Socket socket, boolean secure) throws IOException, HttpError {
         String head = readHead(in);
         String[] lines = head.split("\r\n");
 
@@ -369,17 +404,19 @@ public class McpHttpServer {
         // Browsers always send Origin on cross-site requests, so this stops web pages from driving the game.
         // Non-browser MCP clients don't send it at all.
         String origin = headers.get("origin");
-        if (!this.hostRules.originAllowed(origin)) {
+        // A plain request is this computer's own, and is held to localhost names exactly as it always was
+        HostRules hostRules = secure ? this.hostRules : HostRules.local();
+        if (!hostRules.originAllowed(origin)) {
             throw new HttpError(403, "Forbidden: requests from origin '" + origin + "' are not allowed");
         }
         // Protects against DNS rebinding, where a hostile hostname is pointed at this server's address
-        if (!this.hostRules.hostAllowed(headers.get("host"))) {
+        if (!hostRules.hostAllowed(headers.get("host"))) {
             throw new HttpError(403, "Forbidden: unexpected Host header");
         }
 
         boolean page = method.equals("GET") && (path.equals("/") || path.equals("/moments") || path.equals("/moments/"));
-        TokenGuard guard = this.guard;
-        // The page is the one thing served without the token: it holds no data, and it is what asks for the token
+        TokenGuard guard = secure ? this.guard : null;
+        // Over HTTPS the page is the one thing served without the token: it holds no data, and it is what asks for the token
         if (guard != null && !page) {
             String client = socket.getInetAddress().getHostAddress();
             long now = System.currentTimeMillis();
