@@ -49,6 +49,34 @@ public final class ExportProgress extends Screen {
     static void hook() {
         // After the export has taken its picture of the frame
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (RenderFrameEvent.Post event) -> paint());
+        // Whoever started the export (the editor, the queue, a tool, the moments page), the window shows the progress
+        // panel while it runs, and is cleared again afterwards
+        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> standIn());
+    }
+
+    private static boolean ours = false;
+
+    /** Puts the progress panel up while an export holds the clock with no screen of its own, and takes it down after */
+    private static void standIn() {
+        Minecraft minecraft = Minecraft.getInstance();
+        try {
+            if (Export.holdsClock()) {
+                if (minecraft.screen == null) {
+                    minecraft.setScreen(new ExportProgress());
+                    ours = true;
+                }
+            } else if (ours) {
+                ours = false;
+                if (minecraft.screen instanceof ExportProgress) {
+                    minecraft.setScreen(null);
+                }
+            }
+        } catch (RuntimeException | LinkageError e) {
+            if (!failureLogged) {
+                failureLogged = true;
+                Host.LOGGER.error("Dailies: the export progress display could not be put up", e);
+            }
+        }
     }
 
     @Override

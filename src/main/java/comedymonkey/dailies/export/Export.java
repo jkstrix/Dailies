@@ -294,6 +294,18 @@ public final class Export {
         return new int[]{Math.max(1, (int) Math.round(pictureWidth * scale)), Math.max(1, (int) Math.round(pictureHeight * scale))};
     }
 
+    /** The size of the window on the desktop, in pixels, whatever size the game is drawing at */
+    private static int[] realWindowSize(Window window) {
+        int[] width = new int[1];
+        int[] height = new int[1];
+        org.lwjgl.glfw.GLFW.glfwGetFramebufferSize(window.getWindow(), width, height);
+        if (width[0] <= 0 || height[0] <= 0) {
+            // Minimised: the game's record is the best there is
+            return new int[]{window.getWidth(), window.getHeight()};
+        }
+        return new int[]{width[0], height[0]};
+    }
+
     public static void windowResized(int width, int height) {
         realWidth = width;
         realHeight = height;
@@ -368,8 +380,11 @@ public final class Export {
         savedPosition = Playback.position();
         savedPaused = Playback.paused();
         savedSpeed = Playback.ticksPerSecond();
-        savedWidth = realWidth = window.getWidth();
-        savedHeight = realHeight = window.getHeight();
+        // The real window's size, asked of the window system itself: the game's own record of it may still hold the size
+        // of an export that has only just finished, when exports run one after another
+        int[] real = realWindowSize(window);
+        savedWidth = realWidth = real[0];
+        savedHeight = realHeight = real[1];
         savedHideGui = minecraft.options.hideGui;
         savedFollow = EditorSession.followCamera();
         startedNanos = System.nanoTime();
