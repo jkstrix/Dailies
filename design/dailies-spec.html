@@ -179,6 +179,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li><b>Game:</b> Minecraft Java 1.21.1 on NeoForge 21.1, Java 21.</li>
 					<li><b>Side:</b> client only. It must load on a client that joins any server, modded or vanilla, and must never be required on a server.</li>
 					<li><b>Data folder:</b> <code>&lt;game dir&gt;/dailies/</code> for recordings, moments and exports.</li>
+					<li><b>Other people's voices:</b> Dailies can record and log the voice chat of everyone the player hears. Agreeing that with the people being recorded is the user's responsibility; the mod gives them the means to leave anyone out (MOM-36) and says plainly where voice audio goes (MOM-37).</li>
 				</ul>
 			</div>
 			<div class="card"><h3>The pieces</h3>
@@ -610,6 +611,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>item_crafted<br>block_placed<br>block_mined<br>tool_first_use</td><td>item or block</td><td>Logged only when it is a first, unless <code>momentsLogRepeats</code> is on.</td></tr>
 				<tr><td>milestone</td><td>milestone id</td><td>Experience levels 10, 20 and 30; every 30 minutes of play in the session (logged every time); the first diamond item and the first enchanting table crafted in the world.</td></tr>
 				<tr><td>marker</td><td>description</td><td>A marker key was pressed (REC-30).</td></tr>
+				<tr><td>voice_burst</td><td><code>unclassified</code></td><td>Laughter or shouting, found by loudness alone (below). Stores the speakers and how far above their usual level the loudest got (<code>peak_db</code>). Dated to when the burst began.</td></tr>
 				<tr><td>custom</td><td>caller's type</td><td>Added through MCP (<code>source: mcp</code>) or sent by the server (<code>source: server</code>, chapter XII).</td></tr>
 				<tr><td>job_*</td><td>kind of job</td><td>McpCraft job board events (chapter XII).</td></tr>
 			</tbody>
@@ -622,6 +624,18 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<div class="rule"><b>History is not a first</b><span>The first statistics reply of a session marks everything already done in that world as "not a first" without logging it.</span></div>
 			<div class="rule"><b>Death messages are parsed</b><span>From the translatable chat message, so victim, killer and cause are read reliably in any language.</span></div>
 		</div>
+
+		<h3>Laughter and shouting</h3>
+		<p>The transcription filter drops laughter, yet a burst of laughter is often the best clip signal there is. This part needs no AI and is always on.</p>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOM-25</td><td>The loudness of each speaker's voice is followed against that speaker's own rolling baseline, from the same voice chat audio as MOM-31. A speaker who stays 12 dB or more above their baseline for at least 1.5 s makes a <code>voice_burst</code> event.</td><td>The baseline follows the voice over about 20 s, so a voice that slowly gets louder is not a burst. Nothing can be a burst until 2 s of a voice have been heard. Near-silence teaches the baseline nothing. Dips shorter than 0.3 s do not end a burst: laughter comes in pulses.</td></tr>
+				<tr><td>MOM-26</td><td>A second speaker who does the same within 3 s joins the same event, which then lists both and scores higher. At most one <code>voice_burst</code> is logged every 20 s.</td><td>The event is logged at once with one speaker and changed when another joins.</td></tr>
+				<tr><td>MOM-27</td><td>A burst's subject is <code>unclassified</code>. A sound classifier, when one is fitted, replaces it with <code>laughter</code>, <code>cheering</code>, <code>screaming</code> or <code>shouting</code>. It runs on the player's own computer and only with AI on.</td><td><b>Not fitted yet:</b> it needs a bundled model whose licence the owner has approved. The place for it is the <code>BurstClassifier</code> interface, installed with <code>Moments.setBurstClassifier</code>.</td></tr>
+				<tr><td>MOM-28</td><td>Parts of a transcription that the filter of MOM-33 drops as not speech are kept in the dialogue record's <code>segments</code>, marked <code>non_speech</code>, and stay out of its text. A record with nothing but such parts is <code>empty</code> with <code>non_speech</code> true.</td><td>Parts dropped because the model was guessing are still thrown away.</td></tr>
+			</tbody>
+		</table></div>
 
 		<h3>Who was together</h3>
 		<div class="tablebox"><table class="req">
@@ -642,6 +656,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>MOM-32</td><td><b>AI services are optional and off by default.</b> One switch, <code>momentsAiEnabled</code>, turns on both transcription and model-written summaries. While it is off, nothing is sent to any server.</td><td>The owner's rule.</td></tr>
 				<tr><td>MOM-33</td><td>Transcription posts each segment to an OpenAI-compatible endpoint, <code>POST &lt;momentsWhisperUrl&gt;/v1/audio/transcriptions</code>, with the model name, <code>response_format=verbose_json</code>, <code>vad_filter=true</code> and the language (default <code>en</code>; empty means detect). Parts whose <code>no_speech_prob</code> is 0.6 or more, or whose <code>avg_logprob</code> is −1.0 or less, are dropped. A segment with nothing left is <code>empty</code>.</td><td>Fixing the language matters: auto-detect turns laughter into other languages.</td></tr>
 				<tr><td>MOM-34</td><td>An unreachable server is not an error: the segment stays <code>pending</code> and is retried with growing waits (5 s up to 2 min). Three real failures mark it <code>failed</code>. A tool queues pending and failed segments again.</td><td></td></tr>
+				<tr><td>MOM-36</td><td>A list of players (<code>momentsVoiceExcluded</code>, names or ids, case ignored) whose voice is never captured for Moments or transcribed. It is editable in the settings screen, over MCP (<code>moments_voice_excluded</code>) and on the page, and takes effect at once. Their voice is still heard live, and still recorded for playback when <code>recordVoiceChat</code> is on; it never reaches the dialogue log, the loudness of MOM-25 or the transcription server.</td><td>Segments captured before a player was listed stay, but are no longer sent for transcription.</td></tr>
+				<tr><td>MOM-37</td><td>The settings screen and the page say plainly that, with AI on, voice audio is sent to the address in <code>momentsWhisperUrl</code>, and that with AI off nothing is sent anywhere. <code>moments_status</code> says the same in <code>privacy.voice_goes_to</code>.</td><td>Capturing other people's voices is the user's to agree with them (chapter I).</td></tr>
 			</tbody>
 		</table></div>
 
@@ -656,7 +672,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li>45 job_finished</li>
 					<li>40 nearby_player_death · milestone</li>
 					<li>35 pet_death · advancement</li>
-					<li>30 dimension_entered · structure_interaction · job_posted · job_materials_complete</li>
+					<li>30 dimension_entered · structure_interaction · job_posted · job_materials_complete · voice_burst</li>
 					<li>25 job_claimed · job_help_asked</li>
 					<li>20 advancement_other</li>
 					<li>15 biome_discovered · mob_kill</li>
@@ -670,11 +686,21 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li>+30 for a challenge advancement</li>
 					<li>+25 when a boss mob is involved</li>
 					<li>+5 for each player involved beyond the first, up to +20</li>
+					<li>+10 for each speaker of a voice_burst beyond the first, in place of the bonus above</li>
 					<li>+0.15 per word per minute of speech around it, up to +25 (lively talk is about 150 words a minute)</li>
 					<li>The total is capped at 100.</li>
 				</ul>
 			</div>
 		</div>
+
+		<h3>Event pictures</h3>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>MOM-40</td><td>When an event scoring 50 or more is logged during live play, the game keeps a small picture of the screen as it was on the next frame: a JPEG about 320 pixels wide, <code>pictures/&lt;event id&gt;.jpg</code> in the session's folder. The event then carries <code>picture</code>, <code>picture_width</code> and <code>picture_height</code>.</td><td>A few kilobytes each. Off switch: <code>momentsEventPictures</code> (default on). An event that only reaches 50 later, such as a burst a third voice joins, gets its picture then.</td></tr>
+				<tr><td>MOM-41</td><td>It must not be felt: the frame is shrunk on the graphics card, only the shrunken copy is read back, and it is encoded and written off the client thread. No picture is ever taken while a recording is being watched or exported.</td><td>A graphics driver that refuses switches pictures off for the session with one line in the log.</td></tr>
+			</tbody>
+		</table></div>
 
 		<h3>Building clips</h3>
 		<ol class="steps">
@@ -714,17 +740,23 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ X -->
 	<section id="mcp">
 		<div class="chapter"><span class="no">X</span><h2>The MCP server</h2><span class="owner yours">yours</span></div>
-		<p class="lede">Dailies contains a Model Context Protocol server, so an AI agent can do everything a person can: record, open, seek, edit, export, and query moments. It listens only on the player's own machine.</p>
+		<p class="lede">Dailies contains a Model Context Protocol server, so an AI agent can do everything a person can: record, open, seek, edit, export, and query moments. It listens only on the player's own machine unless the player opens it to others, and then only behind HTTPS, a token and a list of allowed machines.</p>
 
 		<div class="tablebox"><table class="req">
 			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
 			<tbody>
 				<tr><td>MCP-1</td><td>Transport is MCP Streamable HTTP at <code>POST /mcp</code>, JSON-RPC 2.0, single messages and batches. Every request is answered in full with a Content-Length; there is no event stream. <code>GET /mcp</code> answers 405.</td><td>Methods: initialize, ping, tools/list, tools/call; notifications answer 202.</td></tr>
-				<tr><td>MCP-2</td><td>It binds to 127.0.0.1 only, on <code>mcpPort</code> (default 25595), and can be switched off with <code>mcpEnabled</code>. Changing either in settings restarts it without restarting the game. A port already in use is reported in the log and is not fatal.</td><td>Another mod's MCP server in the same game must be able to run beside it on its own port.</td></tr>
+				<tr><td>MCP-2</td><td>It binds to 127.0.0.1 only, unless MCP-8 is switched on, on <code>mcpPort</code> (default 25595), and can be switched off with <code>mcpEnabled</code>. Changing any of its settings restarts it without restarting the game. A port already in use is reported in the log and is not fatal.</td><td>Another mod's MCP server in the same game must be able to run beside it on its own port.</td></tr>
 				<tr><td>MCP-3</td><td>A request with an <code>Origin</code> that is not localhost is refused (403), and so is one whose <code>Host</code> is not localhost. Headers are limited to 16 KB and bodies to 1 MB. Chunked bodies are refused.</td><td>Stops web pages and DNS rebinding from driving the game.</td></tr>
 				<tr><td>MCP-4</td><td>Tools that touch the game run on the client thread and the HTTP thread waits for them, with a timeout. Tools that only read files run on the HTTP thread. Editing tools go through the editor's undo stack.</td><td>No dependency on an MCP library: a plain socket and the JSON library the game already ships.</td></tr>
 				<tr><td>MCP-5</td><td>A tool's result is one JSON object as text. A tool failure is a normal result with <code>isError</code> and a message that says what to do next. Unknown argument names are rejected with the list of valid ones; out-of-range numbers are rejected with the nearest allowed value.</td><td></td></tr>
 				<tr><td>MCP-6</td><td>Tools that start slow work (opening a recording, exporting, jumping) return at once and say how to poll for the result.</td><td></td></tr>
+				<tr><td>MCP-8</td><td><b>Reaching it from another machine</b> is off until <code>mcpBind</code> (default <code>127.0.0.1</code>) is set to one of the computer's own addresses, or <code>0.0.0.0</code> for all of them. Then, for every client, this computer included:
+					<br>· the server speaks HTTPS, with a certificate it makes on first use and keeps in <code>dailies/mcp/certificate.p12</code>. Its SHA-256 fingerprint is written to the log and to the setting <code>mcpCertificateFingerprint</code>, so a client can pin it;
+					<br>· the client's address must be in <code>mcpAllowedClients</code> (addresses or CIDR ranges; default the private local-network ranges; this computer is always allowed). Others are dropped before anything is read;
+					<br>· every request but <code>GET /</code> must carry <code>Authorization: Bearer &lt;mcpToken&gt;</code>, else 401. The token is made the first time remote access is switched on;
+					<br>· five wrong tokens from one address within a minute shut it out for a minute (429 with <code>Retry-After</code>), whatever it sends meanwhile;
+					<br>· the Origin and Host checks of MCP-3 still apply, widened to the bound address (for <code>0.0.0.0</code>, to the computer's own addresses and name).</td><td>For anyone who leaves <code>mcpBind</code> alone, nothing changes: plain HTTP on 127.0.0.1, no token. The page is served without the token because a browser cannot send one when opening a page; it holds no data and asks for the token itself (chapter XI). The certificate names the bound address; binding to an address it does not name makes a new one.</td></tr>
 				<tr><td>MCP-7</td><td><code>moments_cue</code> takes a clip id or an event id. If the right recording is open it jumps there (for an event, <code>lead_seconds</code> earlier, default 5) and pauses. If not, it opens that recording and jumps once it has loaded. It refuses to leave a live world unless <code>leave_world</code> is true. With <code>camera</code> true it also adds the clip's suggested Smart Camera at the cue point, following the recorder.</td><td>The refusal message starts with <code>LEAVE_WORLD_NEEDED</code> so the page can ask the person.</td></tr>
 			</tbody>
 		</table></div>
@@ -769,7 +801,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<tr><td>smart_camera_add</td><td>Add a Smart Camera keyframe: tick, target, mode and any setting of chapter VIII, in snake_case.</td></tr>
 			<tr><td>smart_camera_status</td><td>What the Smart Camera is doing now.</td></tr>
 		</tbody></table></div></details>
-		<details><summary>Moments (17)</summary><div class="tablebox"><table><tbody>
+		<details><summary>Moments (18)</summary><div class="tablebox"><table><tbody>
 			<tr><td>moments_status</td><td>Whether a session is running, record counts, whether voice is available, and for each AI service: configured, reachable, queue, last error.</td></tr>
 			<tr><td>moments_sessions_list</td><td>Sessions, newest first.</td></tr>
 			<tr><td>moments_events_query</td><td>Events, filtered by type, subject, player, time, keyword, firsts only; paged; each with its score and a one-sentence description.</td></tr>
@@ -782,8 +814,9 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<tr><td>moments_event_add</td><td>Log a custom event now.</td></tr>
 			<tr><td>moments_transcribe_pending</td><td>Queue untranscribed segments again. Says so plainly when AI is off.</td></tr>
 			<tr><td>moments_ignored_events</td><td>list, add, remove, set or clear the ignore list.</td></tr>
+			<tr><td>moments_voice_excluded</td><td>list, add, remove, set or clear the players whose voice is never captured or transcribed (MOM-36). Says where voice audio currently goes.</td></tr>
 		</tbody></table></div></details>
-		<p>The server itself and all 17 moments tools are provided in <code>reference/</code>. The other 53 tools belong to the new core; appendix A gives every argument of all 70.</p>
+		<p>The server itself and all 18 moments tools are provided in <code>reference/</code>. The other 53 tools belong to the new core; appendix A gives every argument of all 71.</p>
 		<p>Every query tool takes <code>session</code>: an id, <code>current</code> or <code>latest</code>. The default is the running session, else the latest.</p>
 	</section>
 
@@ -801,6 +834,9 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li><b>Events:</b> each with time, type, a "first" badge, where it came from, position and tick; filters for type, minimum score, text and firsts only; sort by time or score; the full record on request.</li>
 					<li><b>Voice:</b> the lines in order, or a note that they are not transcribed.</li>
 					<li><b>Ignored:</b> the ignore list, with add and remove.</li>
+					<li><b>Privacy:</b> the players whose voice is left out (MOM-36), with add and remove and the speakers of this session one click away; and where voice audio goes (MOM-37), which is also said in a notice at the top of every tab.</li>
+					<li><b>Pictures:</b> an event that has a picture (MOM-40) shows it, and a clip shows the picture of its best event that has one. Clicking enlarges it.</li>
+					<li><b>The live lamp:</b> green while the live feed is open, brass while the page is refreshing by the clock, grey when paused.</li>
 				</ul>
 			</div>
 			<div class="card"><h3>What it does</h3>
@@ -809,14 +845,18 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li><b>Cue + camera</b> and <b>Cue only</b> on a clip; <b>Cue</b> on an event (five seconds early).</li>
 					<li>Asks before pulling the player out of a live world.</li>
 					<li><b>Ignore kind</b> on an event adds its type (or, for a custom event, its name) to the ignore list.</li>
-					<li>Refreshes every ten seconds while the session is running, but not under an open details box or a half-typed search.</li>
+					<li><b>PAGE-1. Live:</b> the page keeps <code>GET /live</code> open, a server-sent event stream of its own that is not part of MCP. Each message names what changed (<code>event</code>, <code>dialogue</code>, <code>interaction</code> or <code>clips</code>, with the session, the record's id and <code>added</code> or <code>changed</code>); the page then reads it through the usual tools, so new events, clips, transcripts and pictures appear the moment they happen.</li>
+					<li><b>PAGE-2. Fallback:</b> if the stream cannot be opened or drops, the page refreshes every ten seconds while the session is running and keeps trying to reconnect by itself. Neither way redraws under an open details box or a half-typed entry.</li>
+					<li><b>PAGE-3. Token:</b> when the game answers 401 (MCP-8), the page asks for the token once, keeps it in that browser, and sends it with every request, the stream and the pictures included. It can be forgotten from the Privacy tab.</li>
 				</ul>
 			</div>
 			<div class="card"><h3>Rules</h3>
 				<ul>
 					<li>No external scripts, fonts or requests: it must work offline.</li>
 					<li>Everything shown comes from other players' names and chat, so it is inserted as text, never as markup. This page can drive the game.</li>
-					<li>Light and dark by the browser's preference; usable on a phone-width window.</li>
+					<li>Light and dark by the browser's preference, in the house colours of this document; usable from a phone-width window to a wide monitor.</li>
+					<li>The server carries at most eight live streams, drops one that stops reading, and sends a comment line every 15 s so a closed page is noticed.</li>
+					<li>Pictures are served from <code>GET /pictures/&lt;session id&gt;/&lt;event id&gt;.jpg</code>, from the session's own <code>pictures</code> folder and nowhere else.</li>
 				</ul>
 			</div>
 		</div>
@@ -918,6 +958,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>editor</td><td>defaultInterpolation · flight options</td><td>smooth</td><td>EDIT-4, PLAY-2</td></tr>
 				<tr><td>advanced</td><td>ignoredPayloads</td><td>empty</td><td><b>CFG-7.</b> Ids or <code>namespace:*</code>, one per line, added to the built-in list; a leading <code>+</code> allows one the built-in list ignores</td></tr>
 				<tr><td>mcp</td><td>mcpEnabled · mcpPort</td><td>on · 25595</td><td>MCP-2</td></tr>
+				<tr><td></td><td>mcpBind · mcpToken · mcpAllowedClients</td><td>127.0.0.1 · empty, made by the mod · 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7, fe80::/10</td><td>MCP-8. Remote access is off while mcpBind is 127.0.0.1</td></tr>
+				<tr><td></td><td>mcpCertificateFingerprint</td><td>empty, filled in by the mod</td><td>MCP-8. For reading, to pin the certificate; changing it has no effect</td></tr>
 				<tr><td>moments</td><td>momentsEnabled · momentsLogRepeats · momentsStatsPollSeconds</td><td>on · off · 5</td><td>MOM-1, events</td></tr>
 				<tr><td></td><td>momentsAiEnabled</td><td><b>off</b></td><td>MOM-32</td></tr>
 				<tr><td></td><td>momentsWhisperUrl · momentsWhisperModel · momentsWhisperLanguage · momentsTranscribeLive</td><td>http://192.168.188.50:8000 · Systran/faster-whisper-large-v3 · en · on</td><td>MOM-33</td></tr>
@@ -927,9 +969,11 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td></td><td>momentsClipPreRollSeconds · momentsClipPostRollSeconds</td><td>15 · 20</td><td>Clips, step 2</td></tr>
 				<tr><td></td><td>momentsBossHealthThreshold · momentsNotableEntities · momentsStructureBlocks</td><td>150 · ender dragon, wither, warden, elder guardian · spawner, trial spawner, vault, end portal frame, reinforced deepslate, suspicious sand and gravel</td><td>Events</td></tr>
 				<tr><td></td><td>momentsIgnoredEvents</td><td>empty</td><td>MOM-50</td></tr>
+				<tr><td></td><td>momentsVoiceExcluded</td><td>empty</td><td>MOM-36. Names or ids, separated by commas</td></tr>
+				<tr><td></td><td>momentsEventPictures</td><td>on</td><td>MOM-40</td></tr>
 			</tbody>
 		</table></div>
-		<div class="card"><h3>The AI addresses</h3><p>The two server addresses default to the owner's own machines, so turning on the one switch is all the owner has to do. An empty address keeps that one service off even with the switch on.</p></div>
+		<div class="card"><h3>The AI addresses</h3><p>The two server addresses default to the owner's own machines, so turning on the one switch is all the owner has to do. An empty address keeps that one service off even with the switch on. The descriptions of <code>momentsAiEnabled</code> and <code>momentsWhisperUrl</code> say that, with AI on, voice audio is sent to that address, and that with AI off nothing is sent anywhere (MOM-37).</p></div>
 	</section>
 
 	<!-- ============================================================ XIV -->
@@ -958,6 +1002,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<li><div><h3>Moments</h3><p>The kill, the placed and mined blocks, the biome and the marker are logged with recording ticks in the order they happened. The voice segment is logged with its length. Clips are built; the kill's clip contains the voice segment whole and has a suggested camera. <i>MOM-2 to 5, clips.</i></p></div></li>
 			<li><div><h3>Ignore list and cue</h3><p>Ignoring a type hides its events from a query and removing the entry brings them back. Cueing the clip with a camera jumps, pauses and adds a Smart Camera track; undo removes it. <i>MOM-50, 51; MCP-7.</i></p></div></li>
 			<li><div><h3>MCP</h3><p>Every tool is listed. Bad origin and bad host are refused. GET on <code>/mcp</code> is 405. <code>GET /</code> returns the page. A batch of two calls returns two results. An unknown tool and a bad argument give useful errors. <i>MCP-1, 3, 5.</i></p></div></li>
+			<li><div><h3>Privacy, bursts, the live page and remote access</h3><p>The excluded-voices list goes round over MCP, and an excluded speaker's audio leaves no segment and no file. Two made-up speakers going loud together are one <code>voice_burst</code> scoring 40. <code>GET /live</code> announces a new event within a second; that event, scoring 50, leaves a picture about 320 wide beside the session, and none with the setting off. With <code>mcpBind</code> left alone a foreign Host is refused; bound elsewhere, a request without the token is refused, one with it is answered over HTTPS by a client that pins the certificate, and five wrong tokens lock the address out. The settings are put back. <i>MOM-25, 26, 36, 37, 40; PAGE-1; MCP-8.</i></p></div></li>
 			<li><div><h3>Server side</h3><p>With the companion: <code>/moment data</code> arrives as a custom moment with its data, and a stand-in boss killed by command arrives as <code>boss_fight</code> with the fighter's share. With McpCraft: a job posted, claimed and finished arrives as three <code>job_*</code> moments and the matching advancements; opening playback makes McpCraft stand down. <i>SRV-1 to 3, 10, 11, 15.</i></p></div></li>
 			<li><div><h3>AI, when on</h3><p>The voice clip is transcribed and found by a transcript search; the clip gets a model-written title and summary. When off or unreachable, the same steps report "skipped" and everything else passes. <i>MOM-32 to 34.</i></p></div></li>
 		</ol>
@@ -994,11 +1039,11 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<tbody>
 				<tr><td>design/dailies-spec.html</td><td>This document.</td></tr>
 				<tr><td>companion/</td><td>The Dailies Companion server mod, complete: build files, six classes, mod metadata.</td></tr>
-				<tr><td>reference/src/main/java/<br>comedymonkey/dailies/</td><td>38 classes, about 9,000 lines:
+				<tr><td>reference/src/main/java/<br>comedymonkey/dailies/</td><td>46 classes, about 10,500 lines:
 					<br><code>Host</code>: the interface to the core (below).
-					<br><code>moments/</code>: sessions, storage, the event tracker, bosses, deaths, who-was-together, voice segments, transcription, scoring, clips, summaries, settings access.
+					<br><code>moments/</code>: sessions, storage, the event tracker, bosses, deaths, who-was-together, voice segments, voice bursts, transcription, scoring, clips, summaries, event pictures, settings access.
 					<br><code>smartcamera/</code>: the settings, the maths, the subject (player, vehicle, craft) and the solver with the director.
-					<br><code>mcp/</code>: the HTTP server, the protocol, the tool, argument and schema types, and <code>tools/MomentsTools</code>.
+					<br><code>mcp/</code>: the HTTP server, the protocol, the tool, argument and schema types, <code>tools/MomentsTools</code>, the live feed, and what guards remote access: allowed addresses, the token and lockout, the Host and Origin rules, the certificate.
 					<br><code>compat/</code>: the listeners for the companion and for McpCraft.
 					<br><code>mixin/moments/</code>: the three hooks Moments needs that NeoForge has no event for.</td></tr>
 				<tr><td>reference/src/main/resources/<br>assets/dailies/web/moments.html</td><td>The moments page.</td></tr>
@@ -1048,10 +1093,10 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ A -->
 	<section id="tools">
 		<div class="chapter"><span class="no">A</span><h2>Every tool</h2><span class="owner yours">yours</span></div>
-		<p class="lede">All 70 MCP tools with their arguments. A star marks a required argument. Where an argument offers more than chapters V and VI require (extra containers or codecs, say), that part is optional.</p>
+		<p class="lede">All 71 MCP tools with their arguments. A star marks a required argument. Where an argument offers more than chapters V and VI require (extra containers or codecs, say), that part is optional.</p>
 		<details><summary><code>dailies_status</code></summary><p>Overall state of the Dailies mod: whether a recording is active/paused, whether a replay is open (current tick, total ticks, paused, tick rate), whether a video export is running (with progress), and the mod version. Call this first, and poll it after replay_open or export_start.</p><p>No arguments.</p></details>
 		<details><summary><code>config_get</code></summary><p>Get Dailies&#x27; user-facing options (recording controls, what gets recorded, export defaults, keyframe defaults, editor camera movement, marker keybinds, advanced, MCP server). Returns every option with its value and type, or just one when &#x27;key&#x27; is given.</p><div class="tablebox"><table><tbody><tr><td>key</td><td>string</td><td>Option key, eg. &#x27;quicksave&#x27; or &#x27;the marker settings.color&#x27;. Omit to get all options</td></tr></tbody></table></div></details>
-		<details><summary><code>config_set</code></summary><p>Change one of Dailies&#x27; user-facing options and save it to the config file. Use config_get to see the keys, types and current values. Changing mcpPort or mcpEnabled restarts or stops this MCP server after the reply.</p><div class="tablebox"><table><tbody><tr><td>key *</td><td>string</td><td>Option key from config_get</td></tr><tr><td>value *</td><td>any</td><td>New value: boolean, number, string, or the name of an enum constant</td></tr></tbody></table></div></details>
+		<details><summary><code>config_set</code></summary><p>Change one of Dailies&#x27; user-facing options and save it to the config file. Use config_get to see the keys, types and current values. Changing mcpPort, mcpEnabled, mcpBind, mcpToken or mcpAllowedClients restarts or stops this MCP server after the reply.</p><div class="tablebox"><table><tbody><tr><td>key *</td><td>string</td><td>Option key from config_get</td></tr><tr><td>value *</td><td>any</td><td>New value: boolean, number, string, or the name of an enum constant</td></tr></tbody></table></div></details>
 		<details><summary><code>recording_start</code></summary><p>Start recording a replay of the world/server the player is currently in. Fails if no world is open, a replay is open, or a recording is already active.</p><p>No arguments.</p></details>
 		<details><summary><code>recording_finish</code></summary><p>Finish the active recording and save it into the replay folder straight away (the Save Replay screen is not opened). Returns the path of the saved replay file.</p><div class="tablebox"><table><tbody><tr><td>name</td><td>string</td><td>Optional replay name, also used as the file name. Defaults to the current date and time</td></tr></tbody></table></div></details>
 		<details><summary><code>recording_pause</code></summary><p>Pause the active recording. Nothing is recorded until recording_resume is called.</p><p>No arguments.</p></details>
@@ -1104,11 +1149,12 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 		<details><summary><code>smart_camera_status</code></summary><p>What the smart camera is doing at the current replay time: whether one is active, its mode (and for the director the current shot and the shots so far), the subject&#x27;s position, the camera pose and FOV, where the subject is on screen (-1 to 1, 0 = centre), whether blocks are in the way and whether a vehicle or craft is framed. &#x27;applied&#x27; is false while the replay is paused: the pose is then what the camera will be when playback continues.</p><p>No arguments.</p></details>
 		<details><summary><code>moments_status</code></summary><p>State of the moments tracker: whether a session is being tracked, record counts, voice chat availability, pending transcriptions, and whether the configured Whisper and Ollama servers answer. Call this first when working with the moments_* tools.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_ignored_events</code></summary><p>Read or change the list of events that are left out of every moments query, milestone list and clip, to cut noise. An entry is an event type (block_mined), a type with a subject (mob_kill:minecraft:zombie, advancement:minecraft:story/root) or the name of a custom or server event (close_call, animal_bred). * matches anything (job_*). Ignored events are still stored: removing an entry brings them back. Saved in the mod&#x27;s config (momentsIgnoredEvents). Always returns the list as it now is.</p><div class="tablebox"><table><tbody><tr><td>action</td><td>string</td><td>list (default), add, remove, set (replace the whole list) or clear</td></tr><tr><td>entries</td><td>string[]</td><td>The entries to add, remove or set</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_voice_excluded</code></summary><p>Read or change the list of players whose voice is never captured for Moments or transcribed (momentsVoiceExcluded). An entry is a player&#x27;s name or uuid; case is ignored. Their voice is still heard live, and still recorded for playback when recordVoiceChat is on; it never reaches the dialogue log, the loudness detector or the transcription server. Takes effect at once. Segments already captured stay, but are no longer sent for transcription. Always returns the list as it now is, and where voice audio currently goes.</p><div class="tablebox"><table><tbody><tr><td>action</td><td>string</td><td>list (default), add, remove, set (replace the whole list) or clear</td></tr><tr><td>players</td><td>string[]</td><td>The players to add, remove or set: names or uuids</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_sessions_list</code></summary><p>List the recorded play sessions, newest first: id, start/end time, world or server, local player, the replays recorded during the session and record counts.</p><div class="tablebox"><table><tbody><tr><td>limit</td><td>integer</td><td>Maximum number of sessions (default 20)</td></tr></tbody></table></div></details>
-		<details><summary><code>moments_events_query</code></summary><p>Query the gameplay events of a session (mob_kill, player_kill, player_death, nearby_player_death, pet_death, biome_discovered, advancement, advancement_other, item_crafted, block_placed, block_mined, tool_first_use, dimension_entered, structure_interaction, boss_encounter, boss_defeated, milestone, marker, custom, and with McpCraft installed its job board: job_posted, job_help_asked, job_claimed, job_dropped, job_delivered, job_materials_complete, job_finished, job_removed, with the job in metadata). Every event has real time, game time, position, dimension, biome, an importance score and, when a replay was being recorded, replay_uuid and replay_tick. Kill and death events say how they were attributed in metadata.attribution (death_message, stats, heuristic, heuristic_unconfirmed).</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>type</td><td>any</td><td>Event type, or an array of types</td></tr><tr><td>subject</td><td>string</td><td>Only events with this subject, eg. an entity type id (minecraft:zombie), item id, block id, biome id or advancement id</td></tr><tr><td>first_only</td><td>boolean</td><td>Only events that were the first of their kind in this world</td></tr><tr><td>keyword</td><td>string</td><td>Only events whose type, subject or metadata contains this text (case-insensitive)</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_events_query</code></summary><p>Query the gameplay events of a session (voice_burst for laughter and shouting, with the speakers in metadata; mob_kill, player_kill, player_death, nearby_player_death, pet_death, biome_discovered, advancement, advancement_other, item_crafted, block_placed, block_mined, tool_first_use, dimension_entered, structure_interaction, boss_encounter, boss_defeated, milestone, marker, custom, and with McpCraft installed its job board: job_posted, job_help_asked, job_claimed, job_dropped, job_delivered, job_materials_complete, job_finished, job_removed, with the job in metadata). Every event has real time, game time, position, dimension, biome, an importance score and, when a replay was being recorded, replay_uuid and replay_tick. Kill and death events say how they were attributed in metadata.attribution (death_message, stats, heuristic, heuristic_unconfirmed).</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>type</td><td>any</td><td>Event type, or an array of types</td></tr><tr><td>subject</td><td>string</td><td>Only events with this subject, eg. an entity type id (minecraft:zombie), item id, block id, biome id or advancement id</td></tr><tr><td>first_only</td><td>boolean</td><td>Only events that were the first of their kind in this world</td></tr><tr><td>keyword</td><td>string</td><td>Only events whose type, subject or metadata contains this text (case-insensitive)</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_firsts</code></summary><p>First occurrences in a session, grouped by event type: first kill of each mob, first craft of each item, new biomes, new dimensions, ...</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_milestones</code></summary><p>The big moments of a session: milestones, advancements (own and other players&#x27;), boss encounters and defeats, player kills and deaths, and first entries into dimensions.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr></tbody></table></div></details>
-		<details><summary><code>moments_dialogue_query</code></summary><p>Query the voice chat segments of a session: speaker, start/end time, replay ticks, audio file, transcription status (pending, done, failed, empty) and text.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>speaker</td><td>string</td><td>Only segments of this speaker (name or uuid). Same as &#x27;player&#x27;</td></tr><tr><td>status</td><td>string</td><td>Only segments with this status: pending, done, failed or empty</td></tr></tbody></table></div></details>
+		<details><summary><code>moments_dialogue_query</code></summary><p>Query the voice chat segments of a session: speaker, start/end time, replay ticks, audio file, transcription status (pending, done, failed, empty) and text. A segment that held sound but no words (laughter, a shout) is empty with non_speech = true.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>speaker</td><td>string</td><td>Only segments of this speaker (name or uuid). Same as &#x27;player&#x27;</td></tr><tr><td>status</td><td>string</td><td>Only segments with this status: pending, done, failed or empty</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_transcripts_search</code></summary><p>Search the voice chat transcripts of a session for a word or phrase (case-insensitive). Returns the matching lines with the lines spoken around them.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>query *</td><td>string</td><td>Word or phrase to look for</td></tr><tr><td>context_lines</td><td>integer</td><td>How many lines before and after each match to include (default 2)</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_interactions_query</code></summary><p>Query who was together with whom: meetings (two players staying close), group_formed / group_changed / group_dissolved (three or more) and group_move. Includes the ones still going on (ongoing = true).</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>type</td><td>any</td><td>Interaction type, or an array of types</td></tr><tr><td>players</td><td>string[]</td><td>Only interactions that involve all of these players (names or uuids)</td></tr><tr><td>min_duration</td><td>number</td><td>Only interactions that lasted at least this many seconds</td></tr></tbody></table></div></details>
 		<details><summary><code>moments_notable</code></summary><p>The most important moments of a session, best first, each with its enriched context: what was said around it, who was there, what else happened and where.</p><div class="tablebox"><table><tbody><tr><td>session</td><td>string</td><td>Session id from moments_sessions_list, or &#x27;current&#x27; / &#x27;latest&#x27;. Default: the running session, else the latest one</td></tr><tr><td>player</td><td>string</td><td>Only records involving this player (name or uuid)</td></tr><tr><td>from</td><td>any</td><td>Only records at or after this real time: ISO-8601 or epoch millis</td></tr><tr><td>to</td><td>any</td><td>Only records at or before this real time: ISO-8601 or epoch millis</td></tr><tr><td>limit</td><td>integer</td><td>Maximum number of records to return</td></tr><tr><td>offset</td><td>integer</td><td>Number of matching records to skip (for paging)</td></tr><tr><td>min_importance</td><td>number</td><td>Only events with at least this importance (0-100, default 0)</td></tr><tr><td>type</td><td>any</td><td>Event type, or an array of types</td></tr></tbody></table></div></details>
@@ -1158,10 +1204,14 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
    "fighters":[{"name":"Dev","damage":310.0,"share":0.62},{"name":"Sam","damage":190.0,"share":0.38}],
    "seconds":94,"killer":"Dev","label":"Warden was defeated by Dev and Sam after 94 seconds","source":"server"}}
 
+{"id":"e15","type":"voice_burst","subject":"unclassified","first":false, ...,
+ "metadata":{"speakers":[{"uuid":"380df991-...","name":"Dev"},{"uuid":"7c1e...","name":"Sam"}],"peak_db":17.4,"source":"voice"},
+ "picture":"pictures/e15.jpg","picture_width":320,"picture_height":180}
+
 {"id":"e21","type":"job_finished","subject":"custom","first":true, ...,
  "metadata":{"by":"Dev","claimer":"Dev","job_id":"j1","kind":"custom","title":"Help dig the cutting",
    "creator":"Sam","private":false,"player":"Dev","roles":["actor","claimer"],"source":"mcpcraft"}}</pre>
-		<p><code>replay_uuid</code> and <code>replay_tick</code> are absent when nothing was being recorded. Queries add <code>importance</code> and <code>description</code> to each event; they are not stored.</p>
+		<p><code>replay_uuid</code> and <code>replay_tick</code> are absent when nothing was being recorded. Queries add <code>importance</code> and <code>description</code> to each event; they are not stored. <code>picture</code> and its size are there only on events that were given one (MOM-40); the path is relative to the session's folder.</p>
 
 		<h3>interactions.jsonl</h3>
 <pre>{"id":"i3","type":"meeting","players":[{"uuid":"...","name":"Dev"},{"uuid":"...","name":"Sam"}],
@@ -1182,7 +1232,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
  "audio_file":"audio/380df991-..._1794880361448.wav",
  "status":"pending","text":"","language":null,"avg_logprob":null,"no_speech_prob":null,
  "segments":[],"whisper_model":null,"attempts":0,"metadata":{}}</pre>
-		<p>Status is <code>pending</code>, <code>done</code>, <code>empty</code> or <code>failed</code>. When done, <code>text</code>, <code>language</code>, the two probabilities, <code>segments</code> (each with start, end and text) and <code>whisper_model</code> are filled in.</p>
+		<p>Status is <code>pending</code>, <code>done</code>, <code>empty</code> or <code>failed</code>. When done, <code>text</code>, <code>language</code>, the two probabilities, <code>segments</code> (each with start, end and text) and <code>whisper_model</code> are filled in. A part that was sound but not speech stays in <code>segments</code> with <code>"non_speech": true</code> and out of <code>text</code>; the record's own <code>non_speech</code> is true when it held nothing else (MOM-28).</p>
 
 		<h3>clips.json</h3>
 <pre>{

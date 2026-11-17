@@ -198,6 +198,49 @@ public final class MomentsConfig {
         return java.util.regex.Pattern.compile(regex.toString(), java.util.regex.Pattern.CASE_INSENSITIVE);
     }
 
+    // --- Players whose voice is left alone (specification MOM-36) ---
+
+    private static volatile String excludedSource = null;
+    private static volatile Set<String> excluded = Set.of();
+
+    /** The players whose voice never reaches Moments, as written: names or uuids */
+    public static java.util.List<String> voiceExcluded() {
+        java.util.List<String> entries = new java.util.ArrayList<>();
+        for (String entry : Host.get().setting("momentsVoiceExcluded", "").split("[,\\n]")) {
+            if (!entry.isBlank()) {
+                entries.add(entry.trim());
+            }
+        }
+        return entries;
+    }
+
+    /** Whether this speaker is on the list, by uuid or by name. Called for every piece of voice, so the list is parsed once */
+    public static boolean isVoiceExcluded(@org.jetbrains.annotations.Nullable String uuid, @org.jetbrains.annotations.Nullable String name) {
+        String source = Host.get().setting("momentsVoiceExcluded", "");
+        if (!source.equals(excludedSource)) {
+            Set<String> set = new LinkedHashSet<>();
+            for (String entry : voiceExcluded()) {
+                set.add(entry.toLowerCase(Locale.ROOT));
+            }
+            excluded = set;
+            excludedSource = source;
+        }
+        Set<String> set = excluded;
+        if (set.isEmpty()) {
+            return false;
+        }
+        return (uuid != null && set.contains(uuid.toLowerCase(Locale.ROOT))) || (name != null && set.contains(name.toLowerCase(Locale.ROOT)));
+    }
+
+    public static void setVoiceExcluded(java.util.Collection<String> entries) {
+        Host.get().saveSetting("momentsVoiceExcluded", String.join(", ", entries));
+    }
+
+    /** Whether a small picture of the screen is kept with each big event (plan 2.11) */
+    public static boolean eventPictures() {
+        return Host.get().setting("momentsEventPictures", true);
+    }
+
     /** Replaces the ignore list and saves the config file */
     public static void setIgnoredEvents(java.util.Collection<String> entries) {
         Host.get().saveSetting("momentsIgnoredEvents", String.join(", ", entries));
