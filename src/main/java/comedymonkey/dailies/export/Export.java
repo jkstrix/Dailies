@@ -248,6 +248,9 @@ public final class Export {
         startedNanos = System.nanoTime();
         active = true;
 
+        // An export draws each frame once and moves on: nothing should make it wait for the monitor or a frame limit
+        window.updateVsync(false);
+        window.setFramerateLimit(260);
         minecraft.options.hideGui = wanted.hideGui || !scene.looks().showHud;
         window.setWidth(wanted.width * scale);
         window.setHeight(wanted.height * scale);
@@ -447,6 +450,8 @@ public final class Export {
                 }
             }
         }
+        minecraft.getWindow().updateVsync(minecraft.options.enableVsync().get());
+        minecraft.getWindow().setFramerateLimit(minecraft.options.framerateLimit().get());
         // Said last: by the time anyone hears the export is over, playback is already on its way back
         active = false;
     }

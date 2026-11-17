@@ -108,7 +108,7 @@ final class OwnerFeatureSteps {
         test.waitFor(() -> !Playback.jumping(), 30, "the jump to the clip");
         check(Playback.paused(), "cueing a clip did not leave the recording paused");
         int cuedAt = Playback.position();
-        check(cuedAt > 0, "cueing a clip did not jump to it");
+        check(cuedAt > 0, "cueing a clip did not jump to it (" + shorten(cued.toString()) + ", error " + Playback.lastError() + ")");
         boolean hasSmartCamera = test.onClient(() -> EditorSession.scene().tracks().stream().anyMatch(track -> track.kind() == KeyframeKind.SMART_CAMERA && !track.keyframes().isEmpty()));
         check(hasSmartCamera, "cueing with a camera did not add a Smart Camera track");
         test.tool("editor_undo", none);

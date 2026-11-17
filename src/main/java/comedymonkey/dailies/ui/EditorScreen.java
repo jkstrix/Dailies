@@ -101,6 +101,33 @@ public final class EditorScreen extends Screen {
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> watch());
         ViewPick.init();
         ExportProgress.hook();
+        // The editor is the way a recording is watched and worked on, so it is there as soon as one opens. The scripted
+        // test runs drive the game through its tools and put the editor up themselves when they want it
+        Playback.onOpened(() -> {
+            String script = System.getProperty("dailies.test.script");
+            if (script == null || script.equals("hands-on")) {
+                open();
+            }
+        });
+    }
+
+    /**
+     * The editor has a lot on it, and at the size the game draws its own menus on a large window there is no room left
+     * for the view. So it is drawn at a size of its own: the largest that still leaves it about 900 by 500 to work in,
+     * and never larger than the game's.
+     */
+    private void fitScale() {
+        com.mojang.blaze3d.platform.Window window = this.minecraft.getWindow();
+        int scale = Math.min(usualScale(this.minecraft), Math.max(1, Math.min(window.getWidth() / 900, window.getHeight() / 500)));
+        if (scale != (int) window.getGuiScale()) {
+            window.setGuiScale(scale);
+        }
+        this.width = window.getGuiScaledWidth();
+        this.height = window.getGuiScaledHeight();
+    }
+
+    private static int usualScale(Minecraft minecraft) {
+        return minecraft.getWindow().calculateScale(minecraft.options.guiScale().get(), minecraft.isEnforceUnicode());
     }
 
     /** Puts the editor on screen */
@@ -175,6 +202,7 @@ public final class EditorScreen extends Screen {
     @Override
     protected void init() {
         try {
+            this.fitScale();
             this.build();
         } catch (RuntimeException | LinkageError e) {
             Host.LOGGER.error("Dailies: the editor could not be built", e);
@@ -349,6 +377,13 @@ public final class EditorScreen extends Screen {
         Menu.close();
         this.held = null;
         this.stopFlying();
+        if (this.minecraft != null) {
+            // Whatever comes next is drawn at the game's own size
+            int usual = usualScale(this.minecraft);
+            if (usual != (int) this.minecraft.getWindow().getGuiScale()) {
+                this.minecraft.getWindow().setGuiScale(usual);
+            }
+        }
         if (!wanted || swapping) {
             return;
         }
@@ -958,14 +993,20 @@ public final class EditorScreen extends Screen {
                 && InputConstants.isKeyDown(this.minecraft.getWindow().getWindow(), bound.getValue());
     }
 
-    /** Once a frame while the right button is held: turn by what the mouse moved and fly by the movement keys */
+    /**
+     * Once a frame. The movement keys fly the camera whenever nothing is being typed; holding the right button over the
+     * view also turns it by what the mouse moves.
+     */
     private void fly() {
-        if (!this.flying) {
-            return;
-        }
         long window = this.minecraft.getWindow().getWindow();
-        if (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_RIGHT) != GLFW.GLFW_PRESS || !this.minecraft.isWindowActive() || Viewer.riding() != null) {
+        if (this.flying && (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_RIGHT) != GLFW.GLFW_PRESS || !this.minecraft.isWindowActive() || Viewer.riding() != null)) {
             this.stopFlying();
+        }
+        boolean keys = this.flying || (Entry.focused == null && Menu.open == null && !Screen.hasControlDown() && !Screen.hasAltDown()
+            && Viewer.riding() == null && this.minecraft.isWindowActive());
+        if (!keys) {
+            this.velocity = Vec3.ZERO;
+            this.lastNanos = 0;
             return;
         }
         long now = System.nanoTime();
@@ -975,14 +1016,18 @@ public final class EditorScreen extends Screen {
         Options options = this.minecraft.options;
         double forward = (this.down(options.keyUp) ? 1 : 0) - (this.down(options.keyDown) ? 1 : 0);
         double strafe = (this.down(options.keyLeft) ? 1 : 0) - (this.down(options.keyRight) ? 1 : 0);
-        double lift = (this.down(options.keyJump) ? 1 : 0) - (this.down(options.keyShift) ? 1 : 0);
+        // Shift is also held to choose several things with the mouse, which must not sink the camera
+        boolean choosing = !this.flying && GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+        double lift = (this.down(options.keyJump) ? 1 : 0) - (this.down(options.keyShift) && !choosing ? 1 : 0);
         boolean moving = forward != 0.0 || strafe != 0.0 || lift != 0.0;
         // How far the hidden pointer has moved since the last frame, in the mouse's own measure
         double mouseX = this.minecraft.mouseHandler.xpos();
         double mouseY = this.minecraft.mouseHandler.ypos();
         double turnX = 0.0;
         double turnY = 0.0;
-        if (this.turnSettling > 0) {
+        if (!this.flying) {
+            // The pointer is free and in use: only the keys move the camera
+        } else if (this.turnSettling > 0) {
             this.turnSettling--;
         } else {
             turnX = Mth.clamp(mouseX - this.lastMouseX, -400.0, 400.0);

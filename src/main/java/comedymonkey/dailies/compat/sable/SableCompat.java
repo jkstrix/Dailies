@@ -98,6 +98,11 @@ public final class SableCompat implements Host.Crafts {
             }
 
             @Override
+            public boolean needsNewWorld() {
+                return compat.anyCraft();
+            }
+
+            @Override
             public void reset() {
                 compat.removeAll();
                 compat.recordedPoses.clear();
@@ -285,6 +290,16 @@ public final class SableCompat implements Host.Crafts {
         }
     }
 
+    private boolean anyCraft() {
+        try {
+            ClientLevel level = Minecraft.getInstance().level;
+            Object container = level == null ? null : this.getContainer.invoke(null, level);
+            return container != null && !((Collection<?>) this.getAllSubLevels.invoke(container)).isEmpty();
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
     private void removeAll() {
         try {
             ClientLevel level = Minecraft.getInstance().level;
@@ -294,6 +309,17 @@ public final class SableCompat implements Host.Crafts {
             }
             for (Object subLevel : new ArrayList<>((Collection<?>) this.getAllSubLevels.invoke(container))) {
                 this.removeSubLevel.invoke(container, subLevel, this.removedReason);
+            }
+            // The world may be kept across a jump. Sable's clock for smoothing motion is then put back as it is in a
+            // new world, or it would carry on from the moment that was left
+            Object clock = this.getInterpolation.invoke(container);
+            Object fresh = clock.getClass().getDeclaredConstructor().newInstance();
+            for (Field field : clock.getClass().getDeclaredFields()) {
+                int modifiers = field.getModifiers();
+                if (!java.lang.reflect.Modifier.isStatic(modifiers) && !java.lang.reflect.Modifier.isFinal(modifiers)) {
+                    field.setAccessible(true);
+                    field.set(clock, field.get(fresh));
+                }
             }
         } catch (Throwable t) {
             failOnce("clearing craft before a jump", t);

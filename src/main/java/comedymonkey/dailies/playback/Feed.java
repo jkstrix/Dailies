@@ -44,6 +44,28 @@ final class Feed {
     private final Set<String> warned = new HashSet<>();
     boolean skipping = false;
 
+    // --- Going back without rebuilding the world ---
+    // A jump back used to throw the whole world away and build it again from the snapshot, which blanks the screen and
+    // makes the game draw every chunk afresh. Now the world is kept: everything that moves is taken out and put back as
+    // the snapshot has it, and only the chunks that have changed since they were last built are built again.
+
+    /** For each chunk, the name of the stored chunk it was built from, for as long as nothing has changed it since */
+    private final java.util.Map<Long, String> cleanChunks = new java.util.HashMap<>();
+    /** Every chunk the world holds */
+    private final Set<Long> loadedChunks = new HashSet<>();
+    /** Which chunk each stored chunk is, learned the first time it is read */
+    private final java.util.Map<String, Long> chunkOfStored = new java.util.HashMap<>();
+    /** True while a snapshot is being read by {@link #load} */
+    private boolean loading = false;
+    /** The world that was open when the snapshot began can be kept, if the snapshot turns out to be of the same place */
+    private boolean mayRewind = false;
+    /** The world has been kept, and emptied of everything that moves */
+    private boolean rewound = false;
+    /** The chunks the snapshot being read has, when the world is being kept */
+    private Set<Long> snapshotChunks = null;
+    /** The name of the stored packet being applied right now, or null */
+    private String storedNow = null;
+
     Feed(RecordingFile file) {
         this.file = file;
         this.segments = file.segments();
@@ -111,7 +133,76 @@ final class Feed {
         this.ticksOwed = 0;
         this.reader = new Records.Reader(this.file.openSegment(segment.number));
 
+        this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild")
+            && (Boolean.getBoolean("dailies.playback.keepModdedWorld") || (this.plainWorld(minecraft) && this.plainSnapshot(segment)));
         PlaybackExtensions.resetAll();
+        this.rewound = false;
+        this.snapshotChunks = null;
+        if (!this.mayRewind) {
+            this.rebuild(minecraft);
+        }
+        // Everything up to the first tick record is the snapshot and whatever happened on its own tick
+        this.loading = true;
+        try {
+            while (this.reader.next()) {
+                if (this.reader.kind() == Records.TICK) {
+                    this.ticksOwed += this.reader.number();
+                    break;
+                }
+                if (this.reader.kind() == Records.SNAPSHOT_END) {
+                    this.dropChunksNotInSnapshot();
+                }
+                this.handle(minecraft);
+            }
+            this.dropChunksNotInSnapshot();
+        } finally {
+            this.loading = false;
+            this.mayRewind = false;
+            this.rewound = false;
+            this.snapshotChunks = null;
+        }
+        if (this.session == null) {
+            throw new IOException("Segment " + segment.number + " of the recording does not start with a description of its world");
+        }
+    }
+
+    // Keeping the world is proven for what the game itself puts in it. Machines from mods (a turning contraption, a
+    // physics craft) keep state of their own on the world, and the things they carry have been seen to land up to a
+    // block out after a jump into a kept world. Until that is understood, a world or a snapshot with any of them in
+    // it is built from nothing, as before.
+
+    private boolean plainWorld(Minecraft minecraft) {
+        if (PlaybackExtensions.anyNeedsNewWorld()) {
+            return false;
+        }
+        for (net.minecraft.world.entity.Entity entity : minecraft.level.entitiesForRendering()) {
+            if (!net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getNamespace().equals("minecraft")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** No mod has put a message of its own in the snapshot: a mod's entity arrives with one, and so does a craft */
+    private boolean plainSnapshot(RecordingManifest.Segment segment) {
+        try (Records.Reader start = new Records.Reader(this.file.openSegment(segment.number))) {
+            while (start.next()) {
+                int kind = start.kind();
+                if (kind == Records.TICK || kind == Records.SNAPSHOT_END) {
+                    return true;
+                }
+                if (kind == Records.PAYLOAD) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Throws the world away, to be built again from nothing by the snapshot being read */
+    private void rebuild(Minecraft minecraft) {
         if (minecraft.level != null) {
             minecraft.clearClientLevel(new net.minecraft.client.gui.screens.GenericMessageScreen(net.minecraft.network.chat.Component.translatable("dailies.playback.jumping")));
         }
@@ -119,16 +210,180 @@ final class Feed {
             this.session.close();
             this.session = null;
         }
-        // Everything up to the first tick record is the snapshot and whatever happened on its own tick
-        while (this.reader.next()) {
-            if (this.reader.kind() == Records.TICK) {
-                this.ticksOwed += this.reader.number();
-                break;
-            }
-            this.handle(minecraft);
+        this.mayRewind = false;
+        this.rewound = false;
+        this.snapshotChunks = null;
+        this.cleanChunks.clear();
+        this.loadedChunks.clear();
+    }
+
+    /**
+     * The snapshot's first packet, the one that makes a world. When the world that is open is the one it describes, the
+     * world is kept and emptied instead.
+     *
+     * @return true when the world was kept, and the packet must not be applied
+     */
+    private boolean keepWorld(ClientboundLoginPacket login, Minecraft minecraft) {
+        if (!this.loading) {
+            return false;
         }
-        if (this.session == null) {
-            throw new IOException("Segment " + segment.number + " of the recording does not start with a description of its world");
+        if (this.mayRewind && minecraft.level != null && minecraft.player != null
+            && minecraft.level.dimension().equals(login.commonPlayerSpawnInfo().dimension())) {
+            try {
+                this.emptyWorld(minecraft);
+                this.rewound = true;
+                this.snapshotChunks = new HashSet<>();
+                return true;
+            } catch (Throwable t) {
+                this.warnOnce("going back without rebuilding the world", t);
+            }
+        }
+        if (minecraft.level != null) {
+            // Another dimension, or the world could not be emptied: build from nothing, with a connection of its own
+            String name = this.session.worldName;
+            this.rebuild(minecraft);
+            try {
+                this.session = Session.create(minecraft, name, WorldData.fromBytes(this.file.shared(name)));
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+        return false;
+    }
+
+    /** Takes out of the kept world everything a snapshot puts in: whatever is left afterwards would be there twice */
+    private void emptyWorld(Minecraft minecraft) {
+        net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
+        net.minecraft.client.multiplayer.ClientPacketListener listener = this.session.listener;
+        it.unimi.dsi.fastutil.ints.IntArrayList ids = new it.unimi.dsi.fastutil.ints.IntArrayList();
+        for (net.minecraft.world.entity.Entity entity : level.entitiesForRendering()) {
+            if (entity != minecraft.player) {
+                ids.add(entity.getId());
+            }
+        }
+        if (!ids.isEmpty()) {
+            new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(ids).handle(listener);
+        }
+        List<java.util.UUID> listed = new ArrayList<>();
+        for (net.minecraft.client.multiplayer.PlayerInfo info : listener.getOnlinePlayers()) {
+            if (!info.getProfile().getId().equals(Session.VIEWER.getId())) {
+                listed.add(info.getProfile().getId());
+            }
+        }
+        if (!listed.isEmpty()) {
+            new net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket(listed).handle(listener);
+        }
+        net.minecraft.world.scores.Scoreboard scoreboard = level.getScoreboard();
+        for (net.minecraft.world.scores.Objective objective : new ArrayList<>(scoreboard.getObjectives())) {
+            scoreboard.removeObjective(objective);
+        }
+        for (net.minecraft.world.scores.PlayerTeam team : new ArrayList<>(scoreboard.getPlayerTeams())) {
+            scoreboard.removePlayerTeam(team);
+        }
+        minecraft.gui.getBossOverlay().reset();
+        minecraft.gui.getChat().clearMessages(false);
+        new net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(true).handle(listener);
+        // The snapshot says how hard it is raining, and that it has begun when it has; never that it has stopped
+        level.getLevelData().setRaining(false);
+    }
+
+    /** At the end of a snapshot read into a kept world: chunks the world holds that the snapshot does not have go */
+    private void dropChunksNotInSnapshot() {
+        if (!this.rewound || this.snapshotChunks == null || this.session == null) {
+            return;
+        }
+        Set<Long> kept = this.snapshotChunks;
+        this.snapshotChunks = null;
+        for (long key : new ArrayList<>(this.loadedChunks)) {
+            if (!kept.contains(key)) {
+                try {
+                    new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(new net.minecraft.world.level.ChunkPos(key)).handle(this.session.listener);
+                } catch (Throwable t) {
+                    this.warnOnce("dropping a chunk when going back", t);
+                }
+                this.loadedChunks.remove(key);
+                this.cleanChunks.remove(key);
+            }
+        }
+    }
+
+    /** Whether a stored chunk in a snapshot is what the kept world already has in that place, untouched */
+    private boolean alreadyThere(String stored, Minecraft minecraft) {
+        if (!this.rewound || this.snapshotChunks == null) {
+            return false;
+        }
+        Long key = this.chunkOfStored.get(stored);
+        if (key == null || !stored.equals(this.cleanChunks.get(key)) || minecraft.level == null) {
+            return false;
+        }
+        net.minecraft.world.level.chunk.LevelChunk chunk = minecraft.level.getChunkSource().getChunk(net.minecraft.world.level.ChunkPos.getX(key),
+            net.minecraft.world.level.ChunkPos.getZ(key), net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false);
+        // Machines change in ways no packet shows, so a chunk with any in it is always built again
+        if (chunk == null || !chunk.getBlockEntities().isEmpty()) {
+            return false;
+        }
+        this.snapshotChunks.add(key);
+        return true;
+    }
+
+    /** Keeps count of which chunks the world holds and which have changed since they were built */
+    private void track(Packet<?> packet, Minecraft minecraft) {
+        if (packet instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket chunk) {
+            if (minecraft.level != null && comedymonkey.dailies.Host.crafts().isInPlot(minecraft.level, chunk.getX() * 16.0 + 8.0, chunk.getZ() * 16.0 + 8.0)) {
+                // Part of a physics craft, which is taken out and put back whole
+                return;
+            }
+            long key = net.minecraft.world.level.ChunkPos.asLong(chunk.getX(), chunk.getZ());
+            this.loadedChunks.add(key);
+            if (this.storedNow != null) {
+                this.cleanChunks.put(key, this.storedNow);
+                this.chunkOfStored.put(this.storedNow, key);
+            } else {
+                this.cleanChunks.remove(key);
+            }
+            if (this.snapshotChunks != null) {
+                this.snapshotChunks.add(key);
+            }
+        } else if (this.cleanChunks.isEmpty()) {
+            if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
+                this.loadedChunks.remove(forgotten.pos().toLong());
+            }
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket update) {
+            this.changed(update.getPos(), true);
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket updates) {
+            updates.runUpdates((pos, state) -> this.changed(pos, true));
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket data) {
+            this.changed(data.getPos(), false);
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockEventPacket event) {
+            this.changed(event.getPos(), false);
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
+            this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
+            this.loadedChunks.remove(forgotten.pos().toLong());
+            this.cleanChunks.remove(forgotten.pos().toLong());
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket biomes) {
+            biomes.chunkBiomeData().forEach(data -> this.cleanChunks.remove(data.pos().toLong()));
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundExplodePacket explosion) {
+            explosion.getToBlow().forEach(pos -> this.changed(pos, true));
+        } else if (packet instanceof ClientboundBundlePacket bundle) {
+            bundle.subPackets().forEach(part -> this.track(part, minecraft));
+        }
+    }
+
+    /**
+     * @param spreads whether the change can alter the light, which reaches into the chunks next door
+     */
+    private void changed(net.minecraft.core.BlockPos pos, boolean spreads) {
+        int x = pos.getX() >> 4;
+        int z = pos.getZ() >> 4;
+        if (!spreads) {
+            this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(x, z));
+            return;
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(x + dx, z + dz));
+            }
         }
     }
 
@@ -201,8 +456,17 @@ final class Feed {
         switch (this.reader.kind()) {
             case Records.PACKET -> this.packet(this.reader.payload(), 0, this.reader.length(), minecraft);
             case Records.SHARED_PACKET -> {
-                byte[] shared = this.file.shared(HexFormat.of().formatHex(this.reader.payload(), 0, this.reader.length()));
-                this.packet(shared, 0, shared.length, minecraft);
+                String stored = HexFormat.of().formatHex(this.reader.payload(), 0, this.reader.length());
+                if (this.alreadyThere(stored, minecraft)) {
+                    return;
+                }
+                byte[] shared = this.file.shared(stored);
+                this.storedNow = this.bundle == null ? stored : null;
+                try {
+                    this.packet(shared, 0, shared.length, minecraft);
+                } finally {
+                    this.storedNow = null;
+                }
             }
             case Records.PAYLOAD -> {
                 String id = this.reader.name();
@@ -220,7 +484,10 @@ final class Feed {
             case Records.WORLD -> {
                 String name = HexFormat.of().formatHex(this.reader.payload(), 0, this.reader.length());
                 if (this.session == null || !this.session.worldName.equals(name)) {
-                    if (this.session != null) {
+                    if (this.loading) {
+                        // Other registries: nothing of the world that is open can be kept
+                        this.rebuild(minecraft);
+                    } else if (this.session != null) {
                         this.session.close();
                     }
                     this.session = Session.create(minecraft, name, WorldData.fromBytes(this.file.shared(name)));
@@ -273,7 +540,11 @@ final class Feed {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void apply(Packet<? super ClientGamePacketListener> packet, Minecraft minecraft) {
+        if (packet instanceof ClientboundLoginPacket login && this.keepWorld(login, minecraft)) {
+            return;
+        }
         try {
+            this.track(packet, minecraft);
             ((Packet) packet).handle(this.session.listener);
             if (packet instanceof ClientboundLoginPacket) {
                 // The viewer is a spectator who is in nobody's tab list

@@ -61,7 +61,12 @@ public final class SelfTest {
                 return;
             }
             if ("hands-on".equals(System.getProperty(PROPERTY))) {
-                this.handsOn();
+                try {
+                    this.handsOn();
+                } catch (Throwable t) {
+                    // A hands-on run never closes the game on the person at the controls
+                    Host.LOGGER.warn("Dailies hands-on: the script stopped early; the game is yours", t);
+                }
                 return;
             }
             this.checkMcp();
@@ -103,6 +108,11 @@ public final class SelfTest {
             int seconds = left;
             Minecraft.getInstance().execute(() -> comedymonkey.dailies.ui.Notices.show(net.minecraft.network.chat.Component.literal(seconds + " seconds of recording left")));
             Thread.sleep(10_000);
+            if (comedymonkey.dailies.capture.Recorder.get().recordingId() == null) {
+                // The person finished the recording, or left the world, themselves; the game is theirs from here
+                this.log("the recording was ended by hand; the game is yours");
+                return;
+            }
         }
         JsonObject saved = this.tool("recording_finish", args("name", "Hands on"));
         this.tool("replay_open", args("path", saved.get("path").getAsString()));

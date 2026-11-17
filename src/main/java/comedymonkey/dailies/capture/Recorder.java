@@ -197,7 +197,7 @@ public final class Recorder {
         this.partBeginsSegment = false;
         this.sharedSent.clear();
         this.warnedPayloads.clear();
-        this.segmentTicks = Math.max(20, Integer.getInteger("dailies.test.segmentTicks", DEFAULT_SEGMENT_TICKS));
+        this.segmentTicks = Math.max(20, Integer.getInteger("dailies.test.segmentTicks", Host.get().setting("snapshotSeconds", DEFAULT_SEGMENT_TICKS / 20) * 20));
         this.tick = 0;
         this.id = manifest.id;
         this.waitingForSnapshot = true;

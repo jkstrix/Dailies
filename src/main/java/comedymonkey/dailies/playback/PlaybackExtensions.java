@@ -19,6 +19,11 @@ public final class PlaybackExtensions {
         default void reset() {
         }
 
+        /** Whether the world as it stands holds something of this extension's that cannot be carried across a jump back */
+        default boolean needsNewWorld() {
+            return false;
+        }
+
         /** A jump has arrived and the world stands still at its tick: put right anything that only settles over time */
         default void arrived() {
         }
@@ -45,6 +50,19 @@ public final class PlaybackExtensions {
                 Host.LOGGER.warn("Dailies: an extension could not settle after a jump", t);
             }
         });
+    }
+
+    static boolean anyNeedsNewWorld() {
+        for (Extension extension : EXTENSIONS.values()) {
+            try {
+                if (extension.needsNewWorld()) {
+                    return true;
+                }
+            } catch (Throwable t) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static void resetAll() {

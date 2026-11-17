@@ -162,7 +162,10 @@ public final class ExportProgress extends Screen {
     private static void plate(GuiGraphics graphics, Font font, int wide, int high, float unit) {
         int width = Math.min(PLATE_WIDTH, Math.max(120, wide - 8));
         int left = (wide - width) / 2;
-        int top = Math.max(2, high - PLATE_HEIGHT - 8);
+        // The picture being exported is not shown: nobody should have to sit through the video to get the video
+        graphics.fill(0, 0, wide + 1, high + 1, 0xFF17100A);
+        int top = Math.max(16, (high - PLATE_HEIGHT) / 2);
+        Kit.centred(graphics, font, Kit.t("progress.title").getString(), left, top - 13, width, Controls.BRASS_BRIGHT);
         graphics.fill(left, top, left + width, top + PLATE_HEIGHT, 0xF02B1D0E);
         graphics.renderOutline(left, top, width, PLATE_HEIGHT, Controls.BRASS_BRIGHT);
 
