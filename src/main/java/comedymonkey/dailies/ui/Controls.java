@@ -299,6 +299,22 @@ public final class Controls {
         watching(EditorScreen::open);
     }
 
+    /**
+     * Opens the moments page in the person's web browser. The page is served by the mod's own local server, so there
+     * is nothing to open while that is switched off; the notice says how to switch it on.
+     */
+    public static void openMomentsPage() {
+        guarded(() -> {
+            int port = comedymonkey.dailies.mcp.McpHttpServer.getListeningPort();
+            if (port <= 0) {
+                tell(Component.translatable("dailies.ui.notice.moments_page_off"));
+                return;
+            }
+            net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
+            tell(Component.translatable("dailies.ui.notice.moments_page_opened"));
+        });
+    }
+
     /** Says something to the person: in the editor when it is open, where its top bar would cover a notice, else as a notice */
     static void tell(Component words) {
         EditorState.say(words);

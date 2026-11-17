@@ -301,6 +301,7 @@ public final class EditorScreen extends Screen {
             String what = EditorState.history().redoDescription();
             return what == null ? Component.translatable("dailies.ui.notice.nothing_to_redo") : Kit.t("redo.tip", what);
         }).when(() -> EditorState.history().canRedo()));
+        this.top.add(new Gadget.Push(Component.translatable("dailies.ui.pause.moments"), Controls::openMomentsPage).tip(Component.translatable("dailies.ui.moments.tip")));
         this.top.add(new Gadget.Push(Kit.t("close"), this::onClose).tip(Kit.t("close.tip")));
     }
 

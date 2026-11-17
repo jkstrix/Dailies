@@ -73,6 +73,8 @@ public final class Screens {
                 button.active = false;
                 Playback.close();
             })).bounds(x, y, width, 20).build());
+            y += 24;
+            event.addListener(momentsButton(x, y, width));
             return;
         }
 
@@ -95,6 +97,14 @@ public final class Screens {
             y += 24;
         }
         event.addListener(Button.builder(Component.translatable("dailies.ui.pause.recordings"), button -> minecraft.setScreen(new RecordingsScreen(pause))).bounds(x, y, width, 20).build());
+        y += 24;
+        event.addListener(momentsButton(x, y, width));
+    }
+
+    /** Opens the moments page in the web browser */
+    private static Button momentsButton(int x, int y, int width) {
+        return Button.builder(Component.translatable("dailies.ui.pause.moments"), button -> Controls.openMomentsPage())
+            .bounds(x, y, width, 20).tooltip(Tooltip.create(Component.translatable("dailies.ui.moments.tip"))).build();
     }
 
     // --- The title screen ---
@@ -116,6 +126,7 @@ public final class Screens {
             y = language.getY() - 24;
         }
         event.addListener(new ReelButton(x, y, Component.translatable("dailies.ui.title.recordings"), button -> minecraft.setScreen(new RecordingsScreen(title))));
+        event.addListener(new MomentsButton(x, y - 24, Component.translatable("dailies.ui.title.moments"), button -> Controls.openMomentsPage()));
 
         if (!lookedForUnfinished && !SelfTest.asked()) {
             lookedForUnfinished = true;
@@ -141,6 +152,27 @@ public final class Screens {
         unfinished = null;
         if (!found.isEmpty()) {
             minecraft.setScreen(new RecoveryScreen(found, title));
+        }
+    }
+
+    /** A square button with a drawn picture in place of words: a list of three moments, each a brass dot and a line */
+    private static final class MomentsButton extends Button {
+
+        MomentsButton(int x, int y, Component label, OnPress onPress) {
+            super(x, y, 20, 20, label, onPress, DEFAULT_NARRATION);
+            this.setTooltip(Tooltip.create(label));
+        }
+
+        @Override
+        public void renderString(GuiGraphics graphics, Font font, int colour) {
+            int left = this.getX() + 5;
+            int top = this.getY() + 5;
+            int brass = this.active ? Controls.BRASS_BRIGHT : Controls.BRASS;
+            for (int row = 0; row < 3; row++) {
+                int y = top + row * 4;
+                graphics.fill(left, y, left + 2, y + 2, brass);
+                graphics.fill(left + 4, y, left + 10 - row * 2, y + 2, Controls.PARCHMENT);
+            }
         }
     }
 
