@@ -43,6 +43,13 @@ neoForge {
             systemProperty 'dailies.test.segmentTicks', '100'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
+        // For judging by eye (TEST-3): the test world, sixty seconds at the controls while recording, then the recording open in playback
+        handsOn {
+            client()
+            gameDirectory = file('run-test')
+            systemProperty 'dailies.test.script', 'hands-on'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
         // The same scripted run with the built jar (not the dev classes) beside the other mods it has to work with:
         // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1)
         testModded {

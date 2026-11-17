@@ -246,6 +246,29 @@ public final class Playback {
         }
     }
 
+    private static final List<Runnable> ON_OPENED = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static final List<Runnable> ON_CLOSING = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Something to run on the client thread each time a recording has finished opening */
+    public static void onOpened(Runnable listener) {
+        ON_OPENED.add(listener);
+    }
+
+    /** Something to run on the client thread each time the open recording is about to be closed, while its file is still open */
+    public static void onClosing(Runnable listener) {
+        ON_CLOSING.add(listener);
+    }
+
+    private static void tell(List<Runnable> listeners) {
+        for (Runnable listener : listeners) {
+            try {
+                listener.run();
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: a part of the mod failed when a recording opened or closed", t);
+            }
+        }
+    }
+
     /** Runs something on the client thread once the recording that is opening has loaded, or at once if one has */
     public static void whenLoaded(Runnable action) {
         if (loaded && !jumping()) {
@@ -331,6 +354,7 @@ public final class Playback {
     private static void openNow(Minecraft minecraft, Path path) throws Exception {
         if (file != null) {
             // Another recording is open: swap it out without going back to the title screen
+            tell(ON_CLOSING);
             comedymonkey.dailies.editor.EditorSession.closing();
             feed.close();
             file.close();
@@ -389,6 +413,7 @@ public final class Playback {
         settle(minecraft);
         loaded = true;
         Host.LOGGER.info("Dailies: opened recording {} ({} ticks)", path.getFileName(), total);
+        tell(ON_OPENED);
     }
 
     private static boolean exporting = false;
@@ -527,6 +552,9 @@ public final class Playback {
     }
 
     private static void cleanUp() {
+        if (file != null) {
+            tell(ON_CLOSING);
+        }
         loaded = false;
         try {
             comedymonkey.dailies.editor.EditorSession.closing();

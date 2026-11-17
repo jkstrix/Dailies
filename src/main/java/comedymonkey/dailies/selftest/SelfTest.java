@@ -54,6 +54,10 @@ public final class SelfTest {
         String result;
         try {
             this.waitForGame();
+            if ("hands-on".equals(System.getProperty(PROPERTY))) {
+                this.handsOn();
+                return;
+            }
             this.checkMcp();
             WorldSteps.createWorld(this);
             RecordingSteps.run(this);
@@ -82,6 +86,21 @@ public final class SelfTest {
         } else {
             System.exit(1);
         }
+    }
+
+    /** TEST-3: place the test world, give the person sixty seconds at the controls while recording, and leave the recording open */
+    private void handsOn() throws Exception {
+        WorldSteps.createWorld(this);
+        this.tool("recording_start", new JsonObject());
+        this.log("recording: you have sixty seconds at the controls");
+        for (int left = 60; left > 0; left -= 10) {
+            int seconds = left;
+            Minecraft.getInstance().execute(() -> comedymonkey.dailies.ui.Notices.show(net.minecraft.network.chat.Component.literal(seconds + " seconds of recording left")));
+            Thread.sleep(10_000);
+        }
+        JsonObject saved = this.tool("recording_finish", args("name", "Hands on"));
+        this.tool("replay_open", args("path", saved.get("path").getAsString()));
+        this.log("the recording is open in playback; the game is yours");
     }
 
     /** The game has finished its loading screen and the MCP server is answering */

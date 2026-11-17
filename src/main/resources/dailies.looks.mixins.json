@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "comedymonkey.dailies.mixin.looks",
+  "compatibilityLevel": "JAVA_21",
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

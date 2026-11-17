@@ -211,7 +211,19 @@ public class McpProtocol {
         }
     }
 
+    /** Unknown argument names are refused with the list of valid ones (specification MCP-5) */
+    private static void checkArgumentNames(McpTool tool, McpArgs args) {
+        JsonObject properties = tool.inputSchema().getAsJsonObject("properties");
+        java.util.Set<String> known = properties == null ? java.util.Set.of() : new java.util.TreeSet<>(properties.keySet());
+        for (String name : args.names()) {
+            if (!known.contains(name)) {
+                throw new McpToolException("Unknown argument '" + name + "'. " + (known.isEmpty() ? "This tool takes no arguments" : "Valid arguments: " + String.join(", ", known)));
+            }
+        }
+    }
+
     private JsonElement runTool(McpTool tool, McpArgs args) throws Exception {
+        checkArgumentNames(tool, args);
         if (tool.thread() == McpTool.ThreadMode.HTTP) {
             return tool.handler().call(args);
         }

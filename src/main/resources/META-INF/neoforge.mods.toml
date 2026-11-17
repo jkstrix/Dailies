@@ -15,6 +15,15 @@ config = "dailies.mixins.json"
 [[mixins]]
 config = "dailies.sable.mixins.json"
 
+[[mixins]]
+config = "dailies.extras.mixins.json"
+
+[[mixins]]
+config = "dailies.sound.mixins.json"
+
+[[mixins]]
+config = "dailies.looks.mixins.json"
+
 [[dependencies.dailies]]
 modId = "neoforge"
 type = "required"
