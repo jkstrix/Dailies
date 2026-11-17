@@ -98,7 +98,9 @@ public final class SelfTest {
             // First, while nothing else has been recorded: it makes a recording of its own and puts it aside for later
             WatchingSteps.record(this);
             MomentsExtrasSteps.run(this);
+            PointOfViewSteps.beforeCraft(this);
             RecordingSteps.run(this);
+            PointOfViewSteps.craftMoments(this);
             // A switch for running everything else while a fault in the pack step is being looked into
             if (!Boolean.getBoolean("dailies.test.skipPacks")) {
                 ResourcePackSteps.record(this);
@@ -120,6 +122,7 @@ public final class SelfTest {
                 ResourcePackSteps.play(this);
             }
             WatchingSteps.watch(this);
+            PointOfViewSteps.run(this);
             if (Boolean.getBoolean("dailies.test.bestiary")) {
                 // About ten minutes by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiary
                 BestiarySteps.run(this);

@@ -293,7 +293,8 @@ final class CraftSteps {
         int before = crafts(minecraft);
         // A region tight around the balloon, from the basket floor up: a loose one takes in whatever is nearby as a second
         // object, and the floor under the basket is dead weight
-        test.command("sable assemble area " + origin.getX() + " " + (origin.getY() + 1) + " " + origin.getZ() + " "
+        // Typed by the player, as in play, so that the game sees the assembly and logs it as a craft moment (plan 2.1)
+        PointOfViewSteps.typed(test, "sable assemble area " + origin.getX() + " " + (origin.getY() + 1) + " " + origin.getZ() + " "
             + (origin.getX() + size.getX() - 1) + " " + (origin.getY() + size.getY() - 1) + " " + (origin.getZ() + size.getZ() - 1));
         test.waitFor(() -> crafts(minecraft) > before, 15, "the balloon to become a physics object");
         builtBalloon = true;
