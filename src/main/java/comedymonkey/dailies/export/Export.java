@@ -9,6 +9,7 @@ import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.edit.TimeMap;
 import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.playback.Playback;
+import comedymonkey.dailies.sound.ExportSound;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -45,6 +46,7 @@ public final class Export {
         public long bitrate = 20_000_000L;
         public boolean audio = false;
         public boolean stereo = true;
+        /** aac, opus or pcm; "auto" for the usual one of the container (AAC for mp4 and mov, Opus for webm and mkv) */
         public String audioCodec = "aac";
         public boolean hideGui = false;
         public boolean supersample = false;
@@ -129,6 +131,24 @@ public final class Export {
         return active && seconds > 0.2 ? frame / seconds : 0.0;
     }
 
+    /** What became of the sound of the export under way or the last one; null when none was asked for (EXP-3) */
+    public static @Nullable String soundNote() {
+        return ExportSound.note();
+    }
+
+    /** How fast the recording is passing in the export under way, in ticks per second of video; 0 when none is running or it stands still */
+    public static double ticksPerSecondNow() {
+        Settings current = settings;
+        TimeMap map = timeMap;
+        if (!active || current == null || map == null || current.still) {
+            return 0.0;
+        }
+        double rate = current.framesPerSecond;
+        long now = frame;
+        // The ticks being played now lead up to this frame; the first frame has only what follows it to go by
+        return now > 0 ? (map.tickAtFrame(now, rate) - map.tickAtFrame(now - 1, rate)) * rate : (map.tickAtFrame(1, rate) - map.tickAtFrame(0, rate)) * rate;
+    }
+
     /** Width over height of the export under way, or null */
     public static @Nullable Double aspectRatio() {
         Settings current = settings;
@@ -193,7 +213,9 @@ public final class Export {
         }
         int scale = wanted.supersample ? 2 : 1;
         boolean pictures = wanted.still || wanted.container.equals("png_sequence");
-        FrameSink newSink = pictures ? new PngSink(wanted.output, wanted.still, scale, wanted.transparent) : Encoder.videoSink(wanted, scale);
+        // With sound, the video is first written without it beside the output and joined with the sound at the end (EXP-3)
+        Path soundless = ExportSound.prepare(wanted, pictures);
+        FrameSink newSink = pictures ? new PngSink(wanted.output, wanted.still, scale, wanted.transparent) : Encoder.videoSink(wanted, scale, soundless != null ? soundless : wanted.output);
 
         settings = wanted;
         sink = newSink;
@@ -233,6 +255,8 @@ public final class Export {
         if (!wanted.still) {
             EditorSession.setExporting(true);
             Playback.exportMode(true);
+            // From here the game's sound goes into the file and not to the speakers; restore() puts it back
+            ExportSound.begin(wanted, timeMap, scene);
         }
         Host.LOGGER.info("Dailies: export started, {} frames of {}x{} to {}", totalFrames, wanted.width, wanted.height, wanted.output);
     }
@@ -347,6 +371,8 @@ public final class Export {
                 }
             }
             frame++;
+            // The sound that belongs to this picture, exactly as much as one frame lasts
+            ExportSound.frame(frame);
             frameReady = false;
             minecraft.getWindow().setTitle("Dailies: exporting " + frame + " of " + totalFrames);
         } catch (Throwable t) {
@@ -377,7 +403,7 @@ public final class Export {
         if (writerFailure != null) {
             throw new IllegalStateException("The frames could not be written: " + writerFailure.getMessage(), writerFailure);
         }
-        lastOutput = sink.finish(cancelled);
+        lastOutput = ExportSound.finish(sink.finish(cancelled), cancelled);
         lastCancelled = cancelled;
         Host.LOGGER.info("Dailies: export {} after {} of {} frames: {}", cancelled ? "stopped" : "finished", frame, totalFrames, lastOutput);
         restore(minecraft);
@@ -393,6 +419,7 @@ public final class Export {
         } catch (Throwable ignored) {
             // Already failing
         }
+        ExportSound.abort();
         restore(minecraft);
     }
 
@@ -400,6 +427,8 @@ public final class Export {
     private static void restore(Minecraft minecraft) {
         boolean wasStill = settings != null && settings.still;
         frameReady = false;
+        // The game's usual sound device comes back however the export ended
+        ExportSound.restore();
         Window window = minecraft.getWindow();
         window.setWidth(realWidth > 0 ? realWidth : savedWidth);
         window.setHeight(realHeight > 0 ? realHeight : savedHeight);

@@ -2,7 +2,10 @@
   "required": true,
   "package": "comedymonkey.dailies.mixin.extras",
   "compatibilityLevel": "JAVA_21",
-  "client": [],
+  "client": [
+    "PlayerInfoMixin",
+    "SkinManagerMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

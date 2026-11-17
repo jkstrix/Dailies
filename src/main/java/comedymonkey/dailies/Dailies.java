@@ -43,9 +43,12 @@ public final class Dailies {
         ServerMoments.init();
         Recorder.init();
         comedymonkey.dailies.compat.sable.SableCompat.init();
+        comedymonkey.dailies.compat.create.CreateCompat.init();
         Playback.init();
         Viewer.init();
         comedymonkey.dailies.export.Export.init();
+        comedymonkey.dailies.sound.Sound.init();
+        comedymonkey.dailies.looks.LooksRenderer.init();
 
         // Optional, so a server without the Moments Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));
@@ -53,6 +56,7 @@ public final class Dailies {
         modBus.addListener((ModConfigEvent.Reloading event) -> settingsChanged(event));
 
         modBus.addListener(Notices::register);
+        comedymonkey.dailies.extras.Extras.init(modBus);
         modBus.addListener(Keys::register);
         modBus.addListener(PlaybackBar::register);
         Keys.init();

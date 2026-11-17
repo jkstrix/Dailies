@@ -16,13 +16,19 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Constructor;
@@ -45,6 +51,8 @@ public final class SableCompat implements Host.Crafts {
 
     private static final String MOD = "sable";
     private static final String EXTENSION = "dailies:sable";
+    /** A second kind of record, for people standing on craft. Readers that do not know it skip it */
+    private static final String RIDERS = "dailies:sable_riders";
 
     private static SableCompat instance = null;
 
@@ -93,15 +101,34 @@ public final class SableCompat implements Host.Crafts {
             public void reset() {
                 compat.removeAll();
                 compat.recordedPoses.clear();
+                compat.riders.clear();
             }
 
             @Override
             public void arrived() {
+                // Craft first: the people standing on them are placed from the poses just applied
                 compat.placeCraft();
+                compat.placeRiders();
+            }
+        });
+        PlaybackExtensions.register(RIDERS, new PlaybackExtensions.Extension() {
+            @Override
+            public void play(byte[] data, int from, int length, boolean skipping) {
+                compat.readRiders(data, from, length);
+            }
+
+            @Override
+            public void reset() {
+                compat.riders.clear();
             }
         });
         Snapshots.entityFollowUp = compat::afterEntitySpawn;
+        // In this order, so a tick's poses come before the people placed by them
         Recorder.everyRecordedTick(compat::writePoses);
+        Recorder.everyRecordedTick(compat::writeRiders);
+        // Ahead of the viewer's own frame work, so a camera riding along with someone sees them where they are drawn
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGH, (RenderFrameEvent.Pre event) -> compat.ridersFrame(event.getPartialTick().getGameTimeDeltaPartialTick(true)));
+        NeoForge.EVENT_BUS.addListener((EntityTickEvent.Pre event) -> compat.riderTick(event.getEntity()));
         Host.LOGGER.info("Dailies: Sable found, physics craft will be recorded");
     }
 
@@ -387,9 +414,284 @@ public final class SableCompat implements Host.Crafts {
         }
     }
 
+    // --- People standing on a craft (MOD-4) ---
+    // In live play Sable's own client logic carries someone standing loose on a deck. In playback their recorded world
+    // positions arrive as ordinary packets a fraction of a tick behind the craft, and they trail behind a fast climb.
+    // So the recording also keeps where each of them stands in the craft's own coordinates, and playback places them
+    // from the craft's pose: as drawn, on every frame, and tick by tick so that their walking is only what they walked.
+
+    /** How many ticks someone may be off the deck (a jump, a bump) and still count as aboard */
+    private static final int LOOSE_TICKS = 10;
+    private static final int RIDER_LEFT = 0, RIDER_STANDING = 1;
+    private static final int RIDER_STANDING_BYTES = 16 + 3 * 8 + 4;
+
+    /** While recording: what was last written about a player */
+    private static final class Standing {
+        final UUID craft;
+        final Vec3 local;
+        final float yaw;
+        final int loose;
+
+        Standing(UUID craft, Vec3 local, float yaw, int loose) {
+            this.craft = craft;
+            this.local = local;
+            this.yaw = yaw;
+            this.loose = loose;
+        }
+
+        boolean same(UUID craft, Vec3 local, float yaw) {
+            return this.craft.equals(craft) && this.local.distanceToSqr(local) < 1.0e-8 && Math.abs(Mth.wrapDegrees(this.yaw - yaw)) < 0.5F;
+        }
+    }
+
+    /** In playback: the craft a player stands on and where, in the craft's own coordinates */
+    private static final class Rider {
+        final UUID craft;
+        /** The newest recorded place */
+        Vec3 local;
+        /** Where the tick now being drawn started and ended */
+        Vec3 from, to;
+        /** Their body's turn against the craft's heading. Kept for readers; rotation is left to the recorded packets */
+        float yaw;
+
+        Rider(UUID craft, Vec3 local) {
+            this.craft = craft;
+            this.local = local;
+            this.from = local;
+            this.to = local;
+        }
+    }
+
+    private final java.util.Map<UUID, Standing> standing = new java.util.HashMap<>();
+    private final java.util.Map<UUID, Rider> riders = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Set when a snapshot is written: a snapshot clears the riders in playback, so everyone aboard is written again */
+    private volatile boolean ridersStale = true;
+
+    /** At the end of every recorded tick, after the poses */
+    private void writeRiders() {
+        try {
+            ClientLevel level = Minecraft.getInstance().level;
+            if (level == null) {
+                return;
+            }
+            boolean everyone = this.ridersStale;
+            this.ridersStale = false;
+            Object container = this.getContainer.invoke(null, level);
+            // Players and mobs alike: anything alive that stands loose on a deck is carried by the craft
+            java.util.List<net.minecraft.world.entity.LivingEntity> living = new ArrayList<>();
+            if (container != null) {
+                for (Entity entity : level.entitiesForRendering()) {
+                    if (entity instanceof net.minecraft.world.entity.LivingEntity alive) {
+                        living.add(alive);
+                    }
+                }
+            }
+            java.nio.ByteBuffer out = java.nio.ByteBuffer.allocate((living.size() + this.standing.size()) * (17 + RIDER_STANDING_BYTES));
+            java.util.Set<UUID> aboard = new java.util.HashSet<>();
+            if (container != null) {
+                for (net.minecraft.world.entity.LivingEntity player : living) {
+                    UUID id = player.getUUID();
+                    Standing last = this.standing.get(id);
+                    if (aboard.contains(id) || player.isPassenger() || player.isSpectator() || player.isRemoved() || this.isInPlot(level, player.getX(), player.getZ())) {
+                        // Seated people and anything inside the hidden region are part of the craft already
+                        continue;
+                    }
+                    Object craft = this.standingOn(player);
+                    int loose = 0;
+                    if (craft == null && last != null && last.loose < LOOSE_TICKS) {
+                        // In the air over the deck they were just on: still aboard for a moment
+                        Object held = this.craftById(level, last.craft);
+                        AABB bounds = held == null ? null : this.getSubLevelBounds(held);
+                        if (bounds != null && bounds.inflate(2.0).contains(player.position())) {
+                            craft = held;
+                            loose = last.loose + 1;
+                        }
+                    }
+                    if (craft == null) {
+                        continue;
+                    }
+                    UUID craftId = (UUID) this.getUniqueId.invoke(craft);
+                    Object pose = this.logicalPose.invoke(craft);
+                    Vec3 local = (Vec3) this.transformPositionInverse.invoke(pose, player.position());
+                    float yaw = Mth.wrapDegrees(player.yBodyRot - this.heading(pose));
+                    aboard.add(id);
+                    if (!everyone && last != null && last.same(craftId, local, yaw)) {
+                        if (last.loose != loose) {
+                            this.standing.put(id, new Standing(last.craft, last.local, last.yaw, loose));
+                        }
+                        continue;
+                    }
+                    this.standing.put(id, new Standing(craftId, local, yaw, loose));
+                    out.putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).put((byte) RIDER_STANDING);
+                    out.putLong(craftId.getMostSignificantBits()).putLong(craftId.getLeastSignificantBits());
+                    out.putDouble(local.x).putDouble(local.y).putDouble(local.z).putFloat(yaw);
+                }
+            }
+            for (java.util.Iterator<UUID> left = this.standing.keySet().iterator(); left.hasNext(); ) {
+                UUID id = left.next();
+                if (!aboard.contains(id)) {
+                    left.remove();
+                    out.putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).put((byte) RIDER_LEFT);
+                }
+            }
+            if (out.position() > 0) {
+                Recorder.get().writeExtension(RIDERS, java.util.Arrays.copyOf(out.array(), out.position()));
+            }
+        } catch (Throwable t) {
+            failOnce("recording who stands on a craft", t);
+        }
+    }
+
+    private void readRiders(byte[] data, int from, int length) {
+        java.nio.ByteBuffer in = java.nio.ByteBuffer.wrap(data, from, length);
+        while (in.remaining() >= 17) {
+            UUID player = new UUID(in.getLong(), in.getLong());
+            int kind = in.get();
+            if (kind == RIDER_LEFT) {
+                this.riders.remove(player);
+            } else if (kind == RIDER_STANDING && in.remaining() >= RIDER_STANDING_BYTES) {
+                UUID craft = new UUID(in.getLong(), in.getLong());
+                Vec3 local = new Vec3(in.getDouble(), in.getDouble(), in.getDouble());
+                float yaw = in.getFloat();
+                Rider rider = this.riders.get(player);
+                if (rider == null || !rider.craft.equals(craft)) {
+                    rider = new Rider(craft, local);
+                    this.riders.put(player, rider);
+                }
+                rider.local = local;
+                rider.yaw = yaw;
+            } else {
+                // A kind of entry from a later version: nothing after it can be read
+                return;
+            }
+        }
+    }
+
+    /** A craft's heading as a yaw in degrees: where its own south points in the world */
+    private float heading(Object pose) throws Exception {
+        Vec3 south = (Vec3) this.transformNormal.invoke(pose, new Vec3(0.0, 0.0, 1.0));
+        return (float) Math.toDegrees(Math.atan2(-south.x, south.z));
+    }
+
+    private @Nullable Object craftById(Level level, UUID id) throws Exception {
+        Object container = this.getContainer.invoke(null, level);
+        if (container == null) {
+            return null;
+        }
+        for (Object subLevel : new ArrayList<>((Collection<?>) this.getAllSubLevels.invoke(container))) {
+            if (id.equals(this.getUniqueId.invoke(subLevel)) && !(boolean) this.isRemoved.invoke(subLevel)) {
+                return subLevel;
+            }
+        }
+        return null;
+    }
+
+    /** The player a rider record is about, when they are in the world and loose on their feet */
+    private @Nullable net.minecraft.world.entity.LivingEntity riderEntity(ClientLevel level, UUID id) {
+        Entity found = level.getEntities().get(id);
+        return found instanceof net.minecraft.world.entity.LivingEntity player && player != Minecraft.getInstance().player && !player.isPassenger() && !player.isRemoved() ? player : null;
+    }
+
+    /** Puts an entity somewhere with nothing left of where it was, so the game's blending between ticks cannot pull it back */
+    private static void hold(Entity entity, Vec3 place) {
+        entity.setPos(place.x, place.y, place.z);
+        entity.xo = entity.xOld = place.x;
+        entity.yo = entity.yOld = place.y;
+        entity.zo = entity.zOld = place.z;
+    }
+
+    /** Before every drawn frame of a recording: each rider goes where their craft is drawn this frame */
+    private void ridersFrame(float partialTick) {
+        if (this.riders.isEmpty() || !Playback.loaded()) {
+            return;
+        }
+        try {
+            ClientLevel level = Minecraft.getInstance().level;
+            if (level == null) {
+                return;
+            }
+            for (java.util.Iterator<java.util.Map.Entry<UUID, Rider>> each = this.riders.entrySet().iterator(); each.hasNext(); ) {
+                java.util.Map.Entry<UUID, Rider> entry = each.next();
+                Rider rider = entry.getValue();
+                Object craft = this.craftById(level, rider.craft);
+                if (craft == null) {
+                    // The craft is gone; its riders are on their own again
+                    each.remove();
+                    continue;
+                }
+                net.minecraft.world.entity.LivingEntity player = this.riderEntity(level, entry.getKey());
+                if (player != null) {
+                    Vec3 local = rider.from.lerp(rider.to, Mth.clamp(partialTick, 0.0F, 1.0F));
+                    hold(player, (Vec3) this.transformPosition.invoke(this.poseNow(craft, partialTick), local));
+                }
+            }
+        } catch (Throwable t) {
+            failOnce("keeping people on their craft's deck", t);
+        }
+    }
+
+    /**
+     * Before a rider's own tick in a recording. The game is about to move them a step towards their last recorded world
+     * position, which trails the craft. Instead they start the tick where they stood on the craft and end it where they
+     * stand now, so what the tick sees as their movement (and animates as walking) is only what they walked on the deck.
+     */
+    private void riderTick(Entity entity) {
+        if (this.riders.isEmpty() || !entity.level().isClientSide || !(entity instanceof net.minecraft.world.entity.LivingEntity player) || !Playback.loaded()) {
+            return;
+        }
+        try {
+            Rider rider = this.riders.get(player.getUUID());
+            if (rider == null || player == Minecraft.getInstance().player || player.isPassenger()) {
+                return;
+            }
+            Object craft = this.craftById(player.level(), rider.craft);
+            if (craft == null) {
+                this.riders.remove(player.getUUID());
+                return;
+            }
+            rider.from = rider.to;
+            rider.to = rider.local;
+            Object pose = this.logicalPose.invoke(craft);
+            Vec3 end = (Vec3) this.transformPosition.invoke(pose, rider.to);
+            hold(player, (Vec3) this.transformPosition.invoke(pose, rider.from));
+            // One step, so the whole way is gone this tick. The turn it was already making is kept as its target
+            player.lerpTo(end.x, end.y, end.z, player.lerpTargetYRot(), player.lerpTargetXRot(), 1);
+        } catch (Throwable t) {
+            failOnce("moving people with their craft", t);
+        }
+    }
+
+    /** A jump has arrived and the craft have just been placed: their riders go with them */
+    private void placeRiders() {
+        if (this.riders.isEmpty()) {
+            return;
+        }
+        try {
+            ClientLevel level = Minecraft.getInstance().level;
+            if (level == null) {
+                return;
+            }
+            for (java.util.Map.Entry<UUID, Rider> entry : this.riders.entrySet()) {
+                Rider rider = entry.getValue();
+                rider.from = rider.local;
+                rider.to = rider.local;
+                Object craft = this.craftById(level, rider.craft);
+                net.minecraft.world.entity.LivingEntity player = this.riderEntity(level, entry.getKey());
+                if (craft != null && player != null) {
+                    Vec3 place = (Vec3) this.transformPosition.invoke(this.logicalPose.invoke(craft), rider.local);
+                    hold(player, place);
+                    player.lerpTo(place.x, place.y, place.z, player.lerpTargetYRot(), player.lerpTargetXRot(), 1);
+                }
+            }
+        } catch (Throwable t) {
+            failOnce("placing people on their craft after a jump", t);
+        }
+    }
+
     // --- Snapshots ---
 
     private void writeSnapshot(Recorder.Out out, GameCodec codec) throws Exception {
+        this.ridersStale = true;
         ClientLevel level = Minecraft.getInstance().level;
         Object container = level == null ? null : this.getContainer.invoke(null, level);
         if (container == null) {
@@ -606,6 +908,28 @@ public final class SableCompat implements Host.Crafts {
             failOnce("listing craft", t);
         }
         return found;
+    }
+
+    /**
+     * Where an entity stands on a craft, measured from the centre of the craft's bounds, or null when it is not standing
+     * on one. Found the same way live and in playback, so the two can be compared
+     */
+    public static @Nullable Vec3 offsetOnCraft(Entity entity) {
+        SableCompat compat = instance;
+        if (compat == null) {
+            return null;
+        }
+        try {
+            if (entity.isPassenger() || compat.isInPlot(entity.level(), entity.getX(), entity.getZ())) {
+                return null;
+            }
+            Object craft = compat.standingOn(entity);
+            AABB bounds = craft == null ? null : compat.getSubLevelBounds(craft);
+            return bounds == null ? null : entity.position().subtract(bounds.getCenter());
+        } catch (Throwable t) {
+            failOnce("measuring where someone stands on a craft", t);
+            return null;
+        }
     }
 
     public static boolean available() {

@@ -1,0 +1,79 @@
+package comedymonkey.dailies.extras;
+
+import comedymonkey.dailies.Host;
+import comedymonkey.dailies.capture.GameCodec;
+import comedymonkey.dailies.capture.Recorder;
+import comedymonkey.dailies.capture.SnapshotExtensions;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.player.LocalPlayer;
+
+/**
+ * The recording half of the recorder's HUD (specification REC-13). While the setting {@code recordHud} is on, the
+ * HUD is written into every snapshot, and again at the end of any recorded tick on which something in it changed.
+ */
+final class HudCapture {
+
+    /** What the recording holds as the HUD now, or null when it holds none */
+    private static HudState written = null;
+    private static boolean failed = false;
+
+    private HudCapture() {
+    }
+
+    static void init() {
+        SnapshotExtensions.register(HudState.ID, HudCapture::snapshot);
+        Recorder.everyRecordedTick(HudCapture::tick);
+    }
+
+    private static HudState now() {
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        if (player == null || minecraft.gameMode == null || !Host.get().setting("recordHud", false)) {
+            return null;
+        }
+        return HudState.of(player, minecraft.gameMode.getPlayerMode());
+    }
+
+    private static void snapshot(Recorder.Out out, GameCodec codec) {
+        // A snapshot starts afresh: whatever was written before it is not there after a jump
+        written = null;
+        HudState state = now();
+        if (state == null) {
+            return;
+        }
+        out.extension(HudState.ID, state.encode(codec.registries(), codec.connectionType()));
+        state.keep();
+        written = state;
+    }
+
+    private static void tick() {
+        try {
+            HudState state = now();
+            if (state == null) {
+                if (written != null) {
+                    // Switched off part way through: playback stops showing the last HUD it was given
+                    written = null;
+                    Recorder.get().writeExtension(HudState.ID, HudState.NONE);
+                }
+                return;
+            }
+            if (written != null && state.same(written)) {
+                return;
+            }
+            ClientPacketListener listener = Minecraft.getInstance().getConnection();
+            if (listener == null) {
+                return;
+            }
+            Recorder.get().writeExtension(HudState.ID, state.encode(listener.registryAccess(), listener.getConnectionType()));
+            state.keep();
+            written = state;
+        } catch (Throwable t) {
+            if (!failed) {
+                failed = true;
+                Host.LOGGER.warn("Dailies: the recorder's HUD could not be recorded. The rest of the recording is unharmed. Said once", t);
+            }
+        }
+    }
+
+}

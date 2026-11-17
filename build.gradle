@@ -50,6 +50,14 @@ neoForge {
             systemProperty 'dailies.test.script', 'hands-on'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
+        // Takes the pictures for the manual from the modded game, into run-modded/dailies/manual
+        manualShots {
+            client()
+            gameDirectory = file('run-modded')
+            loadedMods = []
+            systemProperty 'dailies.test.script', 'manual'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
         // The same scripted run with the built jar (not the dev classes) beside the other mods it has to work with:
         // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1)
         testModded {
@@ -65,6 +73,14 @@ neoForge {
 
 repositories {
     mavenCentral()
+    // Simple Voice Chat's public API (specification REC-18), as that mod's documentation gives it
+    maven {
+        name = 'henkelmax.public'
+        url = 'https://maven.maxhenkel.de/repository/public'
+        content {
+            includeGroup 'de.maxhenkel.voicechat'
+        }
+    }
 }
 
 configurations {
@@ -78,6 +94,9 @@ configurations {
 dependencies {
     // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
     encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
+
+    // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
+    compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
 
     // Unit tests cover the parts that need no running game: the file format, curves, timing, the undo stack
     testImplementation platform('org.junit:junit-bom:5.11.4')
@@ -128,6 +147,9 @@ tasks.register('installTestMods', Sync) {
 
 afterEvaluate {
     tasks.named('runTestModded') {
+        dependsOn 'installTestMods'
+    }
+    tasks.named('runManualShots') {
         dependsOn 'installTestMods'
     }
 }

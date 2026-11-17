@@ -130,6 +130,8 @@ final class ExportSteps {
             test.skip("this build has no video encoder packed in: exporting a video file was not tried (EXP-1 containers and codecs, EXP-8)");
         } else {
             video(test, minecraft, from, to);
+            otherFormats(test, minecraft, from);
+            sound(test, minecraft, from);
         }
         test.skip("sound in exports is not built yet (EXP-3)");
     }
@@ -173,6 +175,67 @@ final class ExportSteps {
         check(top > bottom, "the video is upside down or scrambled: blue at the top is " + top + " and at the bottom " + bottom);
         test.log("exported " + expected + " frames of 1920x1080 H.264 in " + (System.currentTimeMillis() - started) + " ms, " + Files.size(file) / 1024 + " KB; the file reports "
             + told.replace('\n', ' ').trim());
+    }
+
+    /** The other codecs and containers of EXP-1, each for half a second: the file must exist and hold the codec asked for */
+    private static void otherFormats(SelfTest test, Minecraft minecraft, int from) throws Exception {
+        java.util.Map<String, List<String>> offered = Encoder.offered();
+        String[][] wanted = {{"h265", "mkv", "hevc"}, {"av1", "mp4", "av1"}, {"vp9", "webm", "vp9"}, {"h264", "mov", "h264"}};
+        StringBuilder worked = new StringBuilder();
+        for (String[] format : wanted) {
+            if (!offered.containsKey(format[0])) {
+                test.skip("the packed encoder has nothing for " + format[0] + " on this machine: " + format[0] + " in " + format[1] + " was not tried");
+                continue;
+            }
+            Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test-" + format[0] + "." + format[1]);
+            Files.deleteIfExists(file);
+            test.tool("export_start", args("output_path", file.toString(), "container", format[1], "video_codec", format[0], "width", 640, "height", 360, "framerate", 30,
+                "start_tick", from, "end_tick", from + 10, "no_gui", true, "bitrate", "2m"));
+            test.waitFor(() -> !Export.active(), 300, "the " + format[0] + " export");
+            JsonObject done = test.tool("export_status", new JsonObject());
+            test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
+            if (done.has("last_error")) {
+                // An encoder can be in the build and still not work on this machine (no such hardware, say)
+                test.skip(format[0] + " in " + format[1] + " could not be encoded here: " + done.get("last_error").getAsString());
+                continue;
+            }
+            String told = run(Encoder.inspector().toString(), "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries", "stream=codec_name,nb_read_frames",
+                "-of", "default=noprint_wrappers=1", file.toString());
+            check(told.contains("codec_name=" + format[2]), "the " + format[1] + " file does not hold " + format[0] + ": " + told);
+            check(told.contains("nb_read_frames=15"), "half a second of " + format[0] + " at 30 frames a second does not hold 15 frames: " + told);
+            worked.append(' ').append(format[0]).append(" in ").append(format[1]).append(';');
+        }
+        test.log("also exported and checked:" + worked);
+    }
+
+    /** One second of video with the game's sound in it: the file must hold a sound stream as long as its picture (EXP-3) */
+    private static void sound(SelfTest test, Minecraft minecraft, int from) throws Exception {
+        Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test-sound.mp4");
+        Files.deleteIfExists(file);
+        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "video_codec", "h264", "width", 640, "height", 360, "framerate", 30,
+            "start_tick", from, "end_tick", from + 20, "no_gui", true, "bitrate", "2m", "record_audio", true, "stereo_audio", true));
+        test.waitFor(() -> !Export.active(), 300, "the export with sound");
+        JsonObject done = test.tool("export_status", new JsonObject());
+        test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
+        check(!done.has("last_error"), "the export with sound failed: " + done);
+        String note = done.has("sound") ? done.get("sound").getAsString() : "";
+        if (note.startsWith("no sound")) {
+            test.skip("the game's sound could not be captured on this machine (" + note + "): sound in exports was not checked (EXP-3)");
+            return;
+        }
+        String told = run(Encoder.inspector().toString(), "-v", "error", "-show_entries", "stream=codec_type,codec_name,channels,duration", "-of", "default=noprint_wrappers=1", file.toString());
+        check(told.contains("codec_type=audio") && told.contains("codec_name=aac"), "the file has no AAC sound stream: " + told);
+        check(told.contains("channels=2"), "the sound is not stereo: " + told);
+        double longest = 0, shortest = 99;
+        for (String line : told.lines().toList()) {
+            if (line.startsWith("duration=")) {
+                double seconds = Double.parseDouble(line.substring(9));
+                longest = Math.max(longest, seconds);
+                shortest = Math.min(shortest, seconds);
+            }
+        }
+        check(longest - shortest < 0.08 && Math.abs(longest - 1.0) < 0.1, "sound and picture are not the same length: " + told);
+        test.log("exported one second with sound (" + note + "); the file reports " + told.replace('\n', ' ').trim());
     }
 
     private static String run(String... command) throws Exception {

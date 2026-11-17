@@ -278,12 +278,17 @@ public final class Snapshots {
         Packet<? super ClientGamePacketListener> spawn = spawnPacket(entity, codec);
         List<byte[]> extras = Capture.spawnExtras(entity.getId());
         byte[] built = null;
-        if (extras == null && entity instanceof IEntityWithComplexSpawn) {
-            // Its spawn was never seen (it was there before the game listened). Ask the entity itself, which may fail
+        if (entity instanceof IEntityWithComplexSpawn) {
+            // Ask the entity to describe itself as it is now: a contraption that has turned since it spawned must come back
+            // at the angle it has reached, not the one it started at. Here the entity is real and can answer. If it cannot,
+            // what came with its spawn is used instead
             try {
                 built = codec.encode(new AdvancedAddEntityPayload(entity).toVanillaClientbound());
+                extras = null;
             } catch (Throwable t) {
-                warnOnce("entity " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()) + " (extra spawn data)", t);
+                if (extras == null) {
+                    warnOnce("entity " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()) + " (extra spawn data)", t);
+                }
             }
         }
         if (extras != null || built != null) {

@@ -80,6 +80,23 @@ final class Feed {
         return this.segmentIndex;
     }
 
+    private final java.util.Map<Integer, Boolean> continues = new java.util.HashMap<>();
+
+    /** Whether a segment follows on from the one before it, so that play can run from one into the other */
+    boolean continuesFromPrevious(int index) {
+        if (index <= 0) {
+            return false;
+        }
+        return this.continues.computeIfAbsent(index, key -> {
+            try (Records.Reader start = new Records.Reader(this.file.openSegment(this.segments.get(key).number))) {
+                // A segment that does not follow on says so straight after the start of its snapshot
+                return start.next() && start.kind() == Records.SNAPSHOT_BEGIN && start.next() && start.kind() != Records.DISCONTINUITY;
+            } catch (IOException e) {
+                return false;
+            }
+        });
+    }
+
     /**
      * Rebuilds the world from a segment's snapshot. Must not be called from inside a game tick: the game draws a
      * frame of its own while it changes worlds.

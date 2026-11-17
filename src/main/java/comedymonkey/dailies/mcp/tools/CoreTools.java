@@ -104,6 +104,10 @@ public final class CoreTools {
         if (Playback.lastError() != null) {
             playback.addProperty("error", Playback.lastError());
         }
+        JsonObject differences = comedymonkey.dailies.extras.ModDifferences.summary();
+        if (differences != null) {
+            playback.add("mods_that_differ", differences);
+        }
         return playback;
     }
 

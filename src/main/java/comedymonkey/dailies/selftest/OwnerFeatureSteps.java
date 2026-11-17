@@ -59,6 +59,10 @@ final class OwnerFeatureSteps {
             check(sent.toString().contains("42") && sent.toString().contains("server"), "the server moment lost its data or its source: " + shorten(sent.toString()));
             test.log("server moments arrived: test_event with its data, and boss_fight");
         }
+        if (McpCraftSteps.done) {
+            check(listed.contains("job_posted") && listed.contains("job_claimed") && listed.contains("job_finished"), "the job board moments did not all arrive: " + shorten(listed));
+            test.log("job board moments arrived: posted, claimed and finished");
+        }
         JsonArray eventList = firstArray(events);
         int stamped = 0;
         int lastTick = -1;

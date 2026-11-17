@@ -54,6 +54,12 @@ public final class SelfTest {
         String result;
         try {
             this.waitForGame();
+            if ("manual".equals(System.getProperty(PROPERTY))) {
+                ManualShots.run(this);
+                Host.LOGGER.info("DAILIES MANUAL PICTURES DONE");
+                Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+                return;
+            }
             if ("hands-on".equals(System.getProperty(PROPERTY))) {
                 this.handsOn();
                 return;

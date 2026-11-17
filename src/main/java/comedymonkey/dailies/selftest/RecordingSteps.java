@@ -86,7 +86,8 @@ final class RecordingSteps {
         // What the game's frames cost with no recording, to compare against
         FrameTimes.Result idle = FrameTimes.measure(test, 60);
 
-        // The real thing
+        // The real thing, with the recorder's HUD captured too (REC-13)
+        test.tool("config_set", args("key", "recordHud", "value", true));
         JsonObject started = test.tool("recording_start", none);
         check(started.get("active").getAsBoolean(), "recording_start did not start a recording");
         check(test.toolError("recording_start", none).contains("already"), "starting twice did not say a recording is already being made");
@@ -121,11 +122,7 @@ final class RecordingSteps {
         } else {
             test.skip("the Moments Companion is not installed: server-sent moments were not tried (SRV-1 to SRV-3)");
         }
-        if (!comedymonkey.dailies.Host.get().isModLoaded("mcpcraft")) {
-            test.skip("McpCraft is not installed: job board moments were not tried (SRV-10, SRV-11, SRV-15)");
-        } else {
-            test.skip("McpCraft's job board is not driven by this script yet: job board moments were not tried (SRV-10, SRV-11, SRV-15)");
-        }
+        McpCraftSteps.run(test);
 
         // Chapter XIV step 2: machines, built while the recording runs
         CraftSteps.build(test);
@@ -137,13 +134,17 @@ final class RecordingSteps {
         JsonObject paused = test.tool("recording_pause", none);
         check(paused.get("paused").getAsBoolean(), "recording_pause did not pause");
         int tickAtPause = paused.get("tick").getAsInt();
-        test.command("setblock 6 -60 0 minecraft:diamond_block");
+        test.command("setblock 6 -60 3 minecraft:diamond_block");
+        // A wall right beside the line the recorder is moved along: close enough to clip through if playback cut corners
+        test.command("fill 4 -60 1 9 -59 1 minecraft:stone_bricks");
         test.sleepTicks(40);
         check(test.tool("dailies_status", none).getAsJsonObject("recording").get("tick").getAsInt() == tickAtPause, "the clock ran on while paused");
         test.tool("recording_resume", none);
 
         // Long enough to cross at least two more segment boundaries with the short test segments (REC-20, REC-24)
         int segmentTicks = Integer.getInteger("dailies.test.segmentTicks", 6000);
+        BlockWatch.liveTicks.clear();
+        BlockWatch.start();
         FrameTimes.begin();
         check(segmentTicks <= 200, "the scripted run needs short segments: set dailies.test.segmentTicks");
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
@@ -173,6 +174,9 @@ final class RecordingSteps {
         test.log("frame times idle: " + idle + "; while recording, with teleports and two snapshots: " + recordingFrames);
         check(recordingFrames.average() <= idle.average() * 1.5 + 2.0, "recording slowed the game: frames averaged " + recordingFrames.average() + " ms against " + idle.average() + " ms idle");
 
+        BlockWatch.stop();
+        test.tool("config_set", args("key", "recordHud", "value", false));
+        check(BlockWatch.liveTicks.isEmpty(), "the test's own path put the recorder inside a block at ticks " + BlockWatch.liveTicks + ", so it cannot show that playback keeps them out");
         JsonObject finished = test.tool("recording_finish", args("name", "Self test"));
         recording = Path.of(finished.get("path").getAsString());
         check(Files.exists(recording) && recording.getFileName().toString().equals("Self test" + RecordingFile.EXTENSION), "the recording was not saved under its name: " + recording);
@@ -220,6 +224,10 @@ final class RecordingSteps {
             check(file.sharedCount() < audit.sharedPackets / 2, "unchanged chunks were stored again: " + file.sharedCount() + " stored for " + audit.sharedPackets + " uses");
             test.log("snapshots: " + audit.sharedPackets + " chunk uses stored as " + file.sharedCount() + " pieces; last snapshot held the game for "
                 + String.format("%.1f", comedymonkey.dailies.capture.Snapshots.lastMillis) + " ms; file is " + java.nio.file.Files.size(recording) / 1024 + " KB");
+            // The parts of the recording that are not packets: the recorder's HUD and everyone's skin (REC-13, REC-14)
+            check(audit.extensions.containsKey("dailies:hud"), "the recorder's HUD was not captured: " + audit.extensions.keySet());
+            check(audit.extensions.getOrDefault("dailies:skins", 0) >= manifest.segments.size(), "the players' skins are not in every snapshot: " + audit.extensions);
+            test.log("recording also holds " + audit.extensions);
             test.log("recording holds " + manifest.totalTicks + " ticks in " + manifest.segments.size() + " segments, " + audit.packets.values().stream().mapToInt(Integer::intValue).sum()
                 + " packets of " + audit.packets.size() + " kinds, " + audit.bundles + " bundles, " + audit.payloads.size() + " kinds of mod message");
         }

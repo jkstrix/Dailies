@@ -34,6 +34,8 @@ public final class Playback {
 
     /** How long a jump may hold up one frame, so the game stays responsive while it runs (PLAY-15) */
     private static final long JUMP_SLICE_NANOS = 30_000_000L;
+    /** A jump runs at least this many ticks of recording before it lands, where the recording allows */
+    private static final int RUN_UP_TICKS = 60;
 
     private static volatile boolean active = false;
     private static volatile boolean loaded = false;
@@ -222,6 +224,11 @@ public final class Playback {
             return;
         }
         int index = feed.segmentIndexAt(target);
+        if (target - feed.segmentStart(index) < RUN_UP_TICKS && feed.continuesFromPrevious(index)) {
+            // Landing just after a snapshot: start from the one before, so that everything a game eases into place over a
+            // few ticks (a bearing's angle, a craft's smoothing, an entity's last steps) has settled, as it has in plain play
+            index--;
+        }
         if (target < position || feed.segmentStart(index) > position) {
             // Backwards, or far enough ahead that a later snapshot is the nearer start
             reloadIndex = index;

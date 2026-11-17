@@ -50,8 +50,9 @@ final class ExportTools {
                 .string("video_codec", "h264 (default), h265, av1 or vp9, where this build's encoder has it")
                 .string("encoder", "A particular encoder for the codec. Left out, hardware encoders are tried first, then software")
                 .any("bitrate", "Video bitrate in bits per second, or text like '20m' or '800k' (default 20m)")
-                .bool("record_audio", "Put the game's sound in the file (default false)")
+                .bool("record_audio", "Put the game's sound in the file, with recorded voice chat and the scene's audio keyframes (default false). export_status says under 'sound' what became of it")
                 .bool("stereo_audio", "Stereo sound and not mono (default true)")
+                .string("audio_codec", "aac, opus or pcm (default: aac for mp4 and mov, opus for webm and mkv). pcm is uncompressed and fits mov and mkv")
                 .bool("no_gui", "Leave the HUD out of the picture (default: last used, at first false)")
                 .bool("ssaa", "Draw at twice the size and scale down, for smoother edges (default: last used, at first false)")
                 .bool("transparent", "Keep the background transparent. Needs the scene's sky switched off and a format that can hold it")
@@ -98,7 +99,7 @@ final class ExportTools {
 
     private static JsonElement start(McpArgs args) {
         CoreTools.allowOnly(args, "output_path", "width", "height", "framerate", "start_tick", "end_tick", "container", "video_codec", "encoder", "bitrate",
-            "record_audio", "stereo_audio", "no_gui", "ssaa", "transparent", "reset_rng", "overwrite");
+            "record_audio", "stereo_audio", "audio_codec", "no_gui", "ssaa", "transparent", "reset_rng", "overwrite");
         String container = args.has("container") ? args.string("container").toLowerCase(Locale.ROOT) : "mp4";
         if (!CONTAINERS.contains(container)) {
             throw new McpToolException("'container' must be one of " + String.join(", ", CONTAINERS));
@@ -116,8 +117,9 @@ final class ExportTools {
         settings.bitrate = bitrate(args);
         settings.audio = args.optBool("record_audio", false);
         settings.stereo = args.optBool("stereo_audio", true);
-        if (settings.audio) {
-            throw new McpToolException("Recording the game's sound into an export is not built yet. Export without record_audio and add sound afterwards");
+        settings.audioCodec = args.has("audio_codec") ? args.string("audio_codec").toLowerCase(Locale.ROOT) : "auto";
+        if (!List.of("auto", "aac", "opus", "pcm").contains(settings.audioCodec)) {
+            throw new McpToolException("'audio_codec' must be one of aac, opus, pcm");
         }
         begin(settings);
         lastRate = settings.framesPerSecond;
@@ -206,6 +208,9 @@ final class ExportTools {
             if (Export.lastError() != null) {
                 json.addProperty("last_error", Export.lastError());
             }
+        }
+        if (Export.soundNote() != null) {
+            json.addProperty("sound", Export.soundNote());
         }
         json.addProperty("video_encoder_bundled", Encoder.bundled());
         if (!Encoder.bundled()) {

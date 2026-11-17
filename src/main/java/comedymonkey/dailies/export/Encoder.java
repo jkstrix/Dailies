@@ -147,6 +147,11 @@ public final class Encoder {
     }
 
     static FrameSink videoSink(Export.Settings settings, int scale) throws IOException {
+        return videoSink(settings, scale, settings.output);
+    }
+
+    /** As above, written to another file than the export's own: the soundless video that sound is joined to afterwards */
+    static FrameSink videoSink(Export.Settings settings, int scale, Path output) throws IOException {
         Map<String, List<String>> offered = offered();
         List<String> names = offered.get(settings.videoCodec.toLowerCase(Locale.ROOT));
         if (names == null) {
@@ -163,7 +168,7 @@ public final class Encoder {
         for (String name : order) {
             try {
                 // A hardware encoder may be in the build and still not work on this machine: try, and fall back
-                return new VideoSink(settings, scale, name);
+                return new VideoSink(settings, scale, name, output);
             } catch (IOException e) {
                 last = e;
                 Host.LOGGER.info("Dailies: encoder {} is not usable here ({}), trying the next", name, e.getMessage());
@@ -180,11 +185,11 @@ public final class Encoder {
         private final StringBuilder log = new StringBuilder();
         private final int width, height;
 
-        VideoSink(Export.Settings settings, int scale, String encoder) throws IOException {
-            this.output = settings.output;
+        VideoSink(Export.Settings settings, int scale, String encoder, Path output) throws IOException {
+            this.output = output;
             this.width = settings.width * scale;
             this.height = settings.height * scale;
-            Files.createDirectories(settings.output.toAbsolutePath().getParent());
+            Files.createDirectories(output.toAbsolutePath().getParent());
             List<String> command = new ArrayList<>(List.of(program().toString(), "-hide_banner", "-loglevel", "error", "-y",
                 "-f", "rawvideo", "-pix_fmt", "rgba", "-s", this.width + "x" + this.height, "-r", String.valueOf(settings.framesPerSecond), "-i", "pipe:0"));
             // Frames arrive bottom row first; supersampled frames are brought down to size here
@@ -198,7 +203,7 @@ public final class Encoder {
                 // A file cut short by a cancel must still play (EXP-6)
                 command.addAll(List.of("-movflags", "+faststart"));
             }
-            command.add(settings.output.toAbsolutePath().toString());
+            command.add(output.toAbsolutePath().toString());
             this.process = new ProcessBuilder(command).redirectErrorStream(true).start();
             this.input = this.process.getOutputStream();
             Thread reader = new Thread(() -> {
