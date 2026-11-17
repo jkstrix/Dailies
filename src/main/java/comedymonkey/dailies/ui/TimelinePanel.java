@@ -8,6 +8,7 @@ import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.edit.TimeMap;
 import comedymonkey.dailies.edit.Track;
 import comedymonkey.dailies.editor.EditorSession;
+import comedymonkey.dailies.editor.PointOfView;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
@@ -54,6 +55,8 @@ final class TimelinePanel {
     /** Where the ruler ends; the moments rows, when shown, lie between here and the track rows */
     private int rulerBottom;
     private MomentsLane.Place moments = new MomentsLane.Place(0, 0, 1, 0);
+    /** Where the lanes of the scene's points of view start (PLAY-19), under the moments */
+    private int viewsTop = 0;
     private @Nullable Font font;
     private int lanesTop;
     private int lanesBottom;
@@ -88,11 +91,11 @@ final class TimelinePanel {
 
     TimelinePanel() {
         this.transport.add(Gadget.Push.icon(Kit.Icon.TO_START, Kit.t("transport.to_start"), () -> Controls.jumpTo(0)));
-        this.transport.add(Gadget.Push.icon(Kit.Icon.STEP_BACK, Kit.t("transport.step_back"), () -> Controls.jumpTo(Math.max(0, Playback.position() - 1))));
+        this.transport.add(Gadget.Push.icon(Kit.Icon.STEP_BACK, Kit.t("transport.step_back"), () -> Controls.jumpTo(Math.max(0, PointOfView.position() - 1))));
         this.transport.add(Gadget.Push.icon(() -> Playback.paused() ? Kit.Icon.PLAY : Kit.Icon.PAUSE, Kit.t("transport.play"), Controls::togglePlay)
                 .liveTip(() -> Kit.t(Playback.paused() ? "transport.play" : "transport.pause")).wide(20));
         this.transport.add(Gadget.Push.icon(Kit.Icon.STEP_FORWARD, Kit.t("transport.step_forward"), Controls::stepOneTick));
-        this.transport.add(Gadget.Push.icon(Kit.Icon.TO_END, Kit.t("transport.to_end"), () -> Controls.jumpTo(Playback.total())));
+        this.transport.add(Gadget.Push.icon(Kit.Icon.TO_END, Kit.t("transport.to_end"), () -> Controls.jumpTo(PointOfView.total())));
         this.transport.add(Gadget.Push.icon(Kit.Icon.MINUS, Kit.t("transport.slower"), Controls::slower));
         this.transport.add(new Gadget.Words(() -> Kit.t("transport.speed", Controls.speed(Playback.ticksPerSecond())), Controls.PARCHMENT)
                 .wide(34).tip(Kit.t("transport.speed.tip")));
@@ -115,7 +118,7 @@ final class TimelinePanel {
         }
         int tracks = EditorSession.open() ? EditorState.scene().tracks().size() : 0;
         int most = Math.max(2, (screenHeight * 42 / 100 - fixed - 8) / LANE);
-        return fixed + MomentsLane.height() + Math.max(2, Math.min(tracks, most)) * LANE + 8;
+        return fixed + MomentsLane.height() + PointOfViewLanes.height() + Math.max(2, Math.min(tracks, most)) * LANE + 8;
     }
 
     void place(Font font, int newLeft, int newTop, int newRight, int newBottom) {
@@ -132,7 +135,8 @@ final class TimelinePanel {
         this.rulerBottom = this.rulerTop + RULER;
         this.moments = new MomentsLane.Place(newLeft, this.laneLeft, this.laneWidth, this.rulerBottom);
         // The rows give way before the moments do, but never altogether: a short window keeps two rows
-        this.lanesTop = Math.min(this.rulerBottom + MomentsLane.height(), Math.max(this.rulerBottom, newBottom - 8 - 2 * LANE));
+        this.viewsTop = this.rulerBottom + MomentsLane.height();
+        this.lanesTop = Math.min(this.viewsTop + PointOfViewLanes.height(), Math.max(this.rulerBottom, newBottom - 8 - 2 * LANE));
         this.lanesBottom = EditorState.timelineFolded ? this.lanesTop : Math.max(this.lanesTop, newBottom - 8);
 
         int x = newLeft + 3;
@@ -152,7 +156,7 @@ final class TimelinePanel {
         this.addTrack.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
         this.addTrack.place(font, newLeft + 3, this.rulerTop, this.columnWidth - 5, RULER - 1);
 
-        int total = Math.max(1, Playback.total());
+        int total = Math.max(1, PointOfView.total());
         if (EditorState.viewSpan <= 0.0 || EditorState.viewSpan > total) {
             EditorState.viewSpan = total;
         }
@@ -179,7 +183,7 @@ final class TimelinePanel {
 
     private int tickAt(double mouseX) {
         double tick = EditorState.viewStart + (mouseX - this.laneLeft) / this.laneWidth * EditorState.viewSpan;
-        return (int) Math.max(0, Math.min(Playback.total(), Math.round(tick)));
+        return (int) Math.max(0, Math.min(PointOfView.total(), Math.round(tick)));
     }
 
     private boolean overRuler(double mouseX, double mouseY) {
@@ -189,6 +193,11 @@ final class TimelinePanel {
     /** Whether the moments rows are there and the mouse is over them */
     private boolean overMoments(double mouseX, double mouseY) {
         return this.lanesTop > this.rulerBottom && mouseY < this.lanesTop && MomentsLane.over(this.moments, mouseX, mouseY);
+    }
+
+    /** Whether the mouse is over the lanes of the scene's points of view */
+    private boolean overViews(double mouseX, double mouseY) {
+        return PointOfViewLanes.height() > 0 && mouseY < this.lanesTop && PointOfViewLanes.over(this.laneLeft, this.laneLeft + this.laneWidth, this.viewsTop, mouseX, mouseY);
     }
 
     private boolean overLanes(double mouseX, double mouseY) {
@@ -250,16 +259,16 @@ final class TimelinePanel {
         if (this.wanted >= 0 && !Playback.jumping()) {
             int tick = this.wanted;
             this.wanted = -1;
-            if (tick != Playback.position()) {
+            if (tick != PointOfView.position()) {
                 Controls.scrubTo(tick);
             }
         } else if (this.refineOwed && this.wanted < 0 && !EditorState.scrubbing && !Playback.jumping()) {
             this.refineOwed = false;
             Controls.refine();
         }
-        int total = Math.max(1, Playback.total());
+        int total = Math.max(1, PointOfView.total());
         if (!Playback.paused() && !EditorState.scrubbing && this.drag == Drag.NONE && EditorState.viewSpan < total) {
-            int position = Playback.position();
+            int position = PointOfView.position();
             if (position < EditorState.viewStart || position > EditorState.viewStart + EditorState.viewSpan) {
                 EditorState.viewStart = Math.max(0.0, Math.min(total - EditorState.viewSpan, position - EditorState.viewSpan * 0.1));
             }
@@ -269,7 +278,7 @@ final class TimelinePanel {
     /** How long the video runs up to each tick, when speed, timelapse or freeze keyframes change that; else null */
     private @Nullable TimeMap realTime() {
         EditHistory history = EditorState.history();
-        long stamp = history.revision() * 31 + Playback.total();
+        long stamp = history.revision() * 31 + PointOfView.total();
         if (stamp != this.realTimeFor) {
             this.realTimeFor = stamp;
             this.realTime = null;
@@ -281,9 +290,9 @@ final class TimelinePanel {
                     changes = true;
                 }
             }
-            if (changes && Playback.total() > 0) {
+            if (changes && PointOfView.total() > 0) {
                 try {
-                    this.realTime = new TimeMap(scene, 0, Playback.total());
+                    this.realTime = new TimeMap(scene, 0, PointOfView.total());
                 } catch (RuntimeException e) {
                     this.realTime = null;
                 }
@@ -305,7 +314,7 @@ final class TimelinePanel {
         this.addTrack.draw(graphics, font, mouseX, mouseY);
 
         Scene scene = EditorState.scene();
-        int total = Math.max(1, Playback.total());
+        int total = Math.max(1, PointOfView.total());
         int laneRight = this.laneLeft + this.laneWidth;
 
         // The ruler and the rows
@@ -325,6 +334,11 @@ final class TimelinePanel {
             if (this.lanesTop > this.rulerBottom) {
                 MomentsLane.draw(graphics, font, this.moments, laneRight, mouseX, mouseY);
             }
+            if (this.lanesTop >= this.viewsTop + PointOfViewLanes.height() && PointOfViewLanes.height() > 0) {
+                graphics.disableScissor();
+                PointOfViewLanes.draw(graphics, font, this.left, this.laneLeft, laneRight, this.viewsTop, total, this::across);
+                graphics.enableScissor(this.laneLeft, this.rulerTop, laneRight + 1, Math.max(this.lanesTop, this.lanesBottom));
+            }
             for (int row = 0; row < rows; row++) {
                 int index = EditorState.laneScroll + row;
                 if (index < scene.tracks().size()) {
@@ -340,7 +354,7 @@ final class TimelinePanel {
                 graphics.renderOutline(x0, y0, x1 - x0 + 1, y1 - y0 + 1, Controls.PARCHMENT);
             }
             // The playhead
-            int hand = (int) Math.round(this.across(Math.max(0, Math.min(total, this.scrubTick >= 0 ? this.scrubTick : Playback.shown()))));
+            int hand = (int) Math.round(this.across(Math.max(0, Math.min(total, this.scrubTick >= 0 ? this.scrubTick : PointOfView.shown()))));
             graphics.fill(hand, this.rulerTop, hand + 1, Math.max(this.lanesTop, this.lanesBottom), Controls.PARCHMENT);
             graphics.fill(hand - 2, this.rulerTop, hand + 3, this.rulerTop + 3, Controls.PARCHMENT);
         } finally {
@@ -383,8 +397,8 @@ final class TimelinePanel {
         if (room < 30) {
             return;
         }
-        int position = this.scrubTick >= 0 ? this.scrubTick : Playback.shown();
-        String time = Component.translatable("dailies.ui.bar.time", Controls.time(position), Controls.time(Playback.total())).getString();
+        int position = this.scrubTick >= 0 ? this.scrubTick : PointOfView.shown();
+        String time = Component.translatable("dailies.ui.bar.time", Controls.time(position), Controls.time(PointOfView.total())).getString();
         String words = time;
         TimeMap map = this.realTime();
         if (map != null) {
@@ -572,8 +586,14 @@ final class TimelinePanel {
             }
             return null;
         }
+        if (this.overViews(mouseX, mouseY)) {
+            if (button == 0) {
+                PointOfViewLanes.press(this.viewsTop, mouseY, this.tickAt(mouseX));
+            }
+            return null;
+        }
         Scene scene = EditorState.scene();
-        int total = Math.max(1, Playback.total());
+        int total = Math.max(1, PointOfView.total());
         if (button == 0 && this.overRuler(mouseX, mouseY)) {
             if (scene.hasExportRange() && mouseY >= this.rulerBottom - 7) {
                 double start = this.across(scene.exportStart());
@@ -712,14 +732,14 @@ final class TimelinePanel {
     }
 
     void dragTo(double mouseX, double mouseY) {
-        int total = Math.max(1, Playback.total());
+        int total = Math.max(1, PointOfView.total());
         switch (this.drag) {
             case KEYS -> {
                 int offset = this.tickAt(mouseX) - this.dragFromTick;
                 // Every keyframe has to stay inside the recording
                 for (KeyframeRef ref : EditorState.selection) {
                     offset = Math.max(offset, -ref.tick());
-                    offset = Math.min(offset, Playback.total() - ref.tick());
+                    offset = Math.min(offset, PointOfView.total() - ref.tick());
                 }
                 this.dragOffset = offset;
             }
@@ -810,7 +830,7 @@ final class TimelinePanel {
         if (!this.over(mouseX, mouseY)) {
             return false;
         }
-        int total = Math.max(1, Playback.total());
+        int total = Math.max(1, PointOfView.total());
         if (this.overColumn(mouseX, mouseY)) {
             int tracks = EditorState.scene().tracks().size();
             EditorState.laneScroll = Math.max(0, Math.min(EditorState.laneScroll - (int) Math.signum(amount), Math.max(0, tracks - this.visibleLanes())));
@@ -856,6 +876,9 @@ final class TimelinePanel {
         }
         if (this.overMoments(mouseX, mouseY)) {
             return this.font == null ? null : MomentsLane.tipAt(this.font, this.moments, mouseX, mouseY);
+        }
+        if (this.overViews(mouseX, mouseY)) {
+            return PointOfViewLanes.tipAt(this.viewsTop, mouseY);
         }
         Scene scene = EditorState.scene();
         if (this.overRuler(mouseX, mouseY)) {

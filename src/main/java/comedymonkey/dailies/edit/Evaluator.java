@@ -177,6 +177,53 @@ public final class Evaluator {
         return cues;
     }
 
+    /**
+     * Which recording the scene shows at the tick (PLAY-19): the id named by the latest point of view keyframe, or null
+     * for the scene's own recording. A keyframe naming a recording the scene does not hold (unlinked since) shows the
+     * scene's own recording too, so a scene never asks for footage it cannot have.
+     *
+     * @param ownId the id of the scene's own recording, which a keyframe may also name
+     */
+    public static @Nullable String pointOfView(Scene scene, double tick, @Nullable String ownId) {
+        Keyframe latest = latest(scene, KeyframeKind.POINT_OF_VIEW, tick);
+        if (!(latest instanceof Keyframe.PointOfView view) || view.recordingId().equals(ownId) || scene.linked(view.recordingId()) == null) {
+            return null;
+        }
+        return view.recordingId();
+    }
+
+    /** A change of point of view: from this tick the scene shows this recording (null for its own) */
+    public record Switch(int tick, @Nullable String recordingId) {
+    }
+
+    /**
+     * Every change of point of view between two ticks, both included, in order, for the timeline's lanes and for
+     * preloading the next recording before a cut. Keyframes that change nothing (the same recording again) are left out.
+     */
+    public static List<Switch> pointOfViewSwitches(Scene scene, int fromTick, int toTick, @Nullable String ownId) {
+        List<Integer> ticks = new ArrayList<>();
+        for (Track track : scene.tracks()) {
+            if (track.kind() == KeyframeKind.POINT_OF_VIEW && track.enabled()) {
+                for (Keyframe keyframe : track.keyframes()) {
+                    if (keyframe.tick() >= fromTick && keyframe.tick() <= toTick && !ticks.contains(keyframe.tick())) {
+                        ticks.add(keyframe.tick());
+                    }
+                }
+            }
+        }
+        ticks.sort(Integer::compare);
+        List<Switch> switches = new ArrayList<>();
+        String shown = fromTick > 0 ? pointOfView(scene, fromTick - 1, ownId) : null;
+        for (int tick : ticks) {
+            String now = pointOfView(scene, tick, ownId);
+            if (!java.util.Objects.equals(now, shown)) {
+                switches.add(new Switch(tick, now));
+                shown = now;
+            }
+        }
+        return switches;
+    }
+
     /** The blended numbers of the track of the kind that applies at the tick, or null when none does */
     public static @Nullable double[] blend(Scene scene, KeyframeKind kind, double tick) {
         Track track = applyingTrack(scene, kind, tick);

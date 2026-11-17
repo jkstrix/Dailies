@@ -60,6 +60,10 @@ public final class Playback {
     private static String lastError = null;
     private static int pauseAt = -1;
     private static boolean serverConfigsLoaded = false;
+    /** A switch of point of view (PLAY-19) is asked for: the editor stays as it is and the next recording lands here */
+    private static boolean keepEditor = false;
+    private static int switchTick = -1;
+    private static boolean switchPlayOn = false;
 
     private Playback() {
     }
@@ -222,6 +226,23 @@ public final class Playback {
         if (active) {
             pendingClose = true;
         }
+    }
+
+    /**
+     * Shows another recording of the same scene from a tick of it (PLAY-19): the point of view changes, the editor's
+     * scene stays, and the camera stays where it is. The recording is opened at the segment that holds the tick, not
+     * from its start, so a switch costs what a jump does (PLAY-15). The work happens over the next frames.
+     *
+     * @param playOn whether playback carries on playing once it has landed
+     */
+    public static void switchTo(Path recording, int tick, boolean playOn) {
+        active = true;
+        lastError = null;
+        pendingOpen = recording;
+        pendingClose = false;
+        keepEditor = true;
+        switchTick = tick;
+        switchPlayOn = playOn;
     }
 
     public static void play() {
@@ -486,12 +507,26 @@ public final class Playback {
     }
 
     private static void openNow(Minecraft minecraft, Path path) throws Exception {
+        boolean keep = keepEditor && file != null;
+        int startTick = keep ? switchTick : -1;
+        boolean playOn = keep && switchPlayOn;
+        keepEditor = false;
+        switchTick = -1;
+        switchPlayOn = false;
         if (file != null) {
             // Another recording is open: swap it out without going back to the title screen
             tell(ON_CLOSING);
-            comedymonkey.dailies.editor.EditorSession.closing();
+            if (!keep) {
+                comedymonkey.dailies.editor.EditorSession.closing();
+            }
             feed.close();
-            file.close();
+            if (!keep || !comedymonkey.dailies.editor.PointOfView.holds(file)) {
+                // The scene's own recording stays open for the editor while another point of view is shown
+                file.close();
+            }
+            if (!keep) {
+                comedymonkey.dailies.editor.PointOfView.forget(file);
+            }
             file = null;
             feed = null;
             loaded = false;
@@ -520,24 +555,40 @@ public final class Playback {
             net.neoforged.fml.config.ConfigTracker.INSTANCE.loadDefaultServerConfigs();
             serverConfigsLoaded = true;
         }
-        file = RecordingFile.openForEditing(path);
+        if (keep) {
+            RecordingFile own = comedymonkey.dailies.editor.PointOfView.reuse(path);
+            // Someone else's recording is only watched: nothing of the scene is saved into it
+            file = own != null ? own : RecordingFile.open(path);
+        } else {
+            file = RecordingFile.openForEditing(path);
+        }
         manifest = file.manifest();
         if (manifest.segments.isEmpty()) {
             throw new IllegalStateException("The recording is empty");
         }
         recordingId = manifest.id;
         total = manifest.totalTicks;
-        comedymonkey.dailies.editor.EditorSession.opened(file);
+        if (keep) {
+            comedymonkey.dailies.editor.PointOfView.shown(file);
+            startTick = Math.max(0, Math.min(total, comedymonkey.dailies.editor.PointOfView.landing(file, startTick)));
+        } else {
+            comedymonkey.dailies.editor.EditorSession.opened(file);
+        }
         feed = new Feed(file);
         paused = true;
         pauseAfterJump = true;
         rough = false;
-        ticksPerSecond = 20.0;
+        if (!keep) {
+            ticksPerSecond = 20.0;
+        }
         jumpTarget = -1;
-        Viewer.reset();
+        if (!keep) {
+            // A switch of point of view keeps the camera where it is: the viewer is not put back by the recorder
+            Viewer.reset();
+        }
         skipping = true;
         feed.skipping = true;
-        feed.load(0, minecraft, true);
+        feed.load(keep && startTick > 0 ? feed.segmentIndexAt(startTick) : 0, minecraft, true);
         loose = false;
         strict = true;
         position = feed.position();
@@ -549,6 +600,15 @@ public final class Playback {
         Viewer.startNear(minecraft, manifest.recorderId);
         settle(minecraft);
         loaded = true;
+        if (keep && startTick > position) {
+            // The rest of the way to the tick that lines up, as a jump does it
+            strict = true;
+            pauseAfterJump = !playOn;
+            jumpTarget = startTick;
+        } else if (keep) {
+            paused = !playOn;
+            pauseAfterJump = !playOn;
+        }
         Host.LOGGER.info("Dailies: opened recording {} ({} ticks)", path.getFileName(), total);
         tell(ON_OPENED);
     }
@@ -762,6 +822,7 @@ public final class Playback {
             if (file != null) {
                 file.close();
             }
+            comedymonkey.dailies.editor.PointOfView.forget(file);
         } catch (Exception e) {
             Host.LOGGER.warn("Dailies: the recording could not be closed cleanly", e);
         }
@@ -775,6 +836,8 @@ public final class Playback {
         paused = true;
         pendingOpen = null;
         pendingClose = false;
+        keepEditor = false;
+        switchTick = -1;
         WHEN_LOADED.clear();
         PackPlayback.closed(Minecraft.getInstance());
         Session.forgetRegistries();

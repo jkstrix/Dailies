@@ -47,6 +47,8 @@ public final class RecordingsScreen extends KitScreen {
     private Gadget.Push delete;
     private Gadget.Push folder;
     private Gadget.Push done;
+    private Gadget.Push share;
+    private Gadget.Push importing;
 
     public RecordingsScreen(@Nullable Screen parent) {
         super(Component.translatable("dailies.ui.list.title"), parent);
@@ -63,6 +65,13 @@ public final class RecordingsScreen extends KitScreen {
         this.folder = new Gadget.Push(Component.translatable("dailies.ui.list.open_folder"), this::openFolder);
         this.folder.tip(Component.translatable("dailies.ui.list.open_folder.tip"));
         this.done = new Gadget.Push(Component.translatable("dailies.ui.list.done"), this::onClose);
+        this.done.tip(Component.translatable("dailies.ui.list.done.tip"));
+        this.share = new Gadget.Push(Component.translatable("dailies.ui.list.share"), this::shareChosen);
+        this.share.when(() -> this.chosenEntry() != null).tip(Component.translatable("dailies.ui.list.share.tip"));
+        this.importing = new Gadget.Push(Component.translatable("dailies.ui.list.import"), this::importShared);
+        this.importing.tip(Component.translatable("dailies.ui.list.import.tip"));
+        this.fixed.add(this.share);
+        this.fixed.add(this.importing);
         this.fixed.add(this.watch);
         this.fixed.add(this.rename);
         this.fixed.add(this.delete);
@@ -89,8 +98,8 @@ public final class RecordingsScreen extends KitScreen {
         int head = this.headingHeight(font, this.count());
         int foot = Kit.ROW + 2 + 8 + 6;
         this.rows.place(font, this.left + 5, this.top + head, this.right - this.left - 10, this.bottom - foot - this.top - head);
-        this.footLeft(font, this.watch, this.rename, this.delete);
-        this.foot(font, this.folder, this.done);
+        this.footLeft(font, this.watch, this.rename, this.delete, this.share);
+        this.foot(font, this.importing, this.folder, this.done);
     }
 
     private void show(List<Recordings.Entry> entries) {
@@ -206,6 +215,65 @@ public final class RecordingsScreen extends KitScreen {
                 Component.translatable("dailies.ui.delete.no")));
     }
 
+    /** "Share session" (FILE-15): the chosen recording and its moments, packed into one file for a friend */
+    private void shareChosen() {
+        Recordings.Entry entry = this.chosenEntry();
+        if (entry == null) {
+            return;
+        }
+        Path file = entry.file();
+        Path[] made = new Path[1];
+        Notices.show(Component.translatable("dailies.ui.share.working", nameOf(entry)));
+        Controls.offThread(() -> {
+            made[0] = comedymonkey.dailies.library.Sharing.share(file, null);
+            Util.getPlatform().openPath(made[0].getParent());
+        }, Component.translatable("dailies.ui.share.failed"), () -> {
+            if (made[0] != null) {
+                Notices.show(Component.translatable("dailies.ui.share.done", made[0].getFileName().toString()));
+            }
+        });
+    }
+
+    /**
+     * "Import" (FILE-15): every friend's shared session put in the import folder is taken into the library, and their
+     * moments onto the page. With nothing there yet, the folder is opened so that one can be put in it.
+     */
+    private void importShared() {
+        int[] counts = new int[2];
+        Controls.offThread(() -> {
+            Path inbox = comedymonkey.dailies.Host.get().dataDirectory().resolve("import");
+            Files.createDirectories(inbox);
+            java.util.List<Path> packs;
+            try (java.util.stream.Stream<Path> list = Files.list(inbox)) {
+                packs = list.filter(path -> path.getFileName().toString().endsWith(comedymonkey.dailies.library.SharePack.EXTENSION)).sorted().toList();
+            }
+            if (packs.isEmpty()) {
+                Util.getPlatform().openPath(inbox);
+                counts[1] = -1;
+                return;
+            }
+            Path done = inbox.resolve("imported");
+            Files.createDirectories(done);
+            for (Path pack : packs) {
+                try {
+                    comedymonkey.dailies.library.Sharing.importPack(pack);
+                    Files.move(pack, done.resolve(pack.getFileName()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    counts[0]++;
+                } catch (java.io.IOException | RuntimeException e) {
+                    Host.LOGGER.warn("Dailies: the shared session {} could not be imported", pack.getFileName(), e);
+                    counts[1]++;
+                }
+            }
+        }, Component.translatable("dailies.ui.import.failed"), () -> {
+            if (counts[1] < 0) {
+                Notices.show(Component.translatable("dailies.ui.import.empty"));
+            } else {
+                Notices.show(Component.translatable(counts[1] == 0 ? "dailies.ui.import.done" : "dailies.ui.import.some_failed", counts[0], counts[1]));
+            }
+            this.lookAgain();
+        });
+    }
+
     private void openFolder() {
         Controls.offThread(() -> {
             Path folder = Recorder.folder();
@@ -276,7 +344,10 @@ public final class RecordingsScreen extends KitScreen {
         Row(Recordings.Entry entry) {
             this.entry = entry;
             RecordingManifest manifest = entry.manifest();
-            this.name = Component.translatable("dailies.ui.list.name", nameOf(entry));
+            boolean theirs = entry.file().toAbsolutePath().normalize().startsWith(Recorder.folder().resolve(comedymonkey.dailies.library.Sharing.SHARED_FOLDER).toAbsolutePath().normalize());
+            this.name = theirs && manifest.recorderName != null && !manifest.recorderName.isBlank()
+                    ? Component.translatable("dailies.ui.list.name_theirs", nameOf(entry), manifest.recorderName)
+                    : Component.translatable("dailies.ui.list.name", nameOf(entry));
             long when = manifest.created > 0 ? manifest.created : entry.modified();
             String date = DATE.format(Instant.ofEpochMilli(when).atZone(ZoneId.systemDefault()));
             String megabytes = String.format(Locale.ROOT, "%.1f", entry.size() / 1048576.0);

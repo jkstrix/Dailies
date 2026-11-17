@@ -301,6 +301,47 @@ public final class RecordingFile implements Closeable {
         return best;
     }
 
+    /**
+     * The tick at which the world's game time was this, exactly, from the time index; -1 when the recording does not
+     * hold it. Reads only the segments whose game times could hold it (PLAY-18)
+     */
+    public int tickAtGame(long gameTime) throws IOException {
+        List<RecordingManifest.SegmentTime> starts = this.segmentTimes();
+        for (int i = 0; i < this.manifest.segments.size(); i++) {
+            RecordingManifest.Segment segment = this.manifest.segments.get(i);
+            RecordingManifest.SegmentTime start = null;
+            for (RecordingManifest.SegmentTime time : starts) {
+                if (time.segment == segment.number) {
+                    start = time;
+                }
+            }
+            // A segment's game time starts where the time index says and goes up about one a tick; a little slack
+            // allows for a server that lagged
+            int length = segment.endTick - segment.startTick;
+            if (start == null || gameTime < start.game - 20 || gameTime > start.game + length + 20) {
+                continue;
+            }
+            int tick = this.times(segment).tickAtGame(gameTime);
+            if (tick >= 0) {
+                return tick;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Gives the recording another identity: a new unique id and recorder. For the scripted test, which has one computer
+     * and so makes a second player's recording of the same world by copying the first and calling it another's.
+     */
+    public synchronized void restamp(String id, String recorderName, String recorderId) throws IOException {
+        this.requireWritable();
+        this.manifest.id = id;
+        this.manifest.recorderName = recorderName;
+        this.manifest.recorderId = recorderId;
+        this.container.append(Container.MANIFEST, 0, 0, 0, this.manifest.toBytes());
+        this.container.appendTrailer();
+    }
+
     /** The source map: the stretches of originals this recording is made of, or itself when it was never edited (FILE-11) */
     public List<Spans.Span> sourceMap() {
         return this.manifest.sourceMap();

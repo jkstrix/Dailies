@@ -269,6 +269,13 @@ public final class MomentsTools {
                 .string("keyword", "Only clips whose title, summary, events or transcript contain this text"),
             McpTool.ThreadMode.HTTP, 0, MomentsTools::clipsList);
 
+        registrar.add("moments_everyone",
+            "Everyone's events over a session, one row per person, for the page's session strip (PLAY-18): this session's own, and those of every other session of the "
+                + "same stretch of play, such as a friend's imported from a shared session (theirs = true), or one of your own on a linked recording. Each row has the "
+                + "player, the session, and its events with time, type, description, score and replay position.",
+            schema().number("min_importance", "Only events with at least this importance (default 0)"),
+            McpTool.ThreadMode.HTTP, 0, MomentsTools::everyone);
+
         registrar.add("moments_transcribe_pending",
             "Queue the pending and failed voice segments of a session for transcription again, eg. after the Whisper server came back or when live transcription is off. Returns counts.",
             schema(), McpTool.ThreadMode.HTTP, 0, MomentsTools::transcribePending);
@@ -576,6 +583,17 @@ public final class MomentsTools {
         return json;
     }
 
+    /** A session as the lists show it, marked when it is a friend's taken in from a shared session (FILE-15) */
+    private static JsonObject sessionEntry(MomentsSession session) {
+        JsonObject json = sessionJson(session);
+        boolean theirs = comedymonkey.dailies.moments.storage.MomentsShare.theirs(session);
+        json.addProperty("theirs", theirs);
+        if (theirs) {
+            json.add("shared_by", MJson.obj(session.meta(), "shared_by") == null ? new JsonObject() : MJson.obj(session.meta(), "shared_by").deepCopy());
+        }
+        return json;
+    }
+
     private static JsonObject sessionsList(McpArgs args) {
         int limit = args.optInteger("limit", 20);
         if (limit < 1) {
@@ -589,13 +607,95 @@ public final class MomentsTools {
             }
             MomentsSession session = Moments.storage().getSession(id);
             if (session != null) {
-                array.add(sessionJson(session));
+                array.add(sessionEntry(session));
             }
         }
         JsonObject json = new JsonObject();
         json.addProperty("total", ids.size());
         json.add("sessions", array);
         return json;
+    }
+
+    // --- Everyone's events (PLAY-18) ---
+
+    private static JsonObject everyone(McpArgs args) {
+        MomentsSession session = session(args);
+        double minimum = args.optNumber("min_importance", 0);
+        long start = MJson.lng(session.meta(), "start_real_time", 0);
+        long end = MJson.lng(session.meta(), "end_real_time", 0);
+        if (end <= 0) {
+            end = System.currentTimeMillis();
+        }
+        // The recordings linked to this session's, as the other players' sessions name them
+        Set<String> linked = new HashSet<>();
+        for (JsonElement replay : MJson.arr(session.meta(), "replays")) {
+            try {
+                linked.addAll(Host.get().linkedRecordings(replay.getAsString()));
+            } catch (RuntimeException ignored) {
+                // Without links only the time and the world say which sessions go together
+            }
+        }
+        JsonArray rows = new JsonArray();
+        rows.add(row(session, minimum, false));
+        String world = MJson.str(session.meta(), "world_key");
+        for (String id : Moments.storage().listSessionIds()) {
+            MomentsSession other = Moments.storage().getSession(id);
+            if (other == null || other == session) {
+                continue;
+            }
+            long otherStart = MJson.lng(other.meta(), "start_real_time", 0);
+            long otherEnd = MJson.lng(other.meta(), "end_real_time", 0);
+            if (otherEnd <= 0) {
+                otherEnd = otherStart > 0 ? Math.max(otherStart, System.currentTimeMillis()) : 0;
+            }
+            boolean overlaps = otherStart > 0 && otherStart <= end && otherEnd >= start;
+            boolean sameRecording = false;
+            for (JsonElement replay : MJson.arr(other.meta(), "replays")) {
+                sameRecording |= replay.isJsonPrimitive() && linked.contains(replay.getAsString());
+            }
+            boolean sameWorld = world != null && world.equals(MJson.str(other.meta(), "world_key"));
+            String me = MJson.str(MJson.obj(session.meta(), "local_player"), "uuid", "");
+            boolean someoneElse = !me.equals(MJson.str(MJson.obj(other.meta(), "local_player"), "uuid", ""));
+            if (overlaps && someoneElse && (sameRecording || sameWorld)) {
+                rows.add(row(other, minimum, true));
+            }
+        }
+        JsonObject json = new JsonObject();
+        json.addProperty("session", session.id);
+        json.addProperty("start_real_time", start);
+        json.addProperty("end_real_time", end);
+        json.add("rows", rows);
+        return json;
+    }
+
+    private static JsonObject row(MomentsSession session, double minimum, boolean other) {
+        MomentAnalysis analysis = analysis(session, MomentsConfig.contextSeconds());
+        JsonObject row = new JsonObject();
+        row.add("player", MJson.obj(session.meta(), "local_player") == null ? new JsonObject() : MJson.obj(session.meta(), "local_player").deepCopy());
+        row.addProperty("session", session.id);
+        row.addProperty("theirs", comedymonkey.dailies.moments.storage.MomentsShare.theirs(session));
+        row.addProperty("own", !other);
+        JsonArray events = new JsonArray();
+        for (JsonObject event : analysis.events) {
+            if (MomentsConfig.isIgnored(MJson.str(event, "type", ""), MJson.str(event, "subject"))) {
+                continue;
+            }
+            double score = analysis.score(event);
+            if (score < minimum) {
+                continue;
+            }
+            JsonObject brief = new JsonObject();
+            brief.addProperty("id", MJson.str(event, "id"));
+            brief.addProperty("type", MJson.str(event, "type"));
+            brief.addProperty("real_time", MJson.lng(event, "real_time", 0));
+            brief.addProperty("description", MomentAnalysis.describe(event));
+            brief.addProperty("importance", MJson.round(score));
+            brief.addProperty("replay_uuid", MJson.str(event, "replay_uuid"));
+            brief.addProperty("replay_tick", MJson.lng(event, "replay_tick", -1));
+            events.add(brief);
+        }
+        row.add("events", events);
+        return row;
     }
 
     // --- Events ---
@@ -1159,6 +1259,15 @@ public final class MomentsTools {
                     chosen.add(located);
                 }
             }
+            if (chosen.isEmpty() && replayUuid != null) {
+                // Another player's recording of the same moment (PLAY-18): cued at the tick that lines up with it there
+                int viewEnd = clipCued != null ? (int) Math.max(tick, MJson.lng(clipCued, "end_replay_tick", tick)) : tick + 100;
+                for (Host.PointOfView view : Host.get().pointsOfView(replayUuid, tick, viewEnd)) {
+                    if (view.recordingId().equals(wantedRecording)) {
+                        chosen.add(new Host.Located(view.file(), view.recordingId(), view.name(), view.startTick(), view.open(), false));
+                    }
+                }
+            }
             if (chosen.isEmpty()) {
                 throw new McpToolException("CUT: this was cut from this recording (id " + wantedRecording + "), or was never in it. " + stillHeldBy(found));
             }
@@ -1282,6 +1391,36 @@ public final class MomentsTools {
      * Every recording that holds a clip, best first: the stretches of it there, and whether any of it was cut. The
      * page lists these, each with its own cue button, so the edited episode can be opened over the raw footage.
      */
+    /**
+     * Every other player's recording that covers a clip (PLAY-18), each with the clip's stretch in its own ticks. Pass one's
+     * recording_id to moments_cue to watch the clip from there.
+     */
+    private static JsonArray clipPointsOfView(JsonObject clip) {
+        JsonArray array = new JsonArray();
+        String replayUuid = MJson.str(clip, "replay_uuid");
+        if (replayUuid == null) {
+            return array;
+        }
+        int start = (int) Math.max(0, MJson.lng(clip, "start_replay_tick", 0));
+        int end = (int) Math.max(start, MJson.lng(clip, "end_replay_tick", start));
+        try {
+            for (Host.PointOfView view : Host.get().pointsOfView(replayUuid, start, end)) {
+                JsonObject json = new JsonObject();
+                json.addProperty("recording_id", view.recordingId());
+                json.addProperty("name", view.name());
+                json.addProperty("recorder", view.recorder());
+                json.addProperty("file", view.file().getFileName().toString());
+                json.addProperty("start_tick", view.startTick());
+                json.addProperty("end_tick", view.endTick());
+                json.addProperty("open", view.open());
+                array.add(json);
+            }
+        } catch (RuntimeException e) {
+            Host.LOGGER.warn("Moments: the other points of view of a clip could not be looked up", e);
+        }
+        return array;
+    }
+
     private static JsonArray clipLocations(JsonObject clip) {
         JsonArray array = new JsonArray();
         String replayUuid = MJson.str(clip, "replay_uuid");
@@ -1341,6 +1480,7 @@ public final class MomentsTools {
         copy.add("suggested_camera", suggestCamera(MJson.arr(clip, "events")));
         JsonArray locations = clipLocations(clip);
         copy.add("locations", locations);
+        copy.add("points_of_view", clipPointsOfView(clip));
         if (locations.isEmpty() && MJson.str(clip, "replay_uuid") != null) {
             // Rule 3 of the source map: a clip that is nowhere any more says so
             copy.addProperty("cut_everywhere", true);

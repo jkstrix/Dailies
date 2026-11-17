@@ -560,6 +560,46 @@ public sealed interface Keyframe {
     }
 
     /**
+     * From this tick the scene shows another of its linked recordings, the same moment seen by someone else (PLAY-19,
+     * EDIT-11). It is a cut: playback jumps the other recording to the tick that lines up with this one, and the camera,
+     * the other tracks and the looks carry on as they were. The recording is named by its unique id; the label is the
+     * name a person reads, usually the player who recorded it, and may be empty.
+     */
+    record PointOfView(int tick, Interpolation interpolation, String recordingId, String label) implements Keyframe {
+        public PointOfView {
+            common(tick, interpolation);
+            if (recordingId == null || recordingId.isBlank()) {
+                throw new IllegalArgumentException("'recording_id' must be a string that is not empty: the id of one of the scene's recordings");
+            }
+            recordingId = recordingId.trim();
+            label = label == null ? "" : label.trim();
+        }
+
+        @Override
+        public KeyframeKind kind() {
+            return KeyframeKind.POINT_OF_VIEW;
+        }
+
+        @Override
+        public PointOfView withTick(int tick) {
+            return new PointOfView(tick, this.interpolation, this.recordingId, this.label);
+        }
+
+        @Override
+        public PointOfView withInterpolation(Interpolation interpolation) {
+            return new PointOfView(this.tick, interpolation, this.recordingId, this.label);
+        }
+
+        @Override
+        public JsonObject toJson() {
+            JsonObject json = base(this);
+            json.addProperty("recording_id", this.recordingId);
+            json.addProperty("label", this.label);
+            return json;
+        }
+    }
+
+    /**
      * Reads a keyframe of the given kind. "tick" (default 0) and "interpolation" (default linear) may be left out, so
      * that a caller holding them separately can add them with {@link #withTick} and {@link #withInterpolation}.
      * Fields the kind does not know are ignored.
@@ -600,6 +640,8 @@ public sealed interface Keyframe {
                     JsonFields.integer(json, "x", (int) -far, (int) far), JsonFields.integer(json, "y", (int) -far, (int) far),
                     JsonFields.integer(json, "z", (int) -far, (int) far), JsonFields.text(json, "block_state"));
             case AUDIO -> new Audio(tick, mode, JsonFields.text(json, "file"), JsonFields.number(json, "volume", 0, 2, 1));
+            case POINT_OF_VIEW -> new PointOfView(tick, mode, JsonFields.text(json, "recording_id"),
+                    json.has("label") && json.get("label").isJsonPrimitive() ? json.get("label").getAsString() : "");
         };
     }
 
@@ -642,6 +684,7 @@ public sealed interface Keyframe {
             case TIME_OF_DAY -> new TimeOfDay(120, Interpolation.LINEAR, 6000.0);
             case BLOCK_CHANGE -> new BlockChange(120, Interpolation.HOLD, 104, 70, -32, "minecraft:oak_stairs[facing=north]");
             case AUDIO -> new Audio(120, Interpolation.HOLD, "C:/Music/theme.ogg", 1.0);
+            case POINT_OF_VIEW -> new PointOfView(120, Interpolation.HOLD, "3f2a9c4e-8b1d-4e7a-9c55-2d6f0a1b7e93", "Alex");
         };
     }
 

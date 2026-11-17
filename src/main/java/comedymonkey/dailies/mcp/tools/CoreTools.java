@@ -55,6 +55,7 @@ public final class CoreTools {
         SmartCameraTools.register(registrar);
         EditingTools.register(registrar);
         LooksTools.register(registrar);
+        PointOfViewTools.register(registrar);
     }
 
     /** Refuses arguments the tool does not have, naming the ones it does */
