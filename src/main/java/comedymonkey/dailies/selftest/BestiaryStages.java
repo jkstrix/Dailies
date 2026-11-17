@@ -401,8 +401,12 @@ final class BestiaryStages {
                     }
                     most = Math.max(most, here);
                 }
-                long left = orbs(item.to - 4, 1);
-                return most - left >= 15 ? "orbs worth 1: " + most + " at once, " + left + " at the end, the rest merged away (" + ever.size() + " seen in all)" : null;
+                java.util.Set<Integer> gone = new java.util.HashSet<>(ever);
+                Census last = Census.live.get(item.to - 4);
+                if (last != null) {
+                    gone.removeAll(last.things.keySet());
+                }
+                return gone.size() >= 15 ? ever.size() + " orbs worth 1 were seen, and " + gone.size() + " of them went again, out of the recorder's reach: merged into others" : null;
             });
         item("XP: orbs homing on the recorder and collected, the XP bar in the recorded HUD").owns("recorded HUD")
             .need(seen("an experience level in the HUD", census -> !census.hud.contains("level=0 ") && census.hud.contains("level=")));
@@ -415,7 +419,10 @@ final class BestiaryStages {
         c("damage @e[name=\"xp pig\",limit=1] 100 minecraft:player_attack by @s");
         server("orbs in quantity", (level, player) -> {
             for (int i = 0; i < 80; i++) {
-                level.addFreshEntity(new ExperienceOrb(level, 4.5, -60.0, 12.5, 1));
+                ExperienceOrb orb = new ExperienceOrb(level, 4.5, -60.0, 12.5, 1);
+                // Lying still, so that they are still on one spot when the next lot comes
+                orb.setDeltaMovement(Vec3.ZERO);
+                level.addFreshEntity(orb);
             }
             for (int i = 0; i < 40; i++) {
                 level.addFreshEntity(new ExperienceOrb(level, 12.5 + (i % 7) * 0.9, -59.0, 20.5 + (i % 5) * 0.9, 2 + i % 8));
@@ -427,7 +434,9 @@ final class BestiaryStages {
         // what is left of the first lot takes in what is left of the second
         server("orbs to merge with the first", (level, player) -> {
             for (int i = 0; i < 80; i++) {
-                level.addFreshEntity(new ExperienceOrb(level, 4.5, -60.0, 12.5, 1));
+                ExperienceOrb orb = new ExperienceOrb(level, 4.5, -60.0, 12.5, 1);
+                orb.setDeltaMovement(Vec3.ZERO);
+                level.addFreshEntity(orb);
             }
         });
         waitTicks(1);

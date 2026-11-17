@@ -237,6 +237,11 @@ final class Census {
                 if (then != null && tally != null) {
                     compare(then, now, "play", tally);
                 }
+                // Light in play is looked at three ticks on, as the live game's was a second time: both take a few frames over it
+                Census earlier = live.get(tick - 3);
+                if (earlier != null && earlier.light != null && tally != null && earlier.dimension.equals(now.dimension)) {
+                    compareLight(earlier, scanLight(minecraft.level, boxesAt(earlier.dimension, earlier.tick)), "play", tally, false);
+                }
                 aim(tick + 1);
             }
         } catch (Throwable t) {
@@ -796,6 +801,10 @@ final class Census {
                     if (java.util.Objects.equals(a, b) || (own && recently(then, key, b))) {
                         continue;
                     }
+                    // Primed TNT counts its own fuse down between the server's corrections, and has been seen one out for a tick
+                    if (key.equals("d8") && was.type.equals("minecraft:tnt") && a != null && b != null && Math.abs(Integer.parseInt(a) - Integer.parseInt(b)) <= 1) {
+                        continue;
+                    }
                     tally.add(mode, was.label, "state " + key + " differs", tick, "live " + a + ", playback " + b, false);
                 }
             }
@@ -846,7 +855,7 @@ final class Census {
             }
         }
 
-        if (then.light != null && now.light != null) {
+        if (then.light != null && now.light != null && !mode.equals("play")) {
             compareLight(then, now.light, mode, tally, false);
         }
         if (!then.bars.equals(now.bars)) {
