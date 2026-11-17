@@ -35,6 +35,62 @@ final class OwnPlayer {
     private final Map<EquipmentSlot, ItemStack> equipment = new EnumMap<>(EquipmentSlot.class);
     private int ticks = 0;
 
+    // Where a game watching this player would be drawing them: it eases towards each reported position over three
+    // ticks. A snapshot places the recorder here, so a jump shows them exactly where continuous play would
+    private double shownX, shownY, shownZ;
+    private float shownYRot, shownXRot;
+    private double targetX, targetY, targetZ;
+    private float targetYRot, targetXRot;
+    private int steps = 0;
+    private boolean shown = false;
+
+    /** x, y, z, yaw and pitch as a watching game would show them now, or null when nothing has been reported yet */
+    double[] shown() {
+        return this.shown ? new double[]{this.shownX, this.shownY, this.shownZ, this.shownYRot, this.shownXRot} : null;
+    }
+
+    /** Nothing before this moment leads up to it: a watching game would start from where the player is */
+    void forgetShown() {
+        this.shown = false;
+        this.steps = 0;
+    }
+
+    private void report(LocalPlayer player, boolean position) {
+        if (!this.shown) {
+            this.shownX = player.getX();
+            this.shownY = player.getY();
+            this.shownZ = player.getZ();
+            this.shownYRot = player.getYRot();
+            this.shownXRot = player.getXRot();
+            this.shown = true;
+        }
+        if (position) {
+            this.targetX = player.getX();
+            this.targetY = player.getY();
+            this.targetZ = player.getZ();
+        } else {
+            this.targetX = this.shownX;
+            this.targetY = this.shownY;
+            this.targetZ = this.shownZ;
+        }
+        // The wire carries angles as 256ths of a turn
+        this.targetYRot = angle(player.getYRot()) * 360.0F / 256.0F;
+        this.targetXRot = angle(player.getXRot()) * 360.0F / 256.0F;
+        this.steps = 3;
+    }
+
+    private void ease() {
+        if (this.steps > 0) {
+            double part = 1.0 / this.steps;
+            this.shownX = Mth.lerp(part, this.shownX, this.targetX);
+            this.shownY = Mth.lerp(part, this.shownY, this.targetY);
+            this.shownZ = Mth.lerp(part, this.shownZ, this.targetZ);
+            this.shownYRot = (float) Mth.rotLerp(part, (double) this.shownYRot, (double) this.targetYRot);
+            this.shownXRot = (float) Mth.lerp(part, (double) this.shownXRot, (double) this.targetXRot);
+            this.steps--;
+        }
+    }
+
     /** Forget everything, so the next tick describes the player in full */
     void reset() {
         this.known = false;
@@ -53,9 +109,11 @@ final class OwnPlayer {
             if (player.isPassenger()) {
                 // A rider's place comes from what they ride, as it does for every other player
                 if (turned) {
+                    this.report(player, false);
                     out.accept(new ClientboundMoveEntityPacket.Rot(player.getId(), angle(player.getYRot()), angle(player.getXRot()), player.onGround()));
                 }
             } else if (moved || turned) {
+                this.report(player, true);
                 out.accept(new ClientboundTeleportEntityPacket(player));
             }
             this.x = player.getX();
@@ -72,6 +130,8 @@ final class OwnPlayer {
             }
             this.known = true;
         }
+
+        this.ease();
 
         List<Pair<EquipmentSlot, ItemStack>> changed = null;
         for (EquipmentSlot slot : EquipmentSlot.values()) {

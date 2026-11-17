@@ -64,5 +64,7 @@
   "dailies.notice.finished": "Recording saved as %s",
   "dailies.notice.cancelled": "Recording discarded",
   "dailies.notice.failed": "Recording failed. What was captured is kept and can be recovered",
-  "dailies.notice.disk_slow": "Recording paused: the disk cannot keep up"
+  "dailies.notice.disk_slow": "Recording paused: the disk cannot keep up",
+  "dailies.playback.opening": "Opening the recording",
+  "dailies.playback.jumping": "Jumping"
 }

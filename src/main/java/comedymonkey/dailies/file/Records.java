@@ -33,6 +33,11 @@ public final class Records {
     /** The packets up to BUNDLE_END arrived as one bundle and must be applied as one */
     public static final int BUNDLE_BEGIN = 11;
     public static final int BUNDLE_END = 12;
+    /**
+     * Straight after SNAPSHOT_BEGIN: what came before this segment does not lead up to it (a pause, another world,
+     * another dimension), so playing across the boundary has to rebuild the world from this snapshot
+     */
+    public static final int DISCONTINUITY = 13;
 
     private Records() {
     }

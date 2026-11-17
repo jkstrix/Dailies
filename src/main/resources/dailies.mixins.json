@@ -10,7 +10,13 @@
     "capture.LocalPlayerMixin",
     "capture.BlockEntityInfoMixin",
     "access.ClientPacketListenerAccess",
-    "access.BiomeManagerAccess"
+    "access.BiomeManagerAccess",
+    "access.ConnectionAccess",
+    "access.TimerAccess",
+    "access.MinecraftAccess",
+    "playback.MinecraftMixin",
+    "playback.SoundEngineMixin",
+    "playback.ParticleEngineMixin"
   ],
   "injectors": {
     "defaultRequire": 1

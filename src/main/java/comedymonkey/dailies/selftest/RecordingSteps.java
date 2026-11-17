@@ -28,6 +28,23 @@ final class RecordingSteps {
 
     /** The recording the later steps play back */
     static Path recording;
+    /** Where things were in the live game at known ticks of that recording */
+    static final List<Note> notes = new java.util.ArrayList<>();
+
+    record Note(int tick, java.util.Map<String, net.minecraft.world.phys.Vec3> positions) {
+        /** Call on the client thread, so the tick and the positions belong together */
+        static Note take(Minecraft minecraft) {
+            java.util.Map<String, net.minecraft.world.phys.Vec3> positions = new java.util.TreeMap<>();
+            for (net.minecraft.world.entity.Entity entity : minecraft.level.entitiesForRendering()) {
+                if (entity == minecraft.player) {
+                    positions.put("recorder", entity.position());
+                } else if (entity.hasCustomName()) {
+                    positions.put(entity.getCustomName().getString(), entity.position());
+                }
+            }
+            return new Note(Recorder.get().recordingTick(), positions);
+        }
+    }
 
     private RecordingSteps() {
     }
@@ -84,6 +101,7 @@ final class RecordingSteps {
         String id = started.get("recording_id").getAsString();
         test.sleepTicks(20);
 
+        test.command("summon minecraft:armor_stand 8.5 -60 6.5 {CustomName:'\"Mover\"',NoGravity:1b}");
         test.command("summon minecraft:pig 3 -60 3 {CustomName:'\"Hamlet\"',NoAI:1b}");
         test.command("setblock 2 -60 0 minecraft:gold_block");
         test.sleepTicks(10);
@@ -115,7 +133,11 @@ final class RecordingSteps {
         check(segmentTicks <= 200, "the scripted run needs short segments: set dailies.test.segmentTicks");
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
             test.command("tp @s " + (4.5 + (i % 5)) + " -60 0.5 " + (i * 20 % 360) + " 0");
+            test.command("tp @e[type=minecraft:armor_stand,name=Mover,limit=1] " + (8.5 + (i % 4) * 1.5) + " -60 " + (6.5 + (i % 3)) + " " + (i * 45 % 360) + " 0");
             test.sleepTicks(20);
+            notes.add(test.onClient(() -> Note.take(minecraft)));
+            // Nothing else may happen on the tick a note belongs to
+            test.sleepTicks(4);
         }
 
         FrameTimes.Result recordingFrames = FrameTimes.end();

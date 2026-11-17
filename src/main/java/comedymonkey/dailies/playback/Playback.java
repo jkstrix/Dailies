@@ -1,0 +1,512 @@
+package comedymonkey.dailies.playback;
+
+import comedymonkey.dailies.Host;
+import comedymonkey.dailies.file.RecordingFile;
+import comedymonkey.dailies.file.RecordingManifest;
+import comedymonkey.dailies.mixin.access.TimerAccess;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.GenericMessageScreen;
+import net.minecraft.client.gui.screens.ReceivingLevelScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.player.Input;
+import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.client.event.ClientChatEvent;
+import net.neoforged.neoforge.client.event.ClientPauseChangeEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import org.jetbrains.annotations.Nullable;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Watching a recording (specification chapter IV). The game is given a world session with no server behind it, and
+ * the recording is fed into it tick by tick. Nothing is simulated: whatever moves does so because the recording
+ * says it did. All state belongs to the client thread; the few flags other threads read are volatile.
+ */
+public final class Playback {
+
+    /** How long a jump may hold up one frame, so the game stays responsive while it runs (PLAY-15) */
+    private static final long JUMP_SLICE_NANOS = 30_000_000L;
+
+    private static volatile boolean active = false;
+    private static volatile boolean loaded = false;
+    private static volatile boolean paused = true;
+    private static volatile boolean skipping = false;
+    private static volatile double ticksPerSecond = 20.0;
+    private static volatile int position = 0;
+    private static volatile int total = 0;
+    private static volatile String recordingId = null;
+    private static volatile int jumpTarget = -1;
+
+    private static RecordingFile file;
+    private static RecordingManifest manifest;
+    private static Feed feed;
+    private static Path pendingOpen = null;
+    private static boolean pendingClose = false;
+    private static int reloadIndex = -1;
+    private static boolean pauseAfterJump = true;
+    private static boolean fastTick = false;
+    private static boolean inFrameStart = false;
+    private static boolean leaving = false;
+    private static final List<Runnable> WHEN_LOADED = new ArrayList<>();
+    private static String lastError = null;
+    private static int pauseAt = -1;
+    private static boolean serverConfigsLoaded = false;
+
+    private Playback() {
+    }
+
+    public static void init() {
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
+        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> Viewer.frame());
+        NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> {
+            if (active && !leaving) {
+                // The person left through the game's own menu
+                cleanUp();
+            }
+        });
+        // The pause flag is playback's own while a recording is open; the game's usual reasons to change it do not apply
+        NeoForge.EVENT_BUS.addListener((ClientPauseChangeEvent.Pre event) -> {
+            if (ownsClock()) {
+                event.setCanceled(true);
+            }
+        });
+        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4)
+        NeoForge.EVENT_BUS.addListener((ScreenEvent.Opening event) -> {
+            if (loaded && (event.getNewScreen() instanceof ChatScreen || event.getNewScreen() instanceof AbstractContainerScreen<?>)) {
+                event.setCanceled(true);
+            }
+        });
+        NeoForge.EVENT_BUS.addListener((ClientChatEvent event) -> {
+            if (active) {
+                event.setCanceled(true);
+            }
+        });
+    }
+
+    // --- What others may ask (any thread) ---
+
+    /** True from the moment a recording is asked for until the playback world has been left */
+    public static boolean active() {
+        return active;
+    }
+
+    /** Whether the recording's world is up and can be watched */
+    public static boolean loaded() {
+        return loaded;
+    }
+
+    public static boolean paused() {
+        return paused;
+    }
+
+    public static int position() {
+        return position;
+    }
+
+    public static int total() {
+        return total;
+    }
+
+    public static double ticksPerSecond() {
+        return ticksPerSecond;
+    }
+
+    public static @Nullable String recordingId() {
+        return recordingId;
+    }
+
+    /** Whether a jump is under way */
+    public static boolean jumping() {
+        return jumpTarget >= 0 || reloadIndex >= 0;
+    }
+
+    /** Whether recorded time is being skipped over right now, so nothing from it should be heard or pile up */
+    public static boolean skipping() {
+        return skipping;
+    }
+
+    public static @Nullable String lastError() {
+        return lastError;
+    }
+
+    public static @Nullable RecordingManifest manifest() {
+        return manifest;
+    }
+
+    public static @Nullable RecordingFile file() {
+        return file;
+    }
+
+    // --- For the clock hooks ---
+
+    public static boolean ownsClock() {
+        return loaded;
+    }
+
+    public static boolean gamePaused() {
+        return paused && !fastTick;
+    }
+
+    public static float millisPerTick() {
+        return (float) (1000.0 / Math.max(0.05, ticksPerSecond));
+    }
+
+    // --- Controls (client thread) ---
+
+    /** Leaves whatever is open and opens this recording. The work happens over the next frames */
+    public static void open(Path recording) {
+        active = true;
+        loaded = false;
+        lastError = null;
+        pendingOpen = recording;
+        pendingClose = false;
+    }
+
+    public static void close() {
+        if (active) {
+            pendingClose = true;
+        }
+    }
+
+    public static void play() {
+        requireLoaded();
+        if (position >= total) {
+            jumpTo(0, false);
+        }
+        paused = false;
+        pauseAfterJump = false;
+    }
+
+    public static void pause() {
+        requireLoaded();
+        paused = true;
+        pauseAfterJump = true;
+    }
+
+    /**
+     * @param speed ticks of recording per second of real time; 20 is as recorded
+     */
+    public static void setTicksPerSecond(double speed) {
+        ticksPerSecond = Math.max(0.05, Math.min(2000.0, speed));
+    }
+
+    /**
+     * Jump to a tick. The world there is the same however it is reached (PLAY-11).
+     *
+     * @param pauseThere whether to stay paused on arrival; otherwise playback carries on as it was
+     */
+    public static void jumpTo(int tick, boolean pauseThere) {
+        requireLoaded();
+        int target = Math.max(0, Math.min(total, tick));
+        pauseAfterJump = pauseThere || paused;
+        if (target == position && !jumping()) {
+            paused = pauseAfterJump;
+            return;
+        }
+        int index = feed.segmentIndexAt(target);
+        if (target < position || feed.segmentStart(index) > position) {
+            // Backwards, or far enough ahead that a later snapshot is the nearer start
+            reloadIndex = index;
+        }
+        jumpTarget = target;
+    }
+
+    /** Plays on from here and pauses exactly at a tick */
+    public static void playTo(int tick) {
+        requireLoaded();
+        pauseAt = Math.max(0, Math.min(total, tick));
+        if (position < pauseAt) {
+            paused = false;
+            pauseAfterJump = false;
+        }
+    }
+
+    public static void step() {
+        requireLoaded();
+        if (position < total) {
+            jumpTo(position + 1, true);
+        }
+    }
+
+    /** Runs something on the client thread once the recording that is opening has loaded, or at once if one has */
+    public static void whenLoaded(Runnable action) {
+        if (loaded && !jumping()) {
+            action.run();
+        } else {
+            WHEN_LOADED.add(action);
+        }
+    }
+
+    private static void requireLoaded() {
+        if (!loaded) {
+            throw new IllegalStateException(active ? "The recording is still loading" : "No recording is open");
+        }
+    }
+
+    // --- The work ---
+
+    /** The start of every frame, outside any game tick: the only place the world may be torn down and rebuilt */
+    public static void frameStart() {
+        if (!active || inFrameStart) {
+            return;
+        }
+        inFrameStart = true;
+        Minecraft minecraft = Minecraft.getInstance();
+        try {
+            if (pendingClose) {
+                pendingClose = false;
+                leave(minecraft);
+                return;
+            }
+            if (pendingOpen != null) {
+                Path path = pendingOpen;
+                pendingOpen = null;
+                openNow(minecraft, path);
+            }
+            if (!loaded) {
+                return;
+            }
+            if (reloadIndex < 0 && feed.reloadWanted() >= 0) {
+                // Play ran into a segment that does not follow on from the last one
+                reloadIndex = feed.reloadWanted();
+            }
+            if (reloadIndex >= 0) {
+                int index = reloadIndex;
+                reloadIndex = -1;
+                skipping = true;
+                feed.skipping = true;
+                feed.load(index, minecraft);
+                position = feed.position();
+                if (minecraft.screen instanceof ReceivingLevelScreen || minecraft.screen instanceof GenericMessageScreen) {
+                    minecraft.setScreen(null);
+                }
+            }
+            if (jumpTarget >= 0) {
+                runJump(minecraft);
+            } else if (skipping) {
+                skipping = false;
+                feed.skipping = false;
+                settle(minecraft);
+            }
+            if (!jumping() && !WHEN_LOADED.isEmpty()) {
+                List<Runnable> actions = new ArrayList<>(WHEN_LOADED);
+                WHEN_LOADED.clear();
+                actions.forEach(Runnable::run);
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.error("Dailies: playback failed and has been closed", t);
+            lastError = t.getMessage() == null ? t.toString() : t.getMessage();
+            try {
+                leave(minecraft);
+            } catch (Throwable again) {
+                Host.LOGGER.error("Dailies: the playback world could not be left cleanly", again);
+                cleanUp();
+            }
+        } finally {
+            inFrameStart = false;
+        }
+    }
+
+    private static void openNow(Minecraft minecraft, Path path) throws Exception {
+        if (file != null) {
+            // Another recording is open: swap it out without going back to the title screen
+            feed.close();
+            file.close();
+            file = null;
+            feed = null;
+            loaded = false;
+            if (minecraft.level != null) {
+                minecraft.clearClientLevel(new GenericMessageScreen(Component.translatable("dailies.playback.opening")));
+            }
+        } else if (minecraft.level != null) {
+            // A live world. Leave it the way its own menu does
+            leaving = true;
+            try {
+                boolean local = minecraft.isLocalServer();
+                minecraft.level.disconnect();
+                if (local) {
+                    minecraft.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
+                } else {
+                    minecraft.disconnect();
+                }
+            } finally {
+                leaving = false;
+            }
+        }
+        minecraft.setScreen(new GenericMessageScreen(Component.translatable("dailies.playback.opening")));
+
+        // No server will send its settings, so every mod's server settings take their defaults, as on a vanilla server
+        if (!serverConfigsLoaded) {
+            net.neoforged.fml.config.ConfigTracker.INSTANCE.loadDefaultServerConfigs();
+            serverConfigsLoaded = true;
+        }
+        file = RecordingFile.openForEditing(path);
+        manifest = file.manifest();
+        if (manifest.segments.isEmpty()) {
+            throw new IllegalStateException("The recording is empty");
+        }
+        recordingId = manifest.id;
+        total = manifest.totalTicks;
+        feed = new Feed(file);
+        paused = true;
+        pauseAfterJump = true;
+        ticksPerSecond = 20.0;
+        jumpTarget = -1;
+        Viewer.reset();
+        skipping = true;
+        feed.skipping = true;
+        feed.load(0, minecraft);
+        position = feed.position();
+        skipping = false;
+        feed.skipping = false;
+        if (minecraft.screen instanceof ReceivingLevelScreen || minecraft.screen instanceof GenericMessageScreen) {
+            minecraft.setScreen(null);
+        }
+        Viewer.startNear(minecraft, manifest.recorderId);
+        settle(minecraft);
+        loaded = true;
+        Host.LOGGER.info("Dailies: opened recording {} ({} ticks)", path.getFileName(), total);
+    }
+
+    /** Runs as much of a jump as fits in this frame */
+    private static void runJump(Minecraft minecraft) throws Exception {
+        long deadline = System.nanoTime() + JUMP_SLICE_NANOS;
+        skipping = true;
+        feed.skipping = true;
+        while (position < jumpTarget) {
+            fastTick = true;
+            try {
+                ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(false);
+                // A whole game tick, so every mod that keeps time by ticks stays in step. Its start feeds the recording
+                minecraft.tick();
+            } finally {
+                fastTick = false;
+            }
+            if (feed.reloadWanted() >= 0 || position >= total) {
+                break;
+            }
+            if (System.nanoTime() > deadline) {
+                return;
+            }
+        }
+        if (feed.reloadWanted() >= 0 && position < jumpTarget) {
+            // The stretch ahead starts from its own snapshot; carry on from there next frame
+            reloadIndex = feed.reloadWanted();
+            return;
+        }
+        jumpTarget = -1;
+        skipping = false;
+        feed.skipping = false;
+        paused = pauseAfterJump;
+        minecraft.getSoundManager().stop();
+        minecraft.particleEngine.setLevel(minecraft.level);
+        settle(minecraft);
+    }
+
+    /** Shows the world exactly as it is at the end of the tick just played, not part way into the next */
+    private static void settle(Minecraft minecraft) {
+        TimerAccess timer = (TimerAccess) minecraft.getTimer();
+        timer.dailies$setPausedPartialTick(1.0F);
+        timer.dailies$setPartialTick(0.0F);
+    }
+
+    /** The start of every game tick */
+    private static void tickStart() {
+        if (!loaded || feed == null) {
+            return;
+        }
+        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0;
+        if (!fastTick && !playing) {
+            return;
+        }
+        try {
+            if (position >= total || !feed.advance(Minecraft.getInstance())) {
+                if (feed.reloadWanted() < 0) {
+                    paused = true;
+                    pauseAfterJump = true;
+                }
+                return;
+            }
+            position = feed.position();
+            if (!fastTick && position == pauseAt) {
+                pauseAt = -1;
+                paused = true;
+                pauseAfterJump = true;
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.error("Dailies: the recording could not be read past tick {}", position, t);
+            lastError = "The recording is damaged after tick " + position;
+            paused = true;
+            pauseAfterJump = true;
+            jumpTarget = -1;
+            skipping = false;
+        }
+    }
+
+    /** The viewer's player has just been created in a new world */
+    static void viewerJoined(Minecraft minecraft) {
+        if (minecraft.player != null) {
+            // The viewer is moved by Dailies every frame, never by the game's own walking and flying
+            minecraft.player.input = new Input();
+            Viewer.place(minecraft);
+        }
+    }
+
+    private static void leave(Minecraft minecraft) {
+        leaving = true;
+        try {
+            if (minecraft.level != null) {
+                minecraft.level.disconnect();
+                minecraft.disconnect();
+            }
+        } finally {
+            leaving = false;
+        }
+        cleanUp();
+        minecraft.setScreen(new TitleScreen());
+    }
+
+    private static void cleanUp() {
+        loaded = false;
+        try {
+            if (feed != null) {
+                feed.close();
+            }
+            if (file != null) {
+                file.close();
+            }
+        } catch (Exception e) {
+            Host.LOGGER.warn("Dailies: the recording could not be closed cleanly", e);
+        }
+        feed = null;
+        file = null;
+        manifest = null;
+        recordingId = null;
+        jumpTarget = -1;
+        reloadIndex = -1;
+        skipping = false;
+        paused = true;
+        pendingOpen = null;
+        pendingClose = false;
+        WHEN_LOADED.clear();
+        Session.forgetRegistries();
+        if (serverConfigsLoaded) {
+            serverConfigsLoaded = false;
+            try {
+                net.neoforged.fml.config.ConfigTracker.INSTANCE.unloadConfigs(net.neoforged.fml.config.ModConfig.Type.SERVER);
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: server settings could not be unloaded after playback", t);
+            }
+        }
+        active = false;
+    }
+
+}

@@ -13,6 +13,7 @@ import comedymonkey.dailies.mcp.McpProtocol;
 import comedymonkey.dailies.mcp.McpSchema;
 import comedymonkey.dailies.mcp.McpTool;
 import comedymonkey.dailies.mcp.McpToolException;
+import comedymonkey.dailies.playback.Playback;
 
 import java.util.Set;
 import java.util.TreeSet;
@@ -48,6 +49,7 @@ public final class CoreTools {
             McpTool.ThreadMode.HTTP, McpTool.DEFAULT_TIMEOUT_SECONDS, CoreTools::configSet);
 
         RecordingTools.register(registrar);
+        PlaybackTools.register(registrar);
     }
 
     /** Refuses arguments the tool does not have, naming the ones it does */
@@ -76,14 +78,31 @@ public final class CoreTools {
         }
         json.add("recording", recording);
 
-        JsonObject playback = new JsonObject();
-        playback.addProperty("open", mod.inPlayback());
-        json.add("playback", playback);
+        json.add("playback", playbackState());
 
         JsonObject export = new JsonObject();
         export.addProperty("running", mod.exportRunning());
         json.add("export", export);
         return json;
+    }
+
+    /** What dailies_status and the transport tools say about the open recording */
+    static JsonObject playbackState() {
+        JsonObject playback = new JsonObject();
+        playback.addProperty("open", Playback.active());
+        playback.addProperty("loaded", Playback.loaded());
+        if (Playback.loaded()) {
+            playback.addProperty("recording_id", Playback.recordingId());
+            playback.addProperty("tick", Playback.position());
+            playback.addProperty("total_ticks", Playback.total());
+            playback.addProperty("paused", Playback.paused());
+            playback.addProperty("tick_rate", Playback.ticksPerSecond());
+            playback.addProperty("jumping", Playback.jumping());
+        }
+        if (Playback.lastError() != null) {
+            playback.addProperty("error", Playback.lastError());
+        }
+        return playback;
     }
 
     private static JsonElement configGet(McpArgs args) {

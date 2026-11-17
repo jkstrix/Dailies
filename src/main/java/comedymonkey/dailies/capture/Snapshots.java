@@ -149,6 +149,9 @@ public final class Snapshots {
         }
     }
 
+    /** Where a watching game would be drawing the recorder: set by the recorder just before each snapshot. Null when unknown */
+    static double[] ownShown = null;
+
     /** How long the last snapshot held the game up, for the tests that watch what recording costs */
     public static volatile double lastMillis = 0;
 
@@ -295,6 +298,27 @@ public final class Snapshots {
             out.packet(spawn);
         }
 
+        if (entity != net.minecraft.client.Minecraft.getInstance().player && (entity.lerpTargetX() != entity.getX() || entity.lerpTargetY() != entity.getY()
+            || entity.lerpTargetZ() != entity.getZ() || entity.lerpTargetYRot() != entity.getYRot() || entity.lerpTargetXRot() != entity.getXRot())) {
+            // Caught part way through easing towards where it was last told it is: it is placed where it is drawn, then told again
+            RegistryFriendlyByteBuf buffer = codec.buffer();
+            try {
+                buffer.writeVarInt(entity.getId());
+                buffer.writeDouble(entity.lerpTargetX());
+                buffer.writeDouble(entity.lerpTargetY());
+                buffer.writeDouble(entity.lerpTargetZ());
+                buffer.writeByte((byte) net.minecraft.util.Mth.floor(entity.lerpTargetYRot() * 256.0F / 360.0F));
+                buffer.writeByte((byte) net.minecraft.util.Mth.floor(entity.lerpTargetXRot() * 256.0F / 360.0F));
+                buffer.writeBoolean(entity.onGround());
+                out.packet(ClientboundTeleportEntityPacket.STREAM_CODEC.decode(buffer));
+            } finally {
+                buffer.release();
+            }
+        }
+        if (entity instanceof ExperienceOrb) {
+            // The game gives a new orb a random push of its own; say how it is really moving
+            out.packet(new ClientboundSetEntityMotionPacket(entity));
+        }
         var values = entity.getEntityData().getNonDefaultValues();
         if (values != null && !values.isEmpty()) {
             out.packet(new ClientboundSetEntityDataPacket(entity.getId(), values));
@@ -346,6 +370,13 @@ public final class Snapshots {
             data = projectile.getOwner() == null ? 0 : projectile.getOwner().getId();
         } else if (entity instanceof Warden warden) {
             data = warden.hasPose(Pose.EMERGING) ? 1 : 0;
+        }
+        // A game eases each entity towards where it was last told it is. The snapshot records where it was told, not how
+        // far the easing has got, or an entity caught mid-step would stay there for good
+        double[] shown = entity == net.minecraft.client.Minecraft.getInstance().player ? ownShown : null;
+        if (shown != null) {
+            return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), shown[0], shown[1], shown[2], (float) shown[4], (float) shown[3],
+                entity.getType(), data, entity.getDeltaMovement(), entity.getYHeadRot());
         }
         return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), entity.getX(), entity.getY(), entity.getZ(), entity.getXRot(), entity.getYRot(),
             entity.getType(), data, entity.getDeltaMovement(), entity.getYHeadRot());

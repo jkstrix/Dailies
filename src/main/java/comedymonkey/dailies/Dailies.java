@@ -7,6 +7,8 @@ import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.core.CoreHost;
 import comedymonkey.dailies.mcp.McpHttpServer;
 import comedymonkey.dailies.moments.Moments;
+import comedymonkey.dailies.playback.Playback;
+import comedymonkey.dailies.playback.Viewer;
 import comedymonkey.dailies.selftest.SelfTest;
 import comedymonkey.dailies.ui.Notices;
 import net.neoforged.api.distmarker.Dist;
@@ -37,6 +39,8 @@ public final class Dailies {
         McpCraftCompat.init();
         ServerMoments.init();
         Recorder.init();
+        Playback.init();
+        Viewer.init();
 
         // Optional, so a server without the Moments Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));

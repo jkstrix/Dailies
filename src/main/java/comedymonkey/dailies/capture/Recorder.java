@@ -411,7 +411,14 @@ public final class Recorder {
         this.codec = new GameCodec(listener.registryAccess(), listener.getConnectionType());
         this.own.reset();
         this.part.number(Records.SNAPSHOT_BEGIN, this.tick);
+        if (this.waitingForSnapshot) {
+            this.part.record(Records.DISCONTINUITY);
+            this.own.forgetShown();
+        }
+        Snapshots.ownShown = this.own.shown();
         Snapshots.write(new Out(), minecraft, listener, this.codec);
+        // What a server sends once the first chunks are on their way: it lets the game stop showing its loading screen
+        this.write(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(net.minecraft.network.protocol.game.ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
         this.part.record(Records.SNAPSHOT_END);
         this.waitingForSnapshot = false;
     }

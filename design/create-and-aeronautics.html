@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dailies: Create and Aeronautics, how it works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Pixelify+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a technical note in the Clockwork Commonwealth house style, companion to the Dailies build specification. A masthead, a sticky
+   index, then numbered chapters. Each chapter states the problem as it shows up on screen, the cause, and the technique that fixed it,
+   with the exact names in the other mod's code that the technique depends on. Brass, walnut and notice paper. */
+:root {
+	--ground: #e8e6e0; --sheet: #f4f1ea; --ink: #2b1d0e; --muted: #6b5a49; --walnut: #4e3626; --brass: #9a7a34; --brass-hi: #c9a75a;
+	--verdigris: #3f7f6f; --rust: #8a3412; --rule: #cdbf9f;
+	--display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+	--body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+	--pixel: "Pixelify Sans", "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+	--ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #d2b48c; --brass: #c9a75a; --brass-hi: #e0c27a;
+	--verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; color-scheme: dark } }
+:root[data-theme="dark"] {
+	--ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #d2b48c; --brass: #c9a75a; --brass-hi: #e0c27a;
+	--verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+body { background: var(--ground); color: var(--ink); font: 17px/1.58 var(--body); margin: 0; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px)) }
+.wrap { max-width: 1080px; margin: 0 auto }
+h1, h2, h3 { font-family: var(--display); line-height: 1.05; text-wrap: balance; margin: 0 }
+h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; letter-spacing: .01em; text-transform: uppercase }
+h3 { font-size: 23px; font-weight: 600; letter-spacing: .02em; margin-top: 8px }
+p { margin: 0; max-width: 72ch }
+a { color: var(--verdigris) }
+code { font: 0.84em ui-monospace, "Cascadia Mono", Consolas, monospace; background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere }
+:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px }
+.eyebrow { font: 700 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
+.lede { color: var(--muted); font-size: 18px }
+.mast { padding-block: 40px 30px }
+.mast h1 { font-size: clamp(40px, 7vw, 76px); font-weight: 800; text-transform: uppercase; letter-spacing: .01em; margin-top: 10px }
+.mast h1 span { color: var(--brass) }
+.mast p { margin-top: 12px; font-size: 19px; color: var(--muted) }
+nav.index { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--ground); border-block: 2px solid var(--rule) }
+nav.index ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; overflow-x: auto }
+nav.index a { display: block; padding: 11px 10px; color: var(--ink); text-decoration: none; font: 600 16px var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; border-bottom: 3px solid transparent }
+nav.index a:hover { border-bottom-color: var(--brass) }
+nav.index a i { font-style: normal; color: var(--brass); margin-right: 5px }
+section { display: grid; gap: 20px; padding-block: 44px 36px; border-top: 2px solid var(--rule); scroll-margin-top: 56px }
+section:first-of-type { border-top: 0 }
+.chapter { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap }
+.chapter .no { font: 800 clamp(30px, 4vw, 44px)/1 var(--display); color: var(--brass) }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px }
+.card { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; min-width: 0; align-content: start }
+.card h3 { margin-top: 0 }
+.card ul, .card ol { margin: 0; padding-left: 20px; display: grid; gap: 6px }
+.card p, .card li { font-size: 16px }
+ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 10px }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 40px 1fr; gap: 14px; align-items: start; background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--brass); border-radius: 4px; padding: 14px 16px }
+ol.steps > li::before { content: counter(s); font: 800 26px/40px var(--display); text-align: center; width: 40px; height: 40px; background: var(--walnut); color: var(--sheet) }
+ol.steps h3 { margin: 0 0 3px; font-size: 21px }
+ol.steps p { color: var(--muted); font-size: 16px }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+.rule { background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--verdigris); border-radius: 4px; padding: 13px 16px; display: grid; gap: 4px; align-content: start }
+.rule.no { border-left-color: var(--rust) }
+.rule b { font-size: 16px }
+.rule span { color: var(--muted); font-size: 15px }
+.tablebox { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px }
+table { width: 100%; border-collapse: collapse; font-size: 16px }
+th { text-align: left; font: 700 12px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 2px solid var(--rule) }
+td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
+tr:last-child td { border-bottom: 0 }
+td:first-child { font-weight: 700 }
+/* problem / cause / fix: one block per fault */
+.fault { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; display: grid; grid-template-columns: 110px 1fr; overflow: hidden }
+.fault > b { padding: 12px 14px; font: 700 12px/1.6 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--rule); background: color-mix(in srgb, var(--rule) 30%, transparent) }
+.fault > div { padding: 12px 16px; border-bottom: 1px solid var(--rule); font-size: 16px }
+.fault > b:nth-last-child(2), .fault > div:last-child { border-bottom: 0 }
+.fault > b.fix { color: var(--verdigris) }
+@media (max-width: 620px) { .fault { grid-template-columns: 1fr } .fault > b { border-bottom: 0; padding-bottom: 0 } }
+footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule); padding-top: 18px }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto } }
+</style>
+</head>
+<body>
+<div class="wrap">
+	<header class="mast">
+		<div class="eyebrow">Dailies · technical note to chapter VII of the build specification</div>
+		<h1>Create and <span>Aeronautics</span></h1>
+		<p>How moving contraptions and flying physics craft were made to record and play back correctly: each fault as it appeared, why it happened, and the technique that fixed it, with the names it relies on in the other mods.</p>
+	</header>
+
+	<nav class="index" aria-label="Chapters">
+		<ul>
+			<li><a href="#scope"><i>I</i>Scope</a></li>
+			<li><a href="#create"><i>II</i>Contraptions</a></li>
+			<li><a href="#model"><i>III</i>How Sable works</a></li>
+			<li><a href="#motion"><i>IV</i>Motion</a></li>
+			<li><a href="#blocks"><i>V</i>Blocks</a></li>
+			<li><a href="#entities"><i>VI</i>Entities aboard</a></li>
+			<li><a href="#snapshots"><i>VII</i>Snapshots</a></li>
+			<li><a href="#jumps"><i>VIII</i>Jumps</a></li>
+			<li><a href="#other"><i>IX</i>Other faults</a></li>
+			<li><a href="#camera"><i>X</i>For the camera</a></li>
+			<li><a href="#state"><i>XI</i>Proven and open</a></li>
+			<li><a href="#rig"><i>XII</i>The test rig</a></li>
+		</ul>
+	</nav>
+
+	<!-- ============================================================ I -->
+	<section id="scope">
+		<div class="chapter"><span class="no">I</span><h2>Scope</h2></div>
+		<p class="lede">This note belongs with requirements MOD-1 to MOD-7 of the build specification. Those say what must hold. This says how it was made to hold in the owner's earlier private build, so the work does not have to be rediscovered.</p>
+
+		<div class="cols">
+			<div class="card"><h3>Versions it was worked out on</h3>
+				<ul>
+					<li>Minecraft 1.21.1, NeoForge 21.1.266</li>
+					<li>Create 6.0.10</li>
+					<li>Sable 2.0.6 (the physics library; its packages start <code>dev.ryanhcode.sable</code>)</li>
+					<li>Create Aeronautics 1.3.2 (bundled build)</li>
+				</ul>
+			</div>
+			<div class="card"><h3>What kind of knowledge this is</h3>
+				<ul>
+					<li>Names of classes, methods and fields in Sable are given exactly. They were found by reading Sable and by experiment, and they hold for the version above only. Check each one before relying on it.</li>
+					<li>The techniques assume the playback design the specification recommends: the real client is connected to an internal stand-in that sends it the recorded data. If the core is built differently, the causes below still apply; the fixes will take a different shape.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>Words</h3>
+				<ul>
+					<li><b>Stand-in</b>: the internal thing the client is connected to during playback. It may hold its own copy of the world and entities.</li>
+					<li><b>Viewer</b>: the client being shown the recording.</li>
+					<li><b>Sub-level</b>: Sable's word for one physics object.</li>
+					<li><b>Plot</b>: the hidden region of the world where Sable keeps a sub-level's blocks.</li>
+				</ul>
+			</div>
+		</div>
+
+		<h3>Rules that applied to every fix</h3>
+		<div class="rules">
+			<div class="rule"><b>Reflection only</b><span>Nothing compiles against Create or Sable. Every class is found by name and every method by name and argument types, once, then cached.</span></div>
+			<div class="rule"><b>Off unless installed</b><span>Each entry point first checks that the mod is loaded and returns at once when it is not.</span></div>
+			<div class="rule"><b>Fail once, quietly</b><span>If a lookup fails (a different Sable version), log one error that says what will look wrong in recordings, set a flag, and carry on without that feature. Never throw into the game.</span></div>
+			<div class="rule"><b>Hooks that may be missing</b><span>Hooks into Sable's classes are declared so that a missing class or method is skipped, not an error.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ II -->
+	<section id="create">
+		<div class="chapter"><span class="no">II</span><h2>Create contraptions</h2></div>
+		<p class="lede">A contraption is the moving block structure carried by a mechanical bearing, piston, pulley or minecart. It is an entity, and its blocks are not in the world.</p>
+
+		<div class="fault">
+			<b>Seen</b><div>A bearing was recorded turning a structure. In playback the bearing was there and the structure was missing.</div>
+			<b>Cause</b><div>The contraption's blocks reach a client in NeoForge's extra spawn data: the payload <code>AdvancedAddEntityPayload</code>, sent with the entity's spawn for any entity that implements <code>IEntityWithComplexSpawn</code>. When the stand-in introduced the entity to the viewer, NeoForge built that payload afresh by asking the stand-in's copy of the entity to describe itself. That copy is an empty shell, created from the spawn packet alone, and Create's contraption entity threw a null pointer error while writing its data (in <code>ControlledContraptionEntity.writeAdditional</code>).</div>
+			<b class="fix">Fix</b><div>Never rebuild the payload. Keep the recorded one and send it again.</div>
+		</div>
+
+		<ol class="steps">
+			<li><div><h3>While recording</h3><p>The payload arrives as an ordinary custom payload and is recorded like any other. Nothing special is needed for entities that spawn during the recording.</p></div></li>
+			<li><div><h3>In every snapshot</h3><p>For each known entity that implements <code>IEntityWithComplexSpawn</code>, build an <code>AdvancedAddEntityPayload</code> from it on the recording client and write it straight after that entity's spawn. Here the entity is real and can describe itself.</p></div></li>
+			<li><div><h3>During playback</h3><p>When such a payload comes up in the recorded stream, store it by its entity id before the entity is created. Whenever the stand-in introduces that entity to a viewer, send the stored payload in place of anything it would build itself.</p></div></li>
+			<li><div><h3>On a jump</h3><p>Empty the store when a snapshot is replayed; the snapshot refills it.</p></div></li>
+		</ol>
+		<p>Movement and assembly state need no help: they arrive as entity data and as Create's own payloads, and replaying those is enough.</p>
+	</section>
+
+	<!-- ============================================================ III -->
+	<section id="model">
+		<div class="chapter"><span class="no">III</span><h2>How Sable works</h2></div>
+		<p class="lede">Everything in the next five chapters follows from four facts about Sable. Each caused its own fault.</p>
+
+		<div class="tablebox"><table>
+			<thead><tr><th>Fact</th><th>Detail</th><th>Fault it caused</th></tr></thead>
+			<tbody>
+				<tr><td>Blocks live elsewhere</td><td>Each sub-level's blocks sit in a "plot": real chunks of the same world, tens of millions of blocks from where the craft appears. The client draws them moved and rotated by the sub-level's pose.</td><td>Craft invisible (V)</td></tr>
+				<tr><td>Motion uses its own channel</td><td>Poses are sent many times a second over a UDP channel Sable opens beside the normal connection. It does this in singleplayer too.</td><td>Craft frozen (IV)</td></tr>
+				<tr><td>Entities aboard live in the plot</td><td>Seats, glue and rotor contraptions that are part of a craft have positions inside the plot. Sable's server marks the packets about them; its client treats an unmarked plot position as "standing on the craft" and moves the entity out into the visible world.</td><td>Rotors missing, passengers left behind (VI)</td></tr>
+				<tr><td>The client smooths motion</td><td>The client keeps a short buffer of recent poses per sub-level and discards ones more than a few ticks old before sampling.</td><td>Craft in the wrong place after a jump (VIII)</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>The names used throughout</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Name in Sable 2.0.6</th><th>What it gives</th></tr></thead>
+			<tbody>
+				<tr><td><code>api.sublevel.SubLevelContainer</code></td><td>Static <code>getContainer(Level)</code> returns the container of a world's sub-levels (null when there is none). On it: <code>inBounds(ChunkPos)</code> says whether a chunk lies in the plot region; <code>getAllSubLevels()</code>; <code>getOrigin()</code> (an object with integer fields <code>x</code> and <code>y</code>, the plot grid's origin in chunks); <code>getInterpolation()</code>; <code>removeSubLevel(SubLevel, SubLevelRemovalReason)</code>.</td></tr>
+				<tr><td><code>sublevel.SubLevel</code></td><td><code>getUniqueId()</code>, <code>getName()</code>, <code>getPlot()</code>, <code>logicalPose()</code>, <code>boundingBox()</code> (world bounds, with <code>minX()</code> ... <code>maxZ()</code>), <code>isRemoved()</code>, <code>isFinalized()</code>.</td></tr>
+				<tr><td><code>sublevel.ClientSubLevel</code></td><td><code>renderPose(float partialTick)</code>: the pose as drawn this frame.</td></tr>
+				<tr><td>The plot (from <code>getPlot()</code>)</td><td>Field <code>plotPos</code> (a <code>ChunkPos</code>); <code>getBoundingBox()</code>; <code>getLightEngine()</code>; <code>getLoadedChunks()</code>, each with <code>getChunk()</code>.</td></tr>
+				<tr><td><code>companion.math.Pose3dc</code></td><td><code>transformPosition(Vec3)</code> plot to world, <code>transformPositionInverse(Vec3)</code> world to plot, <code>transformNormal(Vec3)</code> for directions.</td></tr>
+				<tr><td><code>Sable.HELPER</code> (static field)</td><td><code>projectOutOfSubLevel(Level, Vec3)</code>, <code>getContaining(Entity)</code>, <code>getContaining(Level, Position)</code>, <code>getTrackingOrVehicleSubLevel(Entity)</code>.</td></tr>
+				<tr><td><code>sublevel.storage.SubLevelRemovalReason</code></td><td>An enum; the constant <code>REMOVED</code> is the one to use.</td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<!-- ============================================================ IV -->
+	<section id="motion">
+		<div class="chapter"><span class="no">IV</span><h2>Recording motion</h2></div>
+
+		<div class="fault">
+			<b>Seen</b><div>A platform was recorded drifting away. In playback it appeared, and never moved.</div>
+			<b>Cause</b><div>The recorder watches the normal connection. Sable's poses never cross it: they arrive over its UDP channel, in singleplayer as well.</div>
+			<b class="fix">Fix</b><div>Hook the point where Sable's client handles each movement packet, and record the packet there as if it had arrived as an ordinary custom payload.</div>
+		</div>
+
+		<div class="tablebox"><table>
+			<thead><tr><th>Packet class (<code>network.packets</code>)</th><th>Hook</th><th>What to do</th></tr></thead>
+			<tbody>
+				<tr><td><code>ClientboundSableSnapshotDualPacket</code><br>the poses</td><td>Start of <code>handleClient(Level)</code></td><td>Record the packet object.</td></tr>
+				<tr><td><code>ClientboundSableSnapshotInfoDualPacket</code><br>the timing that goes with them</td><td>Start of <code>handleClient(Level)</code>; also start and end of <code>handle</code></td><td>Record the packet object, unless it is inside <code>handle</code>.</td></tr>
+			</tbody>
+		</table></div>
+
+		<div class="rules">
+			<div class="rule"><b>Why the second one needs care</b><span>The timing packet uses <code>handleClient(Level)</code> for both routes. When it does arrive over the normal connection, <code>handle</code> runs first and the recorder has already seen it. Set a per-thread flag at the start of <code>handle</code>, clear it at the end, and skip recording while it is set.</span></div>
+			<div class="rule"><b>Recording it</b><span>Both packet classes are custom payloads. Wrap the object in a clientbound custom-payload packet and hand it to the recorder with the current tick, exactly as a received one would be.</span></div>
+			<div class="rule"><b>Only while recording live</b><span>Do nothing when no recording is running, and nothing during playback, where the same handlers run on replayed data.</span></div>
+			<div class="rule"><b>Playback needs nothing</b><span>Sable registers these same payloads for the normal connection too. Sent to the viewer as ordinary custom payloads, its client handles them unchanged.</span></div>
+		</div>
+		<p>This is the technique that has not been proven on a dedicated server, where the UDP channel is a real network path (MOD-7).</p>
+	</section>
+
+	<!-- ============================================================ V -->
+	<section id="blocks">
+		<div class="chapter"><span class="no">V</span><h2>Showing the blocks</h2></div>
+
+		<div class="fault">
+			<b>Seen</b><div>With motion recorded, the craft was still invisible in playback, though Sable reported that it existed.</div>
+			<b>Cause</b><div>The craft's blocks arrive as ordinary chunk and block-change packets for positions in the plot. The stand-in filed them into its own copy of the world, tens of millions of blocks from the viewer, and so never passed them on: nobody was near enough to be sent them.</div>
+			<b class="fix">Fix</b><div>Before the stand-in handles any recorded packet about a position, test whether that position is in the plot. If it is, send the packet straight to the viewer and do nothing else with it.</div>
+		</div>
+
+		<p>The test is <code>SubLevelContainer.getContainer(level).inBounds(chunkPos)</code>. The packets it has to be applied to, and where each one's position comes from:</p>
+		<div class="tablebox"><table>
+			<thead><tr><th>Packet</th><th>Position</th></tr></thead>
+			<tbody>
+				<tr><td>Chunk with light</td><td>Its chunk x and z</td></tr>
+				<tr><td>Block update · block entity data · block event · block destruction · level event</td><td>Its block position</td></tr>
+				<tr><td>Section blocks update</td><td>Its section position (a private field in 1.21.1: needs an access change)</td></tr>
+				<tr><td>Light update · forget chunk</td><td>Its chunk x and z</td></tr>
+				<tr><td>Particles · sound</td><td>Its x, y, z</td></tr>
+			</tbody>
+		</table></div>
+		<div class="rules">
+			<div class="rule"><b>Every path to a chunk</b><span>If chunks stored once and shared between snapshots (FILE-5) take a different path through the stand-in than chunks in the stream, that path needs the same test. Missing it made the craft vanish after a jump only.</span></div>
+			<div class="rule"><b>The stand-in's world may differ</b><span>The test asks Sable about a world. Ask it about a world Sable knows on that side, and treat "no container" as "not in the plot".</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ VI -->
+	<section id="entities">
+		<div class="chapter"><span class="no">VI</span><h2>Entities aboard</h2></div>
+		<p class="lede">Three faults, found one after another on a helicopter: the rotor vanished, then the seat stayed behind, then the pilot did.</p>
+
+		<div class="fault">
+			<b>Seen</b><div>The helicopter's body flew correctly. Its rotor blades, a Create contraption on a bearing, were missing.</div>
+			<b>Cause</b><div>The rotor is an entity whose position is in the plot. The stand-in created it in its own world there, where no chunks are loaded and no viewer is ever within range, so it was never sent to the viewer.</div>
+			<b class="fix">Fix</b><div>Keep a set of the entity ids that belong to craft. Send every packet about those entities straight to the viewer.</div>
+		</div>
+
+		<h3>Sorting entity packets</h3>
+		<p>The set starts empty and is emptied whenever a snapshot is replayed. Each recorded packet is sorted as follows.</p>
+		<div class="tablebox"><table>
+			<thead><tr><th>Packet</th><th>Rule</th><th>Then</th></tr></thead>
+			<tbody>
+				<tr><td>Add entity</td><td>If its position is in the plot, add its id to the set. If not, remove its id from the set (ids are reused).</td><td>In the plot: send to the viewer only, then the marked teleport below. Otherwise handle normally.</td></tr>
+				<tr><td>Remove entities</td><td>Remove each listed id from the set.</td><td>If any was in the set: send to the viewer and also handle normally, since the stand-in may hold some of them too.</td></tr>
+				<tr><td>Set passengers</td><td>Look at the vehicle's id.</td><td>If it is in the set: send to the viewer and also handle normally.</td></tr>
+				<tr><td>Entity data · move · teleport · motion · head rotation · entity event · attributes · equipment · animate · leash link · the extra spawn data of chapter II</td><td>Look at the entity's id.</td><td>If it is in the set: send to the viewer only.</td></tr>
+				<tr><td>Anything else</td><td></td><td>Handle normally.</td></tr>
+			</tbody>
+		</table></div>
+		<p>The entity id is a private field on the move, entity-event and head-rotation packets in 1.21.1. Those three need an access change.</p>
+
+		<div class="fault">
+			<b>Seen</b><div>The seat block flew with the helicopter, but the seat entity, and the pilot on it, hung in the air where the craft had been assembled.</div>
+			<b>Cause</b><div>Two things. Sable's client moves some kinds of entity out into the visible world when they spawn at plot coordinates, expecting the server to keep correcting them. And an entity that existed before assembly (the seat a player sat on first) is moved into the plot afterwards by a position update, not by a spawn, so the set never learned of it.</div>
+			<b class="fix">Fix</b><div>Send marked teleports, and watch position updates for entities crossing into the plot.</div>
+		</div>
+
+		<ol class="steps">
+			<li><div><h3>The marked teleport</h3><p>Build an ordinary teleport-entity packet for the entity's id, position and rotation (rotations as bytes: degrees × 256 ÷ 360, rounded down). Then call the method <code>sable$setActuallyInSubLevel(true)</code> on the packet object. Sable adds that method to the teleport packet class; its own server sets the same mark for entities that are part of a craft. A marked teleport to plot coordinates keeps the entity in the plot.</p></div></li>
+			<li><div><h3>After a spawn in the plot</h3><p>Having sent the add-entity packet to the viewer, send a marked teleport to the same position and rotation straight after it.</p></div></li>
+			<li><div><h3>On every recorded position update</h3><p>For an entity the stand-in knows that is not a passenger: if the new x and z are in the plot, add its id to the set, send the viewer a marked teleport, and keep it out of the stand-in's ordinary position broadcasting. If they are not, remove its id from the set and treat it as usual. For an entity the stand-in does not know, send a marked teleport when the position is in the plot and a plain one when it is not.</p></div></li>
+			<li><div><h3>Stop the stand-in removing it</h3><p>Once the stand-in's copy of an entity sits in the plot, its tracking sees it as impossibly far from every viewer and tells them to remove it. Suppress that removal for entities whose position is in the plot. Real removals are in the recording and are passed on by the table above.</p></div></li>
+		</ol>
+		<div class="rules">
+			<div class="rule"><b>Result</b><span>Rotor blades spin, the seat stays on the craft, and a seated player moves and turns with it, including when they sat down before the craft was assembled.</span></div>
+			<div class="rule no"><b>Not solved: standing passengers</b><span>A player standing loose on a deck is carried by Sable's client-side logic in live play, not by packets. In playback their recorded world positions are a fraction of a tick behind the craft, and they trail about a block behind a fast climb. This is requirement MOD-4. The likely route is to express a standing passenger's recorded position relative to the craft, using the pose at the same tick, and place them from the craft's interpolated pose each frame.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ VII -->
+	<section id="snapshots">
+		<div class="chapter"><span class="no">VII</span><h2>Craft in snapshots</h2></div>
+
+		<div class="fault">
+			<b>Seen</b><div>A craft assembled in the first few minutes was missing after jumping to any later segment.</div>
+			<b>Cause</b><div>A snapshot describes the world a fresh client would need, built from the vanilla world. Sable's sub-levels are not in it.</div>
+			<b class="fix">Fix</b><div>Add each sub-level to every snapshot (REC-23), using the same three messages a Sable server sends when a player comes into range of one.</div>
+		</div>
+
+		<p>For each sub-level from <code>getAllSubLevels()</code> whose <code>isRemoved()</code> is false, write in this order:</p>
+		<ol class="steps">
+			<li><div><h3>Start tracking</h3><p>Payload class <code>network.packets.tcp.ClientboundStartTrackingSubLevelPacket</code>, a record. Its arguments in order: the plot coordinate; <code>getUniqueId()</code>; the pose (<code>logicalPose()</code>); the pose again, as the previous pose; the plot's <code>getBoundingBox()</code>; <code>getName()</code>; the game tick. Build it through the record's canonical constructor.</p></div></li>
+			<li><div><h3>The plot's chunks</h3><p>For every entry of the plot's <code>getLoadedChunks()</code>, take <code>getChunk()</code> and write an ordinary chunk-with-light packet for it, using the plot's own <code>getLightEngine()</code>, not the world's.</p></div></li>
+			<li><div><h3>Finalize</h3><p>If <code>isFinalized()</code>, payload class <code>network.packets.tcp.ClientboundFinalizeSubLevelPacket</code>, a record of one argument: the plot coordinate.</p></div></li>
+		</ol>
+		<div class="tablebox"><table>
+			<thead><tr><th>Value</th><th>Where it comes from</th></tr></thead>
+			<tbody>
+				<tr><td>Plot coordinate</td><td>The plot's <code>plotPos</code> minus the container's origin (<code>getOrigin()</code>, fields <code>x</code> and <code>y</code>), packed as a chunk position long: <code>ChunkPos.asLong(plotPos.x − origin.x, plotPos.z − origin.y)</code>.</td></tr>
+				<tr><td>Game tick</td><td>The container's <code>getInterpolation()</code> has a private numeric field <code>mostRecentTick</code>; use it rounded down, never below 0.</td></tr>
+			</tbody>
+		</table></div>
+		<div class="rules">
+			<div class="rule"><b>All or nothing per craft</b><span>Collect a craft's packets in a list and write them only once all three steps have succeeded, so a failure half way never leaves a craft that is tracked but has no blocks.</span></div>
+			<div class="rule"><b>Entities aboard</b><span>They are ordinary entities at plot positions and are written by the normal entity part of the snapshot. Chapter VI's sorting picks them up when the snapshot is replayed.</span></div>
+			<div class="rule"><b>Block entities that cannot answer</b><span>Building a chunk packet on a client asks each block entity for its update data. See chapter IX for the one that throws.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ VIII -->
+	<section id="jumps">
+		<div class="chapter"><span class="no">VIII</span><h2>Jumps</h2></div>
+
+		<div class="fault">
+			<b>Seen</b><div>After jumping backwards, the log filled with "plot already exists" errors and craft were duplicated or stuck.</div>
+			<b>Cause</b><div>A backward jump replays a snapshot, which creates every craft again. Sable refuses to create one that already exists.</div>
+			<b class="fix">Fix</b><div>Before a snapshot is replayed to the viewer, remove every sub-level from the viewer's world: for each of <code>getAllSubLevels()</code> (copy the collection first), call <code>removeSubLevel(subLevel, SubLevelRemovalReason.REMOVED)</code> on the container. Do it at the same moment the viewer's ordinary entities are cleared.</div>
+		</div>
+
+		<div class="fault">
+			<b>Seen</b><div>After a jump, a craft that had moved during the skipped stretch sat where it had been at the start of that stretch, then snapped to its true place seconds later, or never.</div>
+			<b>Cause</b><div>A jump delivers minutes of recorded poses at once. Sable's smoother (<code>network.client.SubLevelSnapshotInterpolator</code>) discards every pose older than its current time minus 6 ticks before it samples. All the poses of the skipped stretch are older than that, so they were thrown away unused.</div>
+			<b class="fix">Fix</b><div>Hook the start of the smoother's <code>tick(double backTick)</code>. During playback only: look at its private list field <code>buffer</code>; if the newest entry's <code>gameTick()</code> is below <code>backTick − 6</code> (so the whole buffer is about to be dropped), copy that newest entry's <code>pose()</code> into the smoother's private field <code>runningSnapshot</code> by calling its one-argument <code>set(pose)</code>. The craft then holds its last known pose.</div>
+		</div>
+		<div class="rules">
+			<div class="rule"><b>Lock as Sable does</b><span>Read the buffer while synchronised on it; it is filled from another thread.</span></div>
+			<div class="rule"><b>Harmless noise</b><span>During a jump Sable logs errors about a "movement packet for a non-existent sub-level" when recorded motion arrives for a craft that had not been created yet at that point of the stream. Nothing is wrong and nothing needs fixing.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ IX -->
+	<section id="other">
+		<div class="chapter"><span class="no">IX</span><h2>Other faults on the way</h2></div>
+
+		<div class="fault">
+			<b>Seen</b><div>With a hot air balloon nearby and its burner lit, the game crashed at the end of every recording segment.</div>
+			<b>Cause</b><div>A snapshot builds chunk packets from the client's chunks, which asks each block entity for its update data. Vanilla only ever asks on a server. Aeronautics' burner (<code>aeronautics:adjustable_burner</code>) assumes so and fails with a class-cast error on a client, where its balloon is the client-side kind.</div>
+			<b class="fix">Fix</b><div>This is REC-22. Where a chunk packet gathers a block entity's update data on a client, catch any failure. Fall back to the block entity's plain save data without metadata; if that fails too, use an empty tag. Warn once per block entity type, saying its state may reset after a jump to a later part. Make the surrounding snapshot work null-safe as well, so one bad chunk is skipped.</div>
+		</div>
+
+		<div class="fault">
+			<b>Seen</b><div>Playing a recording back, Sable tried to open a network channel, froze the viewer, or put them into an editing mode.</div>
+			<b>Cause</b><div>Three of Sable's payloads act on the recorder's own connection or body, and were being replayed.</div>
+			<b class="fix">Fix</b><div>Put <code>sable:udp_activation</code>, <code>sable:freeze_player</code> and <code>sable:enter_gizmo_mode</code> on the default playback ignore list (MOD-6).</div>
+		</div>
+
+		<div class="fault">
+			<b>Seen</b><div>Opening a recording failed or changed the world's biomes with certain mods installed.</div>
+			<b>Cause</b><div>NeoForge runs its server-start steps for any integrated server, among them applying biome modifiers to the world's registries. A playback world is not a world to modify.</div>
+			<b class="fix">Fix</b><div>This is PLAY-6. Skip those world-altering start-up steps when the server starting is the playback stand-in.</div>
+		</div>
+
+		<div class="fault">
+			<b>Seen</b><div>Any modded entity with extra spawn data, not only contraptions, could appear wrong or crash on being introduced to the viewer.</div>
+			<b class="fix">Fix</b><div>Chapter II covers all of them: it is keyed on NeoForge's interface, not on Create.</div>
+		</div>
+	</section>
+
+	<!-- ============================================================ X -->
+	<section id="camera">
+		<div class="chapter"><span class="no">X</span><h2>What the Smart Camera needs</h2></div>
+		<p class="lede">The provided Smart Camera asks eight questions about craft through <code>Host.Crafts</code>. This is how each was answered. All of it sits behind one lazy set-up that looks the names up once and switches the whole feature off, with one log line, if any is missing.</p>
+
+		<div class="tablebox"><table>
+			<thead><tr><th>Question</th><th>Answer</th></tr></thead>
+			<tbody>
+				<tr><td>isInPlot(level, x, z)</td><td><code>SubLevelContainer.getContainer(level).inBounds(chunk of x, z)</code>.</td></tr>
+				<tr><td>projectOutOfSubLevel(level, position)</td><td><code>Sable.HELPER.projectOutOfSubLevel(level, position)</code>. Returns the position unchanged when it is not in a plot, or when the result is null.</td></tr>
+				<tr><td>projectOutOfSubLevel(level, position, partialTick)</td><td>Find the craft with <code>HELPER.getContaining(level, position)</code>; take its pose as drawn this frame; return <code>pose.transformPosition(position)</code>.</td></tr>
+				<tr><td>projectDirectionOutOfSubLevel</td><td>The same, with <code>pose.transformNormal(direction)</code>.</td></tr>
+				<tr><td>getSubLevel(entity)</td><td>The first that answers: <code>HELPER.getContaining(entity)</code> (the entity is part of a craft), then <code>HELPER.getTrackingOrVehicleSubLevel(entity)</code> (it rides one), then the search below (it stands on one).</td></tr>
+				<tr><td>getSubLevelAt(level, position)</td><td><code>HELPER.getContaining(level, position)</code>.</td></tr>
+				<tr><td>getSubLevelBounds(subLevel)</td><td><code>boundingBox()</code>, read through <code>minX()</code> to <code>maxZ()</code>, as a world-space box. Null if any value is not finite or the box is inside out.</td></tr>
+				<tr><td>isNearSubLevel(subLevel, position, margin)</td><td>Whether those bounds, grown by the margin, contain the position.</td></tr>
+			</tbody>
+		</table></div>
+		<div class="cols">
+			<div class="card"><h3>The pose as drawn this frame</h3><p>If the object is a <code>ClientSubLevel</code> and <code>renderPose(float)</code> exists, use <code>renderPose(partialTick)</code>. Otherwise fall back to <code>logicalPose()</code>, which is a tick old. The fallback makes the camera judder on a moving craft, so it matters that the first works.</p></div>
+			<div class="card"><h3>Finding what an entity stands on</h3><p>Sable only knows what an entity stands on for entities this client simulates, and recorded players are not simulated. So: for each craft whose bounds, grown by 1, contain the entity's feet, take the feet position at 0.1, 0.6 and 1.1 blocks down, turn each into plot coordinates with <code>logicalPose().transformPositionInverse</code>, and look at the block there. If any has a collision shape, the entity is standing on that craft.</p></div>
+			<div class="card"><h3>Create contraptions</h3><p>For framing a vanilla vehicle or a contraption the camera needs no Sable: it uses the entity's bounding box. A contraption is recognised by its entity type id being in the <code>create</code> namespace and containing "contraption".</p></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ XI -->
+	<section id="state">
+		<div class="chapter"><span class="no">XI</span><h2>Proven and open</h2></div>
+
+		<div class="cols">
+			<div class="card"><h3>Proven by the scripted run</h3>
+				<ul>
+					<li>A bearing contraption appears and turns, live and in playback.</li>
+					<li>A physics platform keeps its recorded position.</li>
+					<li>A hot air balloon climbed 82 blocks with a player aboard. At three points of the climb, each reached by a jump, playback had the balloon within 0.3 to 0.5 of a block of its live position.</li>
+					<li>Craft survive jumps forward across segments and jumps backward, with no duplicates.</li>
+					<li>The lit burner no longer breaks segment snapshots.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>Proven by eye, flown by hand</h3>
+				<ul>
+					<li>A helicopter: body, spinning rotor and seated pilot all move together in playback.</li>
+					<li>Sitting down before assembling the craft works.</li>
+				</ul>
+			</div>
+			<div class="card"><h3>Open</h3>
+				<ul>
+					<li><b>Standing passengers</b> trail the craft (chapter VI). In the balloon test the passenger was about 1.4 blocks low.</li>
+					<li><b>A dedicated server</b>, where UDP is a real path. Never tried.</li>
+					<li><b>Other players</b> riding a craft. Never tried.</li>
+					<li><b>Sitting down after</b> the craft is assembled. Never tried.</li>
+					<li><b>Glue entities</b> may show a stale position during forward play.</li>
+					<li><b>The burner's state</b> after a jump, since its snapshot data is the fallback.</li>
+					<li><b>Other Aeronautics parts</b>: levitite, propellers on planes, anything not in the two test craft.</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- ============================================================ XII -->
+	<section id="rig">
+		<div class="chapter"><span class="no">XII</span><h2>The test rig</h2></div>
+		<p class="lede">How the test craft are built by script, for the run in chapter XIV of the specification. Each line here cost a failed attempt to learn.</p>
+
+		<div class="tablebox"><table>
+			<thead><tr><th>Craft</th><th>How to build it</th></tr></thead>
+			<tbody>
+				<tr><td>Bearing contraption</td><td>A creative motor facing up, a mechanical bearing on it, a few blocks on the bearing. Do not click the bearing afterwards: it assembles by itself, and a click takes it apart again.</td></tr>
+				<tr><td>Physics platform</td><td>A slab of stone in the air, then <code>/sable assemble area &lt;from&gt; &lt;to&gt;</code>.</td></tr>
+				<tr><td>Helicopter</td><td>Place the structure <code>aeronautics:ponder/gyroscopic_propeller_bearing/helicopter.nbt</code>. Glue it into one piece with <code>/create glue &lt;from&gt; &lt;to&gt;</code> (the command is under <code>/create</code>; there is no <code>/glue</code>). Click the seat to sit. Then work the physics assembler block: it is not a click but a press, hold and drag of its handle, which a script has to drive through the assembler's own mouse-move and release handling.</td></tr>
+				<tr><td>Hot air balloon</td><td>Place <code>aeronautics:ponder/hot_air/envelope.nbt</code>. Put a redstone block against the burner: it will not heat without one, and it starts heating as soon as it is placed. Stand the player in the basket first, then assemble with <code>/sable assemble area</code> over a region tight around the balloon. A loose region takes in nearby decoration as a second object, which topples.</td></tr>
+			</tbody>
+		</table></div>
+		<div class="rules">
+			<div class="rule"><b>Use the balloon for automated motion</b><span>It flies by itself once lit. The helicopter needs its rotor speed and direction set by hand, and scripted attempts made the rotor drop out.</span></div>
+			<div class="rule"><b>Board before assembling</b><span>A player who is not aboard when the craft is assembled is left on the ground.</span></div>
+			<div class="rule"><b>Identify the craft, don't assume</b><span>After assembling, find the right sub-level by nearness to a known block (the burner), not by taking the first in the list.</span></div>
+			<div class="rule"><b>Measure live, then compare</b><span>Log the craft's and the passenger's world positions at fixed ticks while recording. In playback, jump to each tick and compare. World positions come from the pose, never from plot coordinates.</span></div>
+		</div>
+	</section>
+
+	<footer>
+		<p>Technical note to the Dailies build specification, chapter VII. First issue, 17 November 2026. Names of Sable's classes and members are as found in Sable 2.0.6 and must be re-checked against the version in use.</p>
+	</footer>
+</div>
+</body>
+</html>

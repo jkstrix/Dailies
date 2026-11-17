@@ -57,6 +57,7 @@ public final class SelfTest {
             this.checkMcp();
             WorldSteps.createWorld(this);
             RecordingSteps.run(this);
+            PlaybackSteps.run(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);

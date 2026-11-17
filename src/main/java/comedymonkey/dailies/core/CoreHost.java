@@ -7,6 +7,8 @@ import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.config.Setting;
 import comedymonkey.dailies.mcp.McpProtocol;
 import comedymonkey.dailies.mcp.tools.CoreTools;
+import comedymonkey.dailies.playback.Playback;
+import comedymonkey.dailies.playback.Recordings;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLPaths;
@@ -107,31 +109,40 @@ public final class CoreHost implements Host.Mod {
 
     @Override
     public boolean inPlayback() {
-        return false;
+        return Playback.active();
     }
 
     @Override
     public @Nullable String openRecordingId() {
-        return null;
+        return Playback.loaded() ? Playback.recordingId() : null;
     }
 
     @Override
     public int openRecordingTicks() {
-        return 0;
+        return Playback.loaded() ? Playback.total() : 0;
     }
 
     @Override
     public void seek(int tick, boolean pause) {
+        if (Playback.loaded()) {
+            Playback.jumpTo(tick, pause);
+        } else if (Playback.active()) {
+            // Still opening: go there as soon as the world is up
+            Playback.whenLoaded(() -> Playback.jumpTo(tick, pause));
+        }
     }
 
     @Override
     public @Nullable Path findRecording(String recordingId) {
-        return null;
+        return Recordings.findById(recordingId);
     }
 
     @Override
     public void openRecording(Path file) throws Exception {
-        throw new IllegalStateException(NOT_BUILT);
+        if (Recorder.get().state() != Recorder.State.IDLE) {
+            throw new IllegalStateException("A recording is being made. Finish it first");
+        }
+        Playback.open(file);
     }
 
     @Override
