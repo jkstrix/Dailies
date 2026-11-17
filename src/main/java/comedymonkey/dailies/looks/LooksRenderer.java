@@ -7,6 +7,7 @@ import comedymonkey.dailies.edit.EntityOverride;
 import comedymonkey.dailies.edit.Looks;
 import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.editor.EditorSession;
+import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.PlaybackExtensions;
 import net.minecraft.client.Minecraft;
@@ -78,7 +79,12 @@ public final class LooksRenderer {
     }
 
     public static void init() {
-        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> frame());
+        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> {
+            Drawn.frame();
+            frame();
+        });
+        // After whoever sets the field of view, and before whoever reads what it came to
+        NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOW, (ViewportEvent.ComputeFov event) -> framedFov(event));
         NeoForge.EVENT_BUS.addListener((RenderGuiLayerEvent.Pre event) -> guiLayer(event));
         NeoForge.EVENT_BUS.addListener((RenderNameTagEvent event) -> nameTag(event));
         NeoForge.EVENT_BUS.addListener((RenderHandEvent event) -> {
@@ -129,6 +135,37 @@ public final class LooksRenderer {
     /** The looks of the scene being shown, or null whenever no recording is on screen */
     static @Nullable Looks current() {
         return looks;
+    }
+
+    /**
+     * The shape the picture is held to in the editor's view: width divided by height, or 0 when the scene has no
+     * frame of its own, an export is drawing (its pictures are that shape already) or the interface is hidden.
+     */
+    public static double framedRatio() {
+        Looks now = looks;
+        if (now == null || Export.active() || Minecraft.getInstance().options.hideGui) {
+            return 0.0;
+        }
+        return now.frameRatio();
+    }
+
+    /**
+     * A frame wider than the window is shown between bars above and below. The view is drawn that much taller, so
+     * that what is left between the bars is exactly the picture an export of that shape will hold.
+     */
+    private static void framedFov(ViewportEvent.ComputeFov event) {
+        double ratio = framedRatio();
+        if (ratio <= 0.0 || !event.usedConfiguredFov()) {
+            return;
+        }
+        try {
+            com.mojang.blaze3d.platform.Window window = Minecraft.getInstance().getWindow();
+            if (window.getHeight() > 0) {
+                event.setFOV(Looks.fovBehindBars(event.getFOV(), ratio, (double) window.getWidth() / window.getHeight()));
+            }
+        } catch (Throwable t) {
+            failOnce("fitting the view to the scene's frame", t);
+        }
     }
 
     private static void forget() {
@@ -202,6 +239,9 @@ public final class LooksRenderer {
         if (!now.showChat && layer.equals(VanillaGuiLayers.CHAT)
                 || !now.showBossBars && layer.equals(VanillaGuiLayers.BOSS_OVERLAY)
                 || !now.showTitles && (layer.equals(VanillaGuiLayers.TITLE) || layer.equals(VanillaGuiLayers.OVERLAY_MESSAGE))
+                || !now.showActionBar && layer.equals(VanillaGuiLayers.OVERLAY_MESSAGE)
+                || !now.showScoreboard && layer.equals(VanillaGuiLayers.SCOREBOARD_SIDEBAR)
+                || !now.showHotbar && (layer.equals(VanillaGuiLayers.HOTBAR) || layer.equals(VanillaGuiLayers.SELECTED_ITEM_NAME))
                 || !now.showHud && HUD.contains(layer)) {
             event.setCanceled(true);
         }
@@ -278,8 +318,22 @@ public final class LooksRenderer {
         if (now == null) {
             return false;
         }
+        if (entity instanceof Player ? !now.showPlayers : !now.showEntities) {
+            return true;
+        }
         Set<EntityType<?>> hidden = hiddenEntityTypes;
         return !hidden.isEmpty() && hidden.contains(entity.getType()) || override(now, entity).hide();
+    }
+
+    /** Whether the terrain, and the block entities in it, are left out */
+    public static boolean hidesBlocks() {
+        Looks now = looks;
+        return now != null && !now.showBlocks;
+    }
+
+    public static boolean hidesBeaconBeams() {
+        Looks now = looks;
+        return now != null && !now.showBeaconBeams;
     }
 
     /** Whether this entity is drawn with the glowing outline, given whether the recording says so */

@@ -251,7 +251,13 @@ public final class CoreHost implements Host.Mod {
 
     @Override
     public @Nullable Double exportAspectRatio() {
-        return comedymonkey.dailies.export.Export.aspectRatio();
+        Double exporting = comedymonkey.dailies.export.Export.aspectRatio();
+        if (exporting != null) {
+            return exporting;
+        }
+        // A scene held to a frame shape is composed for that shape in the editor too, between its bars
+        double framed = comedymonkey.dailies.looks.LooksRenderer.framedRatio();
+        return framed > 0.0 ? framed : null;
     }
 
     @Override

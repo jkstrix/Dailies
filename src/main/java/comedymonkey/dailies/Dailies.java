@@ -61,6 +61,7 @@ public final class Dailies {
         modBus.addListener(Keys::register);
         modBus.addListener(PlaybackBar::register);
         Keys.init();
+        comedymonkey.dailies.command.DailiesCommand.init();
         Screens.init();
 
         SelfTest.startIfAsked();

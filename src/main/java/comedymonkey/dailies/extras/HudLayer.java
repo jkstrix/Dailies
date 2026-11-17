@@ -137,18 +137,25 @@ final class HudLayer implements PlaybackExtensions.Extension {
             if (manifest == null || !(riding instanceof Player recorder) || !recorder.getUUID().toString().equalsIgnoreCase(manifest.recorderId)) {
                 return;
             }
-            if (EditorSession.open() && !EditorSession.scene().looks().showHud) {
-                return;
+            boolean hotbar = true;
+            if (EditorSession.open()) {
+                comedymonkey.dailies.edit.Looks looks = EditorSession.scene().looks();
+                if (!looks.showHud) {
+                    return;
+                }
+                hotbar = looks.showHotbar;
             }
             HudState hud = this.current(minecraft);
             if (hud == null || hud.gameMode == net.minecraft.world.level.GameType.SPECTATOR) {
                 return;
             }
-            boolean barShown = !comedymonkey.dailies.export.Export.active();
+            boolean barShown = !comedymonkey.dailies.export.Export.active() && !comedymonkey.dailies.ui.Notices.hidden();
             graphics.pose().pushPose();
             try {
                 graphics.pose().translate(0.0F, barShown ? -PLAYBACK_BAR : 0.0F, 0.0F);
-                this.drawHotbar(graphics, minecraft, recorder, hud);
+                if (hotbar) {
+                    this.drawHotbar(graphics, minecraft, recorder, hud);
+                }
                 if (hud.gameMode.isSurvival()) {
                     this.drawBars(graphics, hud);
                     this.drawExperience(graphics, minecraft.font, hud);

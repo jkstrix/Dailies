@@ -23,12 +23,23 @@ public final class Notices {
 
     private static volatile Component text = null;
     private static volatile long since = 0;
+    private static volatile boolean hidden = false;
 
     private Notices() {
     }
 
     public static void register(RegisterGuiLayersEvent event) {
         event.registerAboveAll(ResourceLocation.fromNamespaceAndPath(Dailies.ID, "notices"), Notices::draw);
+    }
+
+    /** Whether the person has asked for everything of Dailies to be kept off the screen ("/dailies hide") */
+    public static boolean hidden() {
+        return hidden;
+    }
+
+    /** Hides or shows the recording mark, these notices, the playback bar and the editor. Any thread */
+    public static void setHidden(boolean now) {
+        hidden = now;
     }
 
     /** Any thread */
@@ -39,7 +50,7 @@ public final class Notices {
 
     private static void draw(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.options.hideGui || comedymonkey.dailies.export.Export.active()) {
+        if (hidden || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active()) {
             // Nothing of Dailies' own may end up in an exported picture
             return;
         }

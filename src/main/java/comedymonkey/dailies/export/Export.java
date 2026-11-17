@@ -250,6 +250,10 @@ public final class Export {
             throw new IllegalArgumentException("The frame rate must be between 1 and 240");
         }
         Scene scene = EditorSession.scene();
+        // A scene that holds its picture to a frame shape is exported in that shape, fitted inside the size asked for
+        int[] framed = scene.looks().frameSize(wanted.width, wanted.height);
+        wanted.width = framed[0];
+        wanted.height = framed[1];
         int total = Playback.total();
         int start = wanted.startTick >= 0 ? wanted.startTick : scene.hasExportRange() ? scene.exportStart() : scene.firstKeyframeTick() >= 0 ? scene.firstKeyframeTick() : 0;
         int end = wanted.endTick >= 0 ? wanted.endTick : scene.hasExportRange() ? scene.exportEnd() : scene.lastKeyframeTick() > start ? scene.lastKeyframeTick() : total;
