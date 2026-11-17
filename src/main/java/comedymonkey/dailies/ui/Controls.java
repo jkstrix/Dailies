@@ -326,9 +326,8 @@ public final class Controls {
                 tell(Component.translatable("dailies.ui.notice.moments_page_off"));
                 return;
             }
-            // With remote access switched on the server speaks HTTPS only, under a certificate of its own making
-            String scheme = comedymonkey.dailies.mcp.McpHttpServer.isRemote() ? "https" : "http";
-            net.minecraft.Util.getPlatform().openUri(java.net.URI.create(scheme + "://127.0.0.1:" + port + "/"));
+            // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token
+            net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
             tell(Component.translatable("dailies.ui.notice.moments_page_opened"));
         });
     }
