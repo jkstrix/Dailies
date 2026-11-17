@@ -62,6 +62,7 @@ public final class DailiesConfig {
         });
         group("advanced", "Advanced", () -> {
             text("ignoredPayloads", "", "Mod messages that playback must not hand back to their mod, added to the built-in list. Ids or namespace:* separated by commas or new lines; a leading + allows one the built-in list ignores");
+            text("testShaderPack", "", "For the scripted test only: the file name of a shader pack in the shaderpacks folder to try playback and export with (needs Iris). Empty skips the shader pack checks");
         });
         group("mcp", "The MCP server", () -> {
             bool("mcpEnabled", true, "Run the MCP server, which also serves the moments page. It listens on this computer only, unless Listen On is changed");

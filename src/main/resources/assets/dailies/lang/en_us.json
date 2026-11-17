@@ -105,6 +105,7 @@
   "dailies.configuration.flightLookRelative": "Fly Where I Look",
   "dailies.configuration.advanced": "Advanced",
   "dailies.configuration.ignoredPayloads": "Ignored Mod Messages",
+  "dailies.configuration.testShaderPack": "Test Shader Pack",
   "dailies.configuration.mcp": "MCP Server",
   "dailies.configuration.mcpEnabled": "Run the MCP Server",
   "dailies.configuration.mcpPort": "Port",
