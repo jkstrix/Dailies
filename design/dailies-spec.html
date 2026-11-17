@@ -142,6 +142,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<li><a href="#config"><i>XIII</i>Settings</a></li>
 			<li><a href="#tests"><i>XIV</i>Proving it</a></li>
 			<li><a href="#provided"><i>XV</i>Provided</a></li>
+			<li><a href="#renderers"><i>XVI</i>Renderers</a></li>
 			<li><a href="#tools"><i>A</i>Tools</a></li>
 			<li><a href="#records"><i>B</i>Records</a></li>
 		</ul>
@@ -1016,6 +1017,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td></td><td>showMomentsOnTimeline</td><td>on</td><td>EDIT-9</td></tr>
 				<tr><td></td><td>showCameraPath · showMarkersInWorld</td><td>on · on</td><td>EDIT-8, REC-32</td></tr>
 				<tr><td>advanced</td><td>ignoredPayloads</td><td>empty</td><td><b>CFG-7.</b> Ids or <code>namespace:*</code>, one per line, added to the built-in list; a leading <code>+</code> allows one the built-in list ignores</td></tr>
+				<tr><td>advanced</td><td>testShaderPack</td><td>empty</td><td>For the scripted run only (REN-6): the file name of a shader pack in the test game's <code>shaderpacks</code> folder. Empty skips the shader pack checks</td></tr>
 				<tr><td>mcp</td><td>mcpEnabled · mcpPort</td><td>on · 25595</td><td>MCP-2</td></tr>
 				<tr><td></td><td>mcpBind · mcpToken · mcpAllowedClients</td><td>127.0.0.1 · empty, made by the mod · 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7, fe80::/10</td><td>MCP-8. Remote access is off while mcpBind is 127.0.0.1. The token is for HTTPS; this computer's plain HTTP never needs it</td></tr>
 				<tr><td></td><td>mcpCertificateFingerprint</td><td>empty, filled in by the mod</td><td>MCP-8. For reading, to pin the certificate; changing it has no effect</td></tr>
@@ -1047,6 +1049,23 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>TEST-2</td><td>The test window does not pause when it loses focus.</td><td>The owner watches runs and types elsewhere.</td></tr>
 				<tr><td>TEST-3</td><td>A second task places the same test world, then gives the person 60 seconds at the controls while recording, and leaves the recording open in playback afterwards.</td><td>For judging by eye.</td></tr>
 				<tr><td>TEST-4</td><td>Every check that needs an optional mod or service is skipped, with a line saying so, when that mod or service is absent. The run passes with none of them.</td><td>Including with AI off, which is the default.</td></tr>
+				<tr><td>TEST-5</td><td>A CI job on a self-hosted Windows machine with a graphics card builds the mod and the companion, runs the unit tests, the plain scripted run and the modded one, and keeps their logs, pictures and measurements (<code>budgets.txt</code>) with each run.</td><td><code>.github/workflows/scripted-test.yml</code>. The modded game's mods come from a runner variable.</td></tr>
+			</tbody>
+		</table></div>
+
+		<h3>Budgets</h3>
+		<p>Measurable targets the scripted run measures every time. Each measure is logged against its target and written to <code>dailies/budgets.txt</code>. A measure over its target is logged as over, for a person to judge, since other programs make timings noisy; the run fails only on a gross breach, more than twice the target (for a speed, under half of it).</p>
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Measure</th><th>Target</th><th>How it is measured</th></tr></thead>
+			<tbody>
+				<tr><td>BUD-1</td><td>Recording overhead</td><td>Under 3% lower frame rate and under 1 ms added per frame, on the test world at 1080p</td><td>Frame times with the recording paused and running, four turns each, the game drawing as fast as it can. The 3% is taken of a frame at 144 frames a second: of an uncapped frame it is smaller than the noise. Also in generated terrain, when the tour runs.</td></tr>
+				<tr><td>BUD-2</td><td>Recording size</td><td>Under 150 MB per hour of normal play, excluding resource packs and voice</td><td>Bytes written while walking about, per hour. The tour of generated terrain's walk round a village is the true measure; the flat world's only catches a gross breach.</td></tr>
+				<tr><td>BUD-3</td><td>Jump within a recording</td><td>Under 2 s to any tick, under 0.5 s within the current segment</td><td>Time from asking for a jump to standing at exactly that tick: to the ends, the middle and quarters, and short hops between the ends of each segment.</td></tr>
+				<tr><td>BUD-4</td><td>Opening a recording</td><td>Under 5 s to the first frame for a two-hour recording</td><td>Time from asking to open it to the first frame drawn after it has loaded. The scripted recordings are shorter than two hours, so only a gross breach shows; the length is logged with the measure.</td></tr>
+				<tr><td>BUD-5</td><td>Moments</td><td>Under 0.2 ms per tick of tracking; transcription keeps up in real time with AI on</td><td>Whole client ticks with Moments on and off, three turns of 200 ticks each; the difference. Transcription only with AI on.</td></tr>
+				<tr><td>BUD-6</td><td>Export</td><td>Faster than real time for 1080p60 H.264 on hardware encoders</td><td>Five seconds of 1080p60 H.264 on the machine's first hardware encoder, its waits for terrain and the encoder's start included. Skipped, with a line, on a machine with none.</td></tr>
+				<tr><td>BUD-7</td><td>Craft accuracy</td><td>Craft within 0.3 blocks of their live position in playback; standing passengers within 0.25 blocks of the deck (MOD-4)</td><td>The worst offsets of the playback step's comparisons, less the one tick of travel those checks allow for sampling. Needs Create, Sable and Create Aeronautics.</td></tr>
+				<tr><td>BUD-8</td><td>Smart Camera</td><td>Same director shots on every replay of a stretch; under 0.5 ms per frame</td><td>Measured by the Smart Camera's own steps (chapter VIII), not by the budgets step.</td></tr>
 			</tbody>
 		</table></div>
 
@@ -1066,6 +1085,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<li><div><h3>Server side</h3><p>With the companion: <code>/moment data</code> arrives as a custom moment with its data, and a stand-in boss killed by command arrives as <code>boss_fight</code> with the fighter's share. With McpCraft: a job posted, claimed and finished arrives as three <code>job_*</code> moments and the matching advancements; opening playback makes McpCraft stand down. <i>SRV-1 to 3, 10, 11, 15.</i></p></div></li>
 			<li><div><h3>Seen and typed</h3><p>Before anything else is recorded, a short recording is made entirely with <code>/dailies</code>, run as the chat runs it: start, cancel (answering its question), start again, two markers (one blue with a description and a position, one plain), a moment by command and one by the moment key, pause, resume, hide, config, and finish under a name. Each answer is checked, Tab offers the sub-commands and colours, and the saved file holds the name and both markers. Opened in playback: the recording sub-commands refuse, hide and config still act, and another command is turned away. The blue marker's ring is drawn at its spot in its colour and a click on it jumps to its tick. Four camera keyframes give four marks and a path whose every point is where <code>Evaluator</code> puts the camera, a quarter tick apart at most; a click on a mark selects its keyframe; a held keyframe breaks the line; a played Smart Camera stretch has a path that turns stale when its keyframe changes. A still exported with the path, the rings and the editor on screen is the same file, byte for byte, as one without. <i>REC-7, REC-32, EDIT-8, PLAY-4.</i></p></div></li>
 			<li><div><h3>Looks and the frame</h3><p>With a pig, a beacon and the recorder in view, each of blocks, entities, players and beacon beams is switched off in turn: the count of what was drawn drops to none for that kind and no other, an exported still differs from the one with everything on where it should, and comes back the same afterwards; with beams off the beacon is still drawn. The hotbar, scoreboard and action bar looks each turn away their own interface layer and no other, and exported stills lose the hotbar, the scoreboard and a line on the action bar where those are. With Create installed, a row of kinetics and a bearing's contraption are put in view against a plain background: blocks off empties Flywheel's list of block entities and leaves the contraption, entities off empties its list of entities and leaves the kinetics, and with both off not one pixel of an exported still is anything but background. A scene held to 21:9 shows solid bars leaving that shape clear, gives the Smart Camera that shape, and exports a still and a run of pictures at 640×274 when asked for 640×360; held to 1:1 it exports 360×360. The players panel lists the recorder; look at turns the camera to them, hide takes them out of the count of drawn players and back, ride and leave work, and follow keeps them near the middle of the view through a walk and across a jump back. Two more players are then given to the playback world as a server would send them, one in sight and one only listed: each row acts on its own player, the one out of sight can be hidden and nothing else, and after a jump the panel lists who is there. <i>Chapter V, PLAY-3.</i> Run in the modded game too, beside Sodium and Iris.</p></div></li>
+			<li><div><h3>Other renderers</h3><p>With the scripted recording open: after a jump the terrain renderer (the game's or Sodium's) says all is drawn and a still shows it. With Create, Flywheel's update limit is off, and a bearing's turning arm, seen from seventy blocks and zoomed in, moves between every pair of neighbouring frames at sixty frames a second and at four times speed. With Iris, its frame timer steps by a frame's length on every exported frame and never runs back afterwards. With <code>throwawayFrames</code> at 3, ten pictures take at least forty drawn frames, all counted by Iris. With a shader pack named by <code>testShaderPack</code>, stills show the pack and the same frame exported twice matches. With Distant Horizons, the playback world's store is in the recording's own folder, chunks are handed over and it settles before a still. Each part is skipped, with a line, without its mod. <i>REN-1 to 6, CMP-1.</i></p></div></li>
+			<li><div><h3>Budgets</h3><p>Last, in a flat world of its own: Moments' cost a tick, recording's cost a frame and what walking about fills, then opening that recording, jumps across it and, on hardware H.264, five seconds of 1080p60. With the tour's measures and the playback step's craft offsets, each budget is logged and written to <code>budgets.txt</code>; a gross breach fails the run. <i>BUD-1 to 8.</i></p></div></li>
 			<li><div><h3>AI, when on</h3><p>The voice clip is transcribed and found by a transcript search; the clip gets a model-written title and summary. When off or unreachable, the same steps report "skipped" and everything else passes. <i>MOM-32 to 34.</i></p></div></li>
 		</ol>
 
@@ -1151,6 +1172,51 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<div class="rule"><b>Use it as it stands</b><span>Change the provided code where the core needs it to, and keep its behaviour as chapters VIII to XII describe.</span></div>
 			<div class="rule no"><b>Compiled, not run</b><span>The provided code compiled in this form but has only ever run inside a different mod. Chapter XIV's run is what proves it here.</span></div>
 			<div class="rule no"><b>Not a model for the core</b><span>It shows nothing about how to record, store, play back, edit or export. Those are built from chapters II to VII.</span></div>
+		</div>
+	</section>
+
+	<!-- ============================================================ XVI -->
+	<section id="renderers">
+		<div class="chapter"><span class="no">XVI</span><h2>Other renderers</h2><span class="owner new">new work</span></div>
+		<p class="lede">Create draws its moving parts through Flywheel, Create Aeronautics draws some of its effects with Veil, shader packs replace the game's drawing through Iris (or Oculus), Sodium (or Embeddium) replaces how terrain is built, and Distant Horizons draws terrain far beyond the view distance. Each changes how a frame comes to be. Playback and export must be as right with them as without them. Numbered XVI, after the others, so that no chapter number already referred to elsewhere changes.</p>
+
+		<div class="rules">
+			<div class="rule"><b>No hard dependency</b><span>Dailies loads and works without any of these mods. What is done for each switches on only when it is present.</span></div>
+			<div class="rule"><b>Public parts first</b><span>Reach each through its published API where it has one, else through its own settings or by name, and fail soft: one line in the log when a version is not the one Dailies knows, and everything else goes on working.</span></div>
+			<div class="rule"><b>Tested versions</b><span>Flywheel 1.0.6 (inside Create 6.0.10), Veil 4.3.2 (inside Sable 2.0.6), Iris 1.8.14, Sodium 0.8.13 and Distant Horizons 3.3.3, for Minecraft 1.21.1. On NeoForge 1.21.1 Iris and Sodium are the mods; Oculus and Embeddium are their names on older versions and are treated the same.</span></div>
+		</div>
+
+		<div class="fact"><b>Facts: how these renderers keep time</b>
+			<ul>
+				<li>Flywheel moves each thing it draws once per frame, to the frame's point between two ticks, and finishes a tick's work before starting the next, so several ticks run in one frame are each done in full. To save time in live play it can also move far-off things only on some frames: its "limitUpdates" setting, on by default, updates something more than about 45 blocks away on every second frame, every third beyond 64, and so on. Flywheel reads the setting when it starts on a world.</li>
+				<li>Iris gives shader packs a frame counter, which goes up by one for every frame drawn, and a frame timer (<code>frameTimeCounter</code>, <code>frameTime</code>) read from the real clock at the start of every frame, in whole milliseconds. Packs animate water, wind and clouds by the timer, and build up their picture over frames (temporal anti-aliasing, exposure) by the counter. The game's own time of day and the frame's point between ticks reach Iris the usual way.</li>
+				<li>Veil sets a <code>VeilRenderTime</code> uniform from the real clock each time a shader's usual uniforms are set.</li>
+				<li>Sodium replaces the game's terrain building, and answers the game's own questions of whether every section is drawn and how many are, which is what an export waits on (EXP-5).</li>
+				<li>Distant Horizons keeps a store of far terrain per world or server, builds it from chunks the game loads, and draws it over many frames after a world opens. It offers an override for the folder each world's store is kept in, a way to hand it a chunk, and a way to read what its store holds.</li>
+			</ul>
+		</div>
+
+		<div class="tablebox"><table class="req">
+			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
+			<tbody>
+				<tr><td>REN-1</td><td>Playback and export are correct beside Sodium or Embeddium: an export waits for the terrain Sodium builds, as for the game's own, and no frame is captured with terrain missing.</td><td>Sodium answers the same questions the game's renderer does; nothing else is needed.</td></tr>
+				<tr><td>REN-2</td><td>Playback and export are correct beside Flywheel: while a recording is open, Flywheel moves everything on every frame, however far from the camera. Its own setting is put back as it was when playback ends, and never written to its settings file.</td><td>Done by switching "limitUpdates" off, in memory, as each playback world loads.</td></tr>
+				<tr><td>REN-3</td><td>A Create contraption is fully updated in every exported frame, at any export speed: no two neighbouring frames show a turning contraption in the same place, whether a frame lies between two ticks or several ticks are run for one frame.</td><td>Follows from REN-2 and from each tick an export runs being a whole game tick.</td></tr>
+				<tr><td>REN-4</td><td>While an export holds the clock, anything that animates by the real clock is given the export's clock instead: the export's start plus exactly <i>n</i>/<i>f</i> seconds for frame <i>n</i> of an <i>f</i> fps export. This covers Iris's frame timer and Veil's render time. Iris's frame counter is not changed. After an export the timer carries on from where the export left it, never running back.</td><td>So water, wind and Aeronautics' effects move at the video's pace, the same in an exported frame as in a live one at that moment.</td></tr>
+				<tr><td>REN-5</td><td>Shader packs that build up their picture over frames are honoured by <code>throwawayFrames</code> (EXP-5): every thrown-away frame is a whole frame drawn, which the pack's frame counter counts, at the same moment of the recording as the frame captured after it.</td><td></td></tr>
+				<tr><td>REN-6</td><td>Playback and export are correct with an Iris or Oculus shader pack in use: stills and videos show the pack, are never blank, and the same frame exported twice comes out the same within the pack's own frame-to-frame jitter.</td><td>The scripted run tries a pack named by the setting <code>testShaderPack</code>, when one is set.</td></tr>
+				<tr><td>CMP-1</td><td>With Distant Horizons installed, playback shows its far terrain. The playback world uses a level-of-detail store of its own, kept in <code>dailies/dh/&lt;recording id&gt;/</code>, so the data Distant Horizons keeps for the player's real worlds and servers is never read or written. Each chunk the playback world loads is handed to Distant Horizons so it can build that chunk's far version. An export waits for Distant Horizons to settle after the world is rebuilt, as it waits for terrain (EXP-5), and never for more than 600 frames.</td><td>Through Distant Horizons' published API (version 7, that of 3.3), found by name. With another version: one line in the log, and playback leaves it alone. The store grows as the recording is watched: far terrain is what the recording has loaded so far.</td></tr>
+			</tbody>
+		</table></div>
+
+		<div class="fact"><b>Tested in each combination</b>
+			<ul>
+				<li>The plain game, with none of these: the scripted run passes, every renderer check skipped with a line (TEST-4).</li>
+				<li>The modded game, beside Sodium, Iris, Flywheel and Veil: REN-1 to REN-5 checked by the "Other renderers" step of chapter XIV.</li>
+				<li>With a shader pack: the same, with <code>testShaderPack</code> set, adds REN-6.</li>
+				<li>With Distant Horizons added to the modded game's mods: adds CMP-1.</li>
+				<li>Veil's effects in a video, and how far terrain looks, can only be judged by a person.</li>
+			</ul>
 		</div>
 	</section>
 
