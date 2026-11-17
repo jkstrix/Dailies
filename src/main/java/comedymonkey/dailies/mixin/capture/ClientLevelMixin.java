@@ -5,7 +5,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.Holder;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
@@ -35,6 +34,27 @@ public abstract class ClientLevelMixin {
     private void dailies$ownEvent(@Nullable Player player, int type, BlockPos pos, int data, CallbackInfo ci) {
         if (player != null) {
             Capture.ownEvent(player, type, pos, data);
+        }
+    }
+
+    /**
+     * And for the sounds a player makes: their footsteps, the block they put down, the door they open. Their own game
+     * plays these for them, and the server sends them to everyone else. A sound the server sent comes through here too,
+     * naming the game's own player; Capture tells the two apart (ServerSoundMixin).
+     */
+    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V", at = @At("HEAD"))
+    private void dailies$ownSound(@Nullable Player player, double x, double y, double z, Holder<SoundEvent> sound, SoundSource source, float volume, float pitch, long seed,
+                                  CallbackInfo ci) {
+        if (player != null) {
+            Capture.ownSound(player, null, x, y, z, sound, source, volume, pitch, seed);
+        }
+    }
+
+    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
+        at = @At("HEAD"))
+    private void dailies$ownEntitySound(@Nullable Player player, Entity entity, Holder<SoundEvent> sound, SoundSource source, float volume, float pitch, long seed, CallbackInfo ci) {
+        if (player != null) {
+            Capture.ownSound(player, entity, entity.getX(), entity.getY(), entity.getZ(), sound, source, volume, pitch, seed);
         }
     }
 

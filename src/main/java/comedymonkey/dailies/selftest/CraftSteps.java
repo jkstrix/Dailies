@@ -291,6 +291,19 @@ final class CraftSteps {
             test.skip("the mob did not sit in the seat of the balloon's basket: a seated mob on a flying craft was not tried");
         }
         int before = crafts(minecraft);
+        // The recorder steps into the basket first, as a player would to fly it. The game only counts a craft as the
+        // player's when it appears within sixteen blocks of them (CraftRules), and boarding, the first flight and the
+        // altitude record are only logged for someone aboard; from the far platform none of them were
+        Vec3 wasAt = test.onClient(() -> minecraft.player.position());
+        BlockPos aboard = minecraft.getSingleplayerServer().submit(() -> basketSpot(level, burner, seat, origin.offset(5, 2, 5))).get();
+        if (aboard != null) {
+            test.command("tp @s " + (aboard.getX() + 0.5) + " " + aboard.getY() + " " + (aboard.getZ() + 0.5));
+            test.sleepTicks(10);
+        } else {
+            test.skip("no room was found in the balloon's basket for the recorder: it watched the balloon from beside it");
+            test.command("tp @s " + (origin.getX() - 2.5) + " " + (origin.getY() + 1) + " " + (origin.getZ() - 2.5));
+            test.sleepTicks(10);
+        }
         // A region tight around the balloon, from the basket floor up: a loose one takes in whatever is nearby as a second
         // object, and the floor under the basket is dead weight
         // Typed by the player, as in play, so that the game sees the assembly and logs it as a craft moment (plan 2.1)
@@ -374,10 +387,39 @@ final class CraftSteps {
         test.log("balloon with its burner turned down at tick " + balloonBurnerOffTick + ":" + after + " (it climbed at " + String.format("%.1f", climbRate)
             + " blocks a second, and was last moving at " + String.format("%.1f", lastRate) + ")");
         SelfTest.check(lastRate < climbRate * 0.5, "turning the burner down did not slow the balloon: it climbed at " + climbRate + " blocks a second and still rises at " + lastRate);
-        // The flight is noted; what the two do when the basket bumps down again is not part of it
+        // The flight is noted; what the two do when the basket bumps down again is not part of it, and the recorder goes
+        // back to where it stood before, so the steps after this one find it where they always have
         test.command("kill @e[type=minecraft:pig,name=Aeronaut]");
         test.command("kill @e[type=minecraft:pig,name=Ballast]");
+        test.command(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f", wasAt.x, wasAt.y, wasAt.z));
         test.sleepTicks(30);
+    }
+
+    /**
+     * A place on the basket floor beside the burner with room for a player to stand: open for two blocks, a floor
+     * under it, and not where either mob is. The floor test keeps it inside the basket, which stands a block above the
+     * scene's ground. Server thread
+     */
+    private static BlockPos basketSpot(ServerLevel level, BlockPos burner, BlockPos seat, BlockPos ballast) {
+        BlockPos best = null;
+        double nearest = Double.MAX_VALUE;
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                BlockPos pos = burner.offset(dx, 0, dz);
+                if ((dx == 0 && dz == 0) || pos.equals(seat) || pos.equals(ballast)) {
+                    continue;
+                }
+                boolean open = level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()
+                    && level.getBlockState(pos.above()).getCollisionShape(level, pos.above()).isEmpty();
+                boolean floor = !level.getBlockState(pos.below()).getCollisionShape(level, pos.below()).isEmpty();
+                double distance = dx * dx + dz * dz;
+                if (open && floor && distance < nearest) {
+                    nearest = distance;
+                    best = pos.immutable();
+                }
+            }
+        }
+        return best;
     }
 
     /** Where everything was at ticks of the balloon's flight, with the balloon's own state. Checked by BalloonSteps */

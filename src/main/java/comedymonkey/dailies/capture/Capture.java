@@ -99,6 +99,35 @@ public final class Capture {
         }
     }
 
+    // The game plays a sound the server sent through the same door as one of the player's own making, naming its own
+    // player both times. The server's is already in the recording as the packet it came in; it is told apart by its seed
+    private static boolean serverSound = false;
+    private static long serverSeed = 0L;
+
+    /** The game is about to play a sound the server sent. Client thread */
+    public static void soundFromServer(long seed) {
+        serverSound = true;
+        serverSeed = seed;
+    }
+
+    /**
+     * A sound the game plays for a player of its own accord, which the server sends everyone else: the recorder's own
+     * footsteps, and the sounds of what they do. {@code entity} is the entity it follows, or null for a sound at a place
+     */
+    public static void ownSound(net.minecraft.world.entity.player.Player player, @org.jetbrains.annotations.Nullable net.minecraft.world.entity.Entity entity,
+                                double x, double y, double z, net.minecraft.core.Holder<net.minecraft.sounds.SoundEvent> sound, net.minecraft.sounds.SoundSource source,
+                                float volume, float pitch, long seed) {
+        if (serverSound && seed == serverSeed) {
+            serverSound = false;
+            return;
+        }
+        try {
+            Recorder.get().onOwnSound(player, entity, x, y, z, sound, source, volume, pitch, seed);
+        } catch (Throwable t) {
+            failed(t);
+        }
+    }
+
     /** Cracks on a block being mined, by whom. Only the recorder's own are written: the server sends everyone else's */
     public static void cracks(int breaker, net.minecraft.core.BlockPos pos, int stage) {
         try {

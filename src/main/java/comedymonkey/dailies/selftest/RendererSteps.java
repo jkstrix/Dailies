@@ -47,6 +47,8 @@ final class RendererSteps {
     private static volatile int drawn = 0;
     /** Iris's frame timer at each frame drawn while counting; NaN when Iris is absent */
     private static final List<Float> timer = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** Iris's frame counter at each frame drawn while counting */
+    private static final List<Integer> counter = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static IntSupplier irisCounter = null;
     private static Object irisTimer = null;
     private static Method irisTimerValue = null;
@@ -103,6 +105,9 @@ final class RendererSteps {
                 drawn++;
                 if (irisTimer != null) {
                     timer.add(irisTimerNow());
+                }
+                if (irisCounter != null) {
+                    counter.add(irisCounter.getAsInt());
                 }
             }
         });
@@ -249,9 +254,9 @@ final class RendererSteps {
 
     private static void throwaway(SelfTest test, boolean iris) throws Exception {
         int from = RecordingSteps.notes.get(RecordingSteps.notes.size() / 2).tick();
-        int counterBefore = irisCounter != null ? test.onClient(irisCounter::getAsInt) : 0;
         test.tool("config_set", args("key", "throwawayFrames", "value", 3));
         drawn = 0;
+        counter.clear();
         counting = true;
         List<Path> frames;
         try {
@@ -263,8 +268,20 @@ final class RendererSteps {
         check(frames.size() == 10, "ten ticks at twenty frames a second wrote " + frames.size() + " pictures, not 10");
         check(drawn >= 40, "with three frames thrown away before each of ten, only " + drawn + " frames were drawn (REN-5)");
         if (irisCounter != null) {
-            int counted = test.onClient(irisCounter::getAsInt) - counterBefore;
-            check(counted >= 40, "Iris counted " + counted + " frames over an export that drew " + drawn + ": shader packs would not see the thrown-away frames (REN-5)");
+            // Read at every frame the export drew rather than once before and once after: Iris puts its counter back to
+            // nought when it makes a pipeline for a new level, and playback changes the level on a jump back
+            int counted = 0;
+            int backwards = 0;
+            for (int i = 1; i < counter.size(); i++) {
+                int step = Math.floorMod(counter.get(i) - counter.get(i - 1), 720720);
+                if (counter.get(i) < counter.get(i - 1) && counter.get(i - 1) - counter.get(i) < 360360) {
+                    backwards++;
+                } else {
+                    counted += step;
+                }
+            }
+            check(backwards == 0, "Iris's frame counter went back to nought " + backwards + " times during an export: shader packs that build their picture up over frames would start again (REN-5)");
+            check(counted >= drawn - 1, "Iris counted " + counted + " frames between the first and last of " + drawn + " an export drew: shader packs would not see the thrown-away frames (REN-5)");
         }
         test.log("with throwawayFrames at 3, ten pictures took " + drawn + " frames" + (irisCounter != null ? ", all counted by Iris" : ""));
     }

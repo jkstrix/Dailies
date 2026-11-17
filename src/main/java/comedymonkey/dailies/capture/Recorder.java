@@ -720,6 +720,20 @@ public final class Recorder {
     }
 
     /**
+     * A sound of the recorder's own making: their footsteps, a block they placed, a door they opened. The game plays it
+     * for itself and the server sends it to everyone else, so it is written here in the form everyone else gets it.
+     * {@code entity} is the entity the sound follows, or null for one at a place. Client thread
+     */
+    void onOwnSound(net.minecraft.world.entity.player.Player player, @Nullable net.minecraft.world.entity.Entity entity, double x, double y, double z,
+                    net.minecraft.core.Holder<net.minecraft.sounds.SoundEvent> sound, net.minecraft.sounds.SoundSource source, float volume, float pitch, long seed) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (this.capturing() && minecraft.isSameThread() && player == minecraft.player) {
+            this.write(entity != null ? new net.minecraft.network.protocol.game.ClientboundSoundEntityPacket(sound, source, entity, volume, pitch, seed)
+                : new net.minecraft.network.protocol.game.ClientboundSoundPacket(sound, source, x, y, z, volume, pitch, seed));
+        }
+    }
+
+    /**
      * The cracks on a block someone is mining have spread or gone. A server tells every player but the miner, so the
      * recorder's own mining is written here in the form the server gives everyone else. Client thread
      */

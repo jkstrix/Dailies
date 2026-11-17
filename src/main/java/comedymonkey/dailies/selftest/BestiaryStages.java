@@ -586,14 +586,11 @@ final class BestiaryStages {
         double[] cloud = new double[3];
         boolean found = server("finding the perched breath's cloud", (level, player) -> {
             EnderDragon dragon = level.getDragons().get(0);
-            Entity nearest = null;
-            for (Entity entity : level.getAllEntities()) {
-                if (entity.getType() == EntityType.AREA_EFFECT_CLOUD && entity.distanceTo(dragon) < 16.0F && (nearest == null || entity.distanceTo(dragon) < nearest.distanceTo(dragon))) {
-                    nearest = entity;
-                }
-            }
+            // The breath itself, which is the dragon's own: the fireball summoned above leaves a cloud near the portal
+            // too, owned by nobody, and a glass bottle only fills from a cloud the dragon made
+            Entity nearest = breathCloud(level, dragon);
             if (nearest == null) {
-                throw new IllegalStateException("the perched dragon left no cloud");
+                throw new IllegalStateException("the perched dragon left no cloud of its own");
             }
             cloud[0] = nearest.getX();
             cloud[1] = nearest.getY();
@@ -615,8 +612,19 @@ final class BestiaryStages {
             waitTicks(4);
             mark("bottle in hand");
             server("collecting breath in a bottle", (level, player) -> {
+                // A bottle fills from a cloud of the dragon's within two blocks of the player. The cloud shrinks as it
+                // lasts, so the recorder steps to its middle first, as a player reaching for it would
+                net.minecraft.world.entity.AreaEffectCloud breath = level.getDragons().isEmpty() ? null : breathCloud(level, level.getDragons().get(0));
+                if (breath == null) {
+                    throw new IllegalStateException("the dragon's breath was gone before the bottle came out");
+                }
+                player.connection.teleport(breath.getX(), breath.getY(), breath.getZ(), player.getYRot(), player.getXRot());
                 ItemStack bottle = player.getMainHandItem();
                 player.setItemInHand(InteractionHand.MAIN_HAND, bottle.use(level, player, InteractionHand.MAIN_HAND).getObject());
+                if (!player.getMainHandItem().is(Items.DRAGON_BREATH)) {
+                    throw new IllegalStateException("the bottle did not fill: the hand holds " + player.getMainHandItem() + ", the breath's radius is " + breath.getRadius()
+                        + ", the recorder " + (player.hasInfiniteMaterials() ? "has" : "has not") + " infinite materials");
+                }
             });
             waitTicks(6);
             mark("breath bottled");
@@ -728,6 +736,18 @@ final class BestiaryStages {
         waitTicks(30);
         mark("back in the overworld");
         waitTicks(5);
+    }
+
+    /** The lingering cloud of the dragon's own breath nearest to it, within sixteen blocks; null when there is none. Server thread */
+    private static net.minecraft.world.entity.AreaEffectCloud breathCloud(ServerLevel level, EnderDragon dragon) {
+        net.minecraft.world.entity.AreaEffectCloud nearest = null;
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof net.minecraft.world.entity.AreaEffectCloud cloud && cloud.isAlive() && cloud.getOwner() instanceof EnderDragon
+                && cloud.distanceTo(dragon) < 16.0F && (nearest == null || cloud.distanceTo(dragon) < nearest.distanceTo(dragon))) {
+                nearest = cloud;
+            }
+        }
+        return nearest;
     }
 
     /** Waits until the live game shows a block that is not air at a place, and says at which recording tick it was */

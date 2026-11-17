@@ -365,7 +365,10 @@ public final class Snapshots {
             new CommonPlayerSpawnInfo(level.dimensionTypeRegistration(), level.dimension(), ((BiomeManagerAccess) level.getBiomeManager()).dailies$biomeZoomSeed(),
                 GameType.SPECTATOR, null, level.isDebug(), flat, Optional.empty(), 0), false));
 
-        ChunkPos centre = playback != null ? playback.centre() : minecraft.player.chunkPosition();
+        // Where the game's chunks are centred, which is where the server last said, not always the chunk the player stands
+        // in: the server says so a moment after the player crosses into a chunk. Playback has to take and let go of chunks
+        // from the same place the game did, or it keeps some the game let go of
+        ChunkPos centre = playback != null ? playback.centre() : chunkCentre(level);
         out.packet(new ClientboundSetChunkCacheCenterPacket(centre.x, centre.z));
         out.packet(new ClientboundSetChunkCacheRadiusPacket(distances.dailies$serverChunkRadius()));
         out.packet(new ClientboundSetSimulationDistancePacket(distances.dailies$serverSimulationDistance()));
@@ -429,8 +432,14 @@ public final class Snapshots {
         }
     }
 
+    /** The chunk the game's chunks are centred on: every chunk it shows is within reach of this one */
+    private static ChunkPos chunkCentre(ClientLevel level) {
+        net.minecraft.client.multiplayer.ClientChunkCache.Storage storage = level.getChunkSource().storage;
+        return new ChunkPos(storage.viewCenterX, storage.viewCenterZ);
+    }
+
     private static int writeChunks(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, ClientLevel level, GameCodec codec) {
-        ChunkPos centre = minecraft.player.chunkPosition();
+        ChunkPos centre = chunkCentre(level);
         int radius = Math.max(minecraft.options.getEffectiveRenderDistance(), ((ClientPacketListenerAccess) listener).dailies$serverChunkRadius()) + 4;
         Set<Long> present = new HashSet<>();
         List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();

@@ -9,6 +9,7 @@
     "capture.ConnectionMixin",
     "capture.LocalPlayerMixin",
     "capture.ClientLevelMixin",
+    "capture.ServerSoundMixin",
     "capture.BlockEntityInfoMixin",
     "packs.ServerPackManagerMixin",
     "packs.PackPushMixin",

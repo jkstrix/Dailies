@@ -192,6 +192,7 @@ final class Feed {
         this.skipChunks = this.mayRewind && plain;
         this.keptModded = false;
         PlaybackExtensions.resetAll();
+        clearCracks(minecraft);
         this.lightSettled = false;
         this.rewound = false;
         this.snapshotChunks = null;
@@ -397,7 +398,12 @@ final class Feed {
         this.snapshotChunks = null;
         net.minecraft.client.multiplayer.ClientLevel level = this.session.listener.getLevel();
         boolean moved = false;
-        for (long key : new ArrayList<>(this.loadedChunks)) {
+        // What the game really holds, as well as what the list says: a chunk the list lost track of would otherwise stay
+        Set<Long> held = new java.util.LinkedHashSet<>(this.loadedChunks);
+        if (level != null) {
+            held.addAll(heldChunks(level));
+        }
+        for (long key : held) {
             if (!kept.contains(key)) {
                 this.chunksLetGo++;
                 try {
@@ -419,6 +425,73 @@ final class Feed {
         }
         if (moved) {
             level.getChunkSource().updateViewCenter(this.centreX, this.centreZ);
+        }
+    }
+
+    /**
+     * Every chunk the game holds, within reach of the place its chunks are centred on or not. The game keeps a chunk it
+     * was told to forget while it was out of reach, unseen, until another chunk takes its place in its table or the centre
+     * comes back that way and shows it again
+     */
+    private static Set<Long> heldChunks(net.minecraft.client.multiplayer.ClientLevel level) {
+        Set<Long> held = new HashSet<>();
+        java.util.concurrent.atomic.AtomicReferenceArray<net.minecraft.world.level.chunk.LevelChunk> chunks = level.getChunkSource().storage.chunks;
+        for (int i = 0; i < chunks.length(); i++) {
+            net.minecraft.world.level.chunk.LevelChunk chunk = chunks.get(i);
+            if (chunk != null) {
+                held.add(chunk.getPos().toLong());
+            }
+        }
+        return held;
+    }
+
+    /**
+     * Takes away the cracks on every block someone was mining. A snapshot has none (whoever is still mining is heard of
+     * again just after it), and the game keeps cracks with whoever made them, not with the world: changing worlds leaves
+     * them, and so does taking the miner out. After a jump back the log the recorder was about to mine stood cracked
+     */
+    private static void clearCracks(Minecraft minecraft) {
+        net.minecraft.client.renderer.LevelRenderer renderer = minecraft.levelRenderer;
+        if (renderer == null) {
+            return;
+        }
+        for (int breaker : new it.unimi.dsi.fastutil.ints.IntArrayList(renderer.destroyingBlocks.keySet())) {
+            renderer.destroyBlockProgress(breaker, net.minecraft.core.BlockPos.ZERO, -1);
+        }
+    }
+
+    /** Whether the game holds this chunk, in reach or not */
+    private static boolean holds(net.minecraft.client.multiplayer.ClientLevel level, int x, int z) {
+        net.minecraft.client.multiplayer.ClientChunkCache.Storage storage = level.getChunkSource().storage;
+        net.minecraft.world.level.chunk.LevelChunk chunk = storage.chunks.get(storage.getIndex(x, z));
+        return chunk != null && chunk.getPos().x == x && chunk.getPos().z == z;
+    }
+
+    /**
+     * After a chunk arrived or was to be forgotten: the list follows what the game did with it, not what it should have
+     * done. The game takes a chunk only within reach of its centre and lets one go only within reach, and its reach and
+     * centre are its own; a chunk it kept that the list had let go would never be taken out by a jump back
+     */
+    private void followGame(Packet<?> packet) {
+        if (packet instanceof ClientboundBundlePacket bundle) {
+            bundle.subPackets().forEach(this::followGame);
+            return;
+        }
+        net.minecraft.client.multiplayer.ClientLevel level = this.session == null ? null : this.session.listener.getLevel();
+        if (level == null) {
+            return;
+        }
+        if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
+            long key = forgotten.pos().toLong();
+            if (holds(level, forgotten.pos().x, forgotten.pos().z)) {
+                this.loadedChunks.add(key);
+            } else {
+                this.loadedChunks.remove(key);
+            }
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket chunk) {
+            if (!holds(level, chunk.getX(), chunk.getZ())) {
+                this.loadedChunks.remove(net.minecraft.world.level.ChunkPos.asLong(chunk.getX(), chunk.getZ()));
+            }
         }
     }
 
@@ -712,6 +785,7 @@ final class Feed {
             }
             this.track(packet, minecraft);
             ((Packet) packet).handle(this.session.listener);
+            this.followGame(packet);
             if (packet instanceof ClientboundLoginPacket) {
                 // The viewer is a spectator who is in nobody's tab list
                 ClientboundPlayerInfoUpdatePacket viewer = PlayerInfoPackets.build(this.session.codec, PlayerInfoPackets.allButChat(),

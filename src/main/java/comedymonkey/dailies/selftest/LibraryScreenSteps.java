@@ -227,7 +227,7 @@ final class LibraryScreenSteps {
         check(job.state() == LibraryJob.State.DONE && job.resultTicks() == 30, "the combine did not make a recording of 30 ticks: " + job.state() + " " + job.error());
         Path combined = job.result();
         RecordingManifest made = RecordingFile.readManifest(combined);
-        check(made.markers.stream().anyMatch(marker -> marker.kind == RecordingManifest.Marker.BOUNDARY && marker.tick == 10), "the combined recording has no boundary at tick 10");
+        check(made.markers.stream().anyMatch(marker -> RecordingManifest.Marker.BOUNDARY.equals(marker.kind) && marker.tick == 10), "the combined recording has no boundary at tick 10");
         test.onClientRun(combine::onClose);
 
         // --- Storage (REC-8) ---
