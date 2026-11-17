@@ -180,9 +180,16 @@ def modsSource = file(providers.gradleProperty('dailies.modsFolder').getOrElse("
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
     'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*').split(',')
 
+// The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
+tasks.register('buildCompanion', GradleBuild) {
+    description = 'Builds the Dailies Companion in companion/'
+    dir = file('companion')
+    tasks = ['build']
+}
+
 tasks.register('installTestMods', Sync) {
     description = 'Puts the built Dailies jar and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar')
+    dependsOn tasks.named('jar'), 'buildCompanion'
     from(tasks.named('jar'))
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
