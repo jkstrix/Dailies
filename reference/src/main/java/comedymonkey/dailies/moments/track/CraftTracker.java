@@ -139,6 +139,8 @@ public final class CraftTracker {
         UUID aboard = this.aboard(host, player);
         Vec3 eyes = player.position();
         Set<UUID> still = new HashSet<>();
+        // One assembly can make several craft at once (a balloon and its propeller): the event is for the largest of them
+        java.util.List<Craft> newlyAssembled = new java.util.ArrayList<>();
         for (Host.CraftInfo info : present) {
             if (info.uniqueId() == null || info.bounds() == null) {
                 continue;
@@ -151,8 +153,7 @@ public final class CraftTracker {
                 this.crafts.put(craft.id, craft);
                 // Craft already there when the session began, or when the player came into range, are not new
                 if (!this.firstLook && CraftRules.assembledByPlayer(this.lastAssemblyAction, now, distance)) {
-                    this.lastAssemblyAction = 0;
-                    this.assembled(craft, "observed");
+                    newlyAssembled.add(craft);
                 }
             } else {
                 Vec3 centre = info.bounds().getCenter();
@@ -175,6 +176,16 @@ public final class CraftTracker {
             if (info.uniqueId().equals(aboard)) {
                 this.aboard(craft, info.bounds(), player, level, now);
             }
+        }
+        if (!newlyAssembled.isEmpty()) {
+            Craft largest = newlyAssembled.get(0);
+            for (Craft craft : newlyAssembled) {
+                if (craft.volume > largest.volume) {
+                    largest = craft;
+                }
+            }
+            this.lastAssemblyAction = 0;
+            this.assembled(largest, "observed");
         }
         Iterator<Craft> known = this.crafts.values().iterator();
         while (known.hasNext()) {
