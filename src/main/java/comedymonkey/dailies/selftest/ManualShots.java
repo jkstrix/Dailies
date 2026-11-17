@@ -145,6 +145,21 @@ final class ManualShots {
             test.sleepTicks(8);
             shot(test, "07e-editor-dropdown");
             test.onClientRun(comedymonkey.dailies.ui.Previews::closeMenu);
+            attempt(test, "the editor's rarer things", () -> {
+                // The "..." menu hanging from the bar: what is done to scenes, and forgetting the export range
+                test.onClientRun(comedymonkey.dailies.ui.Previews::editorMore);
+                test.sleepTicks(8);
+                shot(test, "07h-editor-more-menu");
+                test.onClientRun(comedymonkey.dailies.ui.Previews::closeMenu);
+            });
+            attempt(test, "the editor folded away", () -> {
+                // Every panel folded: the cards to their titles, the inspector to its edge, the timeline to its ruler
+                test.onClientRun(() -> comedymonkey.dailies.ui.Previews.editorFolds(true, true, true, true));
+                test.sleepTicks(8);
+                shot(test, "07g-editor-folded");
+                test.onClientRun(() -> comedymonkey.dailies.ui.Previews.editorFolds(false, false, false, false));
+                test.sleepTicks(3);
+            });
             test.onClientRun(Controls::openTimeline);
             test.sleepTicks(5);
             test.onClientRun(() -> {

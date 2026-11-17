@@ -28,19 +28,30 @@ import java.util.Set;
  * track of the scene with its keyframes as diamonds. The names of the tracks, with what can be done to each, stand in
  * a column at the left. Between the ruler and the rows, when there are any and they are wanted, the recording's
  * moments: see {@link MomentsLane}.
+ * <p>
+ * The rows are compact and scroll when there are more tracks than room, by the wheel over their names or by the bar
+ * at their right; the wheel over the rows themselves zooms about the tick under the mouse. How high the panel is
+ * comes from {@link EditorLayout}, which gives rows up before the view gets small.
  */
 final class TimelinePanel {
 
-    private static final int BAR = 16;
-    private static final int RULER = 14;
-    private static final int LANE = 13;
+    private static final int BAR = EditorLayout.ROW;
+    private static final int RULER = EditorLayout.RULER;
+    private static final int LANE = EditorLayout.LANE;
+    private static final int FOOT = EditorLayout.FOOT;
+    /** How near the mouse has to be to a keyframe's middle, across, to take hold of it */
+    private static final double REACH = 6.0;
+    /** The space between two groups of transport buttons */
+    private static final int GROUP_GAP = 8;
+    /** Where each group of transport buttons ends, as an index into the list of them: a little room follows it */
+    private static final int[] GROUP_ENDS = {4, 7};
     private static final int SEGMENT_LINE = 0x90EFE6D6;
     private static final int RANGE_TINT = 0x38D4B25A;
     private static final double[] RULER_STEPS = {0.05, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600};
 
     /** What the left mouse button is in the middle of doing in the rows */
     private enum Drag {
-        NONE, KEYS, BOX, RANGE_START, RANGE_END, PAN
+        NONE, KEYS, BOX, RANGE_START, RANGE_END, PAN, LANE_BAR
     }
 
     private int left;
@@ -59,8 +70,12 @@ final class TimelinePanel {
     private int lanesBottom;
     private int statusLeft;
     private int statusRight;
+    /** Where the rows' scroll bar stands; it is only there when there are more tracks than rows */
+    private int laneBarLeft;
+    private int laneBarGrab;
 
     private final List<Gadget> transport = new ArrayList<>();
+    private final Gadget.Push follow;
     private final Gadget.Push fold;
     private final Gadget.Push momentsSwitch;
     private final Gadget.Push addTrack;
@@ -97,8 +112,9 @@ final class TimelinePanel {
         this.transport.add(new Gadget.Words(() -> Kit.t("transport.speed", Controls.speed(Playback.ticksPerSecond())), Controls.PARCHMENT)
                 .wide(34).tip(Kit.t("transport.speed.tip")));
         this.transport.add(Gadget.Push.icon(Kit.Icon.PLUS, Kit.t("transport.faster"), Controls::faster));
-        this.transport.add(new Gadget.Push(() -> Kit.t(EditorSession.followCamera() ? "transport.camera_track" : "transport.camera_free"), Controls::toggleFollowCamera)
-                .lit(EditorSession::followCamera).tip(Kit.t("transport.camera.tip")).wide(96));
+        this.follow = new Gadget.Push(() -> Kit.t(EditorSession.followCamera() ? "transport.camera_track" : "transport.camera_free"), Controls::toggleFollowCamera);
+        this.follow.lit(EditorSession::followCamera).tip(Kit.t("transport.camera.tip"));
+        this.transport.add(this.follow);
         this.fold = Gadget.Push.icon(() -> EditorState.timelineFolded ? Kit.Icon.FOLD_UP : Kit.Icon.FOLD_DOWN, Kit.t("timeline.fold"),
                 () -> EditorState.timelineFolded = !EditorState.timelineFolded);
         this.momentsSwitch = new Gadget.Push(Kit.t("moments.switch"), () -> MomentsLane.setShown(!MomentsLane.shown()));
@@ -107,50 +123,55 @@ final class TimelinePanel {
         this.addTrack.tip(Kit.t("track.add.tip"));
     }
 
-    /** The height the panel would like on a screen of this height */
-    static int wantedHeight(int screenHeight) {
-        int fixed = 2 + BAR + 2 + RULER;
-        if (EditorState.timelineFolded) {
-            return fixed + 3;
-        }
-        int tracks = EditorSession.open() ? EditorState.scene().tracks().size() : 0;
-        int most = Math.max(2, (screenHeight * 42 / 100 - fixed - 8) / LANE);
-        return fixed + MomentsLane.height() + Math.max(2, Math.min(tracks, most)) * LANE + 8;
-    }
-
     void place(Font font, int newLeft, int newTop, int newRight, int newBottom) {
         this.left = newLeft;
         this.top = newTop;
         this.right = newRight;
         this.bottom = newBottom;
         int width = newRight - newLeft;
-        this.columnWidth = Math.max(84, Math.min(190, width * 24 / 100));
+        int pad = EditorLayout.PAD;
+        this.columnWidth = Math.max(110, Math.min(160, width * 15 / 100)) & ~1;
         this.laneLeft = newLeft + this.columnWidth + 1;
-        this.laneWidth = Math.max(20, newRight - this.laneLeft - 5);
         this.font = font;
-        this.rulerTop = newTop + 2 + BAR + 2;
+        this.rulerTop = newTop + EditorLayout.TRANSPORT;
         this.rulerBottom = this.rulerTop + RULER;
-        this.moments = new MomentsLane.Place(newLeft, this.laneLeft, this.laneWidth, this.rulerBottom);
         // The rows give way before the moments do, but never altogether: a short window keeps two rows
-        this.lanesTop = Math.min(this.rulerBottom + MomentsLane.height(), Math.max(this.rulerBottom, newBottom - 8 - 2 * LANE));
-        this.lanesBottom = EditorState.timelineFolded ? this.lanesTop : Math.max(this.lanesTop, newBottom - 8);
+        this.lanesTop = Math.min(this.rulerBottom + MomentsLane.height(), Math.max(this.rulerBottom, newBottom - FOOT - EditorLayout.FEWEST_LANES * LANE));
+        this.lanesBottom = EditorState.timelineFolded ? this.lanesTop : Math.max(this.lanesTop, newBottom - FOOT);
+        int tracks = EditorSession.open() ? EditorState.scene().tracks().size() : 0;
+        int rows = Math.max(0, (this.lanesBottom - this.lanesTop) / LANE);
+        boolean scrolls = rows > 0 && tracks > rows;
+        // The rows' scroll bar has a strip of its own at the right, so that it never lies over a keyframe
+        this.laneBarLeft = newRight - pad - Kit.BAR;
+        this.laneWidth = Math.max(20, (scrolls ? this.laneBarLeft - 3 : newRight - pad) - this.laneLeft);
+        this.moments = new MomentsLane.Place(newLeft, this.laneLeft, this.laneWidth, this.rulerBottom);
 
-        int x = newLeft + 3;
-        for (Gadget gadget : this.transport) {
+        // The transport buttons in their groups: where the playhead goes, how fast it goes, and who moves the camera
+        int widest = Math.max(font.width(Kit.t("transport.camera_track")), font.width(Kit.t("transport.camera_free"))) + 12;
+        this.follow.wide(widest);
+        int x = newLeft + pad;
+        int y = newTop + EditorLayout.GAP;
+        for (int i = 0; i < this.transport.size(); i++) {
+            Gadget gadget = this.transport.get(i);
             int wide = gadget.wantedWidth(font);
             gadget.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-            gadget.place(font, x, newTop + 2, wide, BAR);
-            x += wide + 2;
+            gadget.place(font, x, y, wide, BAR);
+            x += wide + EditorLayout.GAP;
+            for (int end : GROUP_ENDS) {
+                if (i == end) {
+                    x += GROUP_GAP - EditorLayout.GAP;
+                }
+            }
         }
         this.fold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-        this.fold.place(font, newRight - 19, newTop + 2, 16, BAR);
+        this.fold.place(font, newRight - pad - 16, y, 16, BAR);
         int switchWide = this.momentsSwitch.wantedWidth(font);
         this.momentsSwitch.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-        this.momentsSwitch.place(font, newRight - 21 - switchWide, newTop + 2, switchWide, BAR);
-        this.statusLeft = x + 4;
-        this.statusRight = newRight - 25 - switchWide;
+        this.momentsSwitch.place(font, newRight - pad - 16 - EditorLayout.GAP - switchWide, y, switchWide, BAR);
+        this.statusLeft = x + GROUP_GAP - EditorLayout.GAP;
+        this.statusRight = this.momentsSwitch.x - GROUP_GAP;
         this.addTrack.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-        this.addTrack.place(font, newLeft + 3, this.rulerTop, this.columnWidth - 5, RULER - 1);
+        this.addTrack.place(font, newLeft + pad, this.rulerTop, this.columnWidth - pad - 2, RULER);
 
         int total = Math.max(1, Playback.total());
         if (EditorState.viewSpan <= 0.0 || EditorState.viewSpan > total) {
@@ -158,9 +179,7 @@ final class TimelinePanel {
         }
         EditorState.viewSpan = Math.max(Math.min(total, 40.0), EditorState.viewSpan);
         EditorState.viewStart = Math.max(0.0, Math.min(total - EditorState.viewSpan, EditorState.viewStart));
-        int rows = this.visibleLanes();
-        int tracks = EditorState.scene().tracks().size();
-        EditorState.laneScroll = Math.max(0, Math.min(EditorState.laneScroll, tracks - rows));
+        EditorState.laneScroll = Math.max(0, Math.min(EditorState.laneScroll, EditorState.scene().tracks().size() - rows));
     }
 
     private int visibleLanes() {
@@ -169,6 +188,35 @@ final class TimelinePanel {
 
     boolean over(double mouseX, double mouseY) {
         return mouseX >= this.left && mouseX < this.right && mouseY >= this.top && mouseY < this.bottom;
+    }
+
+    /** Its buttons, in the order the Tab key goes through them */
+    void collect(List<Gadget> order) {
+        for (Gadget gadget : this.transport) {
+            gadget.collect(order);
+        }
+        this.momentsSwitch.collect(order);
+        this.fold.collect(order);
+        this.addTrack.collect(order);
+    }
+
+    /** Whether there are more tracks than rows, so that the rows scroll */
+    private boolean lanesScroll() {
+        return this.visibleLanes() > 0 && EditorState.scene().tracks().size() > this.visibleLanes();
+    }
+
+    private boolean overLaneBar(double mouseX, double mouseY) {
+        return this.lanesScroll() && mouseX >= this.laneBarLeft && mouseX < this.laneBarLeft + Kit.BAR
+                && mouseY >= this.lanesTop && mouseY < this.lanesTop + this.visibleLanes() * LANE;
+    }
+
+    /** Scrolls the rows so that the top of the bar's thumb is at this height */
+    private void dragLaneBar(double mouseY) {
+        int rows = this.visibleLanes();
+        int tracks = EditorState.scene().tracks().size();
+        int height = rows * LANE;
+        int scroll = Kit.scrollFor((int) mouseY - this.laneBarGrab, this.lanesTop, height, tracks * LANE);
+        EditorState.laneScroll = Math.max(0, Math.min(tracks - rows, Math.round(scroll / (float) LANE)));
     }
 
     // ------------------------------------------------------------------ Ticks and pixels
@@ -218,7 +266,7 @@ final class TimelinePanel {
             return null;
         }
         KeyframeRef nearest = null;
-        double best = 4.5;
+        double best = REACH;
         for (Keyframe keyframe : EditorState.scene().track(index).keyframes()) {
             double distance = Math.abs(this.across(keyframe.tick()) - mouseX);
             if (distance < best) {
@@ -310,11 +358,18 @@ final class TimelinePanel {
 
         // The ruler and the rows
         graphics.fill(this.laneLeft, this.rulerTop, laneRight + 1, this.rulerBottom, Controls.FIELD);
+        graphics.fill(this.laneLeft, this.rulerBottom - 1, laneRight + 1, this.rulerBottom, Controls.BRASS_DIM);
         int rows = this.visibleLanes();
+        int hoveredTrack = this.drag == Drag.NONE && (this.overLanes(mouseX, mouseY) || this.overColumn(mouseX, mouseY)) ? this.trackAt(mouseY) : -1;
         for (int row = 0; row < rows; row++) {
             int index = EditorState.laneScroll + row;
             int y = this.lanesTop + row * LANE;
-            graphics.fill(this.laneLeft, y, laneRight + 1, y + LANE - 1, index < scene.tracks().size() ? (row % 2 == 0 ? 0x50000000 : 0x30000000) : 0x18000000);
+            int shade = index < scene.tracks().size() ? (row % 2 == 0 ? 0x50000000 : 0x30000000) : 0x18000000;
+            graphics.fill(this.laneLeft, y, laneRight + 1, y + LANE - 1, shade);
+            if (index == hoveredTrack) {
+                // The row under the mouse, across names and keyframes alike, so the eye can follow it
+                graphics.fill(this.left + 1, y, laneRight + 1, y + LANE - 1, 0x14EFE6D6);
+            }
         }
 
         graphics.enableScissor(this.laneLeft, this.rulerTop, laneRight + 1, Math.max(this.lanesTop, this.lanesBottom));
@@ -325,10 +380,11 @@ final class TimelinePanel {
             if (this.lanesTop > this.rulerBottom) {
                 MomentsLane.draw(graphics, font, this.moments, laneRight, mouseX, mouseY);
             }
+            KeyframeRef under = this.drag == Drag.NONE && this.overLanes(mouseX, mouseY) ? this.keyframeAt(mouseX, mouseY) : null;
             for (int row = 0; row < rows; row++) {
                 int index = EditorState.laneScroll + row;
                 if (index < scene.tracks().size()) {
-                    this.drawKeyframes(graphics, scene.track(index), index, this.lanesTop + row * LANE);
+                    this.drawKeyframes(graphics, scene.track(index), index, this.lanesTop + row * LANE, under);
                 }
             }
             if (this.drag == Drag.BOX) {
@@ -339,10 +395,13 @@ final class TimelinePanel {
                 graphics.fill(x0, y0, x1 + 1, y1 + 1, 0x30EFE6D6);
                 graphics.renderOutline(x0, y0, x1 - x0 + 1, y1 - y0 + 1, Controls.PARCHMENT);
             }
-            // The playhead
+            // The playhead: a head on the ruler to take hold of, and a line down through the rows
             int hand = (int) Math.round(this.across(Math.max(0, Math.min(total, this.scrubTick >= 0 ? this.scrubTick : Playback.shown()))));
             graphics.fill(hand, this.rulerTop, hand + 1, Math.max(this.lanesTop, this.lanesBottom), Controls.PARCHMENT);
-            graphics.fill(hand - 2, this.rulerTop, hand + 3, this.rulerTop + 3, Controls.PARCHMENT);
+            graphics.fill(hand - 3, this.rulerTop, hand + 4, this.rulerTop + 4, Controls.PARCHMENT);
+            for (int i = 1; i <= 3; i++) {
+                graphics.fill(hand - 3 + i, this.rulerTop + 3 + i, hand + 4 - i, this.rulerTop + 4 + i, Controls.PARCHMENT);
+            }
         } finally {
             graphics.disableScissor();
         }
@@ -360,12 +419,10 @@ final class TimelinePanel {
         if (!EditorState.timelineFolded && scene.tracks().isEmpty() && rows > 0) {
             Kit.text(graphics, font, Kit.clip(font, Kit.t("track.none").getString(), this.laneWidth - 8), this.laneLeft + 4, this.lanesTop + 3, Controls.PARCHMENT_DIM);
         }
-        if (scene.tracks().size() > rows && rows > 0) {
-            // More tracks than rows: a thin bar says where among them the rows are
-            int height = rows * LANE;
-            int thumb = Math.max(6, height * rows / scene.tracks().size());
-            int at = this.lanesTop + (height - thumb) * EditorState.laneScroll / Math.max(1, scene.tracks().size() - rows);
-            graphics.fill(this.left + 1, at, this.left + 2, at + thumb, Controls.BRASS_BRIGHT);
+        if (this.lanesScroll()) {
+            // More tracks than rows: a bar at the right says where among them the rows are, and can be dragged
+            boolean bright = this.drag == Drag.LANE_BAR || this.overLaneBar(mouseX, mouseY);
+            Kit.scrollBar(graphics, this.laneBarLeft, this.lanesTop, rows * LANE, scene.tracks().size() * LANE, EditorState.laneScroll * LANE, bright);
         }
 
         // The bar for moving along a zoomed-in timeline
@@ -478,7 +535,7 @@ final class TimelinePanel {
         }
     }
 
-    private void drawKeyframes(GuiGraphics graphics, Track track, int index, int y) {
+    private void drawKeyframes(GuiGraphics graphics, Track track, int index, int y, @Nullable KeyframeRef under) {
         int middle = y + LANE / 2;
         List<Keyframe> keyframes = track.keyframes();
         int plain = track.enabled() ? Controls.BRASS_BRIGHT : 0xFF6A5A3A;
@@ -496,12 +553,20 @@ final class TimelinePanel {
             graphics.fill(from, middle, to + 1, middle + 1, track.enabled() ? 0x80D4B25A : 0x606A5A3A);
         }
         for (Keyframe keyframe : keyframes) {
-            boolean selected = EditorState.selection.contains(new KeyframeRef(index, keyframe.tick()));
+            KeyframeRef ref = new KeyframeRef(index, keyframe.tick());
+            boolean selected = EditorState.selection.contains(ref);
+            boolean hovered = ref.equals(under);
             int x = (int) Math.round(this.across(keyframe.tick()));
             if (selected) {
                 Kit.diamond(graphics, x, middle, 4, Controls.PARCHMENT);
                 Kit.diamond(graphics, x, middle, 2, Controls.ALERT);
+            } else if (hovered) {
+                // The one a click would take: a size larger and in parchment
+                Kit.diamond(graphics, x, middle, 4, 0xFF1A1108);
+                Kit.diamond(graphics, x, middle, 3, Controls.PARCHMENT);
             } else {
+                // A dark rim, so a diamond reads against the range's tint and the line it sits on
+                Kit.diamond(graphics, x, middle, 4, 0xC01A1108);
                 Kit.diamond(graphics, x, middle, 3, plain);
             }
         }
@@ -534,7 +599,7 @@ final class TimelinePanel {
             int bx = buttons + i * 12;
             boolean usable = i == 0 ? index > 0 : i == 1 ? index < scene.tracks().size() - 1 : true;
             boolean hovered = usable && rowHovered && mouseX >= bx && mouseX < bx + 11;
-            Kit.face(graphics, bx, y + 1, 11, LANE - 3, hovered, false, usable);
+            Kit.face(graphics, bx, y + 1, 11, LANE - 2, hovered, false, usable);
             Kit.icon(graphics, icons[i], bx + 5, y + LANE / 2 - 1, usable ? Controls.PARCHMENT : 0xFF6A5A3A);
         }
     }
@@ -574,6 +639,16 @@ final class TimelinePanel {
         }
         Scene scene = EditorState.scene();
         int total = Math.max(1, Playback.total());
+        if (this.overLaneBar(mouseX, mouseY)) {
+            if (button == 0) {
+                // Taking hold of the thumb drags it from where it was taken; a click beside it brings its middle there
+                int[] thumb = Kit.thumb(this.lanesTop, this.visibleLanes() * LANE, scene.tracks().size() * LANE, EditorState.laneScroll * LANE);
+                this.laneBarGrab = mouseY >= thumb[0] && mouseY < thumb[0] + thumb[1] ? (int) mouseY - thumb[0] : thumb[1] / 2;
+                this.drag = Drag.LANE_BAR;
+                this.dragLaneBar(mouseY);
+            }
+            return null;
+        }
         if (button == 0 && this.overRuler(mouseX, mouseY)) {
             if (scene.hasExportRange() && mouseY >= this.rulerBottom - 7) {
                 double start = this.across(scene.exportStart());
@@ -732,6 +807,7 @@ final class TimelinePanel {
                 double share = (mouseX - this.laneLeft) / this.laneWidth;
                 EditorState.viewStart = Math.max(0.0, Math.min(total - EditorState.viewSpan, share * total - EditorState.viewSpan / 2.0));
             }
+            case LANE_BAR -> this.dragLaneBar(mouseY);
             default -> {
             }
         }
@@ -811,7 +887,7 @@ final class TimelinePanel {
             return false;
         }
         int total = Math.max(1, Playback.total());
-        if (this.overColumn(mouseX, mouseY)) {
+        if (this.overColumn(mouseX, mouseY) || this.overLaneBar(mouseX, mouseY)) {
             int tracks = EditorState.scene().tracks().size();
             EditorState.laneScroll = Math.max(0, Math.min(EditorState.laneScroll - (int) Math.signum(amount), Math.max(0, tracks - this.visibleLanes())));
             return true;
@@ -858,6 +934,9 @@ final class TimelinePanel {
             return this.font == null ? null : MomentsLane.tipAt(this.font, this.moments, mouseX, mouseY);
         }
         Scene scene = EditorState.scene();
+        if (this.overLaneBar(mouseX, mouseY)) {
+            return Kit.t("timeline.lanes.tip", EditorState.laneScroll + 1, Math.min(scene.tracks().size(), EditorState.laneScroll + this.visibleLanes()), scene.tracks().size());
+        }
         if (this.overRuler(mouseX, mouseY)) {
             RecordingManifest manifest = Playback.manifest();
             if (manifest != null && !EditorState.scrubbing) {

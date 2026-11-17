@@ -251,7 +251,7 @@ final class KeyframeForms {
         })).tip(tip("volume")));
         form.add(new Gadget.Line(
                 new Gadget.Push(Kit.t("audio.add"), KeyframeForms::addAudio).tip(Kit.t("audio.add.tip")),
-                new Gadget.Push(Kit.t("button.cancel"), () -> EditorState.audioDraft = false)));
+                new Gadget.Push(Kit.t("button.cancel"), () -> EditorState.audioDraft = false).tip(Kit.t("audio.cancel.tip"))));
     }
 
     private static void addAudio() {
@@ -320,7 +320,7 @@ final class KeyframeForms {
                 history.endGroup();
             }
         })).tip(tip("blend")));
-        form.add(new Gadget.Push(Kit.t("many.clear"), EditorState.selection::clear));
+        form.add(new Gadget.Push(Kit.t("many.clear"), EditorState.selection::clear).tip(Kit.t("many.clear.tip")));
     }
 
     // ------------------------------------------------------------------ One selected

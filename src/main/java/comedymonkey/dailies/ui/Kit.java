@@ -36,7 +36,7 @@ final class Kit {
     /** The small pictures drawn on buttons in place of words */
     enum Icon {
         TO_START, STEP_BACK, PLAY, PAUSE, STEP_FORWARD, TO_END, MINUS, PLUS, UP, DOWN, DOTS, CROSS, FOLD_DOWN, FOLD_UP, FOLD_LEFT, FOLD_RIGHT,
-        CHEVRON, RESET, SEARCH, TICK, GEAR
+        CHEVRON, RESET, SEARCH, TICK, GEAR, UNDO, REDO
     }
 
     private Kit() {
@@ -89,6 +89,25 @@ final class Kit {
         graphics.renderOutline(left, top, right - left, bottom - top, Controls.BRASS);
         // A thin light along the top, inside the edge: the panel has a thickness
         graphics.fill(left + 1, top + 1, right - 1, top + 2, 0x14FFFFFF);
+    }
+
+    /**
+     * A card that lies over the world rather than beside it: see-through enough that the view still reads behind it,
+     * dark enough that its words read over a bright sky, with a soft shadow all round.
+     */
+    static void card(GuiGraphics graphics, int left, int top, int right, int bottom) {
+        if (right <= left || bottom <= top) {
+            return;
+        }
+        shadow(graphics, left, top, right, bottom, 3);
+        graphics.fill(left, top, right, bottom, Controls.CARD);
+        graphics.renderOutline(left, top, right - left, bottom - top, Controls.BRASS_DIM);
+        graphics.fill(left + 1, top + 1, right - 1, top + 2, 0x14FFFFFF);
+    }
+
+    /** A thin upright line between two groups of controls in a bar */
+    static void divider(GuiGraphics graphics, int x, int top, int bottom) {
+        graphics.fill(x, top + 2, x + 1, bottom - 2, Controls.BRASS_DIM);
     }
 
     /** A panel that floats in the middle of the screen: a dialogue, a list, the settings. Its shadow is all round it */
@@ -370,6 +389,22 @@ final class Kit {
         "##.##..",
         ".###...",
         "..#...."};
+    private static final String[] UNDO = {
+        "..#......",
+        ".##......",
+        "#######..",
+        ".##....#.",
+        "..#....#.",
+        ".......#.",
+        "...####.."};
+    private static final String[] REDO = {
+        "......#..",
+        "......##.",
+        "..#######",
+        ".#....##.",
+        ".#....#..",
+        ".#.......",
+        "..####..."};
     private static final String[] GEAR = {
         "...###...",
         ".#.###.#.",
@@ -458,6 +493,8 @@ final class Kit {
             case SEARCH -> dots(graphics, SEARCH, centreX, centreY, colour);
             case TICK -> dots(graphics, TICK, centreX, centreY, colour);
             case GEAR -> dots(graphics, GEAR, centreX, centreY, colour);
+            case UNDO -> dots(graphics, UNDO, centreX, centreY, colour);
+            case REDO -> dots(graphics, REDO, centreX, centreY, colour);
             default -> {
             }
         }

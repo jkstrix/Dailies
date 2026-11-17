@@ -51,6 +51,10 @@ abstract class Gadget {
         return false;
     }
 
+    /** Adds itself, or the name-and-control pairs it is made of, so that a form can line their names up in one column */
+    void pairs(List<Pair> into) {
+    }
+
     /** Adds itself, or the controls it is made of, to the order the Tab key goes through */
     void collect(List<Gadget> order) {
         if (this.focusable() && this.usable.getAsBoolean() && this.height > 0) {
@@ -853,13 +857,28 @@ abstract class Gadget {
         private final Component label;
         private final Gadget control;
         private boolean cut = false;
+        /** The width of the names' column when the form lines them up; 0 for the usual share */
+        int column = 0;
 
         Pair(Component label, Gadget control) {
             this.label = label;
             this.control = control;
         }
 
+        /** How wide its name is in the font, for the form to size the column of names */
+        int nameWidth(Font font) {
+            return font.width(this.label);
+        }
+
+        @Override
+        void pairs(List<Pair> into) {
+            into.add(this);
+        }
+
         private int labelWidth(int of) {
+            if (this.column > 0) {
+                return Math.max(30, Math.min(this.column, of - 30));
+            }
             return Math.max(30, of * 42 / 100);
         }
 
@@ -934,6 +953,11 @@ abstract class Gadget {
         @Override
         void collect(List<Gadget> order) {
             this.parts.forEach(part -> part.collect(order));
+        }
+
+        @Override
+        void pairs(List<Pair> into) {
+            this.parts.forEach(part -> part.pairs(into));
         }
 
         private int[] widths(int of) {
@@ -1066,6 +1090,11 @@ abstract class Gadget {
             if (this.open.getAsBoolean()) {
                 this.rows.forEach(row -> row.collect(order));
             }
+        }
+
+        @Override
+        void pairs(List<Pair> into) {
+            this.rows.forEach(row -> row.pairs(into));
         }
 
         @Override

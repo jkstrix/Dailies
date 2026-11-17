@@ -30,21 +30,31 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The editor (specification chapter V), opened with the timeline key while a recording is watched. Panels are docked
- * round the edges and the middle of the view is left clear: scenes and the export range along the top, the timeline
- * with its tracks along the bottom, the viewer's controls at the left with the players in the recording under them,
- * and at the right a panel with three tabs for the selected keyframe, the scene's looks and the export. Every panel
- * folds away. In the view itself a click on a keyframe's mark along the camera path selects it, and a click on a
- * marker's ring jumps to the marker.
+ * The editor (specification chapter V), opened with the timeline key while a recording is watched. The view is the
+ * point of it, so what is round it is kept narrow: one row along the top for the scene, the export range, undo and
+ * redo, the moments and the way out, with the rarer things in a "..." menu; the timeline with its tracks along the
+ * bottom; at the right a panel with three tabs for the selected keyframe, the scene's looks and the export, which
+ * folds to a slim edge; and two small see-through cards over the top left of the view for the viewer's controls and
+ * the players in the recording, which fold to their titles. Where each goes is worked out by {@link EditorLayout}.
+ * In the view itself a click on a keyframe's mark along the camera path selects it, and a click on a marker's ring
+ * jumps to the marker.
  * <p>
  * The recording keeps playing behind it: the screen neither pauses nor dims nor blurs the world. Holding the right
  * mouse button over the view turns the camera and lets the movement keys fly it, so a shot can be framed without
  * closing the editor. Nothing is drawn while an export is under way.
+ * <p>
+ * The Tab key puts a parchment ring on one control after another, bar first, then the cards, the panel and the
+ * timeline's buttons; Enter or the space bar then presses it. Until Tab is pressed no control has the ring, and every
+ * key does what it always did.
  */
 public final class EditorScreen extends Screen {
 
-    private static final int TOP_ROW = 14;
-    private static final int HEADER = 18;
+    private static final int ROW = EditorLayout.ROW;
+    private static final int GAP = EditorLayout.GAP;
+    private static final int PAD = EditorLayout.PAD;
+    private static final int HEADER = EditorLayout.HEADER;
+    /** The room between two groups of controls in the bar, where a thin line stands */
+    private static final int GROUP_GAP = 9;
 
     /**
      * Whether the editor should be on screen whenever it can be. The game takes screens away while a jump rebuilds
@@ -64,29 +74,33 @@ public final class EditorScreen extends Screen {
     private static boolean failureLogged = false;
 
     private final TimelinePanel timeline = new TimelinePanel();
-    private final Form keyframeForm = new Form();
-    private final Form looksForm = new Form();
-    private final Form exportForm = new Form();
+    private final Form keyframeForm = new Form().fitNames();
+    private final Form looksForm = new Form().fitNames();
+    private final Form exportForm = new Form().fitNames();
     private final Form pickForm = new Form();
-    private final Form viewerForm = new Form();
+    private final Form viewerForm = new Form().fitNames();
     private final Form playersForm = new Form();
+    /** Every control of the bar, left to right */
     private final List<Gadget> top = new ArrayList<>();
+    /** The bar's controls in their groups: those that start at the left, and those that end at the right */
+    private final List<List<Gadget>> topLeft = new ArrayList<>();
+    private final List<List<Gadget>> topRight = new ArrayList<>();
     private final List<Gadget> tabs = new ArrayList<>();
+    /** The tabs again, standing on end along the panel's edge while it is folded */
+    private final List<Gadget> edgeTabs = new ArrayList<>();
+    private Gadget.Push more;
     private Gadget.Push sideFold;
     private Gadget.Push viewerFold;
     private Gadget.Push playersFold;
     private @Nullable Gadget held;
     private int selectionSeen = 0;
 
-    private int topBottom;
-    private int timelineTop;
-    private int sideLeft;
-    private int sideBottom;
-    private int viewerRight;
-    private int viewerBottom;
-    /** The players panel sits under the viewer's strip; top and bottom are the same when there is no room for it */
-    private int playersTop;
-    private int playersBottom;
+    private EditorLayout.Layout layout = EditorLayout.of(new EditorLayout.Input(1920, 1080, 2, false, false, false, false, 0, 0, 0, 0, 40, 40));
+    /** Where the thin lines between the bar's groups stand */
+    private final List<Integer> dividers = new ArrayList<>();
+    /** The part of the bar no control takes, where notices are shown when they fit */
+    private int barFreeLeft;
+    private int barFreeRight;
 
     // Flying with the right mouse button held
     private boolean flying = false;
@@ -125,7 +139,7 @@ public final class EditorScreen extends Screen {
      */
     private void fitScale() {
         com.mojang.blaze3d.platform.Window window = this.minecraft.getWindow();
-        int scale = Math.min(usualScale(this.minecraft), Math.max(1, Math.min(window.getWidth() / 900, window.getHeight() / 500)));
+        int scale = EditorLayout.scaleFor(window.getWidth(), window.getHeight(), usualScale(this.minecraft));
         if (scale != (int) window.getGuiScale()) {
             window.setGuiScale(scale);
         }
@@ -220,24 +234,34 @@ public final class EditorScreen extends Screen {
     private void build() {
         Entry.drop();
         Menu.close();
+        Gadget.focus = null;
         this.held = null;
         EditorState.attach();
         this.top.clear();
+        this.topLeft.clear();
+        this.topRight.clear();
         this.tabs.clear();
+        this.edgeTabs.clear();
         this.buildTop();
 
-        this.tabs.add(new Gadget.Push(Kit.t("tab.keyframe"), () -> this.showTab(EditorState.TAB_KEYFRAME))
-                .lit(() -> EditorState.pick == null && EditorState.tab == EditorState.TAB_KEYFRAME).tip(Kit.t("tab.keyframe.tip")));
-        this.tabs.add(new Gadget.Push(Kit.t("tab.looks"), () -> this.showTab(EditorState.TAB_LOOKS))
-                .lit(() -> EditorState.pick == null && EditorState.tab == EditorState.TAB_LOOKS).tip(Kit.t("tab.looks.tip")));
-        this.tabs.add(new Gadget.Push(Kit.t("tab.export"), () -> this.showTab(EditorState.TAB_EXPORT))
-                .lit(() -> EditorState.pick == null && EditorState.tab == EditorState.TAB_EXPORT).tip(Kit.t("tab.export.tip")));
+        String[] names = {"tab.keyframe", "tab.looks", "tab.export"};
+        int[] which = {EditorState.TAB_KEYFRAME, EditorState.TAB_LOOKS, EditorState.TAB_EXPORT};
+        for (int i = 0; i < names.length; i++) {
+            int tab = which[i];
+            this.tabs.add(new Gadget.Push(Kit.t(names[i]), () -> this.showTab(tab))
+                    .lit(() -> EditorState.pick == null && EditorState.tab == tab).tip(Kit.t(names[i] + ".tip")));
+            this.edgeTabs.add(new EdgeTab(Kit.t(names[i]), () -> this.showTab(tab), () -> EditorState.tab == tab).tip(Kit.t(names[i] + ".tip")));
+        }
         this.sideFold = Gadget.Push.icon(() -> EditorState.sideFolded ? Kit.Icon.FOLD_LEFT : Kit.Icon.FOLD_RIGHT, Kit.t("side.fold"),
                 () -> EditorState.sideFolded = !EditorState.sideFolded);
         this.viewerFold = Gadget.Push.icon(() -> EditorState.viewerFolded ? Kit.Icon.FOLD_DOWN : Kit.Icon.FOLD_UP, Kit.t("viewer.fold"),
                 () -> EditorState.viewerFolded = !EditorState.viewerFolded);
         this.playersFold = Gadget.Push.icon(() -> EditorState.playersFolded ? Kit.Icon.FOLD_DOWN : Kit.Icon.FOLD_UP, Kit.t("players.fold"),
                 () -> EditorState.playersFolded = !EditorState.playersFolded);
+        // Square, to stand in a card's title row
+        this.sideFold.wide(ROW);
+        this.viewerFold.wide(ROW);
+        this.playersFold.wide(ROW);
 
         this.keyframeForm.builtFor = "";
         this.looksForm.builtFor = "";
@@ -245,6 +269,10 @@ public final class EditorScreen extends Screen {
         this.pickForm.builtFor = "";
         this.playersForm.builtFor = "";
         ViewerForms.build(this.viewerForm);
+        if (this.usable()) {
+            // So that a click before the first frame lands where the controls will be; each frame arranges it again
+            this.arrange();
+        }
     }
 
     private void showTab(int tab) {
@@ -253,27 +281,28 @@ public final class EditorScreen extends Screen {
         EditorState.sideFolded = false;
     }
 
+    /** The bar: the scene, the export range, undo and redo, the moments, the rarer things and the way out */
     private void buildTop() {
-        this.top.add(new Gadget.Push(() -> {
-            EditHistory history = EditorState.history();
-            return Kit.t("scene.current", history.scene().name(), history.state().currentSceneIndex() + 1, history.state().scenes().size());
-        }, this::openSceneMenu).wide(128).tip(Kit.t("scene.current.tip")));
-        this.top.add(new Gadget.Push(Kit.t("scene.add"), () -> {
-            EditorState.selection.clear();
-            EditorState.history().addScene(null);
-        }).tip(Kit.t("scene.add.tip")));
-        this.top.add(new Gadget.Push(Kit.t("scene.rename"), this::renameScene).tip(Kit.t("scene.rename.tip")));
-        this.top.add(new Gadget.Push(Kit.t("scene.duplicate"), () -> {
-            EditorState.selection.clear();
-            EditorState.history().duplicateScene(EditorState.history().state().currentSceneIndex());
-        }).tip(Kit.t("scene.duplicate.tip")));
-        this.top.add(new Gadget.Push(Kit.t("scene.remove"), () -> {
-            EditorState.selection.clear();
-            EditorState.history().removeScene(EditorState.history().state().currentSceneIndex());
-        }).when(() -> EditorState.history().state().scenes().size() > 1).tip(Kit.t("scene.remove.tip")));
+        // The scene, as a dropdown of every scene of the recording
+        Gadget.Dropdown<Integer> scenes = new Gadget.Dropdown<>(() -> {
+            List<Integer> all = new ArrayList<>();
+            for (int index = 0; index < EditorState.history().state().scenes().size(); index++) {
+                all.add(index);
+            }
+            return all;
+        }, index -> Component.literal(EditorState.history().state().scene(index).name()), () -> EditorState.history().state().currentSceneIndex(), chosen -> {
+            if (chosen != EditorState.history().state().currentSceneIndex()) {
+                EditorState.selection.clear();
+                EditorState.history().selectScene(chosen);
+            }
+        });
+        scenes.wide(128);
+        scenes.tip(Kit.t("scene.current.tip"));
+        this.group(this.topLeft, scenes);
 
-        this.top.add(new Gadget.Words(() -> Kit.t("range.label"), Controls.PARCHMENT_DIM).tip(Kit.t("range.tip")));
-        this.top.add(Entry.number(() -> EditorState.scene().hasExportRange() ? Double.valueOf(EditorState.scene().exportStart()) : null,
+        List<Gadget> range = new ArrayList<>();
+        range.add(new Gadget.Words(() -> Kit.t("range.label"), Controls.PARCHMENT_DIM).tip(Kit.t("range.tip")));
+        range.add(Entry.number(() -> EditorState.scene().hasExportRange() ? Double.valueOf(EditorState.scene().exportStart()) : null,
                 0, Keyframe.MAX_TICK, true, value -> {
                     Scene scene = EditorState.scene();
                     int start = (int) Math.rint(value);
@@ -283,49 +312,75 @@ public final class EditorScreen extends Screen {
                     EditorState.history().setExportRange(start, Math.max(start, scene.hasExportRange() ? scene.exportEnd() : Playback.total()));
                     return null;
                 }).errorsAsNotice().hint(Kit.t("range.start.hint")).wide(48).tip(Kit.t("range.start.tip")));
-        this.top.add(Entry.number(() -> EditorState.scene().hasExportRange() ? Double.valueOf(EditorState.scene().exportEnd()) : null,
+        range.add(Entry.number(() -> EditorState.scene().hasExportRange() ? Double.valueOf(EditorState.scene().exportEnd()) : null,
                 0, Keyframe.MAX_TICK, true, value -> {
                     Scene scene = EditorState.scene();
                     int end = Math.min(Playback.total(), (int) Math.rint(value));
                     EditorState.history().setExportRange(scene.hasExportRange() ? scene.exportStart() : 0, end);
                     return null;
                 }).errorsAsNotice().hint(Kit.t("range.end.hint")).wide(48).tip(Kit.t("range.end.tip")));
-        this.top.add(new Gadget.Push(Kit.t("range.start_here"), () -> {
+        range.add(new Gadget.Push(Kit.t("range.start_here"), () -> {
             Scene scene = EditorState.scene();
             int start = Playback.position();
             EditorState.history().setExportRange(start, scene.hasExportRange() ? Math.max(start, scene.exportEnd()) : Math.max(start, Playback.total()));
         }).tip(Kit.t("range.start_here.tip")));
-        this.top.add(new Gadget.Push(Kit.t("range.end_here"), () -> {
+        range.add(new Gadget.Push(Kit.t("range.end_here"), () -> {
             Scene scene = EditorState.scene();
             int end = Playback.position();
             EditorState.history().setExportRange(scene.hasExportRange() ? Math.min(end, scene.exportStart()) : 0, end);
         }).tip(Kit.t("range.end_here.tip")));
-        this.top.add(new Gadget.Push(Kit.t("range.clear"), () -> EditorState.history().clearExportRange())
-                .when(() -> EditorState.scene().hasExportRange()).tip(Kit.t("range.clear.tip")));
+        this.group(this.topLeft, range.toArray(new Gadget[0]));
 
-        this.top.add(new Gadget.Push(Component.translatable("dailies.ui.timeline.undo"), EditorState::undo).liveTip(() -> {
+        Gadget undo = Gadget.Push.icon(Kit.Icon.UNDO, Component.translatable("dailies.ui.timeline.undo"), EditorState::undo).liveTip(() -> {
             String what = EditorState.history().undoDescription();
             return what == null ? Component.translatable("dailies.ui.notice.nothing_to_undo") : Kit.t("undo.tip", what);
-        }).when(() -> EditorState.history().canUndo()));
-        this.top.add(new Gadget.Push(Component.translatable("dailies.ui.timeline.redo"), EditorState::redo).liveTip(() -> {
+        }).when(() -> EditorState.history().canUndo());
+        Gadget redo = Gadget.Push.icon(Kit.Icon.REDO, Component.translatable("dailies.ui.timeline.redo"), EditorState::redo).liveTip(() -> {
             String what = EditorState.history().redoDescription();
             return what == null ? Component.translatable("dailies.ui.notice.nothing_to_redo") : Kit.t("redo.tip", what);
-        }).when(() -> EditorState.history().canRedo()));
-        this.top.add(new Gadget.Push(Component.translatable("dailies.ui.pause.moments"), Controls::openMomentsPage).tip(Component.translatable("dailies.ui.moments.tip")));
-        this.top.add(new Gadget.Push(Kit.t("close"), this::onClose).tip(Kit.t("close.tip")));
+        }).when(() -> EditorState.history().canRedo());
+        this.group(this.topRight, undo, redo);
+
+        this.more = Gadget.Push.icon(Kit.Icon.DOTS, Kit.t("more.tip"), this::openMoreMenu);
+        this.more.lit(() -> Menu.openFor(this.more));
+        this.group(this.topRight,
+                new Gadget.Push(Component.translatable("dailies.ui.pause.moments"), Controls::openMomentsPage).tip(Component.translatable("dailies.ui.moments.tip")),
+                this.more,
+                new Gadget.Push(Kit.t("close"), this::onClose).tip(Kit.t("close.tip")));
+        for (List<Gadget> group : this.topLeft) {
+            this.top.addAll(group);
+        }
+        for (List<Gadget> group : this.topRight) {
+            this.top.addAll(group);
+        }
     }
 
-    private void openSceneMenu() {
-        EditHistory history = EditorState.history();
+    private void group(List<List<Gadget>> side, Gadget... gadgets) {
+        side.add(List.of(gadgets));
+    }
+
+    /** The rarer things, hanging from the "..." button: what is done to scenes, and forgetting the export range */
+    private void openMoreMenu() {
+        Menu.drop(this.moreItems(), this.more.x, this.more.y, this.more.width, ROW, this.more);
+    }
+
+    private List<Menu.Item> moreItems() {
         List<Menu.Item> items = new ArrayList<>();
-        for (int index = 0; index < history.state().scenes().size(); index++) {
-            int chosen = index;
-            items.add(new Menu.Item(Component.literal(history.state().scene(index).name()), () -> {
-                EditorState.selection.clear();
-                EditorState.history().selectScene(chosen);
-            }, true, index == history.state().currentSceneIndex()));
-        }
-        Menu.show(items, this.mouseX(), this.mouseY());
+        items.add(new Menu.Item(Kit.t("more.scene_add"), () -> {
+            EditorState.selection.clear();
+            EditorState.history().addScene(null);
+        }));
+        items.add(new Menu.Item(Kit.t("more.scene_rename"), this::renameScene));
+        items.add(new Menu.Item(Kit.t("more.scene_duplicate"), () -> {
+            EditorState.selection.clear();
+            EditorState.history().duplicateScene(EditorState.history().state().currentSceneIndex());
+        }));
+        items.add(new Menu.Item(Kit.t("more.scene_remove"), () -> {
+            EditorState.selection.clear();
+            EditorState.history().removeScene(EditorState.history().state().currentSceneIndex());
+        }, EditorState.history().state().scenes().size() > 1, false));
+        items.add(new Menu.Item(Kit.t("more.range_clear"), () -> EditorState.history().clearExportRange(), EditorState.scene().hasExportRange(), false));
+        return items;
     }
 
     private void renameScene() {
@@ -346,12 +401,49 @@ public final class EditorScreen extends Screen {
                 EditorScreen::open));
     }
 
-    private double mouseX() {
-        return this.minecraft.mouseHandler.xpos() * this.width / Math.max(1, this.minecraft.getWindow().getScreenWidth());
+    /** For the picture-taking scripts: opens the "..." menu as a click on it would */
+    boolean openMore() {
+        if (this.more == null) {
+            return false;
+        }
+        this.arrange();
+        this.openMoreMenu();
+        return Menu.open != null;
     }
 
-    private double mouseY() {
-        return this.minecraft.mouseHandler.ypos() * this.height / Math.max(1, this.minecraft.getWindow().getScreenHeight());
+    /** For the scripted test: the share of the window the view has as the editor is laid out now */
+    double viewShare() {
+        return this.layout.viewShare();
+    }
+
+    /** For the scripted test: whatever is wrong with the layout as it stands, in words; empty when nothing is */
+    List<String> layoutProblems() {
+        this.arrange();
+        List<String> problems = new ArrayList<>();
+        EditorLayout.Layout at = this.layout;
+        List<EditorLayout.Rect> all = new ArrayList<>(at.docked());
+        all.addAll(at.cards());
+        for (EditorLayout.Rect rect : all) {
+            if (!rect.within(this.width, this.height)) {
+                problems.add(rect + " is off a screen of " + this.width + "x" + this.height);
+            }
+        }
+        for (int i = 0; i < all.size(); i++) {
+            for (int j = i + 1; j < all.size(); j++) {
+                if (all.get(i).overlaps(all.get(j))) {
+                    problems.add(all.get(i) + " overlaps " + all.get(j));
+                }
+            }
+        }
+        for (Gadget gadget : this.top) {
+            if (gadget.height <= 0 || gadget.x < 0 || gadget.x + gadget.width > this.width) {
+                problems.add("a control of the bar had no room: " + gadget.getClass().getSimpleName() + " " + gadget.tip);
+            }
+        }
+        if (at.width() != this.width || at.height() != this.height) {
+            problems.add("the layout was worked out for " + at.width() + "x" + at.height() + " but the screen is " + this.width + "x" + this.height);
+        }
+        return problems;
     }
 
     // ------------------------------------------------------------------ The screen as the game sees it
@@ -376,6 +468,7 @@ public final class EditorScreen extends Screen {
         wanted = false;
         Entry.blur();
         Menu.close();
+        Gadget.focus = null;
         EditorState.pick = null;
         this.stopFlying();
         super.onClose();
@@ -386,6 +479,7 @@ public final class EditorScreen extends Screen {
     public void removed() {
         EditorState.guard(Entry::blur);
         Menu.close();
+        Gadget.focus = null;
         this.held = null;
         this.stopFlying();
         if (this.minecraft != null) {
@@ -455,8 +549,9 @@ public final class EditorScreen extends Screen {
             }
             this.arrange();
             // A scene held to a frame shape shows its picture whole in what the panels leave clear
-            comedymonkey.dailies.looks.LooksRenderer.clearOfPanels((double) this.viewerRight / this.width, (double) this.topBottom / this.height,
-                    (double) this.sideLeft / this.width, (double) this.timelineTop / this.height);
+            EditorLayout.Rect clear = this.layout.frameClear();
+            comedymonkey.dailies.looks.LooksRenderer.clearOfPanels((double) clear.left() / this.width, (double) clear.top() / this.height,
+                    (double) clear.right() / this.width, (double) clear.bottom() / this.height);
             this.timeline.frame(mouseX, GLFW.glfwGetMouseButton(this.minecraft.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS);
 
             boolean busy = Menu.open != null || this.flying;
@@ -528,9 +623,9 @@ public final class EditorScreen extends Screen {
         }
         this.pickForm.add(new Gadget.Heading(Kit.t("pick.heading")));
         this.pickForm.add(new Gadget.Note(() -> pick.prompt(), Controls.PARCHMENT));
-        this.pickForm.add(new Gadget.Push(Kit.t("button.cancel"), () -> EditorState.pick = null));
+        this.pickForm.add(new Gadget.Push(Kit.t("button.cancel"), () -> EditorState.pick = null).tip(Kit.t("pick.cancel.tip")));
         for (Menu.Item extra : pick.extras()) {
-            this.pickForm.add(new Gadget.Push(extra.label(), extra.action()));
+            this.pickForm.add(new Gadget.Push(extra.label(), extra.action()).tip(extra.label()));
         }
         if (pick.block()) {
             return;
@@ -549,172 +644,259 @@ public final class EditorScreen extends Screen {
                 }
                 EditorState.pick = null;
                 pick.entity().accept(entity);
-            }));
+            }).tip(Kit.t("pick.choose.tip", ViewPick.describe(entity))));
         }
     }
 
     /** Works out where everything goes on a screen of this size */
     private void arrange() {
         Font font = this.font;
-        this.topBottom = Kit.flow(font, this.top, 3, 2, this.width - 3, TOP_ROW) + 3;
-
-        int timelineHeight = Math.min(TimelinePanel.wantedHeight(this.height), Math.max(37, this.height - this.topBottom - 24));
-        this.timelineTop = Math.max(this.topBottom, this.height - timelineHeight);
-        this.timeline.place(font, 0, this.timelineTop, this.width, this.height);
-
-        int room = Math.max(HEADER, this.timelineTop - this.topBottom);
-
-        // The side panel, at the right
-        int sideWidth = Math.min(Math.max(150, Math.min(250, this.width * 30 / 100)), Math.max(60, this.width - 20));
-        if (EditorState.sideFolded && EditorState.pick == null) {
-            this.sideLeft = this.width - 20;
-            this.sideBottom = this.topBottom + Math.min(room, HEADER);
-            this.sideFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-            this.sideFold.place(font, this.sideLeft + 2, this.topBottom + 2, 16, TOP_ROW);
-        } else {
-            this.sideLeft = this.width - sideWidth;
-            this.sideBottom = this.topBottom + room;
-            int tabWidth = (sideWidth - 4 - 18 - 2 * this.tabs.size()) / Math.max(1, this.tabs.size());
-            int x = this.sideLeft + 2;
-            for (Gadget tab : this.tabs) {
-                tab.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-                tab.place(font, x, this.topBottom + 2, tabWidth, TOP_ROW);
-                x += tabWidth + 2;
-            }
-            this.sideFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-            this.sideFold.place(font, this.width - 18, this.topBottom + 2, 16, TOP_ROW);
-            Form form = this.sideForm();
-            this.refresh(form);
-            form.place(font, this.sideLeft + 1, this.topBottom + HEADER, sideWidth - 2, Math.max(0, this.sideBottom - this.topBottom - HEADER - 1));
-        }
-
-        // The viewer's strip, at the left
-        int viewerWidth = Math.min(Math.max(140, Math.min(190, this.width * 22 / 100)), Math.max(40, this.sideLeft - 4));
-        this.viewerRight = viewerWidth;
-        this.viewerFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-        this.viewerFold.place(font, viewerWidth - 18, this.topBottom + 2, 16, TOP_ROW);
-        if (EditorState.viewerFolded) {
-            this.viewerBottom = this.topBottom + Math.min(room, HEADER);
-        } else {
-            int formRoom = Math.max(0, room - HEADER - 1);
-            this.viewerForm.place(font, 1, this.topBottom + HEADER, viewerWidth - 2, formRoom);
-            int needed = Math.min(formRoom, this.viewerForm.contentHeight());
-            this.viewerForm.place(font, 1, this.topBottom + HEADER, viewerWidth - 2, needed);
-            this.viewerBottom = this.topBottom + HEADER + needed + 1;
-        }
-
-        // The players, under it
-        this.playersTop = this.viewerBottom;
-        int left = this.timelineTop - this.playersTop;
-        if (left < HEADER) {
-            this.playersBottom = this.playersTop;
+        if (font == null || this.minecraft == null) {
             return;
         }
-        this.playersFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
-        this.playersFold.place(font, viewerWidth - 18, this.playersTop + 2, 16, TOP_ROW);
-        if (EditorState.playersFolded) {
-            this.playersBottom = this.playersTop + HEADER;
-        } else {
+        // How high the cards' contents are, measured at the width they will have
+        int cardInner = Math.max(40, EditorLayout.cardWidth(this.width) - 2);
+        String shape = PlayerList.shape();
+        if (!shape.equals(this.playersForm.builtFor)) {
             // Who is there changes as the recording plays and with every jump
-            String shape = PlayerList.shape();
-            if (!shape.equals(this.playersForm.builtFor)) {
-                this.playersForm.builtFor = shape;
-                PlayerList.build(this.playersForm);
-            }
-            int formRoom = Math.max(0, left - HEADER - 1);
-            this.playersForm.place(font, 1, this.playersTop + HEADER, viewerWidth - 2, formRoom);
-            int needed = Math.min(formRoom, this.playersForm.contentHeight());
-            this.playersForm.place(font, 1, this.playersTop + HEADER, viewerWidth - 2, needed);
-            this.playersBottom = this.playersTop + HEADER + needed + 1;
+            this.playersForm.builtFor = shape;
+            PlayerList.build(this.playersForm);
         }
+        com.mojang.blaze3d.platform.Window window = this.minecraft.getWindow();
+        boolean sideFolded = EditorState.sideFolded && EditorState.pick == null;
+        this.layout = EditorLayout.of(new EditorLayout.Input(window.getWidth(), window.getHeight(), Math.max(1, (int) window.getGuiScale()),
+                EditorState.viewerFolded, EditorState.playersFolded, sideFolded, EditorState.timelineFolded,
+                this.viewerForm.measure(font, cardInner) + 1, this.playersForm.measure(font, cardInner) + 1,
+                EditorSession.open() ? EditorState.scene().tracks().size() : 0, MomentsLane.height(),
+                font.width(Kit.t("viewer.title")), font.width(Kit.t("players.title"))));
+        EditorLayout.Layout at = this.layout;
+
+        this.arrangeBar(font, at.bar());
+        EditorLayout.Rect timeline = at.timeline();
+        this.timeline.place(font, timeline.left(), timeline.top(), timeline.right(), timeline.bottom());
+
+        // The panel at the right: its tabs and a form, or folded to an edge with the tabs standing on end
+        EditorLayout.Rect side = at.side();
+        if (sideFolded) {
+            this.sideFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+            this.sideFold.place(font, side.left() + GAP, side.top() + GAP, ROW, ROW);
+            int y = side.top() + HEADER + GAP;
+            for (Gadget tab : this.edgeTabs) {
+                int tall = ((EdgeTab) tab).length(font);
+                tab.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+                // A tab there is no room for is left out rather than cut short
+                tab.place(font, side.left() + GAP, y, ROW, y + tall <= side.bottom() - GAP ? tall : 0);
+                y += tall + GAP;
+            }
+        } else {
+            int tabRoom = side.width() - 2 * PAD - ROW - GAP - GAP * (this.tabs.size() - 1) - GAP;
+            int tabWidth = tabRoom / Math.max(1, this.tabs.size());
+            int x = side.left() + PAD;
+            for (Gadget tab : this.tabs) {
+                tab.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+                tab.place(font, x, side.top() + GAP, tabWidth, ROW);
+                x += tabWidth + GAP;
+            }
+            this.sideFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+            this.sideFold.place(font, side.right() - PAD - ROW, side.top() + GAP, ROW, ROW);
+            Form form = this.sideForm();
+            this.refresh(form);
+            form.place(font, side.left() + 1, side.top() + HEADER, side.width() - 2, Math.max(0, side.height() - HEADER - 1));
+        }
+
+        // The two cards over the view
+        this.arrangeCard(font, at.viewer(), this.viewerFold, this.viewerForm, EditorState.viewerFolded);
+        this.arrangeCard(font, at.players(), this.playersFold, this.playersForm, EditorState.playersFolded);
+    }
+
+    private void arrangeCard(Font font, EditorLayout.Rect card, Gadget.Push fold, Form form, boolean folded) {
+        fold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+        if (card.empty()) {
+            fold.place(font, -100, -100, 0, 0);
+            form.place(font, 0, 0, 0, 0);
+            return;
+        }
+        fold.place(font, card.right() - GAP - ROW, card.top() + GAP, ROW, ROW);
+        if (folded) {
+            form.place(font, card.left() + 1, card.top() + HEADER, 0, 0);
+        } else {
+            form.place(font, card.left() + 1, card.top() + HEADER, card.width() - 2, Math.max(0, card.height() - HEADER - 1));
+        }
+    }
+
+    /** Sets the bar's groups out in one row, and finds the room left in the middle for notices */
+    private void arrangeBar(Font font, EditorLayout.Rect bar) {
+        int[][] left = widths(font, this.topLeft);
+        int[][] right = widths(font, this.topRight);
+        int[] xs = EditorLayout.row(bar.left() + PAD, bar.right() - PAD, GROUP_GAP, left, right);
+        this.dividers.clear();
+        int index = 0;
+        int leftEnd = bar.left() + PAD;
+        int rightStart = bar.right() - PAD;
+        boolean firstRight = true;
+        for (int side = 0; side < 2; side++) {
+            List<List<Gadget>> groups = side == 0 ? this.topLeft : this.topRight;
+            for (int g = 0; g < groups.size(); g++) {
+                List<Gadget> group = groups.get(g);
+                int groupLeft = Integer.MAX_VALUE;
+                for (Gadget gadget : group) {
+                    int x = xs[index++];
+                    gadget.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+                    int wide = gadget.wantedWidth(font);
+                    // One that has no room is given none, rather than lie over its neighbour
+                    gadget.place(font, Math.max(0, x), bar.top() + GAP, x < 0 ? 0 : wide, x < 0 ? 0 : ROW);
+                    if (x >= 0) {
+                        groupLeft = Math.min(groupLeft, x);
+                        if (side == 0) {
+                            leftEnd = Math.max(leftEnd, x + wide);
+                        } else if (firstRight) {
+                            rightStart = x;
+                            firstRight = false;
+                        }
+                    }
+                }
+                if ((side == 1 || g > 0) && groupLeft != Integer.MAX_VALUE && groupLeft > bar.left() + PAD) {
+                    this.dividers.add(groupLeft - (GROUP_GAP + 1) / 2);
+                }
+            }
+        }
+        this.barFreeLeft = leftEnd + GROUP_GAP;
+        this.barFreeRight = rightStart - GROUP_GAP;
+    }
+
+    private static int[][] widths(Font font, List<List<Gadget>> groups) {
+        int[][] widths = new int[groups.size()][];
+        for (int g = 0; g < groups.size(); g++) {
+            List<Gadget> group = groups.get(g);
+            widths[g] = new int[group.size()];
+            for (int i = 0; i < group.size(); i++) {
+                widths[g][i] = group.get(i).wantedWidth(font);
+            }
+        }
+        return widths;
+    }
+
+    private boolean sideOpen() {
+        return !EditorState.sideFolded || EditorState.pick != null;
     }
 
     private void drawPanels(GuiGraphics graphics, int mouseX, int mouseY) {
         Font font = this.font;
-        Kit.panel(graphics, 0, 0, this.width, this.topBottom);
+        EditorLayout.Layout at = this.layout;
+        EditorLayout.Rect bar = at.bar();
+        Kit.panel(graphics, bar.left(), bar.top(), bar.right(), bar.bottom());
+        for (int x : this.dividers) {
+            Kit.divider(graphics, x, bar.top(), bar.bottom());
+        }
         for (Gadget gadget : this.top) {
-            gadget.draw(graphics, font, mouseX, mouseY);
-        }
-
-        Kit.panel(graphics, 0, this.topBottom, this.viewerRight, this.viewerBottom);
-        Kit.text(graphics, font, Kit.clip(font, Kit.t("viewer.title").getString(), this.viewerRight - 26), 4, this.topBottom + 5, Controls.BRASS_BRIGHT);
-        this.viewerFold.draw(graphics, font, mouseX, mouseY);
-        if (!EditorState.viewerFolded) {
-            this.viewerForm.draw(graphics, font, mouseX, mouseY);
-        }
-
-        if (this.playersBottom > this.playersTop) {
-            Kit.panel(graphics, 0, this.playersTop, this.viewerRight, this.playersBottom);
-            Kit.text(graphics, font, Kit.clip(font, Kit.t("players.title").getString(), this.viewerRight - 26), 4, this.playersTop + 5, Controls.BRASS_BRIGHT);
-            this.playersFold.draw(graphics, font, mouseX, mouseY);
-            if (!EditorState.playersFolded) {
-                this.playersForm.draw(graphics, font, mouseX, mouseY);
+            if (gadget.height > 0) {
+                gadget.draw(graphics, font, mouseX, mouseY);
             }
         }
 
-        Kit.panel(graphics, this.sideLeft, this.topBottom, this.width, this.sideBottom);
+        this.drawCard(graphics, font, at.viewer(), Kit.t("viewer.title"), this.viewerFold, this.viewerForm, EditorState.viewerFolded, mouseX, mouseY);
+        this.drawCard(graphics, font, at.players(), Kit.t("players.title"), this.playersFold, this.playersForm, EditorState.playersFolded, mouseX, mouseY);
+
+        EditorLayout.Rect side = at.side();
+        Kit.panel(graphics, side.left(), side.top(), side.right(), side.bottom());
         this.sideFold.draw(graphics, font, mouseX, mouseY);
-        if (!EditorState.sideFolded || EditorState.pick != null) {
+        if (this.sideOpen()) {
             for (Gadget tab : this.tabs) {
                 tab.draw(graphics, font, mouseX, mouseY);
             }
+            Kit.rule(graphics, side.left() + PAD, side.top() + HEADER - 1, side.right() - PAD);
             this.sideForm().draw(graphics, font, mouseX, mouseY);
+        } else {
+            for (Gadget tab : this.edgeTabs) {
+                if (tab.height > 0) {
+                    tab.draw(graphics, font, mouseX, mouseY);
+                }
+            }
         }
 
         this.timeline.draw(graphics, font, mouseX, mouseY);
     }
 
-    /** A line of words under the top bar: what a click in the view is wanted for, or the latest notice */
+    private void drawCard(GuiGraphics graphics, Font font, EditorLayout.Rect card, Component title, Gadget.Push fold, Form form, boolean folded,
+                          int mouseX, int mouseY) {
+        if (card.empty()) {
+            return;
+        }
+        Kit.card(graphics, card.left(), card.top(), card.right(), card.bottom());
+        Kit.text(graphics, font, Kit.clip(font, title.getString(), card.width() - 2 * PAD - ROW - GAP), card.left() + PAD, card.top() + 5, Controls.BRASS_BRIGHT);
+        fold.draw(graphics, font, mouseX, mouseY);
+        if (!folded) {
+            Kit.rule(graphics, card.left() + PAD, card.top() + HEADER - 1, card.right() - PAD);
+            form.draw(graphics, font, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * What a click in the view is wanted for, or the latest notice: in the middle of the bar when it fits there, so
+     * that it covers none of the view, else on a strip of its own just under the bar.
+     */
     private void drawNotice(GuiGraphics graphics) {
         EditorState.Pick pick = EditorState.pick;
         Component words = pick != null ? Kit.t("pick.banner", pick.prompt()) : EditorState.notice();
         if (words == null) {
             return;
         }
-        int left = this.viewerRight + 4;
-        int right = this.sideLeft - 4;
-        if (right - left < 60) {
-            left = 4;
-            right = this.width - 4;
+        String full = words.getString();
+        int accent = pick != null ? Controls.BRASS_BRIGHT : Controls.BRASS;
+        int room = this.barFreeRight - this.barFreeLeft;
+        if (this.font.width(full) + 12 <= room) {
+            int width = this.font.width(full) + 12;
+            int x = this.barFreeLeft + (room - width) / 2;
+            int y = this.layout.bar().top() + GAP;
+            graphics.fill(x, y, x + width, y + ROW, Controls.FIELD);
+            graphics.fill(x, y + ROW - 1, x + width, y + ROW, accent);
+            Kit.text(graphics, this.font, full, x + 6, y + 3, Controls.PARCHMENT);
+            return;
         }
-        String shown = Kit.clip(this.font, words.getString(), right - left - 12);
+        EditorLayout.Rect view = this.layout.view();
+        int left = this.layout.frameClear().left() + PAD;
+        int right = view.right() - PAD;
+        if (right - left < 60) {
+            left = view.left() + PAD;
+        }
+        String shown = Kit.clip(this.font, full, right - left - 12);
         int width = this.font.width(shown) + 12;
         int x = left + (right - left - width) / 2;
-        int y = this.topBottom + 3;
-        graphics.fill(x, y, x + width, y + 14, Controls.WALNUT_GLASS);
-        graphics.fill(x, y + 13, x + width, y + 14, pick != null ? Controls.BRASS_BRIGHT : Controls.BRASS);
+        int y = view.top() + PAD;
+        graphics.fill(x, y, x + width, y + ROW, Controls.WALNUT_GLASS);
+        graphics.fill(x, y + ROW - 1, x + width, y + ROW, accent);
         Kit.text(graphics, this.font, shown, x + 6, y + 3, Controls.PARCHMENT);
     }
 
     private @Nullable Component tipAt(double mouseX, double mouseY) {
         for (Gadget gadget : this.top) {
-            Component words = gadget.tipAt(mouseX, mouseY);
+            Component words = gadget.height > 0 ? gadget.tipAt(mouseX, mouseY) : null;
             if (words != null) {
                 return words;
             }
         }
-        Component words = this.sideFold.tipAt(mouseX, mouseY);
-        if (words == null) {
-            words = this.viewerFold.tipAt(mouseX, mouseY);
-        }
-        if (words == null && (!EditorState.sideFolded || EditorState.pick != null)) {
-            for (Gadget tab : this.tabs) {
-                if (words == null) {
+        EditorLayout.Layout at = this.layout;
+        Component words = null;
+        if (at.side().contains(mouseX, mouseY)) {
+            words = this.sideFold.tipAt(mouseX, mouseY);
+            List<Gadget> heads = this.sideOpen() ? this.tabs : this.edgeTabs;
+            for (Gadget tab : heads) {
+                if (words == null && tab.height > 0) {
                     words = tab.tipAt(mouseX, mouseY);
                 }
             }
-            if (words == null) {
+            if (words == null && this.sideOpen()) {
                 words = this.sideForm().tipAt(mouseX, mouseY);
             }
+            return words;
         }
-        if (words == null && !EditorState.viewerFolded) {
-            words = this.viewerForm.tipAt(mouseX, mouseY);
+        if (at.viewer().contains(mouseX, mouseY)) {
+            words = this.viewerFold.tipAt(mouseX, mouseY);
+            return words != null || EditorState.viewerFolded ? words : this.viewerForm.tipAt(mouseX, mouseY);
         }
-        if (words == null && this.playersBottom > this.playersTop) {
+        if (at.players().contains(mouseX, mouseY)) {
             words = this.playersFold.tipAt(mouseX, mouseY);
-            if (words == null && !EditorState.playersFolded) {
-                words = this.playersForm.tipAt(mouseX, mouseY);
-            }
+            return words != null || EditorState.playersFolded ? words : this.playersForm.tipAt(mouseX, mouseY);
         }
         if (words == null) {
             words = this.timeline.tipAt(mouseX, mouseY);
@@ -746,13 +928,9 @@ public final class EditorScreen extends Screen {
     }
 
     private boolean overPanels(double mouseX, double mouseY) {
-        if (mouseY < this.topBottom || this.timeline.over(mouseX, mouseY)) {
-            return true;
-        }
-        if (mouseX >= this.sideLeft && mouseY < this.sideBottom) {
-            return true;
-        }
-        return mouseX < this.viewerRight && mouseY < Math.max(this.viewerBottom, this.playersBottom);
+        EditorLayout.Layout at = this.layout;
+        return at.bar().contains(mouseX, mouseY) || this.timeline.over(mouseX, mouseY) || at.side().contains(mouseX, mouseY)
+                || at.viewer().contains(mouseX, mouseY) || at.players().contains(mouseX, mouseY);
     }
 
     private boolean overView(double mouseX, double mouseY) {
@@ -791,6 +969,8 @@ public final class EditorScreen extends Screen {
             // What was typed is handed over before the click does anything, so the click acts on the new value
             Entry.blur();
         }
+        // The ring is for the keys; the mouse says where it is by itself
+        Gadget.focus = null;
         if (this.overPanels(mouseX, mouseY)) {
             this.held = this.pressPanels(mouseX, mouseY, button);
             return;
@@ -825,34 +1005,35 @@ public final class EditorScreen extends Screen {
     }
 
     private @Nullable Gadget pressPanels(double mouseX, double mouseY, int button) {
-        for (Gadget gadget : this.top) {
-            Gadget hit = gadget.press(mouseX, mouseY, button);
-            if (hit != null) {
-                return hit;
-            }
-        }
-        Gadget hit = this.sideFold.press(mouseX, mouseY, button);
-        if (hit != null) {
-            return hit;
-        }
-        hit = this.viewerFold.press(mouseX, mouseY, button);
-        if (hit != null) {
-            return hit;
-        }
-        if (mouseX >= this.sideLeft && mouseY < this.sideBottom && (!EditorState.sideFolded || EditorState.pick != null)) {
-            for (Gadget tab : this.tabs) {
-                hit = tab.press(mouseX, mouseY, button);
+        EditorLayout.Layout at = this.layout;
+        if (at.bar().contains(mouseX, mouseY)) {
+            for (Gadget gadget : this.top) {
+                Gadget hit = gadget.height > 0 ? gadget.press(mouseX, mouseY, button) : null;
                 if (hit != null) {
                     return hit;
                 }
             }
-            return this.sideForm().press(mouseX, mouseY, button);
+            return null;
         }
-        if (mouseX < this.viewerRight && mouseY < this.viewerBottom && mouseY >= this.topBottom) {
-            return EditorState.viewerFolded ? null : this.viewerForm.press(mouseX, mouseY, button);
+        if (at.side().contains(mouseX, mouseY)) {
+            Gadget hit = this.sideFold.press(mouseX, mouseY, button);
+            if (hit != null) {
+                return hit;
+            }
+            for (Gadget tab : this.sideOpen() ? this.tabs : this.edgeTabs) {
+                hit = tab.height > 0 ? tab.press(mouseX, mouseY, button) : null;
+                if (hit != null) {
+                    return hit;
+                }
+            }
+            return this.sideOpen() ? this.sideForm().press(mouseX, mouseY, button) : null;
         }
-        if (mouseX < this.viewerRight && mouseY >= this.playersTop && mouseY < this.playersBottom) {
-            hit = this.playersFold.press(mouseX, mouseY, button);
+        if (at.viewer().contains(mouseX, mouseY)) {
+            Gadget hit = this.viewerFold.press(mouseX, mouseY, button);
+            return hit != null || EditorState.viewerFolded ? hit : this.viewerForm.press(mouseX, mouseY, button);
+        }
+        if (at.players().contains(mouseX, mouseY)) {
+            Gadget hit = this.playersFold.press(mouseX, mouseY, button);
             return hit != null || EditorState.playersFolded ? hit : this.playersForm.press(mouseX, mouseY, button);
         }
         if (this.timeline.over(mouseX, mouseY)) {
@@ -942,12 +1123,19 @@ public final class EditorScreen extends Screen {
             return true;
         }
         EditorState.guard(() -> {
-            if (mouseX >= this.sideLeft && mouseY < this.sideBottom && (!EditorState.sideFolded || EditorState.pick != null)) {
-                this.sideForm().wheel(mouseX, mouseY, scrollY);
-            } else if (!EditorState.viewerFolded && this.viewerForm.wheel(mouseX, mouseY, scrollY)) {
-                return;
-            } else if (!EditorState.playersFolded && this.playersBottom > this.playersTop && this.playersForm.wheel(mouseX, mouseY, scrollY)) {
-                return;
+            EditorLayout.Layout at = this.layout;
+            if (at.side().contains(mouseX, mouseY)) {
+                if (this.sideOpen()) {
+                    this.sideForm().wheel(mouseX, mouseY, scrollY);
+                }
+            } else if (at.viewer().contains(mouseX, mouseY)) {
+                if (!EditorState.viewerFolded) {
+                    this.viewerForm.wheel(mouseX, mouseY, scrollY);
+                }
+            } else if (at.players().contains(mouseX, mouseY)) {
+                if (!EditorState.playersFolded) {
+                    this.playersForm.wheel(mouseX, mouseY, scrollY);
+                }
             } else {
                 this.timeline.wheel(mouseX, mouseY, scrollX, scrollY);
             }
@@ -972,9 +1160,32 @@ public final class EditorScreen extends Screen {
     }
 
     private void key(int keyCode, int scanCode, int modifiers) {
+        boolean back = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
         Entry typing = Entry.focused;
         if (typing != null) {
+            // A real box, and not the stand-in that hands the keys to an open menu
+            boolean box = Entry.typing();
             typing.key(keyCode, scanCode, modifiers);
+            if (box && keyCode == GLFW.GLFW_KEY_TAB && Entry.focused == null && Menu.open == null && !this.hidden()) {
+                // Tab hands over what was typed and moves on, as it does in every other Dailies screen
+                this.moveFocus(typing, back);
+            }
+            return;
+        }
+        if (Gadget.focus != null && !this.flying && !this.hidden()) {
+            if (!this.order().contains(Gadget.focus)) {
+                // Its panel was folded or built afresh
+                Gadget.focus = null;
+            } else if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                // The ring goes first; the next Escape means what it always meant
+                Gadget.focus = null;
+                return;
+            } else if (keyCode != GLFW.GLFW_KEY_TAB && Gadget.focus.key(keyCode, modifiers)) {
+                return;
+            }
+        }
+        if (keyCode == GLFW.GLFW_KEY_TAB && !this.flying && !this.hidden() && Menu.open == null && !Screen.hasControlDown()) {
+            this.moveFocus(Gadget.focus, back);
             return;
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
@@ -1036,6 +1247,66 @@ public final class EditorScreen extends Screen {
         }
     }
 
+    // ------------------------------------------------------------------ Moving the keys from control to control
+
+    /** The controls in the order the Tab key visits them: along the bar, down the cards, the panel, then the timeline */
+    private List<Gadget> order() {
+        List<Gadget> order = new ArrayList<>();
+        for (Gadget gadget : this.top) {
+            if (gadget.height > 0) {
+                gadget.collect(order);
+            }
+        }
+        EditorLayout.Layout at = this.layout;
+        if (!at.viewer().empty()) {
+            this.viewerFold.collect(order);
+            if (!EditorState.viewerFolded) {
+                this.viewerForm.collect(order);
+            }
+        }
+        if (!at.players().empty()) {
+            this.playersFold.collect(order);
+            if (!EditorState.playersFolded) {
+                this.playersForm.collect(order);
+            }
+        }
+        if (this.sideOpen()) {
+            this.tabs.forEach(tab -> tab.collect(order));
+            this.sideFold.collect(order);
+            this.sideForm().collect(order);
+        } else {
+            this.sideFold.collect(order);
+            this.edgeTabs.forEach(tab -> tab.collect(order));
+        }
+        this.timeline.collect(order);
+        return order;
+    }
+
+    private void moveFocus(@Nullable Gadget from, boolean back) {
+        List<Gadget> order = this.order();
+        if (order.isEmpty()) {
+            Gadget.focus = null;
+            return;
+        }
+        int at = from == null ? -1 : order.indexOf(from);
+        int next = at < 0 ? (back ? order.size() - 1 : 0) : Math.floorMod(at + (back ? -1 : 1), order.size());
+        Gadget control = order.get(next);
+        if (control instanceof Entry box) {
+            box.focus();
+        } else {
+            Entry.blur();
+            Gadget.focus = control;
+        }
+        // A control further down a panel than it shows is scrolled into sight
+        for (Form form : List.of(this.viewerForm, this.playersForm, this.sideForm())) {
+            List<Gadget> inside = new ArrayList<>();
+            form.collect(inside);
+            if (inside.contains(control)) {
+                form.reveal(control);
+            }
+        }
+    }
+
     @Override
     public boolean charTyped(char character, int modifiers) {
         Entry typing = Entry.focused;
@@ -1092,7 +1363,8 @@ public final class EditorScreen extends Screen {
         if (this.flying && (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_RIGHT) != GLFW.GLFW_PRESS || !this.minecraft.isWindowActive() || Viewer.riding() != null)) {
             this.stopFlying();
         }
-        boolean keys = this.flying || (Entry.focused == null && Menu.open == null && !Screen.hasControlDown() && !Screen.hasAltDown()
+        // While the keys act on a control (after Tab) the space bar presses it, and must not also lift the camera
+        boolean keys = this.flying || (Entry.focused == null && Menu.open == null && Gadget.focus == null && !Screen.hasControlDown() && !Screen.hasAltDown()
             && Viewer.riding() == null && this.minecraft.isWindowActive());
         if (!keys) {
             this.velocity = Vec3.ZERO;
@@ -1159,6 +1431,70 @@ public final class EditorScreen extends Screen {
         }
         Vec3 at = Viewer.position().add(this.velocity.scale(seconds));
         Viewer.set(at.x, at.y, at.z, yaw, pitch);
+    }
+
+    // ------------------------------------------------------------------ A tab standing on end
+
+    /**
+     * One of the panel's tabs while the panel is folded to its edge: a narrow button with its name written down it.
+     * A click opens the panel on that tab.
+     */
+    private static final class EdgeTab extends Gadget {
+        private final Component label;
+        private final Runnable action;
+        private final java.util.function.BooleanSupplier lit;
+
+        EdgeTab(Component label, Runnable action, java.util.function.BooleanSupplier lit) {
+            this.label = label;
+            this.action = action;
+            this.lit = lit;
+        }
+
+        /** How tall it is: its name and a little room at each end */
+        int length(Font font) {
+            return font.width(this.label) + 10;
+        }
+
+        @Override
+        boolean focusable() {
+            return true;
+        }
+
+        @Override
+        boolean key(int keyCode, int modifiers) {
+            if (!activates(keyCode)) {
+                return false;
+            }
+            Kit.click();
+            EditorState.guard(this.action);
+            return true;
+        }
+
+        @Override
+        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            boolean hovered = this.over(mouseX, mouseY);
+            Kit.face(graphics, this.x, this.y, this.width, this.height, hovered, this.lit.getAsBoolean(), true, hovered && Kit.mouseDown(), focus == this);
+            // Turned a quarter of the way round, so the name reads from the top down
+            graphics.pose().pushPose();
+            try {
+                graphics.pose().translate(this.x + this.width / 2.0F + 4.0F, this.y + this.height / 2.0F, 0.0F);
+                graphics.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90.0F));
+                String words = this.label.getString();
+                graphics.drawString(font, words, -font.width(words) / 2, 0, Controls.PARCHMENT, false);
+            } finally {
+                graphics.pose().popPose();
+            }
+        }
+
+        @Override
+        @Nullable Gadget press(double mouseX, double mouseY, int button) {
+            if (button != 0 || !this.over(mouseX, mouseY)) {
+                return null;
+            }
+            Kit.click();
+            EditorState.guard(this.action);
+            return this;
+        }
     }
 
 }

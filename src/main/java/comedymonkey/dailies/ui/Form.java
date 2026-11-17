@@ -28,6 +28,8 @@ final class Form {
     int height;
     private int scroll = 0;
     private int content = 0;
+    /** Whether the names of its pairs stand in one column as wide as the longest needs, rather than a fixed share */
+    private boolean fitNames = false;
     private boolean barHeld = false;
     /** How far below the top of the thumb the mouse took hold of it */
     private int barGrab = 0;
@@ -48,6 +50,15 @@ final class Form {
             Form.this.barHeld = false;
         }
     };
+
+    /**
+     * Lines the names of every name-and-control pair up in one column, as wide as the longest name needs and no wider
+     * than half the form, so that in a narrow panel names are not cut short while their controls have room to spare.
+     */
+    Form fitNames() {
+        this.fitNames = true;
+        return this;
+    }
 
     Form add(Gadget row) {
         this.rows.add(row);
@@ -108,17 +119,43 @@ final class Form {
         this.scroll = 0;
     }
 
+    /** How high all the rows would be at this width, without moving anything or losing how far it is scrolled */
+    int measure(Font font, int forWidth) {
+        int total = GAP;
+        for (int height : this.heights(font, Math.max(10, forWidth - BAR - 2 * SIDE))) {
+            total += height + (height > 0 ? GAP : 0);
+        }
+        return total + GAP;
+    }
+
+    private int[] heights(Font font, int inner) {
+        if (this.fitNames) {
+            List<Gadget.Pair> pairs = new ArrayList<>();
+            this.rows.forEach(row -> row.pairs(pairs));
+            int widest = 0;
+            for (Gadget.Pair pair : pairs) {
+                widest = Math.max(widest, pair.nameWidth(font) + 6);
+            }
+            int column = Math.max(inner * 30 / 100, Math.min(inner / 2, widest));
+            pairs.forEach(pair -> pair.column = column);
+        }
+        int[] heights = new int[this.rows.size()];
+        for (int i = 0; i < heights.length; i++) {
+            heights[i] = Math.max(0, this.rows.get(i).heightFor(font, inner));
+        }
+        return heights;
+    }
+
     void place(Font font, int newX, int newY, int newWidth, int newHeight) {
         this.x = newX;
         this.y = newY;
         this.width = Math.max(0, newWidth);
         this.height = Math.max(0, newHeight);
         int inner = Math.max(10, this.width - BAR - 2 * SIDE);
-        int[] heights = new int[this.rows.size()];
+        int[] heights = this.heights(font, inner);
         int total = GAP;
-        for (int i = 0; i < heights.length; i++) {
-            heights[i] = Math.max(0, this.rows.get(i).heightFor(font, inner));
-            total += heights[i] + (heights[i] > 0 ? GAP : 0);
+        for (int height : heights) {
+            total += height + (height > 0 ? GAP : 0);
         }
         this.content = total + GAP;
         this.scroll = Math.max(0, Math.min(this.scroll, this.content - this.height));
