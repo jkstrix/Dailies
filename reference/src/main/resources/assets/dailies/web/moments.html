@@ -575,8 +575,6 @@ function renderClips() {
               el('span', { class: 'when' }, ' ' + (place.stretches || []).map(piece => 'ticks ' + piece.tick + ' to ' + piece.end_tick).join(', ')))))) : null,
           transcript.length ? el('details', {}, el('summary', {}, 'What was said (' + transcript.length + ' line' + (transcript.length === 1 ? '' : 's') + ')'),
             el('ul', { class: 'lines' }, transcript.map(line => el('li', {}, el('span', { class: 'who' }, (line.speaker && line.speaker.name || line.speaker || 'Someone') + ': '), line.text || '(not transcribed)')))) : null,
-          // CLIP LOCATIONS GO HERE: the list of every recording that holds this clip (clip.locations), each with
-          // its own cue button, belongs at this point of the card: under what was said, beside the actions.
           null),
         el('div', { class: 'actions' },
           el('button', { class: 'primary', disabled: !hasReplay, title: hasReplay ? 'Open the replay at the start of this clip, paused, and add the suggested smart camera there' : 'No replay was being recorded', onclick: () => cue({ clip_id: clip.id, camera: true }, clip.title || 'clip') }, 'Cue + camera'),

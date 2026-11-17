@@ -324,7 +324,9 @@ public final class Controls {
                 tell(Component.translatable("dailies.ui.notice.moments_page_off"));
                 return;
             }
-            net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
+            // With remote access switched on the server speaks HTTPS only, under a certificate of its own making
+            String scheme = comedymonkey.dailies.mcp.McpHttpServer.isRemote() ? "https" : "http";
+            net.minecraft.Util.getPlatform().openUri(java.net.URI.create(scheme + "://127.0.0.1:" + port + "/"));
             tell(Component.translatable("dailies.ui.notice.moments_page_opened"));
         });
     }
