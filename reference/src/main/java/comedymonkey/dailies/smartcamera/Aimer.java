@@ -21,7 +21,13 @@ public final class Aimer {
     private double turnYaw;
     private double turnPitch;
     /** Degrees a second by which the speed of turning may change in a second */
-    private static final double MOST_TURN_CHANGE = 450.0;
+    private double mostTurnChange = 300;
+
+    /** A gentler or brisker limit on how fast the speed of turning changes, degrees a second each second */
+    public Aimer turnChange(double degreesPerSecondSquared) {
+        this.mostTurnChange = degreesPerSecondSquared;
+        return this;
+    }
 
     public void reset(double toYaw, double toPitch) {
         this.yaw.reset(toYaw);
@@ -80,29 +86,26 @@ public final class Aimer {
         this.yaw.stepAngle(unwrappedGoal + leadYaw, time, dt);
         this.pitch.step(SmartCameraMath.clamp(goalPitch + leadPitch, -89.9, 89.9), time, dt);
 
-        // However the aim moves, the camera never starts or stops turning with a jolt: how fast it turns changes by
-        // no more than a set amount a second, unless the subject is about to leave the frame
-        boolean nearEdge = drift > 2.0;
-        double most = (nearEdge ? MOST_TURN_CHANGE * 3.0 : MOST_TURN_CHANGE) * dt;
-        double yawSpeed = SmartCameraMath.clamp((this.yaw.value - yawBefore) / dt, yawSpeedBefore - most, yawSpeedBefore + most);
-        this.yaw.value = yawBefore + yawSpeed * dt;
-        double pitchSpeed = SmartCameraMath.clamp((this.pitch.value - pitchBefore) / dt, pitchSpeedBefore - most, pitchSpeedBefore + most);
-        this.pitch.value = pitchBefore + pitchSpeed * dt;
+        // However the aim moves, the camera never bursts into a turn: how fast it turns grows by no more than a set
+        // amount a second (more as the subject nears the edge of the frame). Slowing down and changing direction are
+        // free, they never jolt. The springs carry on from the turn actually made
+        double most = this.mostTurnChange * SmartCameraMath.clamp(drift - 1.0, 1.0, 2.0) * dt;
+        double yawSpeed = (this.yaw.value - yawBefore) / dt;
+        double pitchSpeed = (this.pitch.value - pitchBefore) / dt;
+        double speed = Math.hypot(yawSpeed, pitchSpeed);
+        double speedBefore = Math.hypot(yawSpeedBefore, pitchSpeedBefore);
+        if (speed > speedBefore + most) {
+            double scale = (speedBefore + most) / speed;
+            yawSpeed *= scale;
+            pitchSpeed *= scale;
+            this.yaw.value = yawBefore + yawSpeed * dt;
+            this.pitch.value = pitchBefore + pitchSpeed * dt;
+            this.yaw.velocity = yawSpeed;
+            this.pitch.velocity = pitchSpeed;
+        }
         this.turnYaw = yawSpeed;
         this.turnPitch = pitchSpeed;
 
-        double yawOff = SmartCameraMath.wrapDegrees(this.yaw.value - unwrappedGoal);
-        if (Math.abs(yawOff) > yawLimit * 2.2) {
-            this.yaw.value = unwrappedGoal + Math.signum(yawOff) * yawLimit * 2.2;
-            this.yaw.velocity = this.yawRate;
-            this.turnYaw = this.yawRate;
-        }
-        double pitchOff = this.pitch.value - goalPitch;
-        if (Math.abs(pitchOff) > pitchLimit * 2.2) {
-            this.pitch.value = goalPitch + Math.signum(pitchOff) * pitchLimit * 2.2;
-            this.pitch.velocity = this.pitchRate;
-            this.turnPitch = this.pitchRate;
-        }
         this.pitch.value = SmartCameraMath.clamp(this.pitch.value, -89.9, 89.9);
     }
 

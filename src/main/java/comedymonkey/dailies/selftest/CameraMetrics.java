@@ -132,6 +132,11 @@ final class CameraMetrics {
                     }
                 }
             }
+            if (!smart) {
+                // The keyframe cameras and the players panel's Follow cut too (a teleport, a move to a new watching
+                // place): each cut is a new shot, so the film is split there rather than judged as one swing
+                frame.shot = comedymonkey.dailies.editor.CameraSteps.cuts() + Viewer.followCuts();
+            }
             if (smart) {
                 SmartCameraSolver solver = SmartCameraDriver.lastSolver();
                 SmartCameraSolver.Result result = solver == null ? null : solver.lastResult();

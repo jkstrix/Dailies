@@ -89,6 +89,81 @@ final class Filming {
         return frames;
     }
 
+    /** What a tether camera does with the subject each step, given its solver, the subject's point, the step and dt */
+    interface Tethered {
+        TetherSolver.Result step(TetherSolver solver, SubjectSample subject, double dt);
+    }
+
+    /** Films a follow entity, entity orbit or panel Follow camera the way the game steps it: once a tick, frames blended, each cut a new shot */
+    static List<FilmFrame> filmTether(CameraWorld world, IntFunction<SubjectSample> path, int ticks, Tethered camera) {
+        TetherSolver solver = new TetherSolver();
+        PoseBlend blend = new PoseBlend();
+        List<FilmFrame> frames = new ArrayList<>();
+        SubjectSample before = null;
+        int cuts = 0;
+        int frame = 0;
+        for (int tick = 0; tick <= ticks; tick++) {
+            SubjectSample subject = path.apply(tick);
+            TetherSolver.Result result = camera.step(solver, subject, tick == 0 ? -1.0 : 0.05);
+            if (result.cut()) {
+                cuts++;
+            }
+            Vec eye = result.eye();
+            blend.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), FOV, false, result.cut()));
+            while (tick > 0 && frame * 20.0 / FPS <= tick + 1.0e-9) {
+                double time = frame * 20.0 / FPS;
+                double amount = time - (tick - 1);
+                PoseBlend.Pose pose = blend.at(time);
+                Vec feet = before.feet().lerp(subject.feet(), amount);
+                FilmFrame noted = note(world, frame, time, pose, feet, subject.bodyYaw());
+                noted.aimX = feet.x();
+                noted.aimY = feet.y() + 1.62;
+                noted.aimZ = feet.z();
+                noted.shot = cuts;
+                frames.add(noted);
+                frame++;
+            }
+            before = subject;
+        }
+        return frames;
+    }
+
+    private static FilmFrame note(CameraWorld world, int frame, double time, PoseBlend.Pose pose, Vec feet, double bodyYaw) {
+        FilmFrame noted = new FilmFrame();
+        noted.frame = frame;
+        noted.seconds = frame / FPS;
+        noted.tick = time;
+        noted.camX = pose.x();
+        noted.camY = pose.y();
+        noted.camZ = pose.z();
+        noted.yaw = pose.yaw();
+        noted.pitch = pose.pitch();
+        noted.fov = FOV;
+        noted.aspect = ASPECT;
+        noted.cameraInBlock = world.solid(new Vec(pose.x(), pose.y(), pose.z()));
+        noted.subjectPresent = true;
+        noted.eyeX = feet.x();
+        noted.eyeY = feet.y() + 1.62;
+        noted.eyeZ = feet.z();
+        noted.subjectYaw = bodyYaw;
+        noted.minX = feet.x() - 0.3;
+        noted.minY = feet.y();
+        noted.minZ = feet.z() - 0.3;
+        noted.maxX = feet.x() + 0.3;
+        noted.maxY = feet.y() + 1.8;
+        noted.maxZ = feet.z() + 0.3;
+        Vec eye = new Vec(pose.x(), pose.y(), pose.z());
+        double[][] points = noted.points();
+        for (int i = 0; i < points.length; i++) {
+            Vec point = new Vec(points[i][0], points[i][1], points[i][2]);
+            double length = eye.distanceTo(point);
+            if (world.clip(eye, point) * length < length - 0.05) {
+                noted.occludedMask |= 1 << i;
+            }
+        }
+        return noted;
+    }
+
     static FilmMeasures.Analysis judge(List<FilmFrame> frames, boolean director) {
         return FilmMeasures.analyse(frames, FPS, director);
     }

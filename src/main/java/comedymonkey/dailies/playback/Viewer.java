@@ -43,6 +43,17 @@ public final class Viewer {
     private static double followTime = Double.NaN;
     /** Seconds the following camera takes to settle after the player: bumps and hops are smoothed, the offset kept */
     private static final double FOLLOW_SMOOTHING = 0.15;
+    /** Seconds the following camera's turn takes to settle: it turns on springs, never with a jolt */
+    private static final double FOLLOW_AIM = 0.12;
+    private static volatile int followCuts = 0;
+
+    /**
+     * How many times the players panel's Follow has cut (a teleport or a portal, or out from behind a wall it was stuck
+     * behind): when it changes, the frame shows a new shot and is not to be judged as joined to the one before
+     */
+    public static int followCuts() {
+        return followCuts;
+    }
 
     private Viewer() {
     }
@@ -250,12 +261,19 @@ public final class Viewer {
         }
         double now = Playback.frameTime();
         double dt = exporting ? (Double.isNaN(followTime) ? -1.0 : (now - followTime) / 20.0) : seconds;
+        if (!Double.isNaN(followTime) && dt < 0.0 && dt > -0.5) {
+            // The recording's clock read a hair back between two frames: hold still rather than start again
+            dt = 0.0;
+        }
         followTime = now;
         double fov = Viewer.fov > 0.0 ? Viewer.fov : minecraft.options.fov().get();
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
         comedymonkey.dailies.smartcamera.Vec point = new comedymonkey.dailies.smartcamera.Vec(eyes.x, eyes.y, eyes.z);
         comedymonkey.dailies.smartcamera.TetherSolver.Result result = FOLLOW.keep(new comedymonkey.dailies.smartcamera.LevelCameraWorld(minecraft.level, null),
-            point, new comedymonkey.dailies.smartcamera.Vec(followOffset.x, followOffset.y, followOffset.z), point, FOLLOW_SMOOTHING, 0.0, fov, aspect, dt, true);
+            point, new comedymonkey.dailies.smartcamera.Vec(followOffset.x, followOffset.y, followOffset.z), point, FOLLOW_SMOOTHING, FOLLOW_AIM, fov, aspect, dt, true);
+        if (result.cut()) {
+            followCuts++;
+        }
         x = result.eye().x();
         y = result.eye().y() - EYE_HEIGHT;
         z = result.eye().z();

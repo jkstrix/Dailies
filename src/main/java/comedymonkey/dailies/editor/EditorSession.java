@@ -213,6 +213,7 @@ public final class EditorSession {
                 minecraft.level.getLevelData().setDayTime(Math.round(time));
             }
             if (followCamera || exporting) {
+                CameraSteps.catchUp();
                 placed = placeCamera(minecraft, scene, tick);
             }
         } catch (RuntimeException e) {

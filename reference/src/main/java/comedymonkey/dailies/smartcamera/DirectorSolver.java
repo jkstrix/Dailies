@@ -71,6 +71,14 @@ public final class DirectorSolver implements ShotSolver {
     private double lastVisibility = 1.0;
     private final List<ShotRecord> history = new ArrayList<>();
 
+    /** The camera before a jump forced this director to start again, so its first shot is no jump cut from it */
+    private Pose before;
+
+    public DirectorSolver after(Pose pose) {
+        this.before = pose;
+        return this;
+    }
+
     @Override
     public Pose start(Input input) {
         this.history.clear();
@@ -78,7 +86,10 @@ public final class DirectorSolver implements ShotSolver {
         this.lineSide = 0;
         this.stillSeconds = 0.0;
         this.pendingAction = null;
-        Pose pose = this.cut(input, REASON_START, null, input.settings().establishingShots);
+        Pose pose = this.cut(input, REASON_START, this.before, input.settings().establishingShots && this.before == null);
+        if (pose == null && this.before != null) {
+            pose = this.cut(input, REASON_START, null, false);
+        }
         if (pose == null) {
             // Nothing could be checked good (the subject is walled in): a chase from behind, which pulls in as it must
             pose = this.begin(input, Kind.CHASE, chaseSettings(input.settings(), 1.0, 1.0, 0.0), new ChaseSolver().withoutCuts(), REASON_START);
@@ -94,7 +105,9 @@ public final class DirectorSolver implements ShotSolver {
         Pose pose = this.solver.step(input.with(this.shotSettings, this.age));
         SubjectSample subject = input.subject();
         this.lastVisibility = CameraProbe.visibility(input.world(), pose.eye(), subject.aim(), subject.height());
-        this.blockedSeconds = this.lastVisibility < 0.5 ? this.blockedSeconds + dt : 0.0;
+        // Squeezed up against the subject (a small room) is as bad as blocked: nothing reads from half a block away
+        boolean squeezed = pose.eye().distanceTo(subject.aim()) < 1.2 + subject.extra();
+        this.blockedSeconds = this.lastVisibility < 0.5 || squeezed ? this.blockedSeconds + dt : 0.0;
         Motion motion = input.motion();
         this.stillSeconds = motion.moving() ? 0.0 : this.stillSeconds + dt;
         if (this.stillSeconds > 2.0) {
@@ -122,7 +135,7 @@ public final class DirectorSolver implements ShotSolver {
             boolean establishing = reason.equals(REASON_NEW_PLACE);
             Pose cut = this.cut(input, reason, pose, establishing);
             if (cut == null && mustGo) {
-                cut = this.escape(input, reason);
+                cut = this.escape(input, reason, pose);
             }
             if (cut != null) {
                 // Whatever happened has been cut on
@@ -178,7 +191,7 @@ public final class DirectorSolver implements ShotSolver {
         Motion motion = input.motion();
         boolean enclosed = motion.enclosure() > 0.6;
         // The 180-degree rule: the new shot looks from the side of the line the camera is on now
-        this.lineSide = current == null ? 0 : this.sideOf(input, current.eye());
+        this.lineSide = current == null || current == this.before ? 0 : this.sideOf(input, current.eye());
         if (establishing) {
             Kind kind = Kind.ESTABLISHING;
             for (int attempt = 0; attempt < 3; attempt++) {
@@ -208,20 +221,26 @@ public final class DirectorSolver implements ShotSolver {
     }
 
     /** When the shot has to go and nothing checks good: the candidate with the clearest view, whatever its angle */
-    private Pose escape(Input input, String reason) {
+    private Pose escape(Input input, String reason, Pose current) {
         SmartCameraMath.Random random = new SmartCameraMath.Random(input.settings().seed ^ 0x5EED, Math.round(input.tick()));
         Plan best = null;
         Pose bestPose = null;
         double bestSeen = 0.4;
-        Kind[] kinds = {Kind.CHASE, Kind.OVER_SHOULDER, Kind.TRIPOD, Kind.SIDE_TRACKING};
-        for (Kind kind : kinds) {
-            Plan plan = this.plan(input, kind, random, null);
-            Pose pose = plan.solver.start(input.with(plan.settings, 0.0));
-            double seen = CameraProbe.visibility(input.world(), pose.eye(), input.subject().aim(), input.subject().height());
-            if (seen > bestSeen && CameraProbe.roomFor(input.world(), pose.eye())) {
-                best = plan;
-                bestPose = pose;
-                bestSeen = seen;
+        Vec aim = input.subject().aim();
+        Kind[] kinds = {Kind.TRIPOD, Kind.ORBIT, Kind.SIDE_TRACKING, Kind.OVER_SHOULDER, Kind.CHASE};
+        for (int attempt = 0; attempt < 2; attempt++) {
+            for (Kind kind : kinds) {
+                Plan plan = this.plan(input, kind, random, current);
+                Pose pose = plan.solver.start(input.with(plan.settings, 0.0));
+                double seen = CameraProbe.visibility(input.world(), pose.eye(), aim, input.subject().height());
+                // Even in a hurry, never a jump cut, and never into the subject's face
+                boolean turned = this.turnsFrom(current, pose, aim, LEAST_ANGLE_CHANGE + 2.0) && this.turnsFrom(this.lastPose, pose, aim, LEAST_ANGLE_CHANGE + 2.0);
+                boolean sameSide = this.lineSide == 0 || this.sideOf(input, pose.eye()) != -this.lineSide;
+                if (seen > bestSeen && turned && sameSide && pose.eye().distanceTo(aim) >= 1.2 + input.subject().extra() && CameraProbe.roomFor(input.world(), pose.eye())) {
+                    best = plan;
+                    bestPose = pose;
+                    bestSeen = seen;
+                }
             }
         }
         if (best == null) {
@@ -231,17 +250,30 @@ public final class DirectorSolver implements ShotSolver {
         return this.adopt(input, best, bestPose, reason);
     }
 
+    /**
+     * Whether a cut from one pose to another turns the view far enough not to be a jump cut, both in the way the camera
+     * looks and in the way it sees the subject. Checked against the camera of this tick and of the tick before, since a
+     * frame between them is what the cut is seen from.
+     */
+    private boolean turnsFrom(Pose from, Pose to, Vec aim, double degrees) {
+        if (from == null) {
+            return true;
+        }
+        return Vec.angleBetween(aim.sub(from.eye()), aim.sub(to.eye())) >= degrees
+            && Vec.angleBetween(Vec.look(from.yaw(), from.pitch()), Vec.look(to.yaw(), to.pitch())) >= degrees;
+    }
+
     private Pose tryPlan(Input input, Plan plan, Pose current, String reason, Kind kind) {
         Pose pose = plan.solver.start(input.with(plan.settings, 0.0));
         SubjectSample subject = input.subject();
         Vec aim = subject.aim();
         CameraWorld world = input.world();
-        if (!CameraProbe.roomFor(world, pose.eye()) || CameraProbe.visibility(world, pose.eye(), aim, subject.height()) < 0.75) {
+        if (!CameraProbe.roomFor(world, pose.eye()) || CameraProbe.visibility(world, pose.eye(), aim, subject.height()) < 0.75
+            || pose.eye().distanceTo(aim) < 1.5 + subject.extra()) {
             return null;
         }
         // No jump cut: the view must turn well past the least change, both the way it looks and the way it sees the subject
-        if (current != null && (Vec.angleBetween(aim.sub(current.eye()), aim.sub(pose.eye())) < LEAST_ANGLE_CHANGE + 5.0
-            || Vec.angleBetween(Vec.look(current.yaw(), current.pitch()), Vec.look(pose.yaw(), pose.pitch())) < LEAST_ANGLE_CHANGE + 5.0)) {
+        if (!this.turnsFrom(current, pose, aim, LEAST_ANGLE_CHANGE + 5.0) || current != this.before && !this.turnsFrom(this.lastPose, pose, aim, LEAST_ANGLE_CHANGE + 5.0)) {
             return null;
         }
         int side = this.sideOf(input, pose.eye());

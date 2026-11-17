@@ -60,13 +60,14 @@ public final class Motion {
 
     public void reset(SubjectSample subject, Vec velocityHint, CameraWorld world) {
         this.lastFeet = subject.feet();
-        this.velocity = velocityHint;
-        double speed = velocityHint.length();
+        // A hint measured across a teleport is no speed at all
+        this.velocity = velocityHint.length() > 100.0 ? Vec.ZERO : velocityHint;
+        double speed = this.velocity.length();
         this.moving = speed > 0.8;
         this.airborneSeconds = 0.0;
         this.flightState = subject.gliding() || subject.flying();
         this.ridingState = subject.riding();
-        double heading = velocityHint.horizontalLength() > 1.5 ? SmartCameraMath.yawOf(velocityHint.x(), velocityHint.z()) : subject.bodyYaw();
+        double heading = this.velocity.horizontalLength() > 1.5 ? SmartCameraMath.yawOf(this.velocity.x(), this.velocity.z()) : subject.bodyYaw();
         this.rawTravelYaw = heading;
         this.travel.reset(heading);
         this.body.reset(subject.bodyYaw());

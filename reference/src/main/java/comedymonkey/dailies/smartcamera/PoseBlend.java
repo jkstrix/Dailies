@@ -39,6 +39,10 @@ public final class PoseBlend {
         this.last = pose;
     }
 
+    private static double between(double value, double a, double b) {
+        return SmartCameraMath.clamp(value, Math.min(a, b), Math.max(a, b));
+    }
+
     public Pose last() {
         return this.last;
     }
@@ -74,10 +78,11 @@ public final class PoseBlend {
         double e0z = earlier == null ? 0.0 : earlier.z();
         double e0p = earlier == null ? 0.0 : earlier.pitch();
         double e0f = earlier == null ? 0.0 : earlier.fov();
+        // Never beyond the two steps it runs between: a curve that overshot could reach into a block neither step is near
         return new Pose(tick,
-            w0 * e0x + w1 * before.x() + w2 * last.x(),
-            w0 * e0y + w1 * before.y() + w2 * last.y(),
-            w0 * e0z + w1 * before.z() + w2 * last.z(),
+            between(w0 * e0x + w1 * before.x() + w2 * last.x(), before.x(), last.x()),
+            between(w0 * e0y + w1 * before.y() + w2 * last.y(), before.y(), last.y()),
+            between(w0 * e0z + w1 * before.z() + w2 * last.z(), before.z(), last.z()),
             SmartCameraMath.wrapDegrees(w0 * yaw0 + w1 * before.yaw() + w2 * yaw2),
             SmartCameraMath.clamp(w0 * e0p + w1 * before.pitch() + w2 * last.pitch(), -90.0, 90.0),
             w0 * e0f + w1 * before.fov() + w2 * last.fov(),

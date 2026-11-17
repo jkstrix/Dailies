@@ -21,7 +21,8 @@ public final class TripodSolver implements ShotSolver {
     private static final double GIVE_UP_SECONDS = 0.6;
     private static final double LEAST_STAY_SECONDS = 1.0;
 
-    private final Aimer aimer = new Aimer();
+    // A tripod's pans start and stop gently: it stands still a lot, and a pan from rest must not start with a jolt
+    private final Aimer aimer = new Aimer().turnChange(160.0);
     private Vec eye = Vec.ZERO;
     private double goalYaw;
     private double goalPitch;
@@ -112,16 +113,20 @@ public final class TripodSolver implements ShotSolver {
         double zoneShare = SmartCameraMath.clamp(1.0 - this.crossingRate / 25.0, 0.0, 1.0);
         double zoneYaw = settings.deadZone * halfWidth * zoneShare;
         double zonePitch = settings.deadZone * halfHeight * zoneShare;
-        double offYaw = SmartCameraMath.wrapDegrees(wanted.yaw() - this.goalYaw);
-        if (Math.abs(offYaw) > zoneYaw) {
-            this.goalYaw += offYaw - Math.signum(offYaw) * zoneYaw;
-        }
-        double offPitch = wanted.pitch() - this.goalPitch;
-        if (Math.abs(offPitch) > zonePitch) {
-            this.goalPitch += offPitch - Math.signum(offPitch) * zonePitch;
-        }
+        // A soft edge: inside the zone the goal hardly moves, outside it follows by as much as the subject is out,
+        // and in between it eases from one to the other, so a pan never starts or stops in a step
+        this.goalYaw += softZone(SmartCameraMath.wrapDegrees(wanted.yaw() - this.goalYaw), zoneYaw);
+        this.goalPitch += softZone(wanted.pitch() - this.goalPitch, zonePitch);
         this.aimer.step(this.goalYaw, this.goalPitch, Math.max(0.05, settings.aimSmoothing), input.fov(), input.aspect(), dt);
         return new Pose(this.eye, this.aimer.yaw(), this.aimer.pitch(), this.lastVisibility < 1.0, settings.screenX, settings.screenY, false);
+    }
+
+    /** How far the goal moves for the subject being {@code off} from it, with a dead zone of {@code zone} whose edge is soft */
+    static double softZone(double off, double zone) {
+        if (zone < 1.0e-6) {
+            return off;
+        }
+        return off - zone * Math.tanh(off / zone);
     }
 
     /** Whether the subject has left this place's view for good: hidden or out of frame for a while, or too far off */
@@ -153,11 +158,21 @@ public final class TripodSolver implements ShotSolver {
      * world always give the same place.
      */
     Vec place(Input input) {
-        SubjectSample subject = input.subject();
         Motion motion = input.motion();
-        CameraWorld world = input.world();
+        return placeFor(input.world(), input.subject(), motion.velocity(), motion.travelHeading(), motion.moving(), this.preferredDistance, this.keepSide,
+            this.sideAlong);
+    }
+
+    /**
+     * The best place to stand to watch a subject for the next few seconds of its way, as {@link #place}; also used by
+     * the follow entity keyframe's "stay and watch" when its subject has gone out of its sight.
+     *
+     * @param preferredDistance blocks away, or 0 for the usual
+     * @param keepSide          the side of the line of travel to keep to (1, -1), or 0 for either
+     */
+    public static Vec placeFor(CameraWorld world, SubjectSample subject, Vec velocity, double travelHeading, boolean moving, double preferredDistance,
+                               int keepSide, Vec sideAlong) {
         Vec aim = subject.aim();
-        Vec velocity = motion.velocity();
         double speed = velocity.length();
         // No further ahead than about thirty blocks, however fast
         double reach = speed * PREDICT[PREDICT.length - 1];
@@ -168,7 +183,7 @@ public final class TripodSolver implements ShotSolver {
         }
         Vec middle = path[2];
         double grow = 1.0 + SmartCameraMath.clamp(speed / 12.0, 0.0, 1.0) + subject.extra() * 0.15;
-        double ideal = (this.preferredDistance > 0.0 ? this.preferredDistance : 8.5) * grow + subject.extra();
+        double ideal = (preferredDistance > 0.0 ? preferredDistance : 8.5) * grow + subject.extra();
         double eyeLevel = subject.feet().y() + 1.62;
 
         Vec best = null;
@@ -240,11 +255,11 @@ public final class TripodSolver implements ShotSolver {
                     score += towards * 0.6;
                 }
                 score -= Math.abs(candidate.y() - (eyeLevel + 0.8)) * 0.15;
-                if (this.keepSide != 0) {
+                if (keepSide != 0) {
                     // Clearly on the side of the line the edit keeps to
                     Vec offset = candidate.sub(path[0]);
-                    double lateral = this.sideAlong.x() * offset.z() - this.sideAlong.z() * offset.x();
-                    if (lateral * this.keepSide < 0.5) {
+                    double lateral = sideAlong.x() * offset.z() - sideAlong.z() * offset.x();
+                    if (lateral * keepSide < 0.5) {
                         continue;
                     }
                 }
@@ -263,7 +278,7 @@ public final class TripodSolver implements ShotSolver {
             return fallback;
         }
         // Nowhere sees the subject: ahead on its way and a little above, as far as there is room, so it comes towards the camera
-        Vec back = aim.add(Vec.heading(motion.travelHeading()).scale((motion.moving() ? 8.0 : -5.0) - subject.extra())).add(0.0, 1.0, 0.0);
+        Vec back = aim.add(Vec.heading(travelHeading).scale((moving ? 8.0 : -5.0) - subject.extra())).add(0.0, 1.0, 0.0);
         double share = Clearance.allowedShare(world, aim, back, subject.extra());
         return CameraProbe.pushOut(world, aim.add(back.sub(aim).scale(share)), aim);
     }

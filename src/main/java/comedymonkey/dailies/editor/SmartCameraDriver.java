@@ -57,22 +57,23 @@ public final class SmartCameraDriver {
      *
      * @param tick the scene tick the recording stands on
      */
-    static void step(Minecraft minecraft, Track track, @Nullable Keyframe.SmartCamera keyframe, double tick, boolean applied) {
+    static boolean step(Minecraft minecraft, Track track, @Nullable Keyframe.SmartCamera keyframe, double tick, boolean applied) {
         if (keyframe == null || minecraft.level == null) {
-            return;
+            return false;
         }
         SmartCameraSettings settings = PARSED.computeIfAbsent(keyframe, key -> settings(minecraft, key.settings()));
         SmartCameraSolver solver = SmartCameraSolver.forTrack(track);
         lastSolver = solver;
         lastTrack = track;
         if (settings.target == null) {
-            return;
+            return false;
         }
         SmartCameraSolver.Result result = solver.step(settings, keyframe.tick(), tick, minecraft, applied);
         if (result != null) {
             remember(track, keyframe, tick, new Evaluator.CameraPose(result.cameraX(), result.cameraY() - VIEWER_EYE_HEIGHT, result.cameraZ(), result.yaw(),
                 result.pitch(), 0.0));
         }
+        return result != null;
     }
 
     /** Where the Smart Camera of a track puts the view for a frame drawn at this tick, or null when it has nothing to film */

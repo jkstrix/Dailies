@@ -49,6 +49,10 @@ public final class CameraSteps {
     private static final Map<Track, Tether> TETHERS = new MapMaker().weakKeys().makeMap();
     private static Track steppedTrack = null;
     private static int steppedPosition = Integer.MIN_VALUE;
+    /** Whether that step found what it films; when not (a world being swapped through a portal) it is tried again */
+    private static boolean steppedWithPose = false;
+    /** Every cut a follow entity or entity orbit camera has made (a teleport, a move to a new watching place) */
+    private static volatile int cuts = 0;
 
     private CameraSteps() {
     }
@@ -61,6 +65,23 @@ public final class CameraSteps {
         TETHERS.clear();
         steppedTrack = null;
         steppedPosition = Integer.MIN_VALUE;
+    }
+
+    /**
+     * How many times the follow entity and entity orbit cameras have cut since the game started: when it changes, the
+     * frame shows a new shot, and must not be judged as joined to the one before
+     */
+    public static int cuts() {
+        return cuts;
+    }
+
+    /**
+     * Before a frame is drawn: makes sure the cameras have been stepped for the tick the recording stands on. The tick
+     * hook may have found nothing to film (the world swapped through a portal, its entities not yet in), and then the
+     * frame would show the camera of a tick before while the subject is already somewhere else.
+     */
+    static void catchUp() {
+        tick();
     }
 
     /** After every game tick: when the recording stands on a tick the cameras have not been stepped for, step them */
@@ -81,19 +102,18 @@ public final class CameraSteps {
                 steppedTrack = null;
                 return;
             }
-            if (track == steppedTrack && position == steppedPosition) {
+            if (track == steppedTrack && position == steppedPosition && steppedWithPose) {
                 return;
             }
             steppedTrack = track;
             steppedPosition = position;
             boolean applied = EditorSession.followCamera() || EditorSession.exporting();
-            switch (track.kind()) {
+            steppedWithPose = switch (track.kind()) {
                 case SMART_CAMERA -> SmartCameraDriver.step(minecraft, track, (Keyframe.SmartCamera) track.atOrBefore(tick), tick, applied);
                 case FOLLOW_ENTITY -> follow(minecraft, scene, track, tick);
                 case ORBIT -> orbit(minecraft, scene, track, tick);
-                default -> {
-                }
-            }
+                default -> true;
+            };
         } catch (RuntimeException e) {
             Host.LOGGER.warn("Dailies: a following camera could not be worked out at tick {}", Playback.position(), e);
         }
@@ -101,7 +121,7 @@ public final class CameraSteps {
 
     // ------------------------------------------------------------------ Follow entity
 
-    private static void follow(Minecraft minecraft, Scene scene, Track track, double tick) {
+    private static boolean follow(Minecraft minecraft, Scene scene, Track track, double tick) {
         Tether tether = TETHERS.computeIfAbsent(track, key -> new Tether());
         Evaluator.FollowValue follow = Evaluator.follow(scene, tick);
         Entity entity = follow == null ? null : find(minecraft, follow.entityUuid(), follow.entityId());
@@ -109,7 +129,7 @@ public final class CameraSteps {
             tether.blend.clear();
             tether.solver.reset();
             tether.lastTick = Double.NaN;
-            return;
+            return false;
         }
         double dt = Double.isNaN(tether.lastTick) ? -1.0 : (tick - tether.lastTick) / 20.0;
         tether.lastTick = tick;
@@ -119,21 +139,24 @@ public final class CameraSteps {
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
         TetherSolver.Result result;
         if (follow.mode() == Keyframe.FollowMode.WATCH_FROM_FIXED) {
-            // Stays where the viewer is and turns to watch the point the offset names
+            // Stays where the viewer is and turns to watch the point the offset names, moving to a new place when it
+            // has lost sight of the entity for good
             Vec3 feet = Viewer.position();
             Vec eye = new Vec(feet.x, feet.y + EYE_HEIGHT, feet.z);
-            result = tether.solver.watch(eye, target, target.add(offset), FOLLOW_AIM_TIME * 2.5, fov, aspect, dt);
+            LevelCameraWorld world = new LevelCameraWorld(minecraft.level, null);
+            result = tether.solver.watch(world, eye, target, target.add(offset), entity.getBbHeight(), FOLLOW_AIM_TIME * 2.5, fov, aspect, dt);
         } else {
             // The offset is from the body part to where the viewer stands
             LevelCameraWorld world = new LevelCameraWorld(minecraft.level, null);
             result = tether.solver.keep(world, target, offset.add(0.0, EYE_HEIGHT, 0.0), target, FOLLOW_TIME, FOLLOW_AIM_TIME, fov, aspect, dt, true);
         }
         push(tether, tick, result);
+        return true;
     }
 
     // ------------------------------------------------------------------ Orbit round an entity
 
-    private static void orbit(Minecraft minecraft, Scene scene, Track track, double tick) {
+    private static boolean orbit(Minecraft minecraft, Scene scene, Track track, double tick) {
         Evaluator.OrbitValue orbit = Evaluator.orbit(scene, tick);
         Tether tether = TETHERS.computeIfAbsent(track, key -> new Tether());
         Entity entity = orbit == null || !orbit.onEntity() ? null : find(minecraft, orbit.entityUuid(), orbit.entityId());
@@ -142,7 +165,7 @@ public final class CameraSteps {
             tether.blend.clear();
             tether.solver.reset();
             tether.lastTick = Double.NaN;
-            return;
+            return orbit == null || !orbit.onEntity();
         }
         double dt = Double.isNaN(tether.lastTick) ? -1.0 : (tick - tether.lastTick) / 20.0;
         tether.lastTick = tick;
@@ -154,9 +177,13 @@ public final class CameraSteps {
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
         LevelCameraWorld world = new LevelCameraWorld(minecraft.level, null);
         push(tether, tick, tether.solver.keep(world, centre, offset, centre, ORBIT_TIME, ORBIT_AIM_TIME, fov, aspect, dt, true));
+        return true;
     }
 
     private static void push(Tether tether, double tick, TetherSolver.Result result) {
+        if (result.cut()) {
+            cuts++;
+        }
         Vec eye = result.eye();
         tether.blend.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), 0.0, false, result.cut()));
     }
