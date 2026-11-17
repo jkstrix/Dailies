@@ -39,7 +39,7 @@ public final class DailiesConfig {
             bool("markDimensionChanges", true, "Drop a marker on every change of dimension");
             bool("recordHud", false, "Also capture your hotbar, selected slot, health, hunger and experience, so playback can show your HUD");
             integer("recorderUpdatesPerSecond", 20, 1, 20, "How often your own player's movement is captured each second");
-            integer("snapshotSeconds", 300, 5, 1800, "How often a recording stores the whole world afresh. Going back in playback replays from the stored world before, so a shorter time makes going back quicker and the file a little larger");
+            integer("snapshotSeconds", 5, 1, 1800, "How often a recording stores the whole world afresh. Going back in playback replays from the stored world before, so a shorter time makes going back quicker and the file a little larger");
             bool("recordVoiceChat", false, "Capture the voice chat you hear, per speaker (needs Simple Voice Chat)");
             for (int marker = 1; marker <= 4; marker++) {
                 text("marker" + marker + "Colour", "red", "Colour of marker key " + marker + ": red, orange, yellow, green, cyan, blue, purple, white, or a custom colour as #RRGGBB");

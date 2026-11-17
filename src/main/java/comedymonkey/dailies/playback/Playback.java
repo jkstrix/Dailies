@@ -233,15 +233,47 @@ public final class Playback {
      * @param pauseThere whether to stay paused on arrival; otherwise playback carries on as it was
      */
     public static void jumpTo(int tick, boolean pauseThere) {
+        jump(tick, pauseThere, false);
+    }
+
+    /**
+     * A jump made while the playhead is being dragged: it starts from the nearest stored world and skips the run-up, so
+     * it lands sooner and things that ease into place may be a few ticks out. {@link #refine} puts that right.
+     */
+    public static void scrubTo(int tick) {
+        jump(tick, paused, true);
+    }
+
+    /** After dragging: if the world was last reached by a rough jump, reach the same tick again exactly */
+    public static void refine() {
+        if (loaded && rough) {
+            jump(shown(), paused, false);
+        }
+    }
+
+    /** The tick the person has asked for: where a jump under way is going, else where the recording is */
+    public static int shown() {
+        int target = jumpTarget;
+        return target >= 0 ? target : position;
+    }
+
+    /** Whether the world as it stands was reached by a jump that skipped the run-up */
+    private static boolean rough = false;
+
+    private static void jump(int tick, boolean pauseThere, boolean quick) {
         requireLoaded();
         int target = Math.max(0, Math.min(total, tick));
         pauseAfterJump = pauseThere || paused;
-        if (target == position && !jumping()) {
+        boolean again = rough && !quick;
+        if (target == position && !jumping() && !again) {
             paused = pauseAfterJump;
             return;
         }
         int index = feed.segmentIndexAt(target);
-        if (target - feed.segmentStart(index) < RUN_UP_TICKS && feed.continuesFromPrevious(index)) {
+        if (again) {
+            reloadIndex = index;
+        }
+        if (!quick && target - feed.segmentStart(index) < RUN_UP_TICKS && feed.continuesFromPrevious(index)) {
             // Landing just after a snapshot: start from the one before, so that everything a game eases into place over a
             // few ticks (a bearing's angle, a craft's smoothing, an entity's last steps) has settled, as it has in plain play
             index--;
@@ -249,6 +281,9 @@ public final class Playback {
         if (target < position || feed.segmentStart(index) > position) {
             // Backwards, or far enough ahead that a later snapshot is the nearer start
             reloadIndex = index;
+        }
+        if (reloadIndex >= 0) {
+            rough = quick;
         }
         jumpTarget = target;
     }
@@ -421,6 +456,7 @@ public final class Playback {
         feed = new Feed(file);
         paused = true;
         pauseAfterJump = true;
+        rough = false;
         ticksPerSecond = 20.0;
         jumpTarget = -1;
         Viewer.reset();

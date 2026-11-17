@@ -230,6 +230,16 @@ public final class Controls {
         watching(() -> Playback.jumpTo(Playback.position() + seconds * TICKS_PER_SECOND, Playback.paused()));
     }
 
+    /** While the playhead is dragged */
+    public static void scrubTo(int tick) {
+        watching(() -> Playback.scrubTo(tick));
+    }
+
+    /** When the playhead is let go */
+    public static void refine() {
+        watching(Playback::refine);
+    }
+
     public static void jumpTo(int tick) {
         watching(() -> Playback.jumpTo(tick, Playback.paused()));
     }

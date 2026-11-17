@@ -71,6 +71,10 @@ final class TimelinePanel {
     private int rangePreview = -1;
     /** The tick the mouse last asked for, waiting for the jump before it to finish; -1 for none */
     private int wanted = -1;
+    /** Where the playhead is being dragged to, drawn there whatever the recording has caught up with; -1 when not */
+    private int scrubTick = -1;
+    /** The playhead has been let go and the last rough jump has still to be made exact */
+    private boolean refineOwed = false;
     private @Nullable KeyframeRef lastClicked;
     private long lastClickAt;
 
@@ -215,16 +219,24 @@ final class TimelinePanel {
         } else if (EditorState.scrubbing) {
             if (leftButtonDown) {
                 this.wanted = this.tickAt(mouseX);
+                this.scrubTick = this.wanted;
             } else {
                 EditorState.scrubbing = false;
+                this.refineOwed = true;
             }
+        }
+        if (!EditorState.scrubbing && this.wanted < 0 && !Playback.jumping()) {
+            this.scrubTick = -1;
         }
         if (this.wanted >= 0 && !Playback.jumping()) {
             int tick = this.wanted;
             this.wanted = -1;
             if (tick != Playback.position()) {
-                Controls.jumpTo(tick);
+                Controls.scrubTo(tick);
             }
+        } else if (this.refineOwed && this.wanted < 0 && !EditorState.scrubbing && !Playback.jumping()) {
+            this.refineOwed = false;
+            Controls.refine();
         }
         int total = Math.max(1, Playback.total());
         if (!Playback.paused() && !EditorState.scrubbing && this.drag == Drag.NONE && EditorState.viewSpan < total) {
@@ -305,7 +317,7 @@ final class TimelinePanel {
                 graphics.renderOutline(x0, y0, x1 - x0 + 1, y1 - y0 + 1, Controls.PARCHMENT);
             }
             // The playhead
-            int hand = (int) Math.round(this.across(Math.max(0, Math.min(total, Playback.position()))));
+            int hand = (int) Math.round(this.across(Math.max(0, Math.min(total, this.scrubTick >= 0 ? this.scrubTick : Playback.shown()))));
             graphics.fill(hand, this.rulerTop, hand + 1, Math.max(this.lanesTop, this.lanesBottom), Controls.PARCHMENT);
             graphics.fill(hand - 2, this.rulerTop, hand + 3, this.rulerTop + 3, Controls.PARCHMENT);
         } finally {
@@ -345,7 +357,7 @@ final class TimelinePanel {
         if (room < 30) {
             return;
         }
-        int position = Playback.position();
+        int position = this.scrubTick >= 0 ? this.scrubTick : Playback.shown();
         String time = Component.translatable("dailies.ui.bar.time", Controls.time(position), Controls.time(Playback.total())).getString();
         String words = time;
         TimeMap map = this.realTime();

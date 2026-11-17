@@ -63,7 +63,12 @@ public final class Recorder {
     /** The record that says an entity has just teleported and is to be shown at its new place at once */
     public static final String SNAP = "dailies:snap";
 
-    private static final int DEFAULT_SEGMENT_TICKS = 5 * 60 * 20;
+    /**
+     * The specification asked for five minutes (REC-20). Going back in playback starts from the stored world before, so
+     * at five minutes a step back replays up to five minutes; the owner asked for going back to be quick however long
+     * the session, and five seconds is what the scripted tests have always run with.
+     */
+    private static final int DEFAULT_SEGMENT_TICKS = 5 * 20;
     private static final int PART_TICKS = 40;
     private static final int PART_BYTES = 1024 * 1024;
     private static final DateTimeFormatter NAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss");

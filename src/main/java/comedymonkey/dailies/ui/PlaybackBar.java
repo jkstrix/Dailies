@@ -63,7 +63,7 @@ public final class PlaybackBar {
      * @param instead drawn on the right in place of the camera, or null
      */
     static void drawStatus(GuiGraphics graphics, Font font, int left, int top, int width, @Nullable Component instead) {
-        Component time = Component.translatable("dailies.ui.bar.time", Controls.time(Playback.position()), Controls.time(Playback.total()));
+        Component time = Component.translatable("dailies.ui.bar.time", Controls.time(Playback.shown()), Controls.time(Playback.total()));
         Component doing = Component.translatable(Playback.jumping() ? "dailies.ui.bar.jumping" : Playback.paused() ? "dailies.ui.bar.paused" : "dailies.ui.bar.playing");
         int x = left;
         graphics.drawString(font, time, x, top, Controls.PARCHMENT, false);
@@ -94,7 +94,7 @@ public final class PlaybackBar {
             return;
         }
         int total = Math.max(1, Playback.total());
-        int position = Math.max(0, Math.min(total, Playback.position()));
+        int position = Math.max(0, Math.min(total, Playback.shown()));
         int bottom = top + height;
 
         graphics.fill(left - 1, top - 1, left + width + 1, bottom + 1, Controls.BRASS);
