@@ -5,10 +5,18 @@ import java.awt.image.DataBufferInt;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.imageio.ImageIO;
 
 /**
- * Writes frames as PNG pictures: a numbered sequence in a folder, or one still. Needs no encoder.
+ * Writes frames as PNG pictures: a numbered sequence in a folder, or one still. Needs no encoder. Compressing a PNG
+ * takes far longer than drawing the frame, so the pictures of a sequence are compressed several at a time, each to its
+ * own file.
  */
 final class PngSink implements FrameSink {
 
@@ -16,6 +24,10 @@ final class PngSink implements FrameSink {
     private final boolean single;
     private final int scaleDown;
     private final boolean keepAlpha;
+    private final ExecutorService compressors;
+    /** Pictures made and not yet written, held to a few so a slow disk cannot fill the memory */
+    private final Semaphore room;
+    private final AtomicReference<Throwable> failure = new AtomicReference<>();
 
     /**
      * @param target    the folder for a sequence, or the file for a single picture
@@ -27,10 +39,19 @@ final class PngSink implements FrameSink {
         this.scaleDown = Math.max(1, scaleDown);
         this.keepAlpha = keepAlpha;
         Files.createDirectories(single ? target.toAbsolutePath().getParent() : target);
+        int threads = single ? 1 : Math.max(1, Math.min(8, Runtime.getRuntime().availableProcessors() / 4));
+        AtomicInteger made = new AtomicInteger();
+        this.compressors = Executors.newFixedThreadPool(threads, work -> {
+            Thread thread = new Thread(work, "Dailies-Export-Png-" + made.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.room = new Semaphore(threads * 2);
     }
 
     @Override
-    public void frame(long number, byte[] rgba, int width, int height) throws IOException {
+    public void frame(long number, byte[] rgba, int length, int width, int height) throws IOException {
+        this.rethrow();
         int outWidth = width / this.scaleDown;
         int outHeight = height / this.scaleDown;
         BufferedImage image = new BufferedImage(outWidth, outHeight, this.keepAlpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
@@ -55,16 +76,50 @@ final class PngSink implements FrameSink {
             }
         }
         Path file = this.single ? this.target : this.target.resolve(String.format("frame_%06d.png", number));
-        ImageIO.write(image, "png", file.toFile());
+        try {
+            this.room.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Stopped while waiting to write a picture", e);
+        }
+        this.compressors.execute(() -> {
+            try {
+                if (this.failure.get() == null) {
+                    ImageIO.write(image, "png", file.toFile());
+                }
+            } catch (Throwable t) {
+                this.failure.compareAndSet(null, t);
+            } finally {
+                this.room.release();
+            }
+        });
+    }
+
+    private void rethrow() throws IOException {
+        Throwable failed = this.failure.get();
+        if (failed != null) {
+            throw failed instanceof IOException io ? io : new IOException("A picture could not be written: " + failed, failed);
+        }
     }
 
     @Override
-    public Path finish(boolean cancelled) {
+    public Path finish(boolean cancelled) throws IOException {
+        this.compressors.shutdown();
+        try {
+            if (!this.compressors.awaitTermination(10, TimeUnit.MINUTES)) {
+                throw new IOException("The last pictures were not written in ten minutes");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Stopped while the last pictures were written", e);
+        }
+        this.rethrow();
         return this.target;
     }
 
     @Override
     public void abort() {
+        this.compressors.shutdownNow();
     }
 
 }

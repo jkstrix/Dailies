@@ -63,6 +63,7 @@ public final class DailiesConfig {
         group("export", "Exporting video", () -> {
             text("defaultFileName", "{date}_{time}", "Default name of an exported file. {date} and {time} are filled in when the export starts");
             integer("throwawayFrames", 0, 0, 240, "Extra frames rendered and thrown away before each captured one, for shader packs that build up their image over time");
+            bool("exportGpuColour", true, "Convert video frames to the encoder's colour format on the graphics card, which makes exports faster. Turn off if exported colours ever look wrong");
             bool("exportQueueNotify", true, "Show a notification on the desktop when the export queue is done");
             choice("captionStyle", CaptionStyle.LINES, "How captions drawn into the video show what was said: a line at a time, or each word as it is said, as short videos have them");
             choice("captionFont", CaptionFont.DEFAULT, "The font of captions drawn into the video");

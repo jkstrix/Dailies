@@ -246,11 +246,16 @@ public final class Encoder {
     }
 
     static FrameSink videoSink(Export.Settings settings, int scale) throws IOException {
-        return videoSink(settings, scale, settings.output);
+        return videoSink(settings, scale, settings.output, false);
     }
 
-    /** As above, written to another file than the export's own: the soundless video that sound is joined to afterwards */
-    static FrameSink videoSink(Export.Settings settings, int scale, Path output) throws IOException {
+    /**
+     * As above, written to another file than the export's own: the soundless video that sound is joined to afterwards.
+     *
+     * @param i420 the frames can be converted to the encoder's own format on the graphics card; the sink takes them
+     *             that way where its encoder writes that format (see {@link FrameSink#layout()})
+     */
+    static FrameSink videoSink(Export.Settings settings, int scale, Path output, boolean i420) throws IOException {
         if (!bundled()) {
             throw new IOException(noEncoderWords());
         }
@@ -285,7 +290,7 @@ public final class Encoder {
         for (Codecs.Choice choice : order) {
             try {
                 // Tried already, but a card can still refuse the size or rate of this export: go on to the next
-                return new VideoSink(settings, scale, choice.encoder(), output);
+                return new VideoSink(settings, scale, choice.encoder(), output, i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent));
             } catch (IOException e) {
                 last = e;
                 Host.LOGGER.info("Dailies: encoder {} is not usable for this export ({}), trying the next", choice.encoder(), e.getMessage());
@@ -296,21 +301,33 @@ public final class Encoder {
 
     private static final class VideoSink implements FrameSink {
 
+        /**
+         * How much is handed to the pipe at a time. Java copies each write into a native buffer of its size first:
+         * a whole 4K frame at once meant a fresh allocation of tens of megabytes every frame
+         */
+        private static final int CHUNK = 256 * 1024;
+
         private final Process process;
         private final OutputStream input;
         private final Path output;
         private final StringBuilder log = new StringBuilder();
         private final int width, height;
+        private final Layout layout;
 
-        VideoSink(Export.Settings settings, int scale, String encoder, Path output) throws IOException {
+        VideoSink(Export.Settings settings, int scale, String encoder, Path output, boolean i420) throws IOException {
             this.output = output;
             this.width = settings.width * scale;
             this.height = settings.height * scale;
+            this.layout = i420 && I420.fits(this.width, this.height) ? Layout.I420 : Layout.RGBA_BOTTOM_UP;
             Files.createDirectories(output.toAbsolutePath().getParent());
             List<String> command = new ArrayList<>(List.of(program().toString(), "-hide_banner", "-loglevel", "error", "-y",
-                "-f", "rawvideo", "-pix_fmt", "rgba", "-s", this.width + "x" + this.height, "-r", String.valueOf(settings.framesPerSecond), "-i", "pipe:0"));
-            // Frames arrive bottom row first; supersampled frames are brought down to size here
-            command.addAll(List.of("-vf", scale > 1 ? "vflip,scale=" + settings.width + ":" + settings.height + ":flags=lanczos" : "vflip"));
+                "-f", "rawvideo", "-pix_fmt", this.layout == Layout.I420 ? "yuv420p" : "rgba", "-s", this.width + "x" + this.height,
+                "-r", String.valueOf(settings.framesPerSecond), "-i", "pipe:0"));
+            if (this.layout == Layout.RGBA_BOTTOM_UP) {
+                // Frames arrive bottom row first; supersampled frames are brought down to size here. Frames converted on the
+                // graphics card come the right way up, in the format the encoder writes, and need nothing done to them
+                command.addAll(List.of("-vf", scale > 1 ? "vflip,scale=" + settings.width + ":" + settings.height + ":flags=lanczos" : "vflip"));
+            }
             command.addAll(Codecs.videoArguments(encoder, settings.bitrate, settings.transparent));
             command.add("-an");
             if (settings.container.equals("mp4") || settings.container.equals("mov")) {
@@ -353,12 +370,23 @@ public final class Encoder {
         }
 
         @Override
-        public void frame(long number, byte[] rgba, int frameWidth, int frameHeight) throws IOException {
+        public Layout layout() {
+            return this.layout;
+        }
+
+        @Override
+        public void frame(long number, byte[] pixels, int length, int frameWidth, int frameHeight) throws IOException {
             if (frameWidth != this.width || frameHeight != this.height) {
                 throw new IOException("A frame of " + frameWidth + "x" + frameHeight + " arrived in an export of " + this.width + "x" + this.height);
             }
+            int expected = this.layout == Layout.I420 ? I420.size(frameWidth, frameHeight) : frameWidth * frameHeight * 4;
+            if (length != expected) {
+                throw new IOException("A frame of " + length + " bytes arrived where " + expected + " were expected");
+            }
             try {
-                this.input.write(rgba, 0, frameWidth * frameHeight * 4);
+                for (int at = 0; at < length; at += CHUNK) {
+                    this.input.write(pixels, at, Math.min(CHUNK, length - at));
+                }
             } catch (IOException e) {
                 throw new IOException("The encoder stopped: " + this.said(), e);
             }
