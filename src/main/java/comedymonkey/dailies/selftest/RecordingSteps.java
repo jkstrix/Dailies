@@ -29,6 +29,9 @@ final class RecordingSteps {
     /** The recording the later steps play back */
     static Path recording;
     /** Where things were in the live game at known ticks of that recording */
+    /** A tick of the scripted recording at which the recorder stands on open ground, away from the machines; 0 until known */
+    static int openGroundTick = 0;
+
     static final List<Note> notes = new java.util.ArrayList<>();
 
     record Note(int tick, java.util.Map<String, net.minecraft.world.phys.Vec3> positions) {
@@ -149,6 +152,10 @@ final class RecordingSteps {
         FrameTimes.begin();
         check(segmentTicks <= 200, "the scripted run needs short segments: set dailies.test.segmentTicks");
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
+            if (i == (segmentTicks * 2 / 20 + 3) / 2) {
+                // The middle of the walk up and down the open ground: where a camera test has a clear view of the recorder
+                openGroundTick = test.onClient(() -> Recorder.get().recordingTick());
+            }
             test.command("tp @s " + (4.5 + (i % 5)) + " -60 0.5 " + (i * 20 % 360) + " 0");
             test.command("tp @e[type=minecraft:armor_stand,name=Mover,limit=1] " + (8.5 + (i % 4) * 1.5) + " -60 " + (6.5 + (i % 3)) + " " + (i * 45 % 360) + " 0");
             test.sleepTicks(20);

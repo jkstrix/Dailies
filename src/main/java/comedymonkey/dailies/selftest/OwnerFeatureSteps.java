@@ -126,7 +126,9 @@ final class OwnerFeatureSteps {
                 }
             }
         });
-        int start = Math.max(20, Playback.total() / 2 - 60);
+        // On open ground. Half way through the recording used to be, until other steps were added to it: a camera chasing
+        // someone who is among the machines is rightly pulled in by whatever stands behind them (CAM-5)
+        int start = RecordingSteps.openGroundTick > 20 ? RecordingSteps.openGroundTick : Math.max(20, Playback.total() / 2 - 60);
         PlaybackSteps.jump(test, start);
 
         // Chase holds its distance
