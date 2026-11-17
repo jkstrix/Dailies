@@ -115,6 +115,12 @@ final class ExportPresetSteps {
 
     /** Presets can be listed, added, changed, renamed, removed and reset, and are kept in a file with the mod's data */
     private static void presetsAreKept(SelfTest test) throws Exception {
+        // A run that was stopped half way may have left its own presets behind; reset keeps presets a person made
+        for (ExportPreset left : Export.presets().all()) {
+            if (left.name().startsWith("Self test")) {
+                test.tool("export_presets_remove", args("name", left.name()));
+            }
+        }
         test.tool("export_presets_reset", new JsonObject());
         JsonArray listed = test.tool("export_presets_list", new JsonObject()).getAsJsonArray("presets");
         List<String> names = new ArrayList<>();
