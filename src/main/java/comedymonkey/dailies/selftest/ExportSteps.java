@@ -133,7 +133,6 @@ final class ExportSteps {
             otherFormats(test, minecraft, from);
             sound(test, minecraft, from);
         }
-        test.skip("sound in exports is not built yet (EXP-3)");
     }
 
     /** Two seconds of video: the file must hold the right number of frames, of the right size and length, that are real pictures */

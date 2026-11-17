@@ -858,6 +858,9 @@ public final class SableCompat implements Host.Crafts {
 
     @Override
     public @Nullable AABB getSubLevelBounds(Object subLevel) {
+        if (subLevel == null) {
+            return null;
+        }
         try {
             Object box = this.boundingBox.invoke(subLevel);
             double[] values = {number(this.minX.invoke(box)), number(this.minY.invoke(box)), number(this.minZ.invoke(box)),

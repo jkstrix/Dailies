@@ -117,6 +117,15 @@ final class OwnerFeatureSteps {
         test.log("cued clip " + clipId + " at tick " + cuedAt);
 
         // --- Step 5: the Smart Camera ---
+        // The camera track left by the export step sits above it and would take the view back; switch it off
+        test.onClientRun(() -> {
+            var history = EditorSession.history();
+            for (int index = 0; index < history.scene().tracks().size(); index++) {
+                if (history.scene().track(index).kind() == KeyframeKind.CAMERA) {
+                    history.updateTrack(index, null, false);
+                }
+            }
+        });
         int start = Math.max(20, Playback.total() / 2 - 60);
         PlaybackSteps.jump(test, start);
 
