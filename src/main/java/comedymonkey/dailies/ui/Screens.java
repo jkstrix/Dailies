@@ -8,6 +8,7 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.StringWidget;
@@ -17,11 +18,13 @@ import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,7 +44,8 @@ public final class Screens {
     }
 
     public static void init() {
-        NeoForge.EVENT_BUS.addListener(Screens::screenBuilt);
+        // Last, so that the buttons other mods add to the same screens are there to be kept clear of
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, Screens::screenBuilt);
         // Explanations in the editor are drawn by the game; they are given the house colours here
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderTooltipEvent.Color event) -> {
             if (Minecraft.getInstance().screen instanceof EditorScreen) {
@@ -80,8 +84,11 @@ public final class Screens {
         // The game's own buttons take 204 pixels down the middle; ours keep to what is left at one side
         int width = Math.max(40, Math.min(110, pause.width / 2 - 102 - 12));
         boolean left = "LEFT".equalsIgnoreCase(Host.get().setting("controlsLocation", "RIGHT"));
-        int x = left ? 6 : pause.width - 6 - width;
-        int y = Math.max(8, pause.height / 4);
+        Recorder.State state = Recorder.get().state();
+        int buttons = Playback.active() ? 3 : state == Recorder.State.IDLE ? 4 : 6;
+        int[] place = pauseColumnPlace(event, pause, width, 12 + buttons * 24 - 4, left);
+        int x = place[0];
+        int y = place[1];
 
         event.addListener(new StringWidget(x, y, width, 9, Component.translatable("dailies.ui.pause.heading"), minecraft.font).setColor(Controls.PARCHMENT));
         y += 12;
@@ -98,7 +105,6 @@ public final class Screens {
             return;
         }
 
-        Recorder.State state = Recorder.get().state();
         if (state == Recorder.State.IDLE) {
             event.addListener(Button.builder(Component.translatable("dailies.ui.pause.start"), button -> {
                 Controls.startRecording();
@@ -123,6 +129,42 @@ public final class Screens {
         event.addListener(Button.builder(Component.translatable("dailies.ui.pause.settings"), button -> SettingsScreen.open(pause)).bounds(x, y, width, 20).build());
     }
 
+    /**
+     * Where the column of Dailies' buttons goes on the pause menu: at the chosen side a quarter of the way down if that
+     * is clear of every other widget, else the nearest clear place up or down that side, else the same on the other.
+     *
+     * @return the column's top left corner
+     */
+    private static int[] pauseColumnPlace(ScreenEvent.Init.Post event, PauseScreen pause, int width, int height, boolean left) {
+        int top = Math.max(8, pause.height / 4);
+        List<List<FreeSpot.Box>> candidates = new ArrayList<>();
+        List<int[]> places = new ArrayList<>();
+        for (boolean side : new boolean[]{left, !left}) {
+            int x = side ? 6 : pause.width - 6 - width;
+            for (int step = 0; step < pause.height; step += 4) {
+                for (int y : step == 0 ? new int[]{top} : new int[]{top + step, top - step}) {
+                    if (y >= 2 && y + height <= pause.height - 2) {
+                        candidates.add(List.of(new FreeSpot.Box(x, y, width, height)));
+                        places.add(new int[]{x, y});
+                    }
+                }
+            }
+        }
+        int chosen = FreeSpot.first(candidates, widgets(event), pause.width, pause.height, 2);
+        return chosen >= 0 ? places.get(chosen) : new int[]{left ? 6 : pause.width - 6 - width, top};
+    }
+
+    /** The rectangles of every widget on the screen being built, whichever mod put it there */
+    private static List<FreeSpot.Box> widgets(ScreenEvent.Init.Post event) {
+        List<FreeSpot.Box> taken = new ArrayList<>();
+        for (GuiEventListener listener : event.getListenersList()) {
+            if (listener instanceof AbstractWidget widget && widget.visible) {
+                taken.add(new FreeSpot.Box(widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+            }
+        }
+        return taken;
+    }
+
     /** Opens the moments page in the web browser */
     private static Button momentsButton(int x, int y, int width) {
         return Button.builder(Component.translatable("dailies.ui.pause.moments"), button -> Controls.openMomentsPage())
@@ -134,23 +176,14 @@ public final class Screens {
     private static void addToTitleScreen(ScreenEvent.Init.Post event, TitleScreen title) {
         Minecraft minecraft = Minecraft.getInstance();
 
-        // A small square above the language button, to the left of the main column
-        int x = title.width / 2 - 124;
-        int y = title.height / 4 + 32 + 82;
-        SpriteIconButton language = null;
-        for (GuiEventListener listener : event.getListenersList()) {
-            if (listener instanceof SpriteIconButton icon && (language == null || icon.getX() < language.getX())) {
-                language = icon;
-            }
-        }
-        if (language != null) {
-            x = language.getX();
-            y = language.getY() - 24;
-        }
+        int[] place = titleButtonsPlace(event, title);
+        int x = place[0];
+        int y = place[1];
+        int stepX = place[2];
+        int stepY = place[3];
         event.addListener(new ReelButton(x, y, false, Component.translatable("dailies.ui.title.recordings"), button -> minecraft.setScreen(new RecordingsScreen(title))));
-        // And above that one, the way to the settings
-        event.addListener(new ReelButton(x, y - 24, true, Component.translatable("dailies.ui.title.settings"), button -> SettingsScreen.open(title)));
-        event.addListener(new MomentsButton(x, y - 48, Component.translatable("dailies.ui.title.moments"), button -> Controls.openMomentsPage()));
+        event.addListener(new ReelButton(x + stepX, y + stepY, true, Component.translatable("dailies.ui.title.settings"), button -> SettingsScreen.open(title)));
+        event.addListener(new MomentsButton(x + 2 * stepX, y + 2 * stepY, Component.translatable("dailies.ui.title.moments"), button -> Controls.openMomentsPage()));
 
         if (!lookedForUnfinished && !SelfTest.asked() && !comedymonkey.dailies.export.Worker.active()) {
             lookedForUnfinished = true;
@@ -166,6 +199,64 @@ public final class Screens {
             // Found while another screen was open: offered now, once this screen has finished being built
             minecraft.execute(() -> offerRecovery(minecraft));
         }
+    }
+
+    /**
+     * Where Dailies' three small squares go on the title screen. Other mods add buttons of their own beside the main
+     * column (Create's goggles among them), so the squares go to the first of several places where all three are clear
+     * of every widget and on the screen: to the right of the accessibility button stacking upward, to the left of the
+     * language button stacking upward, in a row above the main column, and then other places round the edge.
+     *
+     * @return the first square's corner and the step from one square to the next: x, y, step x, step y
+     */
+    private static int[] titleButtonsPlace(ScreenEvent.Init.Post event, TitleScreen title) {
+        // The game's own small squares at either end of the options row, or where they would be if a mod took them away
+        int rowY = title.height / 4 + 48 + 72 + 12;
+        SpriteIconButton language = null;
+        for (GuiEventListener listener : event.getListenersList()) {
+            if (listener instanceof SpriteIconButton icon && (language == null || icon.getX() < language.getX())) {
+                language = icon;
+            }
+        }
+        int languageX = language != null ? language.getX() : title.width / 2 - 124;
+        int languageY = language != null ? language.getY() : rowY;
+        SpriteIconButton accessibility = null;
+        for (GuiEventListener listener : event.getListenersList()) {
+            if (listener instanceof SpriteIconButton icon && icon != language && icon.getY() == languageY
+                && (accessibility == null || icon.getX() > accessibility.getX())) {
+                accessibility = icon;
+            }
+        }
+        int accessibilityX = accessibility != null ? accessibility.getX() : title.width / 2 + 104;
+        int accessibilityY = accessibility != null ? accessibility.getY() : rowY;
+        int mainTop = title.height / 4 + 48;
+        int centre = title.width / 2;
+
+        List<int[]> places = new ArrayList<>();
+        places.add(new int[]{accessibilityX + 24, accessibilityY, 0, -24});
+        places.add(new int[]{languageX - 24, languageY, 0, -24});
+        places.add(new int[]{centre - 34, mainTop - 24, 24, 0});
+        places.add(new int[]{languageX, languageY - 24, 0, -24});
+        places.add(new int[]{accessibilityX, accessibilityY - 24, 0, -24});
+        places.add(new int[]{accessibilityX + 48, accessibilityY, 0, -24});
+        places.add(new int[]{languageX - 48, languageY, 0, -24});
+        places.add(new int[]{centre - 100, mainTop - 24, 24, 0});
+        places.add(new int[]{centre + 32, mainTop - 24, 24, 0});
+        // Round the edge of the screen, out of the way of everything
+        for (int y = 4; y + 20 <= title.height - 4; y += 24) {
+            places.add(new int[]{4, y, 24, 0});
+            places.add(new int[]{title.width - 4 - 68, y, 24, 0});
+        }
+        List<List<FreeSpot.Box>> candidates = new ArrayList<>();
+        for (int[] place : places) {
+            candidates.add(FreeSpot.line(place[0], place[1], place[2], place[3], 3, 20));
+        }
+        int chosen = FreeSpot.first(candidates, widgets(event), title.width, title.height, 2);
+        if (chosen < 0) {
+            Host.LOGGER.warn("Dailies: no clear place for its buttons on the title screen; they go above the language button");
+            return places.get(3);
+        }
+        return places.get(chosen);
     }
 
     private static void offerRecovery(Minecraft minecraft) {
