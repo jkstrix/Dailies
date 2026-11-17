@@ -60,15 +60,19 @@ public final class DailiesConfig {
             text("ignoredPayloads", "", "Mod messages that playback must not hand back to their mod, added to the built-in list. Ids or namespace:* separated by commas or new lines; a leading + allows one the built-in list ignores");
         });
         group("mcp", "The MCP server", () -> {
-            bool("mcpEnabled", true, "Run the local MCP server, which also serves the moments page. It only ever listens on this computer");
-            integer("mcpPort", 25595, 1024, 65535, "The port the MCP server listens on, at 127.0.0.1");
+            bool("mcpEnabled", true, "Run the MCP server, which also serves the moments page. It listens on this computer only, unless Listen On is changed");
+            integer("mcpPort", 25595, 1024, 65535, "The port the MCP server listens on");
+            text("mcpBind", "127.0.0.1", "The address the MCP server listens on. 127.0.0.1 keeps it on this computer, as it always was. One of this computer's own network addresses, or 0.0.0.0 for all of them, lets other machines reach it: it then speaks HTTPS, wants the token on every request and only answers the allowed clients");
+            text("mcpToken", "", "The token another machine must send as 'Authorization: Bearer <token>'. Made by the mod the first time remote access is switched on; clear it to have a new one made. Anyone who has it can drive the game, so treat it as a password");
+            text("mcpAllowedClients", comedymonkey.dailies.mcp.AddressRules.LOCAL_NETWORKS, "The machines that may reach the MCP server when it listens beyond this computer: addresses or ranges such as 192.168.1.20 or 192.168.1.0/24, separated by commas. The default is the private local-network ranges. This computer itself is always allowed");
+            text("mcpCertificateFingerprint", "", "The SHA-256 fingerprint of the certificate the MCP server shows to other machines, for a client to pin. Filled in by the mod when remote access is switched on; changing it here has no effect");
         });
         group("moments", "Moments", () -> {
             bool("momentsEnabled", true, "Keep a log of what happens while you play");
             bool("momentsLogRepeats", false, "Log every crafted item, placed block, mined block and tool use, not only the first of each");
             integer("momentsStatsPollSeconds", 5, 0, 600, "How often the game's statistics are asked for, to confirm kills. 0 turns it off");
-            bool("momentsAiEnabled", false, "The one switch for everything that talks to an AI service: transcription and model-written summaries. While off, nothing is sent anywhere");
-            text("momentsWhisperUrl", "http://192.168.188.50:8000", "Address of an OpenAI-compatible transcription server. Empty keeps transcription off");
+            bool("momentsAiEnabled", false, "The one switch for everything that talks to an AI service: transcription and model-written summaries. While off, nothing is sent anywhere. While on, the voice audio Moments captures, other players' included, is sent to the transcription server set below");
+            text("momentsWhisperUrl", "http://192.168.188.50:8000", "Address of an OpenAI-compatible transcription server. With AI on, this is where voice audio is sent. Empty keeps transcription off");
             text("momentsWhisperModel", "Systran/faster-whisper-large-v3", "The transcription model to ask for");
             text("momentsWhisperLanguage", "en", "Language of the speech. Empty means detect it");
             bool("momentsTranscribeLive", true, "Transcribe voice segments as they are made, not only when asked");
@@ -85,6 +89,8 @@ public final class DailiesConfig {
             text("momentsNotableEntities", "minecraft:ender_dragon, minecraft:wither, minecraft:warden, minecraft:elder_guardian", "Mobs that always count as bosses, separated by commas");
             text("momentsStructureBlocks", "minecraft:spawner, minecraft:trial_spawner, minecraft:vault, minecraft:end_portal_frame, minecraft:reinforced_deepslate, minecraft:suspicious_sand, minecraft:suspicious_gravel", "Blocks that only occur in structures, separated by commas");
             text("momentsIgnoredEvents", "", "Events hidden from every list and clip: a type, type:subject, or the name of a custom event, separated by commas. * matches anything");
+            text("momentsVoiceExcluded", "", "Players whose voice is never captured for Moments or transcribed: names or uuids, separated by commas. You still hear them, and they are still in a recording's own voice chat when that is on; nothing of their voice reaches Moments or the transcription server. Recording other people's voices is yours to agree with them");
+            bool("momentsEventPictures", true, "Keep a small picture of the screen, about 320 pixels wide, with each big moment while playing, for the moments page");
         });
         SPEC = BUILDER.build();
     }

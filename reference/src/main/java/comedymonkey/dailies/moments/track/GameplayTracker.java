@@ -200,8 +200,56 @@ public class GameplayTracker {
         return event;
     }
 
+    // --- Laughter and shouting (plan 2.9) ---
+
+    private final Map<Long, String> burstEvents = new java.util.HashMap<>();
+
+    /**
+     * A voice burst, or the same one grown by a speaker. The event is dated to when the burst began, which is a
+     * second and a half before it could be told apart from ordinary talk.
+     */
+    public void onVoiceBurst(long burstId, TimeRef start, com.google.gson.JsonArray speakers, double peakDb) {
+        String known = this.burstEvents.get(burstId);
+        if (known != null) {
+            this.update(known, event -> {
+                JsonObject metadata = MJson.meta(event);
+                metadata.add("speakers", speakers);
+                metadata.addProperty("peak_db", MJson.round(peakDb));
+                event.add("metadata", metadata);
+            });
+            JsonObject updated = this.session.get(MomentsSession.Kind.EVENTS, known);
+            if (updated != null) {
+                // Three voices score what one does not: the picture is decided again
+                comedymonkey.dailies.moments.EventPictures.consider(this.session, updated);
+            }
+            return;
+        }
+        JsonObject event = new JsonObject();
+        event.addProperty("type", "voice_burst");
+        event.addProperty("subject", comedymonkey.dailies.moments.voice.BurstClassifier.UNCLASSIFIED);
+        event.addProperty("first", false);
+        event.add("player", MJson.player(this.localUuid, this.localName));
+        start.applyTo(event);
+        event.add("position", MJson.position(start.x(), start.y(), start.z()));
+        JsonObject metadata = new JsonObject();
+        metadata.add("speakers", speakers);
+        metadata.addProperty("peak_db", MJson.round(peakDb));
+        metadata.addProperty("source", "voice");
+        event.add("metadata", metadata);
+        this.burstEvents.put(burstId, MJson.str(this.store(event), "id"));
+    }
+
+    /** What the classifier made of a burst: laughter, cheering, screaming or shouting. It becomes the event's subject */
+    public void onVoiceBurstLabel(long burstId, String label) {
+        String known = this.burstEvents.get(burstId);
+        if (known != null) {
+            this.update(known, event -> event.addProperty("subject", label));
+        }
+    }
+
     JsonObject store(JsonObject event) {
         JsonObject stored = this.session.add(MomentsSession.Kind.EVENTS, event);
+        comedymonkey.dailies.moments.EventPictures.consider(this.session, stored);
         this.recent.addLast(new Recent(MJson.str(stored, "id"), MJson.str(stored, "type", ""), MJson.str(stored, "subject"), MJson.time(stored)));
         while (this.recent.size() > 300 || (!this.recent.isEmpty() && MJson.time(stored) - this.recent.peekFirst().time > RECENT_MILLIS * 10)) {
             this.recent.removeFirst();

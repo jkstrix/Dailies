@@ -1,11 +1,9 @@
 package comedymonkey.dailies.ui;
 
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.function.Consumer;
 
@@ -13,7 +11,7 @@ import java.util.function.Consumer;
  * Asks for a name: for a recording that is being finished (specification REC-5) and for one that is being renamed.
  * Whoever opens it says what the two buttons are called and what each does, including which screen comes next.
  */
-final class NameScreen extends Screen {
+final class NameScreen extends KitScreen {
 
     private static final int MAX_LENGTH = 80;
 
@@ -23,11 +21,13 @@ final class NameScreen extends Screen {
     private final Consumer<String> accept;
     private final Runnable decline;
     private String name;
-    private EditBox box;
+    private Entry box;
+    private Gadget.Push acceptButton;
+    private Gadget.Push declineButton;
     private boolean answered = false;
 
     NameScreen(Component title, Component explanation, String suggestion, Component acceptLabel, Component declineLabel, Consumer<String> accept, Runnable decline) {
-        super(title);
+        super(title, null);
         this.explanation = explanation;
         this.name = suggestion;
         this.acceptLabel = acceptLabel;
@@ -37,25 +37,36 @@ final class NameScreen extends Screen {
     }
 
     @Override
-    protected void init() {
-        int boxWidth = Math.min(240, this.width - 40);
-        int left = (this.width - boxWidth) / 2;
-        int top = this.height / 2 - 14;
-
-        this.box = new EditBox(this.font, left, top, boxWidth, 20, this.title);
-        this.box.setMaxLength(MAX_LENGTH);
-        this.box.setValue(this.name);
-        this.box.setResponder(value -> this.name = value);
-        this.addRenderableWidget(this.box);
-
-        int buttonWidth = (boxWidth - 4) / 2;
-        this.addRenderableWidget(Button.builder(this.acceptLabel, button -> this.answer(true)).bounds(left, top + 28, buttonWidth, 20).build());
-        this.addRenderableWidget(Button.builder(this.declineLabel, button -> this.answer(false)).bounds(left + boxWidth - buttonWidth, top + 28, buttonWidth, 20).build());
+    void build() {
+        // The name is kept as it is typed, so that a resized window does not lose it and Enter always has the latest
+        this.box = new Entry(() -> this.name, typed -> {
+            this.name = typed;
+            return null;
+        }).live(typed -> {
+            this.name = typed;
+            return null;
+        }).max(MAX_LENGTH).onEnter(() -> this.answer(true));
+        this.acceptButton = new Gadget.Push(this.acceptLabel, () -> this.answer(true));
+        this.declineButton = new Gadget.Push(this.declineLabel, () -> this.answer(false));
+        this.fixed.add(this.box);
+        this.fixed.add(this.acceptButton);
+        this.fixed.add(this.declineButton);
+        this.box.focus();
     }
 
     @Override
-    protected void setInitialFocus() {
-        this.setInitialFocus(this.box);
+    void arrange(Font font) {
+        this.centre(280, 0);
+        int head = this.headingHeight(font, this.explanation);
+        this.centre(280, head + 4 + Kit.ROW + 10 + Kit.ROW + 2 + 8);
+        this.box.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+        this.box.place(font, this.left + 8, this.top + head + 4, this.right - this.left - 16, Kit.ROW);
+        this.foot(font, this.acceptButton, this.declineButton);
+    }
+
+    @Override
+    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        this.heading(graphics, font, this.explanation);
     }
 
     private void answer(boolean accepted) {
@@ -63,6 +74,7 @@ final class NameScreen extends Screen {
             return;
         }
         this.answered = true;
+        Entry.drop();
         Controls.guarded(() -> {
             if (accepted) {
                 this.accept.accept(this.name.trim());
@@ -73,25 +85,8 @@ final class NameScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) && this.getFocused() == this.box) {
-            this.answer(true);
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
     public void onClose() {
         this.answer(false);
-    }
-
-    @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        int top = this.height / 2 - 14;
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, top - 30, Controls.PARCHMENT);
-        graphics.drawCenteredString(this.font, this.explanation, this.width / 2, top - 15, Controls.PARCHMENT_DIM);
     }
 
 }

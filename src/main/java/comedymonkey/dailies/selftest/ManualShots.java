@@ -27,7 +27,7 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
  */
 final class ManualShots {
 
-    private static Path folder;
+    static Path folder;
 
     private ManualShots() {
     }
@@ -127,6 +127,11 @@ final class ManualShots {
             shot(test, "07c-editor-looks");
             editorTab(test, 2, false);
             shot(test, "07d-editor-export");
+            // A dropdown of the export tab, open
+            test.onClientRun(() -> comedymonkey.dailies.ui.Previews.editorDropdown(0));
+            test.sleepTicks(8);
+            shot(test, "07e-editor-dropdown");
+            test.onClientRun(comedymonkey.dailies.ui.Previews::closeMenu);
             test.onClientRun(Controls::openTimeline);
             test.sleepTicks(5);
             test.onClientRun(() -> {
@@ -179,10 +184,7 @@ final class ManualShots {
         });
 
         attempt(test, "the settings screen", () -> {
-            test.onClientRun(() -> minecraft.setScreen(new net.neoforged.neoforge.client.gui.ConfigurationScreen(
-                net.neoforged.fml.ModList.get().getModContainerById("dailies").orElseThrow(), new net.minecraft.client.gui.screens.TitleScreen())));
-            test.sleepTicks(20);
-            shot(test, "12-settings");
+            KitShots.settings(test, "12");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
 
@@ -241,7 +243,7 @@ final class ManualShots {
     }
 
     /** Saves what is on screen now, as the full picture and as a smaller one for the manual */
-    private static void shot(SelfTest test, String name) throws Exception {
+    static void shot(SelfTest test, String name) throws Exception {
         Path full = folder.resolve(name + ".png");
         test.onClientRun(() -> {
             try (NativeImage image = Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {

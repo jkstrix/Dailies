@@ -43,6 +43,8 @@ public class MomentAnalysis {
         Map.entry("tool_first_use", 8.0),
         Map.entry("block_mined", 6.0),
         Map.entry("block_placed", 5.0),
+        // Laughter and shouting; see VOICE_BURST_PER_SPEAKER
+        Map.entry("voice_burst", comedymonkey.dailies.moments.voice.VoiceBurstDetector.BASE_WEIGHT),
         // McpCraft's job board
         Map.entry("job_finished", 45.0),
         Map.entry("job_posted", 30.0),
@@ -66,7 +68,11 @@ public class MomentAnalysis {
     /** Added per spoken word per minute around the event, up to {@link #DIALOGUE_BONUS_MAX}. Lively talk is ~150 wpm */
     private static final double PER_WPM_BONUS = 0.15;
     private static final double DIALOGUE_BONUS_MAX = 25.0;
+    /** Added to a voice_burst per speaker beyond the first. It takes the place of the bonus for players involved */
+    private static final double VOICE_BURST_PER_SPEAKER = comedymonkey.dailies.moments.voice.VoiceBurstDetector.WEIGHT_PER_EXTRA_SPEAKER;
     public static final double MAX_SCORE = 100.0;
+    /** The most that who was around and what was being said can add to what an event scores by itself */
+    public static final double MAX_CONTEXT_BONUS = PLAYERS_BONUS_MAX + DIALOGUE_BONUS_MAX;
 
     public final MomentsSession session;
     public final List<JsonObject> events;
@@ -171,9 +177,11 @@ public class MomentAnalysis {
                 addName(players, MJson.str(party, "name"));
             }
         }
-        for (JsonElement element : MJson.arr(metadata, "participants")) {
-            if (element.isJsonObject()) {
-                addName(players, MJson.str(element.getAsJsonObject(), "name"));
+        for (String key : new String[]{"participants", "speakers"}) {
+            for (JsonElement element : MJson.arr(metadata, key)) {
+                if (element.isJsonObject()) {
+                    addName(players, MJson.str(element.getAsJsonObject(), "name"));
+                }
             }
         }
     }
@@ -188,7 +196,32 @@ public class MomentAnalysis {
         long time = MJson.time(event);
         JsonObject metadata = MJson.obj(event, "metadata");
 
-        double score = TYPE_WEIGHTS.getOrDefault(MJson.str(event, "type", ""), DEFAULT_WEIGHT);
+        double score = ownScore(event);
+        int speakers = MJson.arr(metadata, "speakers").size();
+
+        Set<String> players = new LinkedHashSet<>();
+        addEventPlayers(event, players);
+        for (JsonObject interaction : this.interactionsBetween(time, time)) {
+            for (JsonElement element : MJson.arr(interaction, "players")) {
+                addName(players, MJson.str(element.getAsJsonObject(), "name"));
+            }
+        }
+        // A burst's people are its speakers, and they have had their ten points each already
+        if (speakers == 0) {
+            score += Math.min(PLAYERS_BONUS_MAX, Math.max(0, players.size() - 1) * PER_PLAYER_BONUS);
+        }
+
+        double wordsPerMinute = this.wordsPerMinute(time - this.contextMillis, time + this.contextMillis);
+        score += Math.min(DIALOGUE_BONUS_MAX, wordsPerMinute * PER_WPM_BONUS);
+
+        return Math.min(MAX_SCORE, MJson.round(score));
+    }
+
+    /** What an event scores by itself, whatever was going on around it: its type, and being a first, rare, a boss, or many voices */
+    public static double ownScore(JsonObject event) {
+        JsonObject metadata = MJson.obj(event, "metadata");
+        String type = MJson.str(event, "type", "");
+        double score = TYPE_WEIGHTS.getOrDefault(type, DEFAULT_WEIGHT);
         if (MJson.bool(event, "first")) {
             score += FIRST_BONUS;
         }
@@ -198,20 +231,10 @@ public class MomentAnalysis {
         if (MJson.bool(metadata, "boss")) {
             score += BOSS_BONUS;
         }
-
-        Set<String> players = new LinkedHashSet<>();
-        addEventPlayers(event, players);
-        for (JsonObject interaction : this.interactionsBetween(time, time)) {
-            for (JsonElement element : MJson.arr(interaction, "players")) {
-                addName(players, MJson.str(element.getAsJsonObject(), "name"));
-            }
+        if (type.equals("voice_burst")) {
+            score += Math.max(0, MJson.arr(metadata, "speakers").size() - 1) * VOICE_BURST_PER_SPEAKER;
         }
-        score += Math.min(PLAYERS_BONUS_MAX, Math.max(0, players.size() - 1) * PER_PLAYER_BONUS);
-
-        double wordsPerMinute = this.wordsPerMinute(time - this.contextMillis, time + this.contextMillis);
-        score += Math.min(DIALOGUE_BONUS_MAX, wordsPerMinute * PER_WPM_BONUS);
-
-        return Math.min(MAX_SCORE, MJson.round(score));
+        return score;
     }
 
     // --- Context ---
@@ -411,6 +434,19 @@ public class MomentAnalysis {
                 return MJson.str(metadata, "name", pretty(subject)) + " was defeated";
             case "milestone":
                 return player + ": " + MJson.str(metadata, "label", pretty(subject));
+            case "voice_burst": {
+                List<String> names = new ArrayList<>();
+                for (JsonElement element : MJson.arr(metadata, "speakers")) {
+                    if (element.isJsonObject()) {
+                        names.add(MJson.str(element.getAsJsonObject(), "name", "Someone"));
+                    }
+                }
+                String who = names.isEmpty() ? "Someone" : names.size() == 1 ? names.get(0)
+                    : String.join(", ", names.subList(0, names.size() - 1)) + " and " + names.get(names.size() - 1);
+                // Until something has listened to it, all that is known is that it was loud
+                String what = subject == null || subject.equals("unclassified") ? "a burst of noise" : subject.replace('_', ' ');
+                return who + ": " + what;
+            }
             case "job_posted":
             case "job_help_asked":
             case "job_claimed":

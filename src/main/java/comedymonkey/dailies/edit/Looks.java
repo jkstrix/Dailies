@@ -97,6 +97,8 @@ public final class Looks {
     public int backgroundColour = 0x00FF00;
     /** Full brightness without the potion's tint */
     public boolean nightVision = false;
+    /** The resource packs the server gave the recorder, as recorded (PLAY-17). Off shows the viewer's own packs alone */
+    public boolean serverResourcePacks = true;
 
     // The frame
     /** Field of view in degrees when no track sets it; 0 leaves the game's own alone */
@@ -450,6 +452,9 @@ public final class Looks {
         colour("background_colour", "Plain colour drawn in place of the sky when it is off, for keying.", looks -> looks.backgroundColour,
                 (looks, value) -> looks.backgroundColour = value);
         toggle("night_vision", "Full brightness without the potion's tint", looks -> looks.nightVision, (looks, value) -> looks.nightVision = value);
+
+        toggle("server_resource_packs", "Use the server's resource packs as they were when recorded. When off, only your own packs are used",
+                looks -> looks.serverResourcePacks, (looks, value) -> looks.serverResourcePacks = value);
 
         FIELDS.put("fov", new Field("fov", "number", "Field of view in degrees when no track sets it: 0 leaves the game's own alone, otherwise 1 to 170") {
             @Override

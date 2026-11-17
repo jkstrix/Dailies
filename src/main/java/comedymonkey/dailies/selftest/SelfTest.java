@@ -60,6 +60,12 @@ public final class SelfTest {
                 Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
                 return;
             }
+            if ("kit".equals(System.getProperty(PROPERTY))) {
+                KitShots.run(this);
+                Host.LOGGER.info("DAILIES KIT PICTURES DONE");
+                Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+                return;
+            }
             if ("hands-on".equals(System.getProperty(PROPERTY))) {
                 try {
                     this.handsOn();
@@ -70,13 +76,19 @@ public final class SelfTest {
                 return;
             }
             this.checkMcp();
+            SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
+            MomentsExtrasSteps.run(this);
             RecordingSteps.run(this);
+            ResourcePackSteps.record(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
+            SettingsSteps.editorDropdown(this);
+            ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
             LibrarySteps.run(this);
+            ResourcePackSteps.play(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
@@ -279,6 +291,11 @@ public final class SelfTest {
     }
 
     // --- Helpers for the steps ---
+
+    /** The port the MCP server was found on when the run began */
+    int port() {
+        return this.port;
+    }
 
     /** Runs something on the client thread and waits for it */
     <T> T onClient(java.util.concurrent.Callable<T> action) throws Exception {

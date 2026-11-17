@@ -30,9 +30,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +49,11 @@ import java.util.concurrent.TimeUnit;
  * Recorded voice chat is played into the same device by {@link VoicePlayback}, so it is captured with the game's
  * sound, placed where each speaker was. At the end one run of the bundled encoder joins the soundless video, the
  * captured sound and the scene's audio keyframes into the finished file.
+ * <p>
+ * With separate tracks asked for (EXP-12) the same sound is also kept apart: the game's sound alone, each speaker's
+ * voice alone and the audio keyframes alone. Then the voices are not played into the game's device but placed by
+ * {@link VoicePlayback} and handed to {@link #voice}, the audio keyframes are rendered to samples of their own, and
+ * the mixed track is the sum of the separate ones, sample for sample, so that they always add up to it.
  * <p>
  * Nothing here may stop an export: when sound cannot be captured the video is finished without it and
  * {@link #note} says why. Client thread throughout, except the flags the sound hooks read.
@@ -74,6 +82,31 @@ public final class ExportSound {
     private static @Nullable String problem = null;
     private static final ByteBuffer CHUNK = BufferUtils.createByteBuffer(CHUNK_FRAMES * BYTES_PER_FRAME);
     private static final byte[] BYTES = new byte[CHUNK_FRAMES * BYTES_PER_FRAME];
+    // --- Separate tracks (EXP-12) ---
+
+    /** Silence put in front of a stretch of speech, as {@link VoicePlayback} does for the ear: pieces arrive a tick apart */
+    private static final int VOICE_LEAD = SAMPLE_RATE * 60 / 1000;
+
+    /** One speaker's voice, written as it arrives: stereo, 16 bits, low byte first, silence wherever nothing was said */
+    private static final class Voice {
+        String name;
+        Path file;
+        OutputStream out;
+        /** Sample frames written so far, and where the next piece of speech goes */
+        long written;
+        long cursor;
+    }
+
+    /** One finished track: what it is called, the word for it in a file name, and its samples */
+    private record Track(String title, String tag, Path samples) {
+    }
+
+    /** Read by {@link VoicePlayback}: voices are to be handed over and not played into the game's device */
+    private static volatile boolean separate = false;
+    private static final Map<UUID, Voice> VOICES = new LinkedHashMap<>();
+    private static volatile List<String> lastTracks = List.of();
+    private static volatile List<Path> lastFiles = List.of();
+
     /** Sound files the game is still reading; waited for before samples are taken, so a sound starts on its own frame */
     private static final Queue<CompletableFuture<?>> LOADING = new ConcurrentLinkedQueue<>();
 
@@ -90,6 +123,21 @@ public final class ExportSound {
     /** Whether the game's sound is going into an export's file right now */
     public static boolean capturing() {
         return capturing;
+    }
+
+    /** Whether voices are being kept apart for separate tracks: then they are handed to {@link #voice}, not played */
+    public static boolean keepsVoicesApart() {
+        return capturing && separate;
+    }
+
+    /** The names of the sound tracks inside the file the last export wrote, the mixed one first; empty when it has only one */
+    public static List<String> tracks() {
+        return lastTracks;
+    }
+
+    /** The WAV files the last export wrote beside its video */
+    public static List<Path> files() {
+        return lastFiles;
     }
 
     // --- For the sound hooks ---
@@ -164,6 +212,10 @@ public final class ExportSound {
         pcmFile = null;
         problem = null;
         capturing = false;
+        separate = false;
+        lastTracks = List.of();
+        lastFiles = List.of();
+        dropVoices();
         if (!wanted.audio || wanted.still) {
             return null;
         }
@@ -189,6 +241,7 @@ public final class ExportSound {
         String extension = dot > 0 ? name.substring(dot) : "." + wanted.container;
         videoFile = output.resolveSibling(base + ".dailies-picture" + extension);
         pcmFile = output.resolveSibling(base + ".dailies-sound.pcm");
+        separate = wanted.stemFiles || wanted.stemTracks;
         return videoFile;
     }
 
@@ -270,6 +323,83 @@ public final class ExportSound {
         }
     }
 
+    /**
+     * A piece of one speaker's voice, already placed: it goes into that speaker's own track at the moment of the
+     * export it was spoken in. Client thread. Never throws.
+     *
+     * @param left  how loud it is in the left ear, 0 to 1 or so
+     * @param right the same for the right
+     */
+    public static void voice(UUID speaker, String name, short[] mono, float left, float right) {
+        if (!keepsVoicesApart() || pcmFile == null || mono.length == 0) {
+            return;
+        }
+        try {
+            Voice voice = VOICES.get(speaker);
+            if (voice == null) {
+                voice = new Voice();
+                voice.name = name;
+                String file = pcmFile.getFileName().toString();
+                voice.file = pcmFile.resolveSibling(file.substring(0, file.length() - 4) + "-voice" + VOICES.size() + ".pcm");
+                voice.out = new BufferedOutputStream(Files.newOutputStream(voice.file), 1 << 15);
+                VOICES.put(speaker, voice);
+            }
+            long now = rendered;
+            if (voice.cursor < now) {
+                // A new stretch of speech starts a little after the picture it arrived with
+                voice.cursor = now + VOICE_LEAD;
+            }
+            if (voice.cursor > now + SAMPLE_RATE / 2) {
+                // More than half a second ahead: the recording is not running at the speed it was spoken at
+                return;
+            }
+            silence(voice.out, voice.cursor - voice.written);
+            byte[] bytes = new byte[mono.length * BYTES_PER_FRAME];
+            ByteBuffer out = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            for (short sample : mono) {
+                out.putShort(clamp(Math.round(sample * left))).putShort(clamp(Math.round(sample * right)));
+            }
+            voice.out.write(bytes);
+            voice.cursor += mono.length;
+            voice.written = voice.cursor;
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies: a speaker's voice could not be kept for its own track; the export goes on", t);
+        }
+    }
+
+    private static short clamp(long value) {
+        return (short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, value));
+    }
+
+    private static void silence(OutputStream out, long frames) throws IOException {
+        byte[] nothing = new byte[4096];
+        for (long left = frames * BYTES_PER_FRAME; left > 0; left -= nothing.length) {
+            out.write(nothing, 0, (int) Math.min(left, nothing.length));
+        }
+    }
+
+    /** Closes the speakers' files and, when asked, removes them */
+    private static void closeVoices(boolean remove) {
+        for (Voice voice : VOICES.values()) {
+            try {
+                if (voice.out != null) {
+                    voice.out.close();
+                    voice.out = null;
+                }
+                if (remove) {
+                    Files.deleteIfExists(voice.file);
+                }
+            } catch (Throwable t) {
+                Host.LOGGER.debug("Dailies: a speaker's captured voice could not be closed", t);
+            }
+        }
+    }
+
+    private static void dropVoices() {
+        closeVoices(true);
+        VOICES.clear();
+    }
+
     /** Lets everything the game has started reach the sound device, and keeps streamed sounds such as music fed */
     private static void settle() {
         try {
@@ -309,10 +439,11 @@ public final class ExportSound {
         try {
             if (rendered > 0 && pcmFile != null && Files.exists(pcmFile) && settings != null) {
                 StringBuilder said = new StringBuilder();
-                if (mux(video, pcmFile, output, said)) {
+                if (separate ? muxApart(video, pcmFile, output, said) : mux(video, pcmFile, output, said)) {
                     note = said.toString();
                     Files.deleteIfExists(video);
                     Files.deleteIfExists(pcmFile);
+                    dropVoices();
                     videoFile = null;
                     return output;
                 }
@@ -324,6 +455,7 @@ public final class ExportSound {
             Host.LOGGER.warn("Dailies: sound could not be added to the export", t);
             note = "no sound: " + t;
         }
+        dropVoices();
         try {
             Files.move(video, output, StandardCopyOption.REPLACE_EXISTING);
             if (pcmFile != null) {
@@ -341,6 +473,7 @@ public final class ExportSound {
     public static void abort() {
         capturing = false;
         closePcm();
+        dropVoices();
         try {
             if (pcmFile != null) {
                 Files.deleteIfExists(pcmFile);
@@ -508,6 +641,253 @@ public final class ExportSound {
         command.addAll(List.of("-c:v", "copy"));
         command.addAll(Arrays.asList(codec).subList(1, codec.length));
         command.addAll(List.of("-ar", String.valueOf(SAMPLE_RATE), "-ac", settings.stereo ? "2" : "1"));
+        String container = settings.container.toLowerCase(Locale.ROOT);
+        if (container.equals("mp4") || container.equals("mov")) {
+            command.addAll(List.of("-movflags", "+faststart"));
+        }
+        command.add(output.toString());
+        return command;
+    }
+
+    // --- Separate tracks: the game, each speaker and the music apart, and a mix that is their sum (EXP-12) ---
+
+    /**
+     * Joins the video with a mixed track made by adding the separate ones together, writes the separate ones as WAV
+     * files and as named tracks as asked, and says in {@code said} what was done.
+     */
+    private static boolean muxApart(Path video, Path game, Path output, StringBuilder said) throws IOException {
+        StringBuilder remarks = new StringBuilder();
+        String[] codec = codec(remarks);
+        long frames = rendered;
+        int channels = settings.stereo ? 2 : 1;
+        String name = output.getFileName().toString();
+        String base = name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
+        Path scratch = game.resolveSibling(base + ".dailies-track");
+        List<Path> temporary = new ArrayList<>();
+        try {
+            closeVoices(false);
+            // The sources, all as 48 kHz stereo: the game as it was captured, each speaker, the audio keyframes
+            List<Path> sources = new ArrayList<>();
+            List<ByteOrder> orders = new ArrayList<>();
+            List<Track> tracks = new ArrayList<>();
+            sources.add(game);
+            orders.add(ByteOrder.nativeOrder());
+            tracks.add(new Track("Game", "game", Path.of(scratch + "-game.pcm")));
+            List<String> taken = new ArrayList<>(List.of("mix", "game", "music"));
+            for (Voice voice : VOICES.values()) {
+                String title = voice.name == null || voice.name.isBlank() ? "Speaker" : voice.name.trim();
+                String tag = comedymonkey.dailies.export.NamePattern.safe(title).replace(' ', '_');
+                String unique = comedymonkey.dailies.export.NamePattern.unused(tag, candidate -> taken.contains(candidate.toLowerCase(Locale.ROOT)));
+                taken.add(unique.toLowerCase(Locale.ROOT));
+                sources.add(voice.file);
+                orders.add(ByteOrder.LITTLE_ENDIAN);
+                tracks.add(new Track(unique.equals(tag) ? title : title + unique.substring(tag.length()), "voice-" + unique, Path.of(scratch + "-voice" + tracks.size() + ".pcm")));
+            }
+            List<Cue> extra = cues(remarks);
+            if (!extra.isEmpty()) {
+                Path music = Path.of(scratch + "-music-in.pcm");
+                temporary.add(music);
+                String failure = run(musicCommand(extra, frames, music));
+                if (failure == null && Files.exists(music)) {
+                    sources.add(music);
+                    orders.add(ByteOrder.LITTLE_ENDIAN);
+                    tracks.add(new Track("Music", "music", Path.of(scratch + "-music.pcm")));
+                } else {
+                    // An audio keyframe's file the encoder cannot read must not cost the rest
+                    Host.LOGGER.warn("Dailies: the audio keyframes could not be rendered ({}); going on without them", failure);
+                    remarks.append("; the audio keyframes could not be mixed in (").append(firstLine(String.valueOf(failure))).append(')');
+                    extra = List.of();
+                }
+            }
+            Path mix = Path.of(scratch + "-mix.pcm");
+            temporary.add(mix);
+            tracks.forEach(track -> temporary.add(track.samples()));
+            sum(sources, orders, tracks, mix, frames, channels);
+
+            // Beside the video: asked for, or the only way when this kind of file cannot hold named tracks
+            String container = settings.container.toLowerCase(Locale.ROOT);
+            boolean inside = settings.stemTracks && comedymonkey.dailies.export.Codecs.holdsNamedTracks(container);
+            boolean beside = settings.stemFiles || !inside;
+            if (settings.stemTracks && !inside) {
+                remarks.append("; ").append(container).append(" files are not given separate tracks, so they were written as WAV files instead");
+            }
+            List<Path> written = new ArrayList<>();
+            if (beside) {
+                try {
+                    for (Track track : tracks) {
+                        Path wav = output.resolveSibling(base + "." + track.tag() + ".wav");
+                        wav(track.samples(), wav, frames, channels);
+                        written.add(wav);
+                    }
+                } catch (IOException e) {
+                    Host.LOGGER.warn("Dailies: the separate WAV files could not all be written", e);
+                    remarks.append("; the separate WAV files could not all be written (").append(e.getMessage()).append(')');
+                }
+            }
+            String failure = run(apartCommand(video, mix, output, codec, inside ? tracks : List.of(), channels));
+            if (failure != null && inside) {
+                Host.LOGGER.warn("Dailies: the separate tracks could not be put inside the file ({}); trying with the mixed track alone", failure);
+                remarks.append("; the separate tracks could not be put inside the file (").append(firstLine(failure)).append(')');
+                inside = false;
+                failure = run(apartCommand(video, mix, output, codec, List.of(), channels));
+            }
+            if (failure != null) {
+                Host.LOGGER.warn("Dailies: sound could not be joined to the video: {}", failure);
+                said.append("the encoder could not join sound and picture (").append(firstLine(failure)).append(')');
+                return false;
+            }
+            List<String> titles = new ArrayList<>(List.of("Mix"));
+            tracks.forEach(track -> titles.add(track.title()));
+            lastTracks = inside ? List.copyOf(titles) : List.of();
+            lastFiles = List.copyOf(written);
+            said.append("mixed sound, ").append(codec[0]).append(settings.stereo ? ", stereo" : ", mono").append("; separate tracks: ")
+                .append(String.join(", ", titles.subList(1, titles.size())));
+            said.append(inside && !written.isEmpty() ? " (inside the file and as WAV files beside it)" : inside ? " (inside the file)" : " (as WAV files beside the video)");
+            if (problem != null) {
+                said.append("; ").append(problem);
+            }
+            said.append(remarks);
+            return true;
+        } finally {
+            for (Path file : temporary) {
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException e) {
+                    Host.LOGGER.debug("Dailies: a temporary sound file could not be removed", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * Writes every source out as a finished track of exactly {@code frames} sample frames, and their sum as the mix.
+     * A source that is shorter is silent for the rest. The mix is the sum of the tracks as they are written, so
+     * with one channel it is the sum of the mono tracks; it is only ever different where it would not fit 16 bits.
+     */
+    private static void sum(List<Path> sources, List<ByteOrder> orders, List<Track> tracks, Path mix, long frames, int channels) throws IOException {
+        int count = sources.size();
+        List<java.io.InputStream> in = new ArrayList<>();
+        List<OutputStream> out = new ArrayList<>();
+        try (OutputStream mixed = new BufferedOutputStream(Files.newOutputStream(mix), 1 << 16)) {
+            for (int i = 0; i < count; i++) {
+                in.add(new java.io.BufferedInputStream(Files.newInputStream(sources.get(i)), 1 << 16));
+                out.add(new BufferedOutputStream(Files.newOutputStream(tracks.get(i).samples()), 1 << 16));
+            }
+            byte[] read = new byte[CHUNK_FRAMES * BYTES_PER_FRAME];
+            byte[] one = new byte[CHUNK_FRAMES * 2 * channels];
+            int[] total = new int[CHUNK_FRAMES * channels];
+            for (long done = 0; done < frames; ) {
+                int now = (int) Math.min(CHUNK_FRAMES, frames - done);
+                Arrays.fill(total, 0);
+                for (int i = 0; i < count; i++) {
+                    int got = in.get(i).readNBytes(read, 0, now * BYTES_PER_FRAME);
+                    Arrays.fill(read, got, now * BYTES_PER_FRAME, (byte) 0);
+                    ByteBuffer from = ByteBuffer.wrap(read).order(orders.get(i));
+                    ByteBuffer to = ByteBuffer.wrap(one).order(ByteOrder.LITTLE_ENDIAN);
+                    for (int frame = 0; frame < now; frame++) {
+                        short left = from.getShort();
+                        short right = from.getShort();
+                        if (channels == 2) {
+                            to.putShort(left).putShort(right);
+                            total[frame * 2] += left;
+                            total[frame * 2 + 1] += right;
+                        } else {
+                            short both = (short) Math.floorDiv(left + right + 1, 2);
+                            to.putShort(both);
+                            total[frame] += both;
+                        }
+                    }
+                    out.get(i).write(one, 0, now * 2 * channels);
+                }
+                ByteBuffer to = ByteBuffer.wrap(one).order(ByteOrder.LITTLE_ENDIAN);
+                for (int sample = 0; sample < now * channels; sample++) {
+                    to.putShort(clamp(total[sample]));
+                }
+                mixed.write(one, 0, now * 2 * channels);
+                done += now;
+            }
+        } finally {
+            for (java.io.InputStream stream : in) {
+                try {
+                    stream.close();
+                } catch (IOException ignored) {
+                    // Only read from
+                }
+            }
+            for (OutputStream stream : out) {
+                stream.close();
+            }
+        }
+    }
+
+    /** Samples as a WAV file: the 44 bytes that say what they are, then the samples */
+    private static void wav(Path samples, Path file, long frames, int channels) throws IOException {
+        long bytes = frames * 2 * channels;
+        ByteBuffer head = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
+        head.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt((int) (36 + bytes)).put("WAVE".getBytes(StandardCharsets.US_ASCII));
+        head.put("fmt ".getBytes(StandardCharsets.US_ASCII)).putInt(16).putShort((short) 1).putShort((short) channels).putInt(SAMPLE_RATE)
+            .putInt(SAMPLE_RATE * 2 * channels).putShort((short) (2 * channels)).putShort((short) 16);
+        head.put("data".getBytes(StandardCharsets.US_ASCII)).putInt((int) bytes);
+        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file), 1 << 16)) {
+            out.write(head.array());
+            Files.copy(samples, out);
+        }
+    }
+
+    /** Renders the audio keyframes alone to stereo samples, exactly as long as the video, each starting on its own sample */
+    private static List<String> musicCommand(List<Cue> extra, long frames, Path output) throws IOException {
+        List<String> command = new ArrayList<>(List.of(Encoder.programPath().toString(), "-hide_banner", "-loglevel", "error", "-y"));
+        for (Cue cue : extra) {
+            if (cue.skipSeconds() > 0.0) {
+                command.addAll(List.of("-ss", String.format(Locale.ROOT, "%.4f", cue.skipSeconds())));
+            }
+            command.addAll(List.of("-i", cue.file().toString()));
+        }
+        StringBuilder graph = new StringBuilder();
+        StringBuilder inputs = new StringBuilder();
+        for (int i = 0; i < extra.size(); i++) {
+            Cue cue = extra.get(i);
+            graph.append('[').append(i).append(":a:0]aresample=").append(SAMPLE_RATE).append(",aformat=channel_layouts=stereo,volume=")
+                .append(String.format(Locale.ROOT, "%.4f", cue.volume()));
+            long delay = Math.round(cue.startSeconds() * SAMPLE_RATE);
+            if (delay > 0) {
+                graph.append(",adelay=").append(delay).append("S:all=1");
+            }
+            graph.append("[cue").append(i).append("];");
+            inputs.append("[cue").append(i).append(']');
+        }
+        graph.append(inputs);
+        if (extra.size() > 1) {
+            graph.append("amix=inputs=").append(extra.size()).append(":duration=longest:normalize=0,");
+        }
+        graph.append("apad=whole_len=").append(frames).append(",atrim=end_sample=").append(frames).append("[music]");
+        command.addAll(List.of("-filter_complex", graph.toString(), "-map", "[music]", "-f", "s16le", "-ar", String.valueOf(SAMPLE_RATE), "-ac", "2", output.toString()));
+        return command;
+    }
+
+    private static List<String> apartCommand(Path video, Path mix, Path output, String[] codec, List<Track> tracks, int channels) throws IOException {
+        List<String> command = new ArrayList<>(List.of(Encoder.programPath().toString(), "-hide_banner", "-loglevel", "error", "-y", "-i", video.toString()));
+        List<String> titles = new ArrayList<>(List.of("Mix"));
+        List<Path> inputs = new ArrayList<>(List.of(mix));
+        for (Track track : tracks) {
+            titles.add(track.title());
+            inputs.add(track.samples());
+        }
+        for (Path input : inputs) {
+            command.addAll(List.of("-f", "s16le", "-ar", String.valueOf(SAMPLE_RATE), "-ac", String.valueOf(channels), "-i", input.toString()));
+        }
+        command.addAll(List.of("-map", "0:v:0"));
+        for (int i = 0; i < inputs.size(); i++) {
+            command.addAll(List.of("-map", (i + 1) + ":a:0"));
+        }
+        command.addAll(List.of("-c:v", "copy"));
+        command.addAll(Arrays.asList(codec).subList(1, codec.length));
+        command.addAll(List.of("-ar", String.valueOf(SAMPLE_RATE), "-ac", String.valueOf(channels)));
+        for (int i = 0; i < titles.size(); i++) {
+            // MKV shows the title; MOV shows the handler name, and keeps the title as the track's name
+            command.addAll(List.of("-metadata:s:a:" + i, "title=" + titles.get(i), "-metadata:s:a:" + i, "handler_name=" + titles.get(i)));
+            command.addAll(List.of("-disposition:a:" + i, i == 0 ? "default" : "0"));
+        }
         String container = settings.container.toLowerCase(Locale.ROOT);
         if (container.equals("mp4") || container.equals("mov")) {
             command.addAll(List.of("-movflags", "+faststart"));

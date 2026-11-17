@@ -174,6 +174,20 @@ public final class RecordingManifest {
         return !this.spans.isEmpty();
     }
 
+    /** The server resource packs whose bytes the recording holds (REC-19), each stored once */
+    public List<Pack> packs = new ArrayList<>();
+
+    /** A resource pack kept inside the recording as shared pieces, so that it is never held whole in memory */
+    public static final class Pack {
+        /** What the recorded pushes call this pack's content */
+        public String key = "";
+        /** SHA-256 of the whole file, in hex */
+        public String sha256 = "";
+        public long size = 0;
+        /** The names of the shared pieces, in order */
+        public List<String> pieces = new ArrayList<>();
+    }
+
     public static final class Segment {
         public int number;
         public int startTick;
@@ -248,6 +262,9 @@ public final class RecordingManifest {
             }
             if (manifest.times == null) {
                 manifest.times = new ArrayList<>();
+            }
+            if (manifest.packs == null) {
+                manifest.packs = new ArrayList<>();
             }
             return manifest;
         } catch (JsonSyntaxException e) {
