@@ -116,6 +116,14 @@ final class OwnerFeatureSteps {
         check(!stillThere, "undo did not take the cued Smart Camera away again");
         test.log("cued clip " + clipId + " at tick " + cuedAt);
 
+        // The owner is working on the Smart Camera: its checks are the owner's to run, with
+        // gradlew runTestModded -PdailiesFlags=dailies.test.smartCamera, and are left out of every other run
+        if (!Boolean.getBoolean("dailies.test.smartCamera")) {
+            test.skip("the Smart Camera checks (chase, tripod, director) are left to the owner: run with dailies.test.smartCamera to include them");
+            PlaybackSteps.close(test);
+            return;
+        }
+
         // --- Step 5: the Smart Camera ---
         // The camera track left by the export step sits above it and would take the view back; switch it off
         test.onClientRun(() -> {
