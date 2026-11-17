@@ -1,0 +1,415 @@
+<title>Dailies Manual</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: a workshop manual in the house style of the Dailies specification. A masthead, a sticky strip of chapters, then
+   chapters that pair short instructions with a picture taken from the running game. Brass, walnut and notice paper. */
+:root {
+	--ground: #e8e6e0; --sheet: #f4f1ea; --ink: #2b1d0e; --muted: #6b5a49; --walnut: #4e3626; --brass: #9a7a34;
+	--verdigris: #3f7f6f; --rust: #8a3412; --rule: #cdbf9f; --key: #fbf9f4;
+	--display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+	--body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+	--mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+	--ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #d2b48c; --brass: #c9a75a;
+	--verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; --key: #2c221a; color-scheme: dark } }
+:root[data-theme="dark"] {
+	--ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #d2b48c; --brass: #c9a75a;
+	--verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; --key: #2c221a; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+body { background: var(--ground); color: var(--ink); font: 17px/1.58 var(--body); margin: 0;
+	padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ground) }
+.wrap { max-width: 1040px; margin: 0 auto }
+h1, h2, h3 { font-family: var(--display); line-height: 1.05; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(44px, 8vw, 84px); font-weight: 800; text-transform: uppercase; letter-spacing: .01em }
+h1 span { color: var(--brass) }
+h2 { font-size: clamp(30px, 4vw, 42px); font-weight: 800; text-transform: uppercase; letter-spacing: .01em }
+h3 { font-size: 23px; font-weight: 600; letter-spacing: .02em }
+p { margin: 0; max-width: 68ch }
+a { color: var(--verdigris) }
+:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px }
+code { font: 0.86em var(--mono); background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere }
+kbd { font: 700 0.82em var(--mono); background: var(--key); border: 1px solid var(--rule); border-bottom-width: 3px; border-radius: 5px; padding: 1px 7px; white-space: nowrap }
+.eyebrow { font: 700 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--brass) }
+.lede { color: var(--muted); font-size: 18px }
+
+.mast { display: grid; gap: 12px; padding-block: 40px 28px }
+.mast p { font-size: 19px; color: var(--muted) }
+
+nav.index { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--ground); border-block: 2px solid var(--rule) }
+nav.index ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; overflow-x: auto }
+nav.index a { display: block; padding: 11px 10px; color: var(--ink); text-decoration: none; font: 600 16px var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; border-bottom: 3px solid transparent }
+nav.index a:hover { border-bottom-color: var(--brass) }
+
+section { display: grid; gap: 20px; padding-block: 44px 34px; border-top: 2px solid var(--rule); scroll-margin-top: 56px }
+section:first-of-type { border-top: 0 }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: start }
+.two > * { min-width: 0 }
+.stack { display: grid; gap: 12px; align-content: start }
+ul.plain, ol.plain { margin: 0; padding-left: 22px; display: grid; gap: 7px; max-width: 68ch }
+
+figure { margin: 0; display: grid; gap: 8px }
+figure img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet) }
+figure.crop img { aspect-ratio: 16 / 4; object-fit: cover; object-position: top }
+figcaption { color: var(--muted); font-size: 15px }
+
+.tablebox { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px }
+table { width: 100%; border-collapse: collapse; font-size: 16px }
+th { text-align: left; font: 700 12px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 2px solid var(--rule) }
+td { padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
+tr:last-child td { border-bottom: 0 }
+td:first-child { white-space: nowrap; font-weight: 700 }
+
+.note { background: var(--sheet); border: 1px dashed var(--brass); border-radius: 6px; padding: 14px 18px; display: grid; gap: 8px }
+.note > b:first-child { font: 700 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--brass) }
+.warn { background: var(--sheet); border: 2px solid var(--rust); border-radius: 6px; padding: 14px 18px; display: grid; gap: 8px }
+.warn > b:first-child { font: 700 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--rust) }
+footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule); padding-top: 18px }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto } }
+</style>
+
+<div class="wrap">
+	<header class="mast">
+		<div class="eyebrow">Manual · Minecraft 1.21.1 · NeoForge · version 0.1.0</div>
+		<h1>The <span>Dailies</span></h1>
+		<p>Record what you play, watch it back from any angle, turn it into shots and export them as video. Every picture here was taken from the running mod.</p>
+	</header>
+
+	<nav class="index" aria-label="Chapters">
+		<ul>
+			<li><a href="#install">Install</a></li>
+			<li><a href="#record">Record</a></li>
+			<li><a href="#watch">Watch</a></li>
+			<li><a href="#machines">Machines</a></li>
+			<li><a href="#edit">Edit</a></li>
+			<li><a href="#camera">Smart Camera</a></li>
+			<li><a href="#export">Export</a></li>
+			<li><a href="#moments">Moments</a></li>
+			<li><a href="#settings">Settings</a></li>
+			<li><a href="#limits">Not yet checked</a></li>
+		</ul>
+	</nav>
+
+	<section id="install">
+		<h2>Install</h2>
+		<div class="two">
+			<div class="stack">
+				<p>Dailies is one jar for the client. A server never needs it, and you can join any server with it installed.</p>
+				<ul class="plain">
+					<li>Build it with <code>gradlew build</code>. The jar is <code>build/libs/dailies-1.21.1-0.1.0.jar</code> (31 MB, because the video encoder is packed inside).</li>
+					<li>Put it in your <code>mods</code> folder with NeoForge 21.1 for Minecraft 1.21.1.</li>
+					<li>Everything it writes goes in <code>dailies/</code> in the game folder: <code>recordings</code>, <code>moments</code>, <code>exports</code> and <code>encoder</code>.</li>
+					<li>Create, Sable, Create Aeronautics, Simple Voice Chat, Sodium and Iris are supported when present and never required.</li>
+				</ul>
+			</div>
+			<figure>
+				<img src="img/01-title-screen.jpg" alt="The title screen with a small brass button above the language button" width="1280" height="720">
+				<figcaption>The small brass button at the bottom left of the title screen opens your recordings.</figcaption>
+			</figure>
+		</div>
+	</section>
+
+	<section id="record">
+		<h2>Record</h2>
+		<div class="two">
+			<div class="stack">
+				<p>Open the pause menu in any world or server. The Dailies buttons sit beside the game's own.</p>
+				<ul class="plain">
+					<li><b>Start recording</b> begins at once. A brass plate with a red lamp and a clock shows in the top left while it runs.</li>
+					<li><b>Pause</b> stops the clock; nothing is captured until you resume.</li>
+					<li><b>Finish</b> asks for a name and saves. <b>Cancel</b> deletes what was captured, after asking.</li>
+				</ul>
+				<p>All of these also have key bindings under Options, Controls, Dailies. They are unbound until you choose keys. So are the four marker keys, which drop a coloured flag on the timeline at that moment.</p>
+			</div>
+			<figure>
+				<img src="img/03-pause-menu.jpg" alt="The pause menu with four Dailies buttons on the right: pause, finish, cancel, recordings" width="1280" height="720">
+				<figcaption>The pause menu while recording. The plate in the top left shows the recording's clock.</figcaption>
+			</figure>
+		</div>
+		<div class="two">
+			<figure>
+				<img src="img/04-name-the-recording.jpg" alt="A small screen asking for the recording's name" width="1280" height="720">
+				<figcaption>Finishing asks for a name. Turn on "Save without asking" in the settings to skip this.</figcaption>
+			</figure>
+			<div class="stack">
+				<h3>Good to know</h3>
+				<ul class="plain">
+					<li>A recording is one <code>.dailies</code> file. Rename it, move it, copy it; everything that refers to it uses an id stored inside.</li>
+					<li>If the game closes or crashes mid-recording, the next launch offers to recover it. At most a couple of seconds are lost.</li>
+					<li>"Start by itself" records every world you join. "Finish on leaving" is on by default.</li>
+					<li>Recording costs no measurable frame time: 8.5 ms a frame with it on and off in the test runs.</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<section id="watch">
+		<h2>Watch</h2>
+		<div class="two">
+			<div class="stack">
+				<p>Pick a recording from the list and choose <b>Watch</b>. You are a free, invisible camera inside the recorded session. The player who made the recording appears like anyone else.</p>
+				<p>Fly with the usual movement keys and the mouse. The bar along the bottom shows the whole recording, where you are, any markers, and whether the camera is free or following a track.</p>
+			</div>
+			<figure>
+				<img src="img/05-recordings-list.jpg" alt="The recordings list with one recording and Watch, Rename, Delete, Open folder and Done buttons" width="1280" height="720">
+				<figcaption>The recordings list: name, date, length, world and size.</figcaption>
+			</figure>
+		</div>
+		<figure>
+			<img src="img/06-playback.jpg" alt="A recording being watched from above, with the playback bar along the bottom showing time, a marker flag and camera state" width="1280" height="720">
+			<figcaption>Watching a recording. The blue flag on the bar is a marker dropped while recording.</figcaption>
+		</figure>
+		<div class="tablebox"><table>
+			<thead><tr><th>Key</th><th>Does</th></tr></thead>
+			<tbody>
+				<tr><td><kbd>P</kbd></td><td>Play or pause</td></tr>
+				<tr><td><kbd>.</kbd></td><td>Forward one tick (a twentieth of a second)</td></tr>
+				<tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Jump back or forward five seconds</td></tr>
+				<tr><td><kbd>-</kbd> <kbd>=</kbd></td><td>Slower or faster, from a tenth of normal speed to eight times</td></tr>
+				<tr><td><kbd>C</kbd></td><td>Follow the camera track, or fly free</td></tr>
+				<tr><td><kbd>T</kbd></td><td>Open or close the editor</td></tr>
+				<tr><td><kbd>F7</kbd></td><td>List the mods that differ from when the recording was made</td></tr>
+				<tr><td><kbd>F1</kbd></td><td>Hide everything of Dailies' own</td></tr>
+				<tr><td><kbd>Esc</kbd></td><td>The pause menu, with <b>Close recording</b></td></tr>
+			</tbody>
+		</table></div>
+		<p>Jumping to any moment shows the world exactly as it was then, whether you got there by playing or by jumping forward or back.</p>
+	</section>
+
+	<section id="machines">
+		<h2>Machines</h2>
+		<figure>
+			<img src="img/06b-machines.jpg" alt="A hot air balloon, a bearing contraption with pigs sitting in Create seats, and two stone physics platforms with seats" width="1280" height="720">
+			<figcaption>From the test recording: an Aeronautics balloon, a Create bearing contraption with mobs in its seats, and two Sable physics platforms.</figcaption>
+		</figure>
+		<div class="two">
+			<div class="stack">
+				<h3>What plays back</h3>
+				<ul class="plain">
+					<li>Create contraptions, with all their blocks, turning as they did.</li>
+					<li>Sable physics objects and Aeronautics craft, following their recorded position and rotation.</li>
+					<li>Mobs and players sitting in Create seats on either.</li>
+					<li>Mobs and players standing loose on a moving deck, carried with it.</li>
+				</ul>
+			</div>
+			<div class="stack">
+				<h3>How close</h3>
+				<p>In the test runs, craft were within 0.26 of a block of their live position after a jump, including during a ten-block fall. Seated and standing passengers passed the same check.</p>
+				<p>Dailies needs none of these mods and switches its support on only when they are installed.</p>
+			</div>
+		</div>
+	</section>
+
+	<section id="edit">
+		<h2>Edit</h2>
+		<p class="lede">Press <kbd>T</kbd> while watching. The editor leaves the middle of the view clear and does not pause the world.</p>
+		<figure>
+			<img src="img/07b-editor-keyframe-selected.jpg" alt="The editor: scenes and export range along the top, viewer controls on the left, keyframe fields on the right, timeline with a camera track along the bottom" width="1280" height="720">
+			<figcaption>The editor with a camera keyframe selected. The shaded band on the timeline is the range that will be exported.</figcaption>
+		</figure>
+		<div class="two">
+			<div class="stack">
+				<h3>The parts</h3>
+				<ul class="plain">
+					<li><b>Top bar:</b> scenes (new, rename, duplicate, remove), the export range, undo, redo.</li>
+					<li><b>Viewer</b> (left): flight speed, view angle, roll, ride along with an entity.</li>
+					<li><b>Right panel:</b> three tabs, Keyframe, Looks and Export.</li>
+					<li><b>Timeline</b> (bottom): transport, a ruler in seconds, one row per track, keyframes as diamonds.</li>
+				</ul>
+				<h3>Framing a shot</h3>
+				<p>Hold the <b>right mouse button</b> over the view to look around and fly with the movement keys, without closing the editor. The mouse wheel changes flight speed while you fly.</p>
+			</div>
+			<div class="stack">
+				<h3>Working with keyframes</h3>
+				<ul class="plain">
+					<li><b>Add track</b>, pick a kind, then <b>Add at the playhead</b> in the Keyframe tab.</li>
+					<li>Click a diamond to select it; <kbd>Shift</kbd>-click or drag a box for several.</li>
+					<li>Drag selected diamonds to move them. <kbd>Delete</kbd> removes them.</li>
+					<li><kbd>Ctrl</kbd>+<kbd>C</kbd> and <kbd>Ctrl</kbd>+<kbd>V</kbd> copy and paste at the playhead.</li>
+					<li><kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd> undo and redo, without limit.</li>
+					<li>Mouse wheel over the timeline zooms; <kbd>Shift</kbd>+wheel pans.</li>
+				</ul>
+				<p>Keyframes move the view only while the recording plays or exports, and only while "follow the camera track" is on. Flying off by hand switches it off; <kbd>C</kbd> switches it back on.</p>
+			</div>
+		</div>
+		<div class="tablebox"><table>
+			<thead><tr><th>Kind of keyframe</th><th>What it sets</th></tr></thead>
+			<tbody>
+				<tr><td>Camera</td><td>Position, heading, tilt and roll. Blends between keyframes.</td></tr>
+				<tr><td>Orbit</td><td>Circles a point while looking at it.</td></tr>
+				<tr><td>Follow entity</td><td>Stays beside an entity, or stays put and turns to watch it.</td></tr>
+				<tr><td>Smart Camera</td><td>Films a player by itself. See the next chapter.</td></tr>
+				<tr><td>Field of view</td><td>The view angle in degrees.</td></tr>
+				<tr><td>Camera shake</td><td>A hand-held wobble.</td></tr>
+				<tr><td>Speed</td><td>Playback rate.</td></tr>
+				<tr><td>Timelapse, Freeze</td><td>Squeeze a stretch into a set time, or hold the world still. These apply in exports.</td></tr>
+				<tr><td>Time of day</td><td>Overrides the sky's time.</td></tr>
+				<tr><td>Block change</td><td>Shows a chosen block at a position from that tick on.</td></tr>
+				<tr><td>Audio</td><td>A sound file mixed into the export from that tick.</td></tr>
+			</tbody>
+		</table></div>
+		<div class="two">
+			<figure>
+				<img src="img/07c-editor-looks.jpg" alt="The Looks tab with checkboxes for what is drawn and settings for the world's look" width="1280" height="720">
+				<figcaption>Looks: what is drawn, the weather, fog and sky, night vision, and framing guides.</figcaption>
+			</figure>
+			<div class="stack">
+				<h3>Looks</h3>
+				<p>Looks belong to a scene and apply in playback and export alike.</p>
+				<ul class="plain">
+					<li>Show or hide the HUD, chat, boss bars, titles, name tags, particles and held items.</li>
+					<li>Hide kinds of entity, or one entity you click: hide it, rename it, force or remove its glow, hide its cape or armour.</li>
+					<li>Weather, fog, sky on or off with a plain background colour for keying, night vision.</li>
+					<li>An aspect guide and rule-of-thirds lines. Guides never appear in exports.</li>
+				</ul>
+				<p>Everything you change is saved into the recording as you go.</p>
+			</div>
+		</div>
+	</section>
+
+	<section id="camera">
+		<h2>Smart Camera</h2>
+		<p class="lede">A Smart Camera keyframe names a player and a way of filming them. From there until the next keyframe on its track, the camera places and aims itself.</p>
+		<div class="two">
+			<figure>
+				<img src="img/08-smart-camera-chase.jpg" alt="A chase shot from behind and to one side of the walking player, who sits a third of the way across the frame" width="1280" height="720">
+				<figcaption>Chase: five blocks back, thirty degrees to the side, the player on the left third of the frame.</figcaption>
+			</figure>
+			<figure>
+				<img src="img/09-smart-camera-orbit.jpg" alt="An orbit shot circling the player" width="1280" height="720">
+				<figcaption>Orbit: circling the player at a steady rate.</figcaption>
+			</figure>
+		</div>
+		<div class="tablebox"><table>
+			<thead><tr><th>Mode</th><th>What the camera does</th></tr></thead>
+			<tbody>
+				<tr><td>Chase</td><td>Follows from a set distance and angle relative to the way the player is heading.</td></tr>
+				<tr><td>Tripod</td><td>Stands where you put it and turns to keep the player in frame.</td></tr>
+				<tr><td>Orbit</td><td>Circles the player.</td></tr>
+				<tr><td>Director</td><td>Chooses chase, tripod and orbit shots by itself and cuts between them.</td></tr>
+			</tbody>
+		</table></div>
+		<p>Every mode can place the player anywhere in the frame, leave room ahead of them when they move, zoom to keep them the same size, fit a vehicle or craft they ride into the shot, and move in when blocks get in the way. Add one from the Keyframe tab or with the <code>smart_camera_add</code> tool.</p>
+	</section>
+
+	<section id="export">
+		<h2>Export</h2>
+		<div class="two">
+			<div class="stack">
+				<p>Set the export range on the top bar, open the <b>Export</b> tab and press <b>Export</b>. Each frame is drawn at an exact moment of the recording, so a slow computer gives the same video as a fast one, only later. Playback is put back as it was when the export ends.</p>
+				<ul class="plain">
+					<li><b>Size:</b> any, including larger than your screen. Presets from 720p to 4K and a vertical one.</li>
+					<li><b>Frame rate:</b> 1 to 240, presets from 24 to 120.</li>
+					<li><b>With sound:</b> the game's sound, recorded voice chat and audio keyframes, in step with the picture.</li>
+					<li><b>Still picture:</b> one PNG of the view at any size.</li>
+					<li><b>PNG sequence:</b> numbered pictures in place of a video.</li>
+				</ul>
+				<p>While it runs, the window shows the picture scaled to fit, with frames done, speed, time left and <b>Cancel</b>. A cancelled export keeps what was written and still plays.</p>
+			</div>
+			<figure>
+				<img src="img/07d-editor-export.jpg" alt="The Export tab: size, frame rate, kind of file, codec, encoder, bitrate, sound, file name, Export and Still picture buttons" width="1280" height="720">
+				<figcaption>The Export tab. Codecs are read from the packed encoder, so only what works on your machine is offered.</figcaption>
+			</figure>
+		</div>
+		<div class="tablebox"><table>
+			<thead><tr><th>Codec</th><th>Files</th><th>On the test machine</th></tr></thead>
+			<tbody>
+				<tr><td>H.264</td><td>MP4, MOV, MKV</td><td>Graphics card first (NVENC, Quick Sync), then OpenH264 in software</td></tr>
+				<tr><td>H.265</td><td>MP4, MKV</td><td>Graphics card only (NVENC, Quick Sync)</td></tr>
+				<tr><td>AV1</td><td>MP4, MKV, WebM</td><td>NVENC, then SVT-AV1 in software</td></tr>
+				<tr><td>VP9</td><td>WebM, MKV</td><td>libvpx in software</td></tr>
+			</tbody>
+		</table></div>
+		<figure>
+			<img src="img/11-exported-still.jpg" alt="An exported still of the scene with no interface on it" width="1280" height="720">
+			<figcaption>A still exported at 1920×1080 with the HUD left out.</figcaption>
+		</figure>
+		<div class="note"><b>The encoder</b>
+			<p>The video encoder is FFmpeg 8.1.2 in its LGPL build, packed inside the jar and unpacked to <code>dailies/encoder</code> the first time you export. Nothing else needs installing. <code>THIRD-PARTY-NOTICES.md</code> has the details and how to swap in another build.</p>
+		</div>
+	</section>
+
+	<section id="moments">
+		<h2>Moments and the MCP server</h2>
+		<div class="two">
+			<div class="stack">
+				<p>While you play, Dailies logs what happened: kills, deaths, advancements, new biomes, markers, who you were with, and voice chat. It runs whether or not you are recording. Afterwards it proposes clips, each with a suggested camera.</p>
+				<p>Open <code>http://127.0.0.1:25595/</code> in a browser on the same computer while the game runs. <b>Find clips</b> builds them; <b>Cue</b> opens the right recording at the right moment, with the camera if you want it.</p>
+				<p>The same address serves an MCP server at <code>/mcp</code> with 70 tools, so an AI agent can record, open, jump, edit, export and query moments. It listens on this computer only.</p>
+			</div>
+			<figure class="crop">
+				<img src="img/10-moments-page.png" alt="The moments page: a session picker, a strip of the session, and tabs for clips, events, voice and ignored" width="1280" height="320">
+				<figcaption>The moments page in a browser. AI transcription and summaries are off until you turn them on.</figcaption>
+			</figure>
+		</div>
+	</section>
+
+	<section id="settings">
+		<h2>Settings</h2>
+		<div class="two">
+			<div class="stack">
+				<p>Mods, Dailies, Config opens the settings. They live in <code>config/dailies-client.toml</code> and take effect without a restart.</p>
+				<ul class="plain">
+					<li><b>Recording:</b> start by itself, finish on leaving, notices, save without asking, record my HUD, record voice chat, marker colours.</li>
+					<li><b>Export:</b> default file name, throwaway frames for shader packs that build their image over time.</li>
+					<li><b>Editor:</b> how new keyframes blend, flight options.</li>
+					<li><b>MCP server:</b> on or off, and its port.</li>
+					<li><b>Moments:</b> what is logged, the ignore list, and the one switch for AI services (off by default).</li>
+				</ul>
+			</div>
+			<figure>
+				<img src="img/12-settings.jpg" alt="The Dailies settings screen" width="1280" height="720">
+				<figcaption>The settings screen.</figcaption>
+			</figure>
+		</div>
+	</section>
+
+	<section id="limits">
+		<h2>Not yet checked</h2>
+		<p class="lede">The scripted test passes in the plain game and in the modded one. These things it cannot judge, or does not cover.</p>
+		<div class="two">
+			<div class="warn"><b>Needs your eye</b>
+				<ul class="plain">
+					<li>The editor has only been seen in still pictures. Dragging keyframes, right-button flight, picking an entity by clicking, and the export progress plate have not been tried by hand.</li>
+					<li>Most scene looks (weather, fog, sky off, night vision, hidden entities, capes, armour) are built but have not been looked at, with or without a shader pack.</li>
+					<li>Export has run with Sodium and Iris installed but with no shader pack switched on.</li>
+					<li>Whether the Smart Camera's shots look good, and how the director cuts on a player moving smoothly.</li>
+					<li>The recorder's HUD when riding along, and skins with the network off. Both are in the recording file; neither has been looked at in playback.</li>
+				</ul>
+			</div>
+			<div class="warn"><b>Needs a server or a second player</b>
+				<ul class="plain">
+					<li>Recording on a dedicated server with Create, Sable and Aeronautics, where Sable's motion channel is a real network path.</li>
+					<li>Real voice chat. The test feeds sound in directly; capture through Simple Voice Chat, voices in playback and voices in exports are untested.</li>
+					<li>Meetings, groups, another player's death, another player on your craft.</li>
+					<li>McpCraft job board moments: the installed McpCraft 0.2.0 does not send the event the specification describes, so that step is skipped.</li>
+				</ul>
+			</div>
+		</div>
+		<div class="note"><b>Known gaps</b>
+			<ul class="plain">
+				<li>Timelapse and freeze keyframes apply in exports but not while watching live.</li>
+				<li>A player sitting in a seat on a contraption that is on a physics craft (a helicopter's pilot) has not been scripted.</li>
+				<li>Aeronautics' burner cannot describe itself to a snapshot, so its flame state may reset after a jump to a later part. The balloon itself is unaffected.</li>
+				<li>A few tool arguments from the specification's appendix are accepted but do nothing yet (track colour, six per-entity options). Each tool says so in its reply.</li>
+				<li>Twice in about thirty runs the modded game failed while loading mods, before Dailies had run.</li>
+			</ul>
+		</div>
+		<h3>Running the tests yourself</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th>Command</th><th>Does</th></tr></thead>
+			<tbody>
+				<tr><td><code>gradlew test</code></td><td>88 unit tests: the file format, curves, timing, undo.</td></tr>
+				<tr><td><code>gradlew runTestClient</code></td><td>The scripted run in the plain game. Prints <code>DAILIES TEST PASSED</code> and closes.</td></tr>
+				<tr><td><code>gradlew runTestModded</code></td><td>The same with the built jar beside Create, Sable, Aeronautics, Sodium, Iris and the rest.</td></tr>
+				<tr><td><code>gradlew runHandsOn</code></td><td>Sixty seconds at the controls while recording, then the recording left open for you to watch.</td></tr>
+			</tbody>
+		</table></div>
+	</section>
+
+	<footer>Dailies 0.1.0 manual. Pictures taken from the modded test game on 17 November 2026.</footer>
+</div>
