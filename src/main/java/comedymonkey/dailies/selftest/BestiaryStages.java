@@ -562,13 +562,13 @@ final class BestiaryStages {
         mark("dragon fireball in flight");
         waitForLive(entity -> entity.getType() == EntityType.AREA_EFFECT_CLOUD, 200, "the cloud a dragon fireball leaves");
         waitTicks(10);
-        still("dragon-fireball-cloud", mark("dragon fireball's cloud"), 0.5, y + 18, 28.5, 0.5, y + 14, 18.5, false);
+        still("dragon-fireball-cloud", mark("dragon fireball's cloud"), 0.5, y + 18, 28.5, 0.5, y + 14, 18.5, true);
         // And one that lands on the ground, whatever the dragon did
         c("summon minecraft:dragon_fireball 6.5 " + (y + 16) + " 13.5 {Motion:[0.0,-0.4,0.0]}");
         waitTicks(6);
         mark("second dragon fireball falling");
         waitTicks(60);
-        still("dragon-cloud-landed", mark("clouds, sixty ticks on (the radius has grown)"), 2.5, y + 12, 24.5, 6.5, y + 1, 13.5, false);
+        still("dragon-cloud-landed", mark("clouds, sixty ticks on (the radius has grown)"), 2.5, y + 12, 24.5, 6.5, y + 1, 13.5, true);
 
         // Perched on the portal, breathing
         c("tp @e[type=minecraft:ender_dragon,limit=1] 0 " + (y + 9) + " 0");
@@ -600,7 +600,7 @@ final class BestiaryStages {
             cloud[2] = nearest.getZ();
         });
         if (found) {
-            still("dragon-breath-cloud", mark("perched breath's cloud"), cloud[0] + 4.5, cloud[1] + 6, cloud[2] + 9.5, cloud[0], cloud[1], cloud[2], false);
+            still("dragon-breath-cloud", mark("perched breath's cloud"), cloud[0] + 4.5, cloud[1] + 6, cloud[2] + 9.5, cloud[0], cloud[1], cloud[2], true);
             // The recorder, mortal for a moment, stands in it
             c("gamemode survival");
             c("attribute @s minecraft:generic.max_health base set 100");
@@ -657,16 +657,18 @@ final class BestiaryStages {
         double rx = sx * scale + 0.5, rz = sz * scale + 0.5;
         float yaw = (float) Math.toDegrees(Math.atan2(-(sx - rx), sz - rz));
         int half = (62 + sh) / 2;
+        // The camera for the pictures stands back from the recorder, who would otherwise fill them
+        double cx = sx * (scale - 0.2) + 0.5, cz = sz * (scale - 0.2) + 0.5;
         c(String.format(java.util.Locale.ROOT, "tp @s %.2f %d %.2f %.1f 5", rx, half + 6, rz, yaw));
         fly();
         test.log(String.format("bestiary: the recorder stands %.0f blocks from the pillar's middle, %.0f from the portal", Math.sqrt((sx - rx) * (sx - rx) + (sz - rz) * (sz - rz)), Math.sqrt(rx * rx + rz * rz)));
         waitTicks(30);
-        still("pillar-whole", mark("pillar whole"), rx, half + 6, rz, sx, half + 4, sz, false);
+        still("pillar-whole", mark("pillar whole"), cx, half + 12, cz, sx, half + 4, sz, false);
         waitTicks(4);
         c("kill @e[type=minecraft:end_crystal,x=" + (sx - 4) + ",y=" + (sh - 3) + ",z=" + (sz - 4) + ",dx=8,dy=10,dz=8]");
         c("fill " + (sx - sr - 3) + " " + half + " " + (sz - sr - 3) + " " + (sx + sr + 3) + " " + (sh + 6) + " " + (sz + sr + 3) + " minecraft:air");
         waitTicks(12);
-        still("pillar-half-removed", mark("pillar half removed"), rx, half + 6, rz, sx, half + 4, sz, false);
+        still("pillar-half-removed", mark("pillar half removed"), cx, half + 12, cz, sx, half + 4, sz, false);
         waitTicks(10);
 
         // The respawn, started as placing the fourth crystal starts it
@@ -696,8 +698,8 @@ final class BestiaryStages {
         Census.keyTicks.add(rebuilt - 12);
         marks.merge(rebuilt - 12, "pillar still broken, beams on it", (a, b) -> a + ", " + b);
         waitTicks(3);
-        still("pillar-rebuilt", mark("pillar rebuilt"), rx, half + 6, rz, sx, half + 4, sz, false);
-        stills.add(new BestiarySteps.Still("pillar-beam-before-rebuild", rebuilt - 3, rx, half + 12, rz, yaw, -5.0F, false));
+        still("pillar-rebuilt", mark("pillar rebuilt"), cx, half + 12, cz, sx, half + 4, sz, false);
+        stills.add(new BestiarySteps.Still("pillar-beam-before-rebuild", rebuilt - 3, cx, half + 12, cz, yaw, 5.0F, false));
         Census.keyTicks.add(rebuilt - 3);
         marks.merge(rebuilt - 3, "pillar about to come back", (a, b) -> a + ", " + b);
         waitTicks(40);
