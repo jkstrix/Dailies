@@ -29,7 +29,7 @@ import java.util.Arrays;
  * are drawn from what the recording holds, with the game's own sprites and in the game's own places. The viewer
  * itself stays a spectator with no HUD of its own. A recording made without the HUD draws nothing.
  */
-final class HudLayer implements PlaybackExtensions.Extension {
+public final class HudLayer implements PlaybackExtensions.Extension {
 
     private static final ResourceLocation HOTBAR = sprite("hud/hotbar");
     private static final ResourceLocation HOTBAR_SELECTION = sprite("hud/hotbar_selection");
@@ -138,6 +138,18 @@ final class HudLayer implements PlaybackExtensions.Extension {
             }
         }
         return this.state;
+    }
+
+    /** The recorder's experience level, progress to the next, health and greatest health as last recorded; null when none is. For the tests */
+    public static float[] recordedNumbers() {
+        HudState state = INSTANCE.record == null ? null : INSTANCE.current(Minecraft.getInstance());
+        return state == null ? null : new float[]{state.level, state.progress, state.health, state.maxHealth};
+    }
+
+    /** What the recorder held in the selected slot as last recorded; null when no HUD is. For the tests */
+    public static net.minecraft.world.item.ItemStack recordedHeld() {
+        HudState state = INSTANCE.record == null ? null : INSTANCE.current(Minecraft.getInstance());
+        return state == null || state.selected < 0 || state.selected >= 9 ? null : state.stacks[state.selected];
     }
 
     private void draw(GuiGraphics graphics, DeltaTracker delta) {

@@ -88,6 +88,11 @@ public final class SelfTest {
                 RealWorldSteps.run(this, true);
             }
             this.checkMcp();
+            if (Boolean.getBoolean("dailies.test.bestiaryOnly")) {
+                // For working on the bestiary by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiaryOnly
+                BestiarySteps.run(this);
+                throw new Failure("only the bestiary was run, and it passed");
+            }
             SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
             // First, while nothing else has been recorded: it makes a recording of its own and puts it aside for later
@@ -115,6 +120,12 @@ public final class SelfTest {
                 ResourcePackSteps.play(this);
             }
             WatchingSteps.watch(this);
+            if (Boolean.getBoolean("dailies.test.bestiary")) {
+                // About ten minutes by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiary
+                BestiarySteps.run(this);
+            } else {
+                this.skip("the bestiary was not asked for (dailies.test.bestiary)");
+            }
             // In a world and with a recording of its own: everything above is in a flat world, this is in generated terrain. It
             // takes about seventeen minutes, so it runs only when asked for: -PdailiesFlags=dailies.test.realWorld
             if (tourFirst) {

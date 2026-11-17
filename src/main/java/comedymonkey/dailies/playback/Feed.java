@@ -192,6 +192,7 @@ final class Feed {
         this.skipChunks = this.mayRewind && plain;
         this.keptModded = false;
         PlaybackExtensions.resetAll();
+        this.lightSettled = false;
         this.rewound = false;
         this.snapshotChunks = null;
         if (!this.mayRewind) {
@@ -211,10 +212,12 @@ final class Feed {
                 this.handle(minecraft);
             }
             this.dropChunksNotInSnapshot();
-            if (minecraft.level != null) {
-                // The light of the chunks just built is put in now. The ticks that follow are applied with no frame drawn
-                // between them, and a block that changes in a chunk whose light is still waiting would be lit wrongly
-                comedymonkey.dailies.capture.Snapshots.settleLight(minecraft.level);
+            // The light that came with the snapshot's chunks is taken in now, before anything that happened after it. The
+            // game queues such light and takes it a little each frame; left waiting, it would be applied after the block
+            // changes of the ticks a jump then runs through, and put the old light back over them: the pit an explosion
+            // dug stayed as dark as the earth that had filled it, and the shadow of a wall outlived the wall
+            if (!Boolean.getBoolean("dailies.playback.lightOutOfOrder")) {
+                Playback.settleLight(minecraft);
             }
         } finally {
             this.loading = false;
@@ -703,6 +706,10 @@ final class Feed {
             return;
         }
         try {
+            if (this.rewound && packet instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket chunk && this.lightLeftBehind(chunk, minecraft)) {
+                // Only forgetting the chunk makes the game drop light the packet does not speak of; it is built again at once
+                new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(new net.minecraft.world.level.ChunkPos(chunk.getX(), chunk.getZ())).handle(this.session.listener);
+            }
             this.track(packet, minecraft);
             ((Packet) packet).handle(this.session.listener);
             if (packet instanceof ClientboundLoginPacket) {
@@ -716,6 +723,44 @@ final class Feed {
             this.warnOnce(packet.getClass().getSimpleName(), t);
         }
     }
+
+    /**
+     * Whether a chunk of a kept world holds light that the snapshot's packet for it would leave standing. A chunk
+     * packet gives the light of the sections that had any and names the ones that were dark; of a section the server
+     * kept no light for (empty air, well clear of everything) it says nothing, and the game then leaves whatever it has
+     * there. In a world built from nothing that is nothing. In a kept world it may be the glow of a fire or a torch
+     * from later in the recording, or the shadow of a block that is not there yet
+     */
+    private boolean lightLeftBehind(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet, Minecraft minecraft) {
+        net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
+        // Written from reading the game, and never shown to be needed by a test: off unless asked for, until one shows it
+        if (level == null || !Boolean.getBoolean("dailies.playback.forgetStaleLight") || !level.getChunkSource().hasChunk(packet.getX(), packet.getZ())) {
+            return false;
+        }
+        net.minecraft.world.level.lighting.LevelLightEngine engine = level.getLightEngine();
+        if (!this.lightSettled) {
+            // What the game holds is only known once everything it has been sent has been taken in
+            this.lightSettled = true;
+            for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
+                level.pollLightUpdates();
+            }
+            engine.runLightUpdates();
+        }
+        net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData light = packet.getLightData();
+        for (int index = 0; index < engine.getLightSectionCount(); index++) {
+            net.minecraft.core.SectionPos section = net.minecraft.core.SectionPos.of(packet.getX(), engine.getMinLightSection() + index, packet.getZ());
+            if (!light.getBlockYMask().get(index) && !light.getEmptyBlockYMask().get(index) && engine.getLayerListener(net.minecraft.world.level.LightLayer.BLOCK).getDataLayerData(section) != null) {
+                return true;
+            }
+            if (!light.getSkyYMask().get(index) && !light.getEmptySkyYMask().get(index) && engine.getLayerListener(net.minecraft.world.level.LightLayer.SKY).getDataLayerData(section) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the light of the kept world has been brought up to date for the snapshot being read */
+    private boolean lightSettled = false;
 
     private void warnOnce(String what, Throwable problem) {
         if (this.warned.add(what)) {

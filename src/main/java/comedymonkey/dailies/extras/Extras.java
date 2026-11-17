@@ -32,6 +32,7 @@ public final class Extras {
     public static void init(IEventBus modBus) {
         HudCapture.init();
         HudLayer.init();
+        EntityClocks.init();
         SkinCapture.init();
         RecordedSkins.init();
         ModDifferences.init();
