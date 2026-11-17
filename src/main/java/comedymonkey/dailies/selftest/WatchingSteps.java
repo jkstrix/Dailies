@@ -133,17 +133,9 @@ final class WatchingSteps {
         expect(test, "start", "already_recording");
         test.sleepTicks(20);
         expect(test, "cancel", "cancel_asking");
-        test.waitFor(() -> minecraft.screen instanceof ConfirmScreen, 10, "the question before a recording is thrown away");
+        test.waitFor(comedymonkey.dailies.ui.Previews::asking, 10, "the question before a recording is thrown away");
         check(Recorder.get().state() != Recorder.State.IDLE, "'/dailies cancel' threw the recording away without asking");
-        test.onClientRun(() -> {
-            for (GuiEventListener child : minecraft.screen.children()) {
-                if (child instanceof Button yes) {
-                    yes.onPress();
-                    return;
-                }
-            }
-            throw new IllegalStateException("the question has no buttons");
-        });
+        test.onClientRun(() -> comedymonkey.dailies.ui.Previews.answerAsk(true));
         test.waitFor(() -> Recorder.get().state() == Recorder.State.IDLE, 10, "the cancelled recording to stop");
         test.sleepTicks(20);
         check(Recorder.unfinished().isEmpty(), "a recording cancelled by command left its file behind");
