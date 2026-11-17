@@ -199,6 +199,38 @@ public final class RecordingFile implements Closeable {
         return Packing.unpack(this.container.read(entry), Container.HASH_BYTES);
     }
 
+    /**
+     * Writes a file stored with {@link RecordingWriter#putFile} out again, a piece at a time, and checks it is whole.
+     * The target appears only once it is complete.
+     */
+    public void extractFile(RecordingManifest.Pack stored, Path target) throws IOException {
+        java.security.MessageDigest whole;
+        try {
+            whole = java.security.MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        Files.createDirectories(target.toAbsolutePath().getParent());
+        Path partial = target.resolveSibling(target.getFileName() + "." + Long.toHexString(System.nanoTime()) + ".part");
+        try {
+            long size = 0;
+            try (java.io.OutputStream out = Files.newOutputStream(partial)) {
+                for (String piece : stored.pieces) {
+                    byte[] bytes = this.shared(piece);
+                    whole.update(bytes);
+                    out.write(bytes);
+                    size += bytes.length;
+                }
+            }
+            if (size != stored.size || !java.util.HexFormat.of().formatHex(whole.digest()).equals(stored.sha256)) {
+                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "A file stored in the recording is not what was put in");
+            }
+            Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(partial);
+        }
+    }
+
     /** How many pieces of shared data the recording holds */
     public int sharedCount() {
         synchronized (this.container) {

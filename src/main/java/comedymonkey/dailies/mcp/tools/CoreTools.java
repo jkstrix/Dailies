@@ -100,6 +100,7 @@ public final class CoreTools {
             playback.addProperty("paused", Playback.paused());
             playback.addProperty("tick_rate", Playback.ticksPerSecond());
             playback.addProperty("jumping", Playback.jumping());
+            playback.addProperty("server_packs_applied", comedymonkey.dailies.playback.PackPlayback.applied());
         }
         if (Playback.lastError() != null) {
             playback.addProperty("error", Playback.lastError());

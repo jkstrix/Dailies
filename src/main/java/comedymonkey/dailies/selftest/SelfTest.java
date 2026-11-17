@@ -72,10 +72,12 @@ public final class SelfTest {
             this.checkMcp();
             WorldSteps.createWorld(this);
             RecordingSteps.run(this);
+            ResourcePackSteps.record(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
+            ResourcePackSteps.play(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
