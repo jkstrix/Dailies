@@ -93,45 +93,45 @@ public final class SelfTest {
                 BestiarySteps.run(this);
                 throw new Failure("only the bestiary was run, and it passed");
             }
-            SettingsSteps.run(this, this.port);
-            WorldSteps.createWorld(this);
+            this.step("SettingsSteps.run", () -> SettingsSteps.run(this, this.port));
+            this.step("WorldSteps.createWorld", () -> WorldSteps.createWorld(this));
             // First, while nothing else has been recorded: it makes a recording of its own and puts it aside for later
-            WatchingSteps.record(this);
-            MomentsExtrasSteps.run(this);
-            PointOfViewSteps.beforeCraft(this);
-            RecordingSteps.run(this);
-            PointOfViewSteps.craftMoments(this);
+            this.step("WatchingSteps.record", () -> WatchingSteps.record(this));
+            this.step("MomentsExtrasSteps.run", () -> MomentsExtrasSteps.run(this));
+            this.step("PointOfViewSteps.beforeCraft", () -> PointOfViewSteps.beforeCraft(this));
+            this.step("RecordingSteps.run", () -> RecordingSteps.run(this));
+            this.step("PointOfViewSteps.craftMoments", () -> PointOfViewSteps.craftMoments(this));
             // A switch for running everything else while a fault in the pack step is being looked into
             if (!Boolean.getBoolean("dailies.test.skipPacks")) {
-                ResourcePackSteps.record(this);
+                this.step("ResourcePackSteps.record", () -> ResourcePackSteps.record(this));
             } else {
                 this.skip("the resource pack steps were switched off for this run (dailies.test.skipPacks)");
             }
-            PlaybackSteps.run(this);
-            BalloonSteps.run(this);
-            ExportSteps.run(this);
-            SettingsSteps.editorDropdown(this);
-            EditorDesignSteps.run(this);
-            ExportPresetSteps.run(this);
+            this.step("PlaybackSteps.run", () -> PlaybackSteps.run(this));
+            this.step("BalloonSteps.run", () -> BalloonSteps.run(this));
+            this.step("ExportSteps.run", () -> ExportSteps.run(this));
+            this.step("SettingsSteps.editorDropdown", () -> SettingsSteps.editorDropdown(this));
+            this.step("EditorDesignSteps.run", () -> EditorDesignSteps.run(this));
+            this.step("ExportPresetSteps.run", () -> ExportPresetSteps.run(this));
             // With the recording that has the machines in it still open: Flywheel's contraption, Iris's clock, Distant Horizons
-            RendererSteps.run(this);
-            QueueSteps.run(this);
-            PlaybackSteps.close(this);
+            this.step("RendererSteps.run", () -> RendererSteps.run(this));
+            this.step("QueueSteps.run", () -> QueueSteps.run(this));
+            this.step("PlaybackSteps.close", () -> PlaybackSteps.close(this));
             // While the recording with the machines in it is still there: the library steps take it apart
-            WatchingSteps.machines(this);
-            OwnerFeatureSteps.run(this);
-            TimelineSteps.original(this);
-            LibrarySteps.run(this);
+            this.step("WatchingSteps.machines", () -> WatchingSteps.machines(this));
+            this.step("OwnerFeatureSteps.run", () -> OwnerFeatureSteps.run(this));
+            this.step("TimelineSteps.original", () -> TimelineSteps.original(this));
+            this.step("LibrarySteps.run", () -> LibrarySteps.run(this));
             if (!Boolean.getBoolean("dailies.test.skipPacks")) {
-                ResourcePackSteps.play(this);
+                this.step("ResourcePackSteps.play", () -> ResourcePackSteps.play(this));
             }
-            WatchingSteps.watch(this);
+            this.step("WatchingSteps.watch", () -> WatchingSteps.watch(this));
             // The library's screens, the bin and storage, with small recordings of their own (REC-5, REC-8, REC-9)
-            LibraryScreenSteps.run(this);
-            PointOfViewSteps.run(this);
+            this.step("LibraryScreenSteps.run", () -> LibraryScreenSteps.run(this));
+            this.step("PointOfViewSteps.run", () -> PointOfViewSteps.run(this));
             if (Boolean.getBoolean("dailies.test.bestiary")) {
                 // About ten minutes by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiary
-                BestiarySteps.run(this);
+                this.step("BestiarySteps.run", () -> BestiarySteps.run(this));
             } else {
                 this.skip("the bestiary was not asked for (dailies.test.bestiary)");
             }
@@ -140,22 +140,50 @@ public final class SelfTest {
             if (tourFirst) {
                 RealWorldSteps.verdict();
             } else if (Boolean.getBoolean("dailies.test.realWorld")) {
-                RealWorldSteps.run(this);
+                this.step("RealWorldSteps.run", () -> RealWorldSteps.run(this));
             } else {
                 this.skip("the tour of generated terrain was not asked for (dailies.test.realWorld)");
             }
             // Last, so the tour's measures are there to be reported with its own. About three minutes, in a world of its own
             if (!Boolean.getBoolean("dailies.test.skipBudgets")) {
-                BudgetSteps.run(this);
+                this.step("BudgetSteps.run", () -> BudgetSteps.run(this));
             } else {
                 this.skip("the budgets were switched off for this run (dailies.test.skipBudgets)");
             }
-            result = "PASSED";
+            result = this.failures.isEmpty() ? "PASSED" : "FAILED: " + this.failures.size() + " step(s): " + String.join(" || ", this.failures);
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
             result = "FAILED: " + (t instanceof Failure ? t.getMessage() : t.toString());
         }
         this.finish(result);
+    }
+
+    /** Steps that failed in this run, each with its reason; the run carries on past them so that one run finds them all */
+    private final List<String> failures = new ArrayList<>();
+
+    private interface Step {
+        void run() throws Exception;
+    }
+
+    /** Runs one group of steps; a failure is written down and the run goes on with the next group */
+    private void step(String name, Step body) {
+        try {
+            body.run();
+        } catch (Throwable t) {
+            Host.LOGGER.error("Dailies self test: {} failed; carrying on with the next steps", name, t);
+            this.failures.add(name + ": " + (t instanceof Failure ? t.getMessage() : t.toString()));
+            Host.LOGGER.info("DAILIES TEST STEP FAILED: {}: {}", name, t instanceof Failure ? t.getMessage() : t.toString());
+            try {
+                this.onClientRun(() -> {
+                    Minecraft minecraft = Minecraft.getInstance();
+                    if (minecraft.screen != null && minecraft.level != null) {
+                        minecraft.setScreen(null);
+                    }
+                });
+            } catch (Throwable ignored) {
+                // The next step finds the game as it is
+            }
+        }
     }
 
     private void finish(String result) {

@@ -94,7 +94,7 @@ public final class CraftTracker {
 
     /** The scripted test flies the same world on every run, so the records of the last run would stand in the way */
     public void forgetRecordsForSelfTest() {
-        if (!Boolean.getBoolean("dailies.test")) {
+        if (System.getProperty("dailies.test.script") == null) {
             throw new IllegalStateException("Only the self test may forget the records");
         }
         this.owner.firsts().forgetRecords();
