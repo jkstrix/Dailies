@@ -70,6 +70,7 @@ public final class EditorSession {
     /** The recording is about to be closed: nothing edited may be lost (EDIT-7) */
     public static void closing() {
         SmartCameraDriver.forget();
+        CameraSteps.forget();
         EditHistory closingHistory = history;
         RecordingFile closingFile = file;
         history = null;
@@ -117,6 +118,10 @@ public final class EditorSession {
 
     public static void setExporting(boolean now) {
         exporting = now;
+    }
+
+    public static boolean exporting() {
+        return exporting;
     }
 
     /** Once a frame: save what has changed, once it has been still for a moment */
@@ -226,10 +231,21 @@ public final class EditorSession {
             case CAMERA -> pose = Evaluator.camera(scene, tick);
             case ORBIT -> {
                 Evaluator.OrbitValue orbit = Evaluator.orbit(scene, tick);
-                pose = orbit == null ? null : orbit.pose();
+                if (orbit != null && orbit.onEntity()) {
+                    // Centred on an entity: stepped with the recording's ticks, smoothed and kept clear of blocks
+                    pose = CameraSteps.pose(driver, tick);
+                } else {
+                    pose = orbit == null ? null : orbit.pose();
+                }
             }
-            case FOLLOW_ENTITY -> pose = follow(minecraft, Evaluator.follow(scene, tick));
-            case SMART_CAMERA -> pose = SmartCameraDriver.pose(minecraft, driver, (Keyframe.SmartCamera) driver.atOrBefore(tick), tick);
+            case FOLLOW_ENTITY -> {
+                pose = CameraSteps.pose(driver, tick);
+                if (pose == null) {
+                    // Not stepped yet (the first frame of a stretch): straight from the entity until it is
+                    pose = follow(minecraft, Evaluator.follow(scene, tick));
+                }
+            }
+            case SMART_CAMERA -> pose = SmartCameraDriver.pose(driver, tick);
             default -> {
             }
         }
@@ -281,7 +297,12 @@ public final class EditorSession {
         } else {
             camera = target.add(follow.offsetX(), follow.offsetY(), follow.offsetZ());
         }
-        Vec3 look = target.subtract(camera);
+        if (follow.mode() == Keyframe.FollowMode.WATCH_FROM_FIXED) {
+            // The offset names the point watched
+            target = target.add(follow.offsetX(), follow.offsetY(), follow.offsetZ());
+        }
+        // Looked at from the viewer's eyes, not its feet
+        Vec3 look = target.subtract(camera.add(0.0, 1.62, 0.0));
         if (look.lengthSqr() < 1.0e-6) {
             return new Evaluator.CameraPose(camera.x, camera.y, camera.z, entity.getViewYRot(partial), entity.getViewXRot(partial), 0.0);
         }

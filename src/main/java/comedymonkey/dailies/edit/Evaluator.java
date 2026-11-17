@@ -30,8 +30,21 @@ public final class Evaluator {
     public record CameraPose(double x, double y, double z, double yaw, double pitch, double roll) {
     }
 
-    /** A blended orbit keyframe */
-    public record OrbitValue(double centreX, double centreY, double centreZ, double distance, double height, double angle) {
+    /**
+     * A blended orbit keyframe. With an entity (from the latest keyframe) the centre is an offset from the entity's
+     * middle, and the camera that films it is worked out where the entity is known (the editor), not by {@link #pose}.
+     */
+    public record OrbitValue(double centreX, double centreY, double centreZ, double distance, double height, double angle, @Nullable UUID entityUuid,
+                             int entityId) {
+
+        /** Around a fixed point */
+        public OrbitValue(double centreX, double centreY, double centreZ, double distance, double height, double angle) {
+            this(centreX, centreY, centreZ, distance, height, angle, null, -1);
+        }
+
+        public boolean onEntity() {
+            return this.entityUuid != null;
+        }
 
         /**
          * The camera this orbit asks for: {@code distance} blocks from the centre along the ground, {@code height}
@@ -94,8 +107,13 @@ public final class Evaluator {
     }
 
     public static @Nullable OrbitValue orbit(Scene scene, double tick) {
-        double[] values = blend(scene, KeyframeKind.ORBIT, tick);
-        return values == null ? null : new OrbitValue(values[0], values[1], values[2], values[3], values[4], values[5]);
+        Track track = applyingTrack(scene, KeyframeKind.ORBIT, tick);
+        double[] values = track == null ? null : blend(track, tick);
+        if (values == null) {
+            return null;
+        }
+        Keyframe.Orbit latest = (Keyframe.Orbit) track.atOrBefore(tick);
+        return new OrbitValue(values[0], values[1], values[2], values[3], values[4], values[5], latest.entityUuid(), latest.entityId());
     }
 
     /** The entity, body part and mode of the latest follow keyframe, with the offset blended towards the next */

@@ -35,8 +35,14 @@ public final class Viewer {
     private static boolean driven = false;
     /** The player the camera keeps with and keeps in view, by id: a jump puts new entities in the world */
     private static @Nullable UUID followed = null;
-    /** Where that player was when the camera last moved with them */
-    private static @Nullable Vec3 followedAt = null;
+    /** From that player's eyes to the camera's eye: where the person has put the camera beside them */
+    private static @Nullable Vec3 followOffset = null;
+    /** Where following last put the camera, so that flying it by hand in between moves the offset */
+    private static @Nullable Vec3 followPlaced = null;
+    private static final comedymonkey.dailies.smartcamera.TetherSolver FOLLOW = new comedymonkey.dailies.smartcamera.TetherSolver();
+    private static double followTime = Double.NaN;
+    /** Seconds the following camera takes to settle after the player: bumps and hops are smoothed, the offset kept */
+    private static final double FOLLOW_SMOOTHING = 0.15;
 
     private Viewer() {
     }
@@ -61,8 +67,15 @@ public final class Viewer {
         fov = 0.0;
         driven = false;
         lastNanos = 0;
+        stopFollowing();
+    }
+
+    private static void stopFollowing() {
         followed = null;
-        followedAt = null;
+        followOffset = null;
+        followPlaced = null;
+        followTime = Double.NaN;
+        FOLLOW.reset();
     }
 
     private static boolean watchingThroughOwnEyes() {
@@ -181,8 +194,7 @@ public final class Viewer {
         }
         if (entity != null) {
             // Through their eyes there is nothing left to keep in view
-            followed = null;
-            followedAt = null;
+            stopFollowing();
         }
     }
 
@@ -196,16 +208,21 @@ public final class Viewer {
      * is beside them, and turns to look at them. The keys still fly it round them. Null stops.
      */
     public static void follow(@Nullable UUID player) {
+        stopFollowing();
         followed = player;
-        followedAt = null;
         if (player != null) {
             ride(null);
             followed = player;
         }
     }
 
-    /** Once per drawn frame while the camera is its own: go where the followed player went and look at them */
-    private static void keepInView(Minecraft minecraft) {
+    /**
+     * Once per drawn frame while the camera is its own: go where the followed player went and look at them. The player
+     * is followed on a spring led by their velocity, so the camera keeps the place the person flew it to beside them
+     * while hops and bumps are smoothed away, and it is pulled in before blocks come between them and eased back out,
+     * as the chase camera is. Timed by the recording during an export, so the film is the same every time.
+     */
+    private static void keepInView(Minecraft minecraft, double seconds, boolean exporting) {
         UUID wanted = followed;
         if (wanted == null || minecraft.level == null || riding() != null) {
             return;
@@ -215,29 +232,36 @@ public final class Viewer {
             // Out of the world for now (a jump, or too far away): the camera waits and catches up when they are back
             return;
         }
-        Vec3 now = target.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
-        Vec3 before = followedAt;
-        if (before != null) {
-            x += now.x - before.x;
-            y += now.y - before.y;
-            z += now.z - before.z;
+        Vec3 feet = target.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
+        Vec3 eyes = feet.add(0.0, target.getEyeHeight(), 0.0);
+        Vec3 camera = new Vec3(x, y + EYE_HEIGHT, z);
+        if (followOffset == null) {
+            double away = camera.distanceTo(eyes);
+            if (away > 24.0 || away < 1.0) {
+                // Begun from too far off to see them, or from inside them: a little behind and above, as playback opens
+                Vec3 back = Vec3.directionFromRotation(0.0F, target.getYRot()).scale(-5.0);
+                camera = new Vec3(feet.x + back.x, feet.y + 2.0 + EYE_HEIGHT, feet.z + back.z);
+            }
+            followOffset = camera.subtract(eyes);
+            FOLLOW.reset();
+        } else if (followPlaced != null) {
+            // Flown by hand since the last frame: the person moves the camera's place beside the player
+            followOffset = followOffset.add(x - followPlaced.x, y - followPlaced.y, z - followPlaced.z);
         }
-        double away = Math.sqrt((x - now.x) * (x - now.x) + (y - now.y) * (y - now.y) + (z - now.z) * (z - now.z));
-        if (before == null && (away > 24.0 || away < 1.0)) {
-            // Begun from too far off to see them, or from inside them: a little behind and above, as playback opens
-            Vec3 back = Vec3.directionFromRotation(0.0F, target.getYRot()).scale(-5.0);
-            x = now.x + back.x;
-            y = now.y + 2.0;
-            z = now.z + back.z;
-        }
-        followedAt = now;
-        double lookX = now.x - x;
-        double lookY = now.y + target.getEyeHeight() - (y + EYE_HEIGHT);
-        double lookZ = now.z - z;
-        if (lookX * lookX + lookY * lookY + lookZ * lookZ > 1.0e-6) {
-            yaw = (float) Math.toDegrees(Math.atan2(-lookX, lookZ));
-            pitch = Mth.clamp((float) Math.toDegrees(-Math.atan2(lookY, Math.sqrt(lookX * lookX + lookZ * lookZ))), -90.0F, 90.0F);
-        }
+        double now = Playback.frameTime();
+        double dt = exporting ? (Double.isNaN(followTime) ? -1.0 : (now - followTime) / 20.0) : seconds;
+        followTime = now;
+        double fov = Viewer.fov > 0.0 ? Viewer.fov : minecraft.options.fov().get();
+        double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
+        comedymonkey.dailies.smartcamera.Vec point = new comedymonkey.dailies.smartcamera.Vec(eyes.x, eyes.y, eyes.z);
+        comedymonkey.dailies.smartcamera.TetherSolver.Result result = FOLLOW.keep(new comedymonkey.dailies.smartcamera.LevelCameraWorld(minecraft.level, null),
+            point, new comedymonkey.dailies.smartcamera.Vec(followOffset.x, followOffset.y, followOffset.z), point, FOLLOW_SMOOTHING, 0.0, fov, aspect, dt, true);
+        x = result.eye().x();
+        y = result.eye().y() - EYE_HEIGHT;
+        z = result.eye().z();
+        yaw = (float) result.yaw();
+        pitch = Mth.clamp((float) result.pitch(), -90.0F, 90.0F);
+        followPlaced = new Vec3(x, y, z);
     }
 
     /** Once per drawn frame, after the game's ticks and before the picture */
@@ -266,8 +290,8 @@ public final class Viewer {
             pitch = Mth.clamp(player.getXRot(), -90.0F, 90.0F);
             if (!exporting) {
                 fly(minecraft, seconds);
-                keepInView(minecraft);
             }
+            keepInView(minecraft, seconds, exporting);
         }
         Entity ridden = riding();
         if (ridden != null) {

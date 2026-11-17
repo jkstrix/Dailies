@@ -633,6 +633,9 @@ public final class Playback {
      * @return false when the tick was not reached this time (the world has to be rebuilt first, or the recording ended)
      */
     public static boolean runTo(Minecraft minecraft, int target) {
+        // The game's own pause flag is put back afterwards: left off, the ticks the game runs by itself later in this
+        // frame would move the world on without the recording, and everything easing into place would get ahead
+        boolean wasPaused = minecraft.isPaused();
         while (position < target) {
             fastTick = true;
             try {
@@ -640,6 +643,7 @@ public final class Playback {
                 minecraft.tick();
             } finally {
                 fastTick = false;
+                ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(wasPaused);
             }
             if (feed.reloadWanted() >= 0) {
                 return false;

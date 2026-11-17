@@ -275,9 +275,9 @@ public final class FilmMeasures {
         // Pops: a step far beyond the usual step of the second around it
         int window = (int) Math.round(fps / 2.0);
         for (int i = 1; i < n; i++) {
-            String pop = pop(angleStep, i, window, POP_FLOOR_DEGREES, "degrees");
+            String pop = pop(angleStep, stretch, i, window, POP_FLOOR_DEGREES, "degrees");
             if (pop == null) {
-                pop = pop(blockStep, i, window, POP_FLOOR_BLOCKS, "blocks");
+                pop = pop(blockStep, stretch, i, window, POP_FLOOR_BLOCKS, "blocks");
             }
             if (pop != null) {
                 if (result.pops == 0) {
@@ -356,14 +356,15 @@ public final class FilmMeasures {
         return result;
     }
 
-    private static String pop(double[] steps, int i, int window, double floor, String unit) {
+    /** The usual step is taken within the same stretch: a still shot before a cut says nothing of how the next one moves */
+    private static String pop(double[] steps, int[] stretch, int i, int window, double floor, String unit) {
         if (Double.isNaN(steps[i])) {
             return null;
         }
         double[] around = new double[2 * window + 1];
         int count = 0;
         for (int j = Math.max(1, i - window); j <= Math.min(steps.length - 1, i + window); j++) {
-            if (j != i && !Double.isNaN(steps[j])) {
+            if (j != i && !Double.isNaN(steps[j]) && stretch[j] == stretch[i]) {
                 around[count++] = steps[j];
             }
         }

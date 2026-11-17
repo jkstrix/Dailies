@@ -10,6 +10,7 @@ import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.edit.Track;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
+import comedymonkey.dailies.smartcamera.PoseBlend;
 import comedymonkey.dailies.smartcamera.SmartCameraHeading;
 import comedymonkey.dailies.smartcamera.SmartCameraMode;
 import comedymonkey.dailies.smartcamera.SmartCameraSettings;
@@ -51,27 +52,39 @@ public final class SmartCameraDriver {
     private SmartCameraDriver() {
     }
 
-    static @Nullable Evaluator.CameraPose pose(Minecraft minecraft, Track track, @Nullable Keyframe.SmartCamera keyframe, double tick) {
+    /**
+     * One step of the Smart Camera of a track, after a tick of the recording has been played (see {@link CameraSteps}).
+     *
+     * @param tick the scene tick the recording stands on
+     */
+    static void step(Minecraft minecraft, Track track, @Nullable Keyframe.SmartCamera keyframe, double tick, boolean applied) {
         if (keyframe == null || minecraft.level == null) {
-            return null;
+            return;
         }
         SmartCameraSettings settings = PARSED.computeIfAbsent(keyframe, key -> settings(minecraft, key.settings()));
-        if (settings.target == null) {
-            return null;
-        }
         SmartCameraSolver solver = SmartCameraSolver.forTrack(track);
         lastSolver = solver;
         lastTrack = track;
-        SmartCameraSolver.Result result = solver.solve(settings, keyframe.tick(), (float) tick, minecraft, true);
-        if (result == null) {
+        if (settings.target == null) {
+            return;
+        }
+        SmartCameraSolver.Result result = solver.step(settings, keyframe.tick(), tick, minecraft, applied);
+        if (result != null) {
+            remember(track, keyframe, tick, new Evaluator.CameraPose(result.cameraX(), result.cameraY() - VIEWER_EYE_HEIGHT, result.cameraZ(), result.yaw(),
+                result.pitch(), 0.0));
+        }
+    }
+
+    /** Where the Smart Camera of a track puts the view for a frame drawn at this tick, or null when it has nothing to film */
+    static @Nullable Evaluator.CameraPose pose(Track track, double tick) {
+        PoseBlend.Pose pose = SmartCameraSolver.forTrack(track).poseAt(tick);
+        if (pose == null) {
             return null;
         }
-        if (result.applyFov()) {
-            Viewer.setFov(result.fov());
+        if (pose.hasFov()) {
+            Viewer.setFov(pose.fov());
         }
-        Evaluator.CameraPose pose = new Evaluator.CameraPose(result.cameraX(), result.cameraY() - VIEWER_EYE_HEIGHT, result.cameraZ(), result.yaw(), result.pitch(), 0.0);
-        remember(track, keyframe, tick, pose);
-        return pose;
+        return new Evaluator.CameraPose(pose.x(), pose.y() - VIEWER_EYE_HEIGHT, pose.z(), pose.yaw(), pose.pitch(), 0.0);
     }
 
     // ------------------------------------------------------------------ Where the camera went, for the path preview
@@ -191,8 +204,9 @@ public final class SmartCameraDriver {
         }
         String mode = settings.get("mode").getAsString().toLowerCase(Locale.ROOT);
         settings.addProperty("mode", mode);
-        if (mode.equals("tripod") && !settings.has("position")) {
-            // A tripod stands where the viewer is when the keyframe is made
+        if (mode.equals("tripod") && !settings.has("position") && settings.has("tripod_placement")
+            && settings.get("tripod_placement").getAsString().equalsIgnoreCase("fixed")) {
+            // A fixed tripod stands where the viewer is when the keyframe is made; otherwise it picks its own places
             Vec3 at = Viewer.position();
             JsonObject position = new JsonObject();
             position.addProperty("x", at.x);
@@ -242,19 +256,36 @@ public final class SmartCameraDriver {
                 throw new IllegalArgumentException("'heading_source' must be movement or body");
             }
         }
-        if (json.has("position")) {
+        settings.headingDeadBand = number(json, "heading_dead_band", settings.headingDeadBand, 0, 90);
+        settings.flightWiden = number(json, "flight_widen", settings.flightWiden, 0, 2);
+        boolean hasPosition = json.has("position");
+        if (hasPosition) {
             JsonElement position = json.get("position");
             try {
                 if (position.isJsonArray()) {
-                    settings.position.set(position.getAsJsonArray().get(0).getAsDouble(), position.getAsJsonArray().get(1).getAsDouble(), position.getAsJsonArray().get(2).getAsDouble());
+                    settings.positionX = position.getAsJsonArray().get(0).getAsDouble();
+                    settings.positionY = position.getAsJsonArray().get(1).getAsDouble();
+                    settings.positionZ = position.getAsJsonArray().get(2).getAsDouble();
                 } else {
                     JsonObject object = position.getAsJsonObject();
-                    settings.position.set(object.get("x").getAsDouble(), object.get("y").getAsDouble(), object.get("z").getAsDouble());
+                    settings.positionX = object.get("x").getAsDouble();
+                    settings.positionY = object.get("y").getAsDouble();
+                    settings.positionZ = object.get("z").getAsDouble();
                 }
             } catch (RuntimeException e) {
                 throw new IllegalArgumentException("'position' must be [x, y, z] or {x, y, z}");
             }
         }
+        // A tripod given a place (every one made before tripods could choose) keeps to it unless told otherwise
+        String placement = json.has("tripod_placement") ? json.get("tripod_placement").getAsString().toLowerCase(Locale.ROOT) : hasPosition ? "fixed" : "auto";
+        if (!placement.equals("auto") && !placement.equals("fixed")) {
+            throw new IllegalArgumentException("'tripod_placement' must be auto or fixed");
+        }
+        if (placement.equals("fixed") && !hasPosition && settings.mode == SmartCameraMode.TRIPOD) {
+            throw new IllegalArgumentException("A fixed tripod needs a 'position', [x, y, z]");
+        }
+        settings.autoPlace = placement.equals("auto");
+        settings.deadZone = number(json, "dead_zone", settings.deadZone, 0, 0.8F);
         settings.aimSmoothing = number(json, "aim_smoothing", settings.aimSmoothing, 0, 5);
         settings.radius = number(json, "radius", settings.radius, 1, 128);
         settings.degreesPerSecond = number(json, "degrees_per_second", settings.degreesPerSecond, -360, 360);
@@ -264,6 +295,9 @@ public final class SmartCameraDriver {
         settings.allowChase = flag(json, "allow_chase", settings.allowChase);
         settings.allowTripod = flag(json, "allow_tripod", settings.allowTripod);
         settings.allowOrbit = flag(json, "allow_orbit", settings.allowOrbit);
+        settings.allowOverShoulder = flag(json, "allow_over_shoulder", settings.allowOverShoulder);
+        settings.allowSideTracking = flag(json, "allow_side_tracking", settings.allowSideTracking);
+        settings.establishingShots = flag(json, "establishing_shots", settings.establishingShots);
         settings.seed = json.has("seed") ? json.get("seed").getAsInt() : 0;
         settings.screenX = number(json, "screen_x", settings.screenX, -1, 1);
         settings.screenY = number(json, "screen_y", settings.screenY, -1, 1);
@@ -295,7 +329,7 @@ public final class SmartCameraDriver {
             if (Playback.manifest() != null && Playback.manifest().recorderName.equalsIgnoreCase(wanted)) {
                 return UUID.fromString(Playback.manifest().recorderId);
             }
-            throw new IllegalArgumentException("There is no player called '" + wanted + "' in the recording at this tick. Give a name from replay_list_entities, or a uuid");
+            throw new IllegalArgumentException("There is no player called '" + wanted + "' in the recording at this tick. Give a name from replay_list_entities, or a uuid (any entity's)");
         }
     }
 

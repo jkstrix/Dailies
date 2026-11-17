@@ -22,13 +22,15 @@ import org.jetbrains.annotations.Nullable;
  * @param subLevelRemembered whether that is only assumed, because the entity was on it a moment ago and is still next to it
  * @param riding whether the entity is a passenger or on a physics object
  * @param gliding whether the entity is flying with an elytra
+ * @param flying whether the entity flies the way creative players do
  * @param airborne whether the entity is off the ground without riding anything
+ * @param swimming whether the entity is in water
  * @param tickVelocity blocks per second over the last tick, for a first estimate before the solver has its own
  */
 public record SmartCameraSubject(Vec3 position, AABB bounds, String framed, @Nullable Object subLevel, boolean subLevelRemembered,
-                                 boolean riding, boolean gliding, boolean airborne, double bodyYaw, Vec3 tickVelocity) {
+                                 boolean riding, boolean gliding, boolean flying, boolean airborne, boolean swimming, double bodyYaw, Vec3 tickVelocity) {
 
-    public static final String FRAMED_NONE = "none";
+    public static final String FRAMED_NONE = SubjectSample.FRAMED_NONE;
     public static final String FRAMED_VEHICLE = "vehicle";
     public static final String FRAMED_CONTRAPTION = "contraption";
     public static final String FRAMED_PHYSICS_OBJECT = "physics_object";
@@ -50,6 +52,20 @@ public record SmartCameraSubject(Vec3 position, AABB bounds, String framed, @Nul
     /** The largest extent of the bounds, which is what auto zoom fits into the frame */
     public double size() {
         return Math.max(this.bounds.getYsize(), Math.max(this.bounds.getXsize(), this.bounds.getZsize()));
+    }
+
+    /** The same, for the solvers, which know nothing of Minecraft */
+    public SubjectSample sample() {
+        Vec3 aim = this.aimPoint();
+        double size = this.size();
+        // When more than the entity is framed, distances are measured from the edge of it, and its own blocks are not in the way
+        double extra = this.framesMore() ? size * 0.5 : 0.0;
+        return new SubjectSample(new Vec(this.position.x, this.position.y, this.position.z), new Vec(aim.x, aim.y, aim.z), this.bounds.getYsize(), size,
+            extra, this.bodyYaw, this.riding, this.gliding, this.flying, this.airborne, this.swimming, this.framed);
+    }
+
+    public Vec velocityHint() {
+        return new Vec(this.tickVelocity.x, this.tickVelocity.y, this.tickVelocity.z);
     }
 
     /**
@@ -124,7 +140,9 @@ public record SmartCameraSubject(Vec3 position, AABB bounds, String framed, @Nul
 
         boolean riding = entity.isPassenger() || subLevel != null;
         boolean gliding = entity instanceof LivingEntity livingEntity && livingEntity.isFallFlying();
+        boolean flying = entity instanceof net.minecraft.world.entity.player.Player player && player.getAbilities().flying;
         boolean airborne = !riding && !entity.onGround() && !entity.isInWater();
+        boolean swimming = entity.isInWater();
 
         Vec3 tickVelocity = Vec3.ZERO;
         if (!inPlot) {
@@ -134,7 +152,7 @@ public record SmartCameraSubject(Vec3 position, AABB bounds, String framed, @Nul
             }
         }
 
-        return new SmartCameraSubject(position, bounds, framed, subLevel, subLevelRemembered, riding, gliding, airborne, bodyYaw, tickVelocity);
+        return new SmartCameraSubject(position, bounds, framed, subLevel, subLevelRemembered, riding, gliding, flying, airborne, swimming, bodyYaw, tickVelocity);
     }
 
     private static boolean isUsable(AABB box) {

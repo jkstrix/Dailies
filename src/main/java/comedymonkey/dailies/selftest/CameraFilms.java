@@ -274,15 +274,15 @@ final class CameraFilms {
             case "watch-keyframe" -> history.setKeyframe(new Keyframe.FollowEntity(tick, Interpolation.LINEAR, recorder, subject.getId(), Keyframe.BodyPart.EYES,
                 0.0, 0.0, 0.0, Keyframe.FollowMode.WATCH_FROM_FIXED));
             case "orbit-keyframe" -> {
-                // Centred on the player as they are at the keyframe; an Orbit keyframe has a fixed centre
+                // Centred on the player, who it follows as they move: the centre numbers are then an offset from their middle
                 Vec3 centre = subject.position().add(0.0, subject.getBbHeight() / 2.0, 0.0);
                 Vec3 feet = Viewer.position();
                 double dx = feet.x - centre.x;
                 double dz = feet.z - centre.z;
                 double distance = Math.min(1000.0, Math.sqrt(dx * dx + dz * dz));
                 double angle = distance < 1.0e-6 ? Viewer.yaw() : Math.toDegrees(Math.atan2(dx, -dz));
-                history.setKeyframe(new Keyframe.Orbit(tick, Interpolation.LINEAR, round(centre.x), round(centre.y), round(centre.z), round(distance),
-                    round(Math.max(-1000.0, Math.min(1000.0, feet.y - centre.y))), round(angle)));
+                history.setKeyframe(new Keyframe.Orbit(tick, Interpolation.LINEAR, 0.0, 0.0, 0.0, round(distance),
+                    round(Math.max(-1000.0, Math.min(1000.0, feet.y - centre.y))), round(angle), recorder, subject.getId()));
             }
             case "panel-follow" -> Viewer.follow(recorder);
             default -> {

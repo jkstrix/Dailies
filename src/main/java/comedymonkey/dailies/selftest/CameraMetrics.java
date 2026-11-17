@@ -137,7 +137,7 @@ final class CameraMetrics {
                 SmartCameraSolver.Result result = solver == null ? null : solver.lastResult();
                 if (result != null) {
                     frame.shot = result.shotIndex();
-                    frame.shotKind = result.shotMode().name().toLowerCase(Locale.ROOT);
+                    frame.shotKind = result.shotKind();
                     frame.targetX = result.targetScreenX();
                     frame.targetY = result.targetScreenY();
                     // The Smart Camera places the point it calls the subject, not the eyes

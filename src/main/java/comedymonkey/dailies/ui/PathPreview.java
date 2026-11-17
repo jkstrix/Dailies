@@ -138,7 +138,8 @@ public final class PathPreview {
                     moments.add((double) keyframe.tick());
                     if (keyframe instanceof Keyframe.Camera camera) {
                         keyframes.add(new Mark(index, camera.tick(), KeyframeKind.CAMERA, camera.x(), camera.y(), camera.z()));
-                    } else if (keyframe instanceof Keyframe.Orbit orbit) {
+                    } else if (keyframe instanceof Keyframe.Orbit orbit && !orbit.onEntity()) {
+                        // An orbit round an entity goes where the entity goes, which is only known as it plays
                         Evaluator.CameraPose pose = new Evaluator.OrbitValue(orbit.centreX(), orbit.centreY(), orbit.centreZ(), orbit.distance(), orbit.height(), orbit.angle()).pose();
                         keyframes.add(new Mark(index, orbit.tick(), KeyframeKind.ORBIT, pose.x(), pose.y(), pose.z()));
                     }
@@ -176,7 +177,7 @@ public final class PathPreview {
                     pose = Evaluator.camera(scene, tick);
                 } else if (driver != null && driver.kind() == KeyframeKind.ORBIT) {
                     Evaluator.OrbitValue orbit = Evaluator.orbit(scene, tick);
-                    pose = orbit == null ? null : orbit.pose();
+                    pose = orbit == null || orbit.onEntity() ? null : orbit.pose();
                 }
                 Keyframe keyframe = pose == null ? null : driver.atOrBefore(tick);
                 // A new run where another track takes over, where no track that has a path drives, and after a keyframe

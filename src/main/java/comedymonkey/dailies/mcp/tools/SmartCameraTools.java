@@ -17,7 +17,8 @@ final class SmartCameraTools {
 
     private static final String[] SETTINGS = {"tick", "target", "mode", "track", "distance", "height", "side_angle", "position_smoothing", "heading_source", "position",
         "aim_smoothing", "radius", "degrees_per_second", "start_angle", "min_shot_seconds", "max_shot_seconds", "allow_chase", "allow_tripod", "allow_orbit", "seed",
-        "screen_x", "screen_y", "lead_room", "auto_zoom", "subject_screen_height", "min_fov", "max_fov", "fixed_fov", "frame_vehicle", "avoid_obstructions", "transition_seconds"};
+        "screen_x", "screen_y", "lead_room", "auto_zoom", "subject_screen_height", "min_fov", "max_fov", "fixed_fov", "frame_vehicle", "avoid_obstructions", "transition_seconds",
+        "heading_dead_band", "flight_widen", "tripod_placement", "dead_zone", "allow_over_shoulder", "allow_side_tracking", "establishing_shots"};
 
     private SmartCameraTools() {
     }
@@ -25,10 +26,12 @@ final class SmartCameraTools {
     static void register(McpProtocol.Registrar registrar) {
         registrar.add("smart_camera_add",
             "Add a Smart Camera keyframe to the current scene: from that tick until the next keyframe on its track the camera places and aims itself to film one player. "
-                + "Modes: chase (follows from a set distance and angle), tripod (stands still and turns), orbit (circles), director (picks and cuts between the other three). Undoable.",
+                + "Modes: chase (follows behind, widening and lifting in flight and at speed), tripod (stands still and pans; picks its own place unless given one), "
+                + "orbit (circles, keeping clear of terrain), director (an establishing wide, then chase, over-the-shoulder, side tracking, tripod and orbit shots, "
+                + "cut on action without jump cuts or crossing the line). Undoable.",
             McpSchema.object()
                 .integer("tick", "Tick of the keyframe")
-                .string("target", "The player to film, by name or uuid (default: whoever made the recording)")
+                .string("target", "Who to film: a player by name, or any entity by uuid (default: whoever made the recording)")
                 .string("mode", "chase (default), tripod, orbit or director")
                 .integer("track", "A Smart Camera track of the scene, when it has more than one")
                 .number("distance", "Chase: blocks behind the player (default 6). Director: the base distance of its chase shots")
@@ -36,16 +39,23 @@ final class SmartCameraTools {
                 .number("side_angle", "Chase: degrees round the player from their heading. 0 behind, 90 to their right, 180 in front")
                 .number("position_smoothing", "Chase: seconds the camera takes to catch up (default 0.35; 0 is rigid)")
                 .string("heading_source", "Chase: movement (way of travel, body when nearly still) or body")
-                .any("position", "Tripod: where it stands, as [x, y, z] or {x, y, z} (default: where the camera is now)")
+                .number("heading_dead_band", "Chase: degrees of turn ignored, so small turns and wobbles do not swing the camera (default 15)")
+                .number("flight_widen", "Chase: how much wider and higher it goes in flight and at speed, 0 to 2 (default 0.6)")
+                .string("tripod_placement", "Tripod: auto (picks a place with a clear view of where the player is going, and cuts to a new one when they leave it; the default) or fixed")
+                .any("position", "Tripod: where a fixed tripod stands, as [x, y, z] or {x, y, z} (default for a fixed one: where the camera is now)")
+                .number("dead_zone", "Tripod: how far the player may wander from their place in the frame before it turns, a share of half the frame, 0 to 0.8 (default 0.12)")
                 .number("aim_smoothing", "Tripod: seconds it takes to turn after the player (default 0.25)")
                 .number("radius", "Orbit: distance from the player along the ground (default 8)")
                 .number("degrees_per_second", "Orbit: how fast it circles; the sign is the direction (default 20)")
                 .number("start_angle", "Orbit: the camera's heading at the keyframe's tick")
-                .number("min_shot_seconds", "Director: shortest shot (default 3)")
-                .number("max_shot_seconds", "Director: longest shot (default 8)")
+                .number("min_shot_seconds", "Director: shortest shot (default 3; never under 1.5)")
+                .number("max_shot_seconds", "Director: longest shot (default 10)")
                 .bool("allow_chase", "Director: may use chase shots")
                 .bool("allow_tripod", "Director: may use tripod shots")
                 .bool("allow_orbit", "Director: may use orbit shots")
+                .bool("allow_over_shoulder", "Director: may use over-the-shoulder shots")
+                .bool("allow_side_tracking", "Director: may use side tracking shots")
+                .bool("establishing_shots", "Director: a wide shot whenever the player comes into a new kind of place (default true)")
                 .integer("seed", "Director: the same seed gives the same shots")
                 .number("screen_x", "Where the player sits across the frame, -1 left edge to 1 right edge; 0 centre, 0.333 a third")
                 .number("screen_y", "Where the player sits up the frame, -1 bottom to 1 top")
@@ -99,7 +109,7 @@ final class SmartCameraTools {
                 }
                 json.addProperty("tick", result.tick());
                 json.addProperty("mode", result.mode().name().toLowerCase());
-                json.addProperty("shot_mode", result.shotMode().name().toLowerCase());
+                json.addProperty("shot_mode", result.shotKind());
                 json.addProperty("shot_index", result.shotIndex());
                 json.addProperty("shot_start_tick", result.shotStartTick());
                 json.addProperty("shot_age_seconds", result.shotAgeSeconds());
@@ -128,12 +138,14 @@ final class SmartCameraTools {
                 json.addProperty("target_screen_x", result.targetScreenX());
                 json.addProperty("target_screen_y", result.targetScreenY());
                 json.addProperty("obstructed", result.obstructed());
+                json.addProperty("visibility", result.visibility());
+                json.addProperty("activity", result.activity());
                 json.addProperty("transition", result.transition());
                 JsonArray shots = new JsonArray();
                 for (SmartCameraSolver.ShotInfo shot : solver.shotHistory()) {
                     JsonObject one = new JsonObject();
                     one.addProperty("index", shot.index());
-                    one.addProperty("mode", shot.mode().name().toLowerCase());
+                    one.addProperty("mode", shot.kind());
                     one.addProperty("start_tick", shot.startTick());
                     one.addProperty("seconds", shot.seconds());
                     one.addProperty("start_reason", shot.startReason());

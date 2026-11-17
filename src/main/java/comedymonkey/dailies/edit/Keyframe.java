@@ -107,9 +107,14 @@ public sealed interface Keyframe {
     /**
      * The camera circles a centre point while looking at it. Distance is measured along the ground, height is how far
      * the camera is above the centre, and angle is the camera's yaw (kept between -180 and 180).
+     * <p>
+     * With an entity named ({@code entity_uuid}, and the numeric id it had in the recording, -1 when not known), the
+     * circle is centred on that entity as it moves, and the centre numbers are an offset from the middle of the
+     * entity (0, 0, 0 for its middle). Like the follow keyframe, the entity is taken from the earlier keyframe; only
+     * the numbers blend. Without one the centre is a fixed point, as in scenes made before entities could be named.
      */
     record Orbit(int tick, Interpolation interpolation, double centreX, double centreY, double centreZ, double distance, double height,
-                 double angle) implements Keyframe {
+                 double angle, UUID entityUuid, int entityId) implements Keyframe {
         public Orbit {
             common(tick, interpolation);
             position("centre_x", centreX);
@@ -118,6 +123,22 @@ public sealed interface Keyframe {
             JsonFields.range("distance", distance, 0, 1000);
             JsonFields.range("height", height, -1000, 1000);
             angle = degrees("angle", angle);
+            if (entityId < -1) {
+                throw new IllegalArgumentException("'entity_id' must be a whole number from -1 to " + Integer.MAX_VALUE + ", got " + entityId);
+            }
+            if (entityUuid == null) {
+                entityId = -1;
+            }
+        }
+
+        /** Around a fixed point */
+        public Orbit(int tick, Interpolation interpolation, double centreX, double centreY, double centreZ, double distance, double height, double angle) {
+            this(tick, interpolation, centreX, centreY, centreZ, distance, height, angle, null, -1);
+        }
+
+        /** Whether the circle is centred on an entity rather than on a fixed point */
+        public boolean onEntity() {
+            return this.entityUuid != null;
         }
 
         @Override
@@ -127,12 +148,17 @@ public sealed interface Keyframe {
 
         @Override
         public Orbit withTick(int tick) {
-            return new Orbit(tick, this.interpolation, this.centreX, this.centreY, this.centreZ, this.distance, this.height, this.angle);
+            return new Orbit(tick, this.interpolation, this.centreX, this.centreY, this.centreZ, this.distance, this.height, this.angle, this.entityUuid, this.entityId);
         }
 
         @Override
         public Orbit withInterpolation(Interpolation interpolation) {
-            return new Orbit(this.tick, interpolation, this.centreX, this.centreY, this.centreZ, this.distance, this.height, this.angle);
+            return new Orbit(this.tick, interpolation, this.centreX, this.centreY, this.centreZ, this.distance, this.height, this.angle, this.entityUuid, this.entityId);
+        }
+
+        /** The same circle centred on an entity (an offset from its middle), or on a fixed point when the entity is null */
+        public Orbit withEntity(UUID uuid, int id, double offsetX, double offsetY, double offsetZ) {
+            return new Orbit(this.tick, this.interpolation, offsetX, offsetY, offsetZ, this.distance, this.height, this.angle, uuid, uuid == null ? -1 : id);
         }
 
         @Override
@@ -144,6 +170,10 @@ public sealed interface Keyframe {
             json.addProperty("distance", this.distance);
             json.addProperty("height", this.height);
             json.addProperty("angle", this.angle);
+            if (this.entityUuid != null) {
+                json.addProperty("entity_uuid", this.entityUuid.toString());
+                json.addProperty("entity_id", this.entityId);
+            }
             return json;
         }
 
@@ -618,10 +648,17 @@ public sealed interface Keyframe {
                     JsonFields.number(json, "x", -far, far), JsonFields.number(json, "y", -far, far), JsonFields.number(json, "z", -far, far),
                     JsonFields.number(json, "yaw", -36000, 36000), JsonFields.number(json, "pitch", -90, 90),
                     JsonFields.number(json, "roll", -3600, 3600, 0));
-            case ORBIT -> new Orbit(tick, mode,
-                    JsonFields.number(json, "centre_x", -far, far), JsonFields.number(json, "centre_y", -far, far),
-                    JsonFields.number(json, "centre_z", -far, far), JsonFields.number(json, "distance", 0, 1000),
-                    JsonFields.number(json, "height", -1000, 1000, 0), JsonFields.number(json, "angle", -36000, 36000, 0));
+            case ORBIT -> {
+                // An entity is optional: scenes from before it could be named have none
+                boolean named = json.has("entity_uuid") && !json.get("entity_uuid").isJsonNull()
+                        && !(json.get("entity_uuid").isJsonPrimitive() && json.get("entity_uuid").getAsString().isBlank());
+                UUID entity = named ? JsonFields.uuid(JsonFields.text(json, "entity_uuid"), "entity_uuid") : null;
+                yield new Orbit(tick, mode,
+                        (named ? JsonFields.number(json, "centre_x", -far, far, 0) : JsonFields.number(json, "centre_x", -far, far)), (named ? JsonFields.number(json, "centre_y", -far, far, 0) : JsonFields.number(json, "centre_y", -far, far)),
+                        (named ? JsonFields.number(json, "centre_z", -far, far, 0) : JsonFields.number(json, "centre_z", -far, far)), JsonFields.number(json, "distance", 0, 1000),
+                        JsonFields.number(json, "height", -1000, 1000, 0), JsonFields.number(json, "angle", -36000, 36000, 0),
+                        entity, named ? JsonFields.integer(json, "entity_id", -1, Integer.MAX_VALUE, -1) : -1);
+            }
             case FOLLOW_ENTITY -> new FollowEntity(tick, mode,
                     JsonFields.uuid(JsonFields.text(json, "entity_uuid"), "entity_uuid"),
                     JsonFields.integer(json, "entity_id", -1, Integer.MAX_VALUE, -1),
