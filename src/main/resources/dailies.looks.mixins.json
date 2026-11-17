@@ -15,7 +15,8 @@
     "LightTextureMixin",
     "ParticleDropMixin",
     "TerrainMixin",
-    "BlockEntityMixin"
+    "BlockEntityMixin",
+    "BeamMixin"
   ],
   "injectors": {
     "defaultRequire": 1

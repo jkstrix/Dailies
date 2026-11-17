@@ -186,6 +186,7 @@ public final class LooksRenderer {
                 if (looks != null) {
                     forget();
                 }
+                comedymonkey.dailies.compat.create.FlywheelLooks.frame(false);
                 return;
             }
             Minecraft minecraft = Minecraft.getInstance();
@@ -220,6 +221,7 @@ public final class LooksRenderer {
             }
             particlesShown = now.showParticles;
             looks = now;
+            comedymonkey.dailies.compat.create.FlywheelLooks.frame(true);
             BlockChanges.frame(minecraft, scene);
         } catch (Throwable t) {
             // For example the recording closing between two of the questions above
@@ -323,6 +325,12 @@ public final class LooksRenderer {
         }
         Set<EntityType<?>> hidden = hiddenEntityTypes;
         return !hidden.isEmpty() && hidden.contains(entity.getType()) || override(now, entity).hide();
+    }
+
+    /** Whether any entity at all may be hidden just now, so that asking about each one is worth it */
+    public static boolean hidesAnyEntity() {
+        Looks now = looks;
+        return now != null && (!now.showEntities || !now.showPlayers || anyOverrides || !hiddenEntityTypes.isEmpty());
     }
 
     /** Whether the terrain, and the block entities in it, are left out */

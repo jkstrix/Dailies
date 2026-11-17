@@ -59,6 +59,13 @@ final class CraftSteps {
             test.sleepTicks(6);
             boolean recorderSeated = sit(test, minecraft, new BlockPos(15, -57, -6));
             test.command("setblock 14 -60 -6 create:creative_motor[facing=up]");
+            // A row of kinetics that turn nothing, in view of the bearing: what Flywheel draws as blocks (WatchingSteps.machines)
+            test.command("setblock 10 -60 -9 create:shaft[axis=x]");
+            test.command("setblock 11 -60 -9 create:cogwheel[axis=x]");
+            test.command("setblock 12 -60 -9 create:shaft[axis=x]");
+            test.command("setblock 13 -60 -9 create:large_cogwheel[axis=y]");
+            test.command("setblock 15 -60 -9 create:gearbox");
+            test.command("setblock 16 -60 -9 create:shaft[axis=x]");
             boolean assembled = false;
             for (int attempt = 0; attempt < 4 && !assembled; attempt++) {
                 test.command("setblock 14 -59 -6 create:mechanical_bearing[facing=up]");

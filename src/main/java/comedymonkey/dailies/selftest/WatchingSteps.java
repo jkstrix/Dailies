@@ -26,16 +26,12 @@ import comedymonkey.dailies.ui.PlayerList;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.events.GuiEventListener;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.ClientCommandHandler;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
-import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -70,13 +66,15 @@ final class WatchingSteps {
     private static Path recording;
     private static int walkStart;
     private static int walkEnd;
+    /** The tick just before a line was put on the action bar */
+    private static int actionBar;
 
     private WatchingSteps() {
     }
 
-    /** The settings screen, or the page of it the game goes straight to when a mod has only one file of settings */
+    /** The settings screen of the mod */
     private static boolean settingsOpen(Minecraft minecraft) {
-        return minecraft.screen != null && minecraft.screen.getClass().getName().startsWith(ConfigurationScreen.class.getName());
+        return minecraft.screen instanceof comedymonkey.dailies.ui.SettingsScreen;
     }
 
     // ------------------------------------------------------------------ Recording, by command
@@ -133,16 +131,12 @@ final class WatchingSteps {
         expect(test, "start", "already_recording");
         test.sleepTicks(20);
         expect(test, "cancel", "cancel_asking");
-        test.waitFor(() -> minecraft.screen instanceof ConfirmScreen, 10, "the question before a recording is thrown away");
+        test.waitFor(() -> minecraft.screen != null && minecraft.screen.getClass().getSimpleName().equals("AskScreen"), 10, "the question before a recording is thrown away");
         check(Recorder.get().state() != Recorder.State.IDLE, "'/dailies cancel' threw the recording away without asking");
+        // The keys start on the answer that changes nothing; one step back is "yes"
         test.onClientRun(() -> {
-            for (GuiEventListener child : minecraft.screen.children()) {
-                if (child instanceof Button yes) {
-                    yes.onPress();
-                    return;
-                }
-            }
-            throw new IllegalStateException("the question has no buttons");
+            minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_TAB, 0, org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT);
+            minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER, 0, 0);
         });
         test.waitFor(() -> Recorder.get().state() == Recorder.State.IDLE, 10, "the cancelled recording to stop");
         test.sleepTicks(20);
@@ -152,6 +146,9 @@ final class WatchingSteps {
         test.command("tp @s " + X + " " + Y + " " + Z + " -90 10");
         test.command("fill 37 -60 37 39 -60 39 minecraft:iron_block");
         test.command("setblock 38 -59 38 minecraft:beacon");
+        test.command("setblock 41 -57 38 minecraft:end_gateway");
+        // A room with no light in it, to see the camera path in the dark
+        test.command("fill 30 -60 14 44 -54 22 minecraft:stone hollow");
         test.command("summon minecraft:pig 34.5 -60 36.5 {NoAI:1b,Silent:1b,PersistenceRequired:1b,Tags:[\"dailies_watching\"]}");
         test.command("scoreboard objectives add dailies_watch dummy \"Watching\"");
         test.command("scoreboard objectives setdisplay sidebar dailies_watch");
@@ -205,6 +202,9 @@ final class WatchingSteps {
             test.command("tp @s " + (X + step * 0.3) + " " + Y + " " + Z + " -90 10");
             test.sleepTicks(2);
         }
+        test.sleepTicks(10);
+        actionBar = test.onClient(() -> Recorder.get().recordingTick());
+        test.command("title @s actionbar {\"text\":\"Dailies action bar\",\"color\":\"yellow\",\"bold\":true}");
         test.sleepTicks(30);
         walkEnd = test.onClient(() -> Recorder.get().recordingTick());
         test.sleepTicks(20);
@@ -239,6 +239,8 @@ final class WatchingSteps {
         // The stage is struck, so the steps that follow find the world as they expect it
         test.command("kill @e[tag=dailies_watching]");
         test.command("setblock 38 -59 38 minecraft:air");
+        test.command("setblock 41 -57 38 minecraft:air");
+        test.command("fill 30 -60 14 44 -54 22 minecraft:air");
         test.command("fill 37 -60 37 39 -60 39 minecraft:air");
         test.command("scoreboard objectives remove dailies_watch");
         test.sleepTicks(5);
@@ -385,9 +387,11 @@ final class WatchingSteps {
         newLooks(test, minecraft, recorderId);
         frame(test, minecraft);
         players(test, minecraft, manifest, recorderId);
+        pictures(test, minecraft, manifest, recorderId);
 
         test.tool("replay_close", new JsonObject());
         test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the recording to close");
+        machines(test);
     }
 
     // --- REC-7 and PLAY-4: the command while a recording is watched ---
@@ -596,7 +600,12 @@ final class WatchingSteps {
             test.skip("the terrain hook is not in this game's renderer (another mod draws the terrain its own way): 'show_blocks' was checked by its exported picture only");
         }
         check(blockEntities > 0, "the beacon in the picture is not drawn as a block entity");
-        check(Drawn.terrainLayersHidden() == 0 && Drawn.blockEntitiesHidden() == 0 && Drawn.beaconsHidden() == 0, "something is kept out of the picture with every look on");
+        int beams = Drawn.beams();
+        check(beams >= 1, "no beam is drawn where a beacon stands in the picture");
+        if (beams < 2) {
+            test.skip("the end gateway in the test recording shows no beam in playback, so only the beacon's beam was hidden and counted");
+        }
+        check(Drawn.terrainLayersHidden() == 0 && Drawn.blockEntitiesHidden() == 0 && Drawn.beamsHidden() == 0, "something is kept out of the picture with every look on");
         Path all = still(test, "looks-all", 640, 360, false);
 
         looks(test, "show_entities", false);
@@ -612,16 +621,17 @@ final class WatchingSteps {
         check(Drawn.players() == players, "the players did not come back");
 
         looks(test, "show_beacon_beams", false);
-        check(Drawn.beaconsHidden() > 0 && Drawn.blockEntities() == blockEntities - Drawn.beaconsHidden(), "with beacon beams off, " + Drawn.beaconsHidden() + " beacons are kept out of the picture");
+        check(Drawn.beams() == 0 && Drawn.beamsHidden() == beams, "with beacon beams off, " + Drawn.beams() + " beams are drawn and " + Drawn.beamsHidden() + " of " + beams + " turned away");
+        check(Drawn.blockEntities() == blockEntities && Drawn.blockEntitiesHidden() == 0, "with beacon beams off, the beacon itself or another block entity is kept out of the picture");
         Path noBeams = still(test, "looks-no-beams", 640, 360, false);
         looks(test, "show_beacon_beams", true);
-        check(Drawn.beaconsHidden() == 0, "the beacon beams did not come back");
+        check(Drawn.beams() == beams && Drawn.beamsHidden() == 0, "the beacon beams did not come back");
 
         looks(test, "show_blocks", false);
         if (terrain > 0) {
             check(Drawn.terrainLayers() == 0 && Drawn.terrainLayersHidden() > 0, "with blocks off, " + Drawn.terrainLayers() + " layers of terrain are still drawn");
         }
-        check(Drawn.blockEntities() == 0 && Drawn.entities() == entities && Drawn.players() == players, "with blocks off, block entities are drawn or entities are not");
+        check(Drawn.blockEntities() == 0 && Drawn.beams() == 0 && Drawn.entities() == entities && Drawn.players() == players, "with blocks off, block entities are drawn or entities are not");
         Path noBlocks = still(test, "looks-no-blocks", 640, 360, false);
         looks(test, "show_blocks", true);
         check(Drawn.terrainLayers() == terrain && Drawn.blockEntities() == blockEntities, "the blocks did not come back");
@@ -639,7 +649,7 @@ final class WatchingSteps {
         Path again = still(test, "looks-all-again", 640, 360, false);
         check(differing(all, again) < 30, "with every look back on, the picture is not what it was (" + differing(all, again) + " pixels differ)");
         test.log("looks in exported stills: blocks off changes " + withoutBlocks + " pixels of " + pixels + ", entities " + withoutEntities + ", players " + withoutPlayers
-            + ", beacon beams " + withoutBeams + "; drawn with all on: " + entities + " entities, " + players + " players, " + terrain + " terrain layers, " + blockEntities + " block entities");
+            + ", beacon beams " + withoutBeams + "; drawn with all on: " + entities + " entities, " + players + " players, " + terrain + " terrain layers, " + blockEntities + " block entities, " + beams + " beams");
 
         // The interface layers: each look turns its own layer away and no other
         ResourceLocation[] layers = {VanillaGuiLayers.HOTBAR, VanillaGuiLayers.SCOREBOARD_SIDEBAR, VanillaGuiLayers.OVERLAY_MESSAGE};
@@ -674,7 +684,23 @@ final class WatchingSteps {
         int scoreboardElsewhere = differing(hud, noScoreboard, 0.0, 0.0, 0.7, 1.0);
         check(scoreboardGone > 200 && scoreboardElsewhere < 30,
             "a still without the scoreboard differs in " + scoreboardGone + " pixels where the scoreboard is and " + scoreboardElsewhere + " elsewhere");
-        test.skip("the action bar look was checked by its layer being turned away, not in a picture: a line above the hotbar lasts a moment and no still was timed to one");
+
+        // The action bar: played up to a moment when a line stands on it, which a jump alone would not show
+        jump(test, Math.max(0, actionBar - 5));
+        test.tool("replay_set_speed", args("tick_rate", 20));
+        test.onClientRun(() -> Playback.playTo(actionBar + 12));
+        test.waitFor(() -> Playback.paused() && Playback.position() == actionBar + 12, 30, "play up to the line on the action bar");
+        frames(test, 4);
+        Path bar = still(test, "hud-action-bar", 1280, 720, true);
+        looks(test, "show_action_bar", false);
+        Path noBar = still(test, "hud-no-action-bar", 1280, 720, true);
+        looks(test, "show_action_bar", true);
+        Path barAgain = still(test, "hud-action-bar-again", 1280, 720, true);
+        int barGone = differing(bar, noBar, 0.25, 0.7, 0.75, 0.95);
+        int barElsewhere = differing(bar, noBar, 0.0, 0.0, 1.0, 0.6);
+        check(barGone > 200 && barElsewhere < 30, "a still without the action bar differs in " + barGone + " pixels where its line is and " + barElsewhere + " elsewhere");
+        check(differing(bar, barAgain, 0.25, 0.7, 0.75, 0.95) < barGone / 4, "the line on the action bar did not come back when the look was switched on again");
+        test.log("the action bar look takes " + barGone + " pixels of its line out of an exported still");
     }
 
     // --- Chapter V: the frame that is the picture itself ---
@@ -828,8 +854,326 @@ final class WatchingSteps {
         check(test.onClient(Viewer::position).distanceTo(cameraBefore) < 0.5, "after a jump back the following camera is not back beside the recorder");
         test.onClientRun(() -> PlayerList.follow(recorderId));
         check(!PlayerList.following(recorderId) && Viewer.following() == null, "pressing 'follow' again did not stop following");
+        morePlayers(test, minecraft, recorderId);
         test.onClientRun(() -> minecraft.setScreen(null));
         test.log("following kept the recorder within " + String.format("%.1f", worst) + " degrees of the middle of the view over " + looked + " looks");
+    }
+
+    // --- PLAY-3 with more than the recorder ---
+
+    private static final UUID ADA = UUID.nameUUIDFromBytes("dailies-test-ada".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    private static final UUID BRUNEL = UUID.nameUUIDFromBytes("dailies-test-brunel".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    /** As long as a player's name can be, to see that it is cut short tidily */
+    private static final String ADA_NAME = "Ada_Lovelace_815";
+
+    /**
+     * Puts two more players into the playback world the way a server does: the packet that lists players, for both,
+     * and the packet that brings a player into sight, for one of them. So one is there to be seen and one is only
+     * known of, as someone far off is. A singleplayer test world has nobody else to record.
+     */
+    private static void addPlayers(SelfTest test, Vec3 at) throws Exception {
+        test.onClientRun(() -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            net.minecraft.client.multiplayer.ClientPacketListener listener = minecraft.getConnection();
+            comedymonkey.dailies.capture.GameCodec codec = new comedymonkey.dailies.capture.GameCodec(listener.registryAccess(), listener.getConnectionType());
+            List<net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry> entries = List.of(
+                new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry(ADA, new com.mojang.authlib.GameProfile(ADA, ADA_NAME), true, 0,
+                    net.minecraft.world.level.GameType.SURVIVAL, null, null),
+                new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry(BRUNEL, new com.mojang.authlib.GameProfile(BRUNEL, "Brunel"), true, 0,
+                    net.minecraft.world.level.GameType.SURVIVAL, null, null));
+            listener.handlePlayerInfoUpdate(comedymonkey.dailies.capture.PlayerInfoPackets.build(codec, comedymonkey.dailies.capture.PlayerInfoPackets.allButChat(), entries));
+            listener.handleAddEntity(new net.minecraft.network.protocol.game.ClientboundAddEntityPacket(90001, ADA, at.x, at.y, at.z, 0.0F, 90.0F,
+                net.minecraft.world.entity.EntityType.PLAYER, 0, Vec3.ZERO, 90.0));
+        });
+        frames(test, 6);
+    }
+
+    private static void morePlayers(SelfTest test, Minecraft minecraft, UUID recorderId) throws Exception {
+        Vec3 recorder = test.onClient(() -> minecraft.level.getPlayerByUUID(recorderId).position());
+        Vec3 beside = recorder.add(3.0, 0.0, 4.0);
+        lookFrom(test, recorder.add(1.5, 2.0, -7.0), recorder.add(1.5, 1.0, 2.0));
+        editor(test);
+        int before = Drawn.players();
+        addPlayers(test, beside);
+
+        test.onClientRun(() -> {
+            List<PlayerList.Listed> listed = PlayerList.players();
+            check(listed.size() == 3, "with two more players the panel lists " + listed);
+            check(listed.get(0).id().equals(recorderId), "the recorder is not first in the players panel: " + listed);
+            check(listed.get(1).id().equals(ADA) && listed.get(1).name().equals(ADA_NAME) && listed.get(1).inWorld(), "the player in sight is not listed as in sight: " + listed);
+            check(listed.get(2).id().equals(BRUNEL) && !listed.get(2).inWorld(), "the player who is only known of is not listed as out of sight: " + listed);
+        });
+        check(Drawn.players() == before + 1, "a second player in sight is not drawn: " + Drawn.players() + " players, " + before + " before");
+        picture(test, "watching-players-three");
+
+        // Each row acts on its own player
+        test.onClientRun(() -> PlayerList.lookAt(ADA));
+        frames(test, 3);
+        check(test.onClient(() -> offAim(minecraft.level.getPlayerByUUID(ADA).getEyePosition())) < 1.0, "'look at' on the second row did not turn the camera to that player");
+        test.onClientRun(() -> PlayerList.hide(ADA));
+        frames(test, 4);
+        check(Drawn.players() == before && PlayerList.hidden(ADA) && !PlayerList.hidden(recorderId), "hiding the second player left " + Drawn.players() + " players drawn, or hid the recorder");
+        test.onClientRun(() -> PlayerList.hide(ADA));
+        frames(test, 4);
+        check(Drawn.players() == before + 1, "the second player did not come back");
+        test.onClientRun(() -> PlayerList.follow(ADA));
+        frames(test, 3);
+        check(PlayerList.following(ADA) && !PlayerList.following(recorderId), "'follow' on the second row does not follow that player");
+        test.onClientRun(() -> PlayerList.ride(ADA));
+        check(test.onClient(() -> Viewer.riding() != null && Viewer.riding().getUUID().equals(ADA)), "'ride' on the second row did not ride with that player");
+        check(Viewer.following() == null, "riding along did not end the following");
+        test.onClientRun(() -> PlayerList.ride(ADA));
+
+        // Out of sight: nothing to look at, follow or ride with, and none of them does anything; hide still works,
+        // so that someone can be kept out of a scene before they walk into it
+        Vec3 cameraAt = test.onClient(Viewer::position);
+        float yawAt = test.onClient(Viewer::yaw);
+        test.onClientRun(() -> {
+            PlayerList.lookAt(BRUNEL);
+            PlayerList.follow(BRUNEL);
+            PlayerList.ride(BRUNEL);
+        });
+        frames(test, 3);
+        check(Viewer.following() == null && test.onClient(() -> Viewer.riding() == null) && test.onClient(Viewer::position).distanceTo(cameraAt) < 1.0e-6
+            && Math.abs(test.onClient(Viewer::yaw) - yawAt) < 1.0e-6, "a player who is out of sight could be looked at, followed or ridden with");
+        test.onClientRun(() -> PlayerList.hide(BRUNEL));
+        check(PlayerList.hidden(BRUNEL) && test.onClient(() -> EditorSession.scene().looks().hiddenEntities().contains(BRUNEL)), "a player who is out of sight could not be hidden");
+        test.onClientRun(() -> PlayerList.hide(BRUNEL));
+        check(!PlayerList.hidden(BRUNEL), "a player who is out of sight could not be shown again");
+
+        // They came by hand and a jump takes them away again: the panel follows who is there
+        jump(test, walkStart + 1);
+        frames(test, 6);
+        List<PlayerList.Listed> after = test.onClient(PlayerList::players);
+        check(!after.isEmpty() && after.get(0).id().equals(recorderId) && after.stream().noneMatch(listed -> listed.id().equals(ADA) && listed.inWorld()),
+            "after a jump the panel still shows a player who is no longer in the world: " + after);
+        test.log("players panel with three players: one in sight, one out of sight; after a jump it lists " + after.size());
+    }
+
+    // --- Chapter V with Create: what is a block and what is an entity ---
+
+    /** How many pixels of a picture are not the plain green a scene without its sky is filled with */
+    private static int notBackground(Path picture) throws Exception {
+        BufferedImage image = ImageIO.read(picture.toFile());
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int rgb = image.getRGB(x, y);
+                if ((rgb >> 16 & 0xFF) > 40 || (rgb >> 8 & 0xFF) < 215 || (rgb & 0xFF) > 40) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * The recording the other steps made holds Create's machines: a row of shafts and cogs, a bearing on a motor,
+     * and the contraption the bearing carries. Flywheel draws all of them. Here they are looked at with blocks off
+     * and with entities off, counted in Flywheel's own lists and proved in exported pictures.
+     */
+    static void machines(SelfTest test) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!Host.get().isModLoaded("create")) {
+            test.skip("Create is not installed: the blocks and entities looks were not tried on its machines");
+            return;
+        }
+        test.tool("replay_open", args("path", RecordingSteps.recording.toString()));
+        test.waitFor(() -> (Playback.loaded() && !Playback.jumping() && Playback.file() != null && RecordingSteps.recording.equals(Playback.file().file())) || Playback.lastError() != null, 120,
+            "the recording with the machines to open");
+        check(Playback.lastError() == null, "the recording with the machines did not open: " + Playback.lastError());
+        jump(test, RecordingSteps.notes.get(RecordingSteps.notes.size() / 2).tick());
+        lookFrom(test, new Vec3(13.5, -56.0, -17.0), new Vec3(13.5, -59.0, -7.0));
+        test.sleepTicks(20);
+        frames(test, 8);
+
+        int[] drawn = comedymonkey.dailies.compat.create.FlywheelLooks.drawn();
+        if (drawn == null) {
+            test.skip("Flywheel's lists were not found: Create's machines were checked by exported pictures only");
+        } else {
+            check(drawn[0] >= 4 && drawn[1] >= 1, "Flywheel is drawing " + drawn[0] + " block entities and " + drawn[1] + " entities where a row of kinetics and a contraption are in view");
+        }
+
+        // Against a plain background, so that anything left in the picture can be counted
+        looks(test, "sky", false, "background_colour", "#00FF00", "show_particles", false, "show_players", false);
+        frames(test, 6);
+        Path all = still(test, "machines-all", 640, 360, false);
+
+        looks(test, "show_blocks", false);
+        frames(test, 6);
+        int[] noBlocks = comedymonkey.dailies.compat.create.FlywheelLooks.drawn();
+        if (drawn != null) {
+            check(noBlocks[0] == 0 && noBlocks[1] == drawn[1], "with blocks off Flywheel still draws " + noBlocks[0] + " block entities, and " + noBlocks[1] + " entities of " + drawn[1]);
+        }
+        Path blocksOff = still(test, "machines-no-blocks", 640, 360, false);
+        int contraptionLeft = notBackground(blocksOff);
+        check(contraptionLeft > 150, "with blocks off the contraption, which is an entity, is gone from the picture too (" + contraptionLeft + " pixels are not background)");
+
+        looks(test, "show_entities", false);
+        frames(test, 6);
+        int[] nothing = comedymonkey.dailies.compat.create.FlywheelLooks.drawn();
+        if (drawn != null) {
+            check(nothing[0] == 0 && nothing[1] == 0, "with blocks and entities off Flywheel still draws " + nothing[0] + " block entities and " + nothing[1] + " entities");
+        }
+        Path bare = still(test, "machines-nothing", 640, 360, false);
+        int left = notBackground(bare);
+        check(left == 0, "with blocks, entities, players, particles and sky off, " + left + " pixels of an exported picture are still not background: see " + bare);
+
+        looks(test, "show_blocks", true);
+        frames(test, 6);
+        int[] noEntities = comedymonkey.dailies.compat.create.FlywheelLooks.drawn();
+        if (drawn != null) {
+            check(noEntities[0] == drawn[0] && noEntities[1] == 0, "with entities off Flywheel draws " + noEntities[0] + " block entities of " + drawn[0] + " and " + noEntities[1] + " entities");
+        }
+        Path entitiesOff = still(test, "machines-no-entities", 640, 360, false);
+        int contraptionGone = differing(all, entitiesOff);
+        check(contraptionGone > 150, "with entities off the picture differs from the whole one in only " + contraptionGone + " pixels: the contraption is still there");
+
+        looks(test, "show_entities", true);
+        frames(test, 8);
+        int[] back = comedymonkey.dailies.compat.create.FlywheelLooks.drawn();
+        if (drawn != null) {
+            check(back[0] == drawn[0] && back[1] == drawn[1], "Flywheel does not draw everything again once the looks are back on: " + back[0] + " and " + back[1] + " of " + drawn[0] + " and " + drawn[1]);
+        }
+        Path again = still(test, "machines-all-again", 640, 360, false);
+        check(differing(all, again) < 400, "with every look back on the machines are not all back in the picture (" + differing(all, again) + " pixels differ)");
+        looks(test, "sky", true, "show_particles", true, "show_players", true);
+        test.log("Create's machines: Flywheel drew " + (drawn == null ? "?" : drawn[0] + " block entities and " + drawn[1] + " entities") + "; blocks off leaves " + contraptionLeft
+            + " pixels of contraption, entities off changes " + contraptionGone + ", both off leaves " + left);
+
+        test.tool("replay_close", new JsonObject());
+        test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the recording to close");
+    }
+
+    // --- For the eye: pictures at 1920 by 1080 and interface scale 2 ---
+
+    private interface Stop {
+        void run() throws Exception;
+    }
+
+    private static void attempt(String what, Stop stop) {
+        try {
+            stop.run();
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies self test: the picture of {} could not be taken", what, t);
+        }
+    }
+
+    private static void size(SelfTest test, int width, int height, int scale) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        test.onClientRun(() -> {
+            org.lwjgl.glfw.GLFW.glfwSetWindowSize(minecraft.getWindow().getWindow(), width, height);
+            minecraft.options.guiScale().set(scale);
+        });
+        test.sleepTicks(8);
+        test.onClientRun(minecraft::resizeDisplay);
+        test.sleepTicks(8);
+    }
+
+    /**
+     * Pictures of everything this class draws, at the size and scale the interface is judged at, kept in the
+     * screenshots folder. Nothing here can fail the run: whether it looks right is for a person to say.
+     */
+    private static void pictures(SelfTest test, Minecraft minecraft, RecordingManifest manifest, UUID recorderId) throws Exception {
+        int widthBefore = test.onClient(() -> minecraft.getWindow().getScreenWidth());
+        int heightBefore = test.onClient(() -> minecraft.getWindow().getScreenHeight());
+        int scaleBefore = minecraft.options.guiScale().get();
+        size(test, 1920, 1080, 2);
+        Vec3 base = new Vec3(X, Y, Z);
+        try {
+            attempt("the path against the sky", () -> {
+                jump(test, walkStart);
+                test.onClientRun(() -> {
+                    EditHistory history = EditorSession.history();
+                    history.clearAllTracks();
+                    int index = history.setKeyframe(new Keyframe.Camera(walkStart, Interpolation.SMOOTH, base.x - 6.0, base.y + 14.0, base.z + 4.0, 0.0, 30.0, 0.0));
+                    history.setKeyframe(index, new Keyframe.Camera(walkStart + 20, Interpolation.SMOOTH, base.x, base.y + 18.0, base.z + 8.0, -40.0, 35.0, 0.0));
+                    history.setKeyframe(index, new Keyframe.Camera(walkStart + 40, Interpolation.SMOOTH, base.x + 6.0, base.y + 13.0, base.z + 5.0, -90.0, 30.0, 0.0));
+                    history.setKeyframe(index, new Keyframe.Camera(walkStart + 60, Interpolation.SMOOTH, base.x + 12.0, base.y + 17.0, base.z + 9.0, -120.0, 40.0, 0.0));
+                });
+                lookFrom(test, base.add(3.0, 0.0, -8.0), base.add(3.0, 17.0, 6.0));
+                editor(test);
+                // One keyframe selected, to see the brighter mark
+                test.onClientRun(() -> {
+                    double[] at = PathPreview.onScreen(PathPreview.marks().get(1));
+                    if (at != null) {
+                        minecraft.screen.mouseClicked(at[0], at[1], 0);
+                        minecraft.screen.mouseReleased(at[0], at[1], 0);
+                    }
+                });
+                picture(test, "eye-path-sky");
+            });
+            attempt("the path in the dark", () -> {
+                test.onClientRun(() -> {
+                    EditHistory history = EditorSession.history();
+                    history.clearAllTracks();
+                    int index = history.setKeyframe(new Keyframe.Camera(walkStart, Interpolation.SMOOTH, 33.0, -59.0, 18.0, -90.0, 0.0, 0.0));
+                    history.setKeyframe(index, new Keyframe.Camera(walkStart + 20, Interpolation.SMOOTH, 37.0, -58.2, 16.6, -90.0, 10.0, 0.0));
+                    history.setKeyframe(index, new Keyframe.Camera(walkStart + 40, Interpolation.SMOOTH, 41.0, -59.0, 19.0, -60.0, 0.0, 0.0));
+                });
+                lookFrom(test, new Vec3(37.0, -59.0, 20.6), new Vec3(37.0, -57.0, 17.0));
+                editor(test);
+                picture(test, "eye-path-dark");
+            });
+            attempt("a stale Smart Camera stretch", () -> {
+                test.onClientRun(() -> EditorSession.history().clearAllTracks());
+                int track = test.tool("smart_camera_add", args("tick", walkStart, "mode", "chase")).get("track").getAsInt();
+                jump(test, walkStart);
+                test.onClientRun(() -> {
+                    EditorSession.setFollowCamera(true);
+                    Playback.playTo(walkStart + 60);
+                });
+                test.waitFor(() -> Playback.paused() && Playback.position() == walkStart + 60, 30, "play under the Smart Camera");
+                lookFrom(test, base.add(4.0, 7.0, -13.0), base.add(4.0, 2.0, -3.0));
+                editor(test);
+                picture(test, "eye-smart-fresh");
+                test.onClientRun(() -> {
+                    Keyframe.SmartCamera keyframe = (Keyframe.SmartCamera) EditorSession.scene().track(track).at(walkStart);
+                    JsonObject changed = keyframe.settings().deepCopy();
+                    changed.addProperty("distance", 11.0);
+                    EditorSession.history().setKeyframe(track, new Keyframe.SmartCamera(walkStart, Interpolation.HOLD, changed));
+                });
+                picture(test, "eye-smart-stale");
+                test.onClientRun(() -> EditorSession.history().clearAllTracks());
+            });
+            attempt("the marker rings", () -> {
+                RecordingManifest.Marker well = manifest.markers.get(0);
+                Vec3 spot = new Vec3(well.position[0], well.position[1], well.position[2]);
+                jump(test, walkEnd);
+                lookFrom(test, spot.add(-3.0, 1.0, -4.0), spot);
+                editor(test);
+                picture(test, "eye-ring-near");
+                lookFrom(test, spot.add(-45.0, 12.0, -55.0), spot);
+                picture(test, "eye-ring-far");
+            });
+            attempt("the letterboxed editor", () -> {
+                lookFrom(test, new Vec3(36.5, Y + 3.0, 25.0), new Vec3(37.5, Y, 36.0));
+                looks(test, "aspect_guide", "21:9", "letterbox", true, "thirds_guide", true);
+                editor(test);
+                picture(test, "eye-letterbox-wide");
+                looks(test, "aspect_guide", "9:16");
+                picture(test, "eye-letterbox-tall");
+                looks(test, "aspect_guide", "off", "letterbox", false, "thirds_guide", false);
+            });
+            attempt("the players panel", () -> {
+                Vec3 recorder = test.onClient(() -> minecraft.level.getPlayerByUUID(recorderId).position());
+                lookFrom(test, recorder.add(1.5, 2.0, -7.0), recorder.add(1.5, 1.0, 2.0));
+                addPlayers(test, recorder.add(3.0, 0.0, 4.0));
+                editor(test);
+                test.onClientRun(() -> {
+                    PlayerList.hide(BRUNEL);
+                    PlayerList.follow(ADA);
+                });
+                picture(test, "eye-players");
+                test.onClientRun(() -> {
+                    PlayerList.hide(BRUNEL);
+                    PlayerList.follow(ADA);
+                });
+            });
+        } finally {
+            test.onClientRun(() -> minecraft.setScreen(null));
+            size(test, widthBefore, heightBefore, scaleBefore);
+        }
     }
 
 }
