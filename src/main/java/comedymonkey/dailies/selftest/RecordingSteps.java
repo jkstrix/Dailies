@@ -110,6 +110,23 @@ final class RecordingSteps {
         // A known piece of sound, as if from voice chat, close to the kill so that its clip takes it in (MOM-31)
         OwnerFeatureSteps.speak(test);
 
+        // Chapter XIV step 9: what only a server can tell the game, through the Moments Companion
+        if (comedymonkey.dailies.Host.get().isModLoaded("moments_companion")) {
+            test.command("moment data @s test_event {answer:42} Hello from the server");
+            test.command("summon minecraft:iron_golem 0 -60 9 {NoAI:1b,CustomName:'\"Stand-in boss\"',attributes:[{id:\"minecraft:generic.max_health\",base:200.0}],Health:200.0f}");
+            test.sleepTicks(10);
+            test.command("damage @e[type=minecraft:iron_golem,limit=1,sort=nearest] 500 minecraft:player_attack by @s");
+            test.sleepTicks(20);
+            OwnerFeatureSteps.companionUsed = true;
+        } else {
+            test.skip("the Moments Companion is not installed: server-sent moments were not tried (SRV-1 to SRV-3)");
+        }
+        if (!comedymonkey.dailies.Host.get().isModLoaded("mcpcraft")) {
+            test.skip("McpCraft is not installed: job board moments were not tried (SRV-10, SRV-11, SRV-15)");
+        } else {
+            test.skip("McpCraft's job board is not driven by this script yet: job board moments were not tried (SRV-10, SRV-11, SRV-15)");
+        }
+
         // Chapter XIV step 2: machines, built while the recording runs
         CraftSteps.build(test);
 

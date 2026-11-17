@@ -22,6 +22,8 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  */
 final class OwnerFeatureSteps {
 
+    static boolean companionUsed = false;
+
     private OwnerFeatureSteps() {
     }
 
@@ -50,6 +52,13 @@ final class OwnerFeatureSteps {
         check(listed.contains("\"mob_kill\""), "the kill was not logged as a moment: " + shorten(listed));
         check(listed.contains("\"marker\""), "the marker was not logged as a moment: " + shorten(listed));
         check(listed.contains("biome_discovered"), "the biome was not logged as a moment: " + shorten(listed));
+        if (companionUsed) {
+            check(listed.contains("test_event") && listed.contains("Hello from the server"), "the moment sent by /moment data did not arrive: " + shorten(listed));
+            check(listed.contains("boss_fight"), "killing the stand-in boss did not arrive as a boss_fight moment: " + shorten(listed));
+            JsonObject sent = test.tool("moments_events_query", args("session", "latest", "keyword", "test_event"));
+            check(sent.toString().contains("42") && sent.toString().contains("server"), "the server moment lost its data or its source: " + shorten(sent.toString()));
+            test.log("server moments arrived: test_event with its data, and boss_fight");
+        }
         JsonArray eventList = firstArray(events);
         int stamped = 0;
         int lastTick = -1;
