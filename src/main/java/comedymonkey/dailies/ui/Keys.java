@@ -88,6 +88,8 @@ public final class Keys {
         // Once a frame and not once a tick: a slowed-down recording slows the game's ticks down with it, and the
         // keys that would speed it up again must not become sluggish too
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> playbackKeys());
+        // The editor, the key for which is one of these, has hooks of its own to set up
+        EditorScreen.hook();
     }
 
     private static void recordingKeys() {

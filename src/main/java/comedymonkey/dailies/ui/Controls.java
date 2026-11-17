@@ -32,6 +32,12 @@ public final class Controls {
     static final int WALNUT_GLASS = 0xB02B1D0E;
     static final int PARCHMENT = 0xFFEFE6D6;
     static final int PARCHMENT_DIM = 0xFFA89878;
+    /** A panel of the editor: walnut, less see-through than the playback bar so that small print stays readable */
+    static final int PANEL = 0xE02B1D0E;
+    /** The inside of a box to type in */
+    static final int FIELD = 0xFF1A1108;
+    /** Something refused or wrong */
+    static final int ALERT = 0xFFE8604A;
 
     /** The playback speeds the slower and faster controls move between, in ticks per second. 20 is as recorded */
     private static final double[] SPEEDS = {2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 160.0};
@@ -259,7 +265,7 @@ public final class Controls {
         watching(() -> {
             boolean follow = !EditorSession.followCamera();
             EditorSession.setFollowCamera(follow);
-            Notices.show(Component.translatable(follow ? "dailies.ui.notice.camera_track" : "dailies.ui.notice.camera_free"));
+            tell(Component.translatable(follow ? "dailies.ui.notice.camera_track" : "dailies.ui.notice.camera_free"));
         });
     }
 
@@ -267,7 +273,7 @@ public final class Controls {
         watching(() -> {
             EditHistory history = EditorSession.open() ? EditorSession.history() : null;
             String what = history == null ? null : history.undo();
-            Notices.show(what == null ? Component.translatable("dailies.ui.notice.nothing_to_undo") : Component.translatable("dailies.ui.notice.undone", what));
+            tell(what == null ? Component.translatable("dailies.ui.notice.nothing_to_undo") : Component.translatable("dailies.ui.notice.undone", what));
         });
     }
 
@@ -275,12 +281,17 @@ public final class Controls {
         watching(() -> {
             EditHistory history = EditorSession.open() ? EditorSession.history() : null;
             String what = history == null ? null : history.redo();
-            Notices.show(what == null ? Component.translatable("dailies.ui.notice.nothing_to_redo") : Component.translatable("dailies.ui.notice.redone", what));
+            tell(what == null ? Component.translatable("dailies.ui.notice.nothing_to_redo") : Component.translatable("dailies.ui.notice.redone", what));
         });
     }
 
     public static void openTimeline() {
-        watching(() -> Minecraft.getInstance().setScreen(new TimelineScreen()));
+        watching(EditorScreen::open);
+    }
+
+    /** Says something to the person: in the editor when it is open, where its top bar would cover a notice, else as a notice */
+    static void tell(Component words) {
+        EditorState.say(words);
     }
 
     private static void watching(FileWork action) {
@@ -297,10 +308,10 @@ public final class Controls {
             action.run();
         } catch (IllegalStateException | IllegalArgumentException refused) {
             String reason = refused.getMessage();
-            Notices.show(reason == null || reason.isBlank() ? Component.translatable("dailies.ui.notice.went_wrong") : Component.translatable("dailies.ui.notice.refused", reason));
+            tell(reason == null || reason.isBlank() ? Component.translatable("dailies.ui.notice.went_wrong") : Component.translatable("dailies.ui.notice.refused", reason));
         } catch (Exception | LinkageError e) {
             Host.LOGGER.error("Dailies: a control failed", e);
-            Notices.show(Component.translatable("dailies.ui.notice.went_wrong"));
+            tell(Component.translatable("dailies.ui.notice.went_wrong"));
         }
     }
 
@@ -317,12 +328,12 @@ public final class Controls {
                 work.run();
             } catch (Exception e) {
                 Host.LOGGER.error("Dailies: file work failed", e);
-                Notices.show(failed);
+                tell(failed);
             }
         }, Util.ioPool()).whenComplete((nothing, error) -> {
             if (error != null) {
                 Host.LOGGER.error("Dailies: file work failed", error);
-                Notices.show(failed);
+                tell(failed);
             }
             Minecraft.getInstance().execute(() -> guarded(then::run));
         });

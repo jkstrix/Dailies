@@ -20,7 +20,7 @@ import org.jetbrains.annotations.Nullable;
  * lines and markers as small flags, and above it the time, the speed, what playback is doing and whether the camera
  * follows its track. The game's own "hide the interface" key hides it with everything else.
  *
- * The timeline screen draws the same gauge through {@link #drawGauge} and {@link #drawStatus}.
+ * While the editor is open it has a timeline of its own and this strip stays away.
  */
 public final class PlaybackBar {
 
@@ -39,7 +39,7 @@ public final class PlaybackBar {
 
     private static void draw(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!Playback.loaded() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof TimelineScreen) {
+        if (!Playback.loaded() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof EditorScreen || minecraft.screen instanceof ExportProgress) {
             return;
         }
         try {

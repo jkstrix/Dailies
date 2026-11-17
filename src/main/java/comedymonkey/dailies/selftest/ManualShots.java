@@ -99,11 +99,30 @@ final class ManualShots {
         test.sleepTicks(30);
         shot(test, "06-playback");
 
-        attempt(test, "the timeline screen", () -> {
+        attempt(test, "the editor", () -> {
+            // Two camera keyframes and a field of view keyframe, so the timeline has something on it
+            int a = total / 3;
+            test.tool("keyframe_add_camera", args("tick", a, "x", 0.5, "y", -55.0, "z", 2.0, "yaw", -40.0, "pitch", 25.0));
+            test.tool("keyframe_add_camera", args("tick", a + 60, "x", 13.0, "y", -55.0, "z", 2.0, "yaw", 40.0, "pitch", 25.0));
+            test.tool("scene_set_export_range", args("start_tick", a, "end_tick", a + 60));
+            test.tool("camera_set", args("x", 6.5, "y", -52.0, "z", -2.0, "yaw", 0.0, "pitch", 32.0));
+            editorTab(test, 0, false);
+            shot(test, "07-editor-keyframes");
+            editorTab(test, 0, true);
+            shot(test, "07b-editor-keyframe-selected");
+            editorTab(test, 1, false);
+            shot(test, "07c-editor-looks");
+            editorTab(test, 2, false);
+            shot(test, "07d-editor-export");
             test.onClientRun(Controls::openTimeline);
-            test.sleepTicks(20);
-            shot(test, "07-timeline");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.sleepTicks(5);
+            test.onClientRun(() -> {
+                if (minecraft.screen != null) {
+                    minecraft.setScreen(null);
+                }
+            });
+            // The export step's camera track would hold the view through the Smart Camera pictures that follow
+            test.tool("track_update", args("track", 0, "enabled", false));
         });
 
         attempt(test, "the Smart Camera", () -> {
@@ -156,6 +175,35 @@ final class ManualShots {
 
         PlaybackSteps.close(test);
         test.log("manual: pictures are in " + folder);
+    }
+
+    /** Opens the editor on one of its tabs (0 keyframe, 1 looks, 2 export), with the first keyframe selected when asked */
+    private static void editorTab(SelfTest test, int tab, boolean select) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        test.onClientRun(() -> {
+            try {
+                if (minecraft.screen != null) {
+                    minecraft.setScreen(null);
+                }
+                Class<?> state = Class.forName("comedymonkey.dailies.ui.EditorState");
+                java.lang.reflect.Field field = state.getDeclaredField("tab");
+                field.setAccessible(true);
+                field.setInt(null, tab);
+                java.lang.reflect.Field selection = state.getDeclaredField("selection");
+                selection.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                java.util.Set<Object> chosen = (java.util.Set<Object>) selection.get(null);
+                chosen.clear();
+                if (select) {
+                    var track = comedymonkey.dailies.editor.EditorSession.scene().track(0);
+                    chosen.add(new comedymonkey.dailies.edit.KeyframeRef(0, track.keyframes().get(0).tick()));
+                }
+                Controls.openTimeline();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        test.sleepTicks(25);
     }
 
     private interface Stop {
