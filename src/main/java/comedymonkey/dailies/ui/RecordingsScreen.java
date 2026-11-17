@@ -1164,6 +1164,23 @@ public final class RecordingsScreen extends KitScreen {
         return this.report;
     }
 
+    /** The lines of the pane of details as it stands, each "name: value" */
+    public List<String> detailsLines() {
+        List<String> lines = new ArrayList<>();
+        for (Gadget row : this.side.rows()) {
+            if (row instanceof Fact fact) {
+                lines.add(fact.label.getString() + ": " + fact.value);
+            }
+        }
+        return lines;
+    }
+
+    /** Whether the details of the one recording chosen have been read from its file, mods and spans included */
+    public boolean detailsRead() {
+        List<LibraryIndex.Entry> entries = this.chosenEntries();
+        return entries.size() == 1 && entries.get(0).file.equals(this.detailsFor) && this.detailsManifest != null;
+    }
+
     /** Every control on the plate with nothing to explain it when the mouse rests on it: should be none */
     public List<String> controlsWithoutTips() {
         List<String> missing = new ArrayList<>();

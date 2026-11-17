@@ -120,6 +120,8 @@ public final class SelfTest {
                 ResourcePackSteps.play(this);
             }
             WatchingSteps.watch(this);
+            // The library's screens, the bin and storage, with small recordings of their own (REC-5, REC-8, REC-9)
+            LibraryScreenSteps.run(this);
             if (Boolean.getBoolean("dailies.test.bestiary")) {
                 // About ten minutes by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiary
                 BestiarySteps.run(this);
