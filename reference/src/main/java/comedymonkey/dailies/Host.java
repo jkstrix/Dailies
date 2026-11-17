@@ -80,6 +80,8 @@ public final class Host {
         /** Leave whatever is open and open this recording. Client thread; loading continues afterwards */
         void openRecording(Path file) throws Exception;
         boolean exportRunning();
+        /** The export presets, in their order: each one's name and a line saying what it makes */
+        java.util.Map<String, String> exportPresets();
 
         // --- Editor ---
         /** The FOV the open scene forces, or null when it leaves the game's setting alone */

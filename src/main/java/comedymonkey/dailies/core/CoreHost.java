@@ -150,6 +150,15 @@ public final class CoreHost implements Host.Mod {
         return comedymonkey.dailies.export.Export.active();
     }
 
+    @Override
+    public java.util.Map<String, String> exportPresets() {
+        java.util.Map<String, String> presets = new java.util.LinkedHashMap<>();
+        for (comedymonkey.dailies.export.ExportPreset preset : comedymonkey.dailies.export.Export.presets().all()) {
+            presets.put(preset.name(), preset.summary());
+        }
+        return presets;
+    }
+
     // --- Editor ---
 
     @Override

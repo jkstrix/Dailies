@@ -55,6 +55,8 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
     }
 
     private final Map<UUID, Voice> voices = new HashMap<>();
+    /** The speakers of an export that keeps voices apart: only their decoders are used, they have no sound source */
+    private final Map<UUID, Voice> apart = new HashMap<>();
     private final Set<String> warned = new HashSet<>();
 
     private VoicePlayback() {
@@ -63,6 +65,10 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
     @Override
     public void play(byte[] data, int from, int length, boolean skipping) {
         if (skipping || Playback.skipping() || !audible()) {
+            return;
+        }
+        if (ExportSound.keepsVoicesApart()) {
+            this.keepApart(VoiceFormat.read(data, from, length));
             return;
         }
         if (ALC10.alcGetCurrentContext() == 0L) {
@@ -111,6 +117,58 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
         if (error != AL10.AL_NO_ERROR) {
             this.warnOnce("OpenAL error " + error, null);
         }
+    }
+
+    /**
+     * An export that keeps each speaker on a track of their own (EXP-12): the voice is not played into the game's
+     * sound device, where it would be mixed with everything else for good, but placed here the way that device
+     * would place it and handed to the export. As loud as the distance allows, fading evenly to nothing at the end
+     * of its reach, and to the left or right as the speaker stood from the camera.
+     */
+    private void keepApart(VoiceFormat.Frame frame) {
+        Voice voice = this.apart.computeIfAbsent(frame.speaker(), speaker -> new Voice());
+        short[] samples = this.samples(voice, frame);
+        if (samples == null || samples.length == 0) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        float gain = minecraft.options.getSoundSourceVolume(SoundSource.VOICE) * minecraft.options.getSoundSourceVolume(SoundSource.MASTER);
+        double side = 0.0;
+        if (frame.hasPosition()) {
+            net.minecraft.client.Camera camera = minecraft.gameRenderer.getMainCamera();
+            net.minecraft.world.phys.Vec3 to = new net.minecraft.world.phys.Vec3(frame.x(), frame.y(), frame.z()).subtract(camera.getPosition());
+            double distance = to.length();
+            gain *= (float) Math.max(0.0, 1.0 - distance / REACH);
+            if (distance > 1.0e-3) {
+                org.joml.Vector3f left = camera.getLeftVector();
+                side = -(to.x * left.x() + to.y * left.y() + to.z * left.z()) / distance;
+            }
+        }
+        side = Math.max(-1.0, Math.min(1.0, side));
+        // Equal power: a voice straight ahead is as loud in each ear as one to the side is in one
+        ExportSound.voice(frame.speaker(), speakerName(frame.speaker()), samples, (float) (gain * Math.sqrt((1.0 - side) / 2.0)), (float) (gain * Math.sqrt((1.0 + side) / 2.0)));
+    }
+
+    /** What a speaker is called: the player of that id in the recording, else the start of the id */
+    private static String speakerName(UUID speaker) {
+        Minecraft minecraft = Minecraft.getInstance();
+        try {
+            if (minecraft.level != null) {
+                net.minecraft.world.entity.player.Player player = minecraft.level.getPlayerByUUID(speaker);
+                if (player != null) {
+                    return player.getGameProfile().getName();
+                }
+            }
+            if (minecraft.getConnection() != null) {
+                net.minecraft.client.multiplayer.PlayerInfo info = minecraft.getConnection().getPlayerInfo(speaker);
+                if (info != null) {
+                    return info.getProfile().getName();
+                }
+            }
+        } catch (RuntimeException e) {
+            Host.LOGGER.debug("Dailies: a speaker could not be looked up by id", e);
+        }
+        return "Speaker " + speaker.toString().substring(0, 8);
     }
 
     /** Voices are only right at the speed they were spoken at, and never while the recording stands still */
@@ -219,7 +277,7 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
             return;
         }
         try {
-            if (ALC10.alcGetCurrentContext() != 0L) {
+            if (voice.source != 0 && ALC10.alcGetCurrentContext() != 0L) {
                 AL10.alSourceStop(voice.source);
                 AL10.alSourcei(voice.source, AL10.AL_BUFFER, 0);
                 AL10.alDeleteSources(voice.source);
@@ -248,6 +306,10 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
             free(voice);
         }
         this.voices.clear();
+        for (Voice voice : this.apart.values()) {
+            free(voice);
+        }
+        this.apart.clear();
     }
 
     /** The game is about to close its sound device: the sources die with it, so let go of them while they can still be freed */

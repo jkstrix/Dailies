@@ -41,6 +41,7 @@ public final class Export {
         public int endTick = -1;
         /** mp4, mkv, mov, webm, or png_sequence */
         public String container = "mp4";
+        /** h264, h265, av1, vp9, prores or dnxhr: one of those {@link Encoder#choices} has on this machine */
         public String videoCodec = "h264";
         public @Nullable String encoder = null;
         public long bitrate = 20_000_000L;
@@ -48,6 +49,12 @@ public final class Export {
         public boolean stereo = true;
         /** aac, opus or pcm; "auto" for the usual one of the container (AAC for mp4 and mov, Opus for webm and mkv) */
         public String audioCodec = "aac";
+        /** Also write the game's sound, each speaker and the music as WAV files beside the video (EXP-12) */
+        public boolean stemFiles = false;
+        /** Also put them in the file as named tracks, where the kind of file can hold them */
+        public boolean stemTracks = false;
+        /** What a preset had to change to work on this machine, for whoever asks how the export went; or null */
+        public @Nullable String note = null;
         public boolean hideGui = false;
         public boolean supersample = false;
         public boolean transparent = false;
@@ -63,6 +70,9 @@ public final class Export {
     private static volatile Path lastOutput = null;
     private static volatile boolean lastCancelled = false;
     private static volatile long startedNanos = 0;
+    private static volatile String lastNote = null;
+    private static boolean machineTold = false;
+    private static ExportPresets presets = null;
 
     private static Settings settings;
     private static TimeMap timeMap;
@@ -123,6 +133,43 @@ public final class Export {
 
     public static boolean lastCancelled() {
         return lastCancelled;
+    }
+
+    /** What the preset of the export under way or the last one had to change to work here, or null */
+    public static @Nullable String lastNote() {
+        return lastNote;
+    }
+
+    /** The export presets, kept with the mod's data (EXP-14) */
+    public static synchronized ExportPresets presets() {
+        if (presets == null) {
+            presets = new ExportPresets(Host.get().dataDirectory().resolve("export-presets.json"));
+        }
+        return presets;
+    }
+
+    /**
+     * How many seconds of video a range would make, worked out as an export does; -1 when it would be empty or no
+     * recording is open. Negative ticks mean the scene's own range. Client thread
+     */
+    public static double rangeSeconds(int startTick, int endTick) {
+        if (!Playback.loaded()) {
+            return -1.0;
+        }
+        Scene scene = EditorSession.scene();
+        int total = Playback.total();
+        int start = startTick >= 0 ? startTick : scene.hasExportRange() ? scene.exportStart() : scene.firstKeyframeTick() >= 0 ? scene.firstKeyframeTick() : 0;
+        int end = endTick >= 0 ? endTick : scene.hasExportRange() ? scene.exportEnd() : scene.lastKeyframeTick() > start ? scene.lastKeyframeTick() : total;
+        start = Math.max(0, Math.min(total, start));
+        end = Math.max(0, Math.min(total, end));
+        if (end <= start) {
+            return -1.0;
+        }
+        try {
+            return new TimeMap(scene, start, end).totalRealSeconds();
+        } catch (RuntimeException e) {
+            return (end - start) / 20.0;
+        }
     }
 
     /** Frames written per second of real time so far */
@@ -213,11 +260,15 @@ public final class Export {
         }
         int scale = wanted.supersample ? 2 : 1;
         boolean pictures = wanted.still || wanted.container.equals("png_sequence");
+        if ((wanted.stemFiles || wanted.stemTracks) && !wanted.audio && !pictures) {
+            throw new IllegalArgumentException("Separate sound tracks were asked for in an export without sound");
+        }
         // With sound, the video is first written without it beside the output and joined with the sound at the end (EXP-3)
         Path soundless = ExportSound.prepare(wanted, pictures);
         FrameSink newSink = pictures ? new PngSink(wanted.output, wanted.still, scale, wanted.transparent) : Encoder.videoSink(wanted, scale, soundless != null ? soundless : wanted.output);
 
         settings = wanted;
+        lastNote = wanted.note;
         sink = newSink;
         timeMap = new TimeMap(scene, start, end);
         totalFrames = wanted.still ? 1 : Math.max(1, timeMap.frameCount(wanted.framesPerSecond));
@@ -326,6 +377,15 @@ public final class Export {
 
     /** After the game has drawn a frame and before it reaches the screen: take the picture */
     private static void afterFrame() {
+        if (!machineTold) {
+            // Encoder trials are remembered per graphics card and driver, and only this thread may ask which they are
+            machineTold = true;
+            try {
+                Encoder.machine(com.mojang.blaze3d.platform.GlUtil.getRenderer() + ", " + com.mojang.blaze3d.platform.GlUtil.getOpenGLVersion());
+            } catch (Throwable t) {
+                Host.LOGGER.debug("Dailies: the graphics card could not be asked its name", t);
+            }
+        }
         if (!active || !frameReady) {
             return;
         }

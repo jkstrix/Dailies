@@ -74,6 +74,7 @@ public final class SelfTest {
             RecordingSteps.run(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
+            ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
             result = "PASSED";
