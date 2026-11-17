@@ -708,10 +708,16 @@ final class Census {
         } else if (entity instanceof ConduitBlockEntity conduit) {
             text.append(" active=").append(conduit.isActive());
         }
-        if (!(entity instanceof PistonMovingBlockEntity)) {
-            text.append(' ').append(clean(String.valueOf(entity.saveWithoutMetadata(level.registryAccess()))));
-        }
         String namespace = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(entity.getType()) == null ? "" : BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(entity.getType()).getNamespace();
+        if (!(entity instanceof PistonMovingBlockEntity)) {
+            net.minecraft.nbt.CompoundTag saved = entity.saveWithoutMetadata(level.registryAccess());
+            if (!namespace.equals("minecraft")) {
+                // The components a game copies from the item in its own player's hand onto a block it places, which a
+                // modded block entity's own updates never send or clear: no other game, playback included, ever holds them
+                saved.remove("components");
+            }
+            text.append(' ').append(clean(String.valueOf(saved)));
+        }
         if (!namespace.equals("minecraft")) {
             // A modded chest's lid, which is in no saved data
             Boolean lid = Snapshots.lidOpen(entity);

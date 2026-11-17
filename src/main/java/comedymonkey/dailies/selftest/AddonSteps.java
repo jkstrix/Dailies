@@ -152,6 +152,7 @@ final class AddonSteps {
             }
         }
         weigh();
+        CensusPlayback.explain(test, "addon");
         test.log("addon: recorded " + Census.live.lastKey() + " ticks with " + BestiarySteps.items.size() + " items staged; " + problems.size() + " staging problems");
     }
 
@@ -214,7 +215,7 @@ final class AddonSteps {
         c("setblock 12 " + Y + " " + z + " " + MOD + "animal_pen[facing=south]{Captive:" + bottled("bottled_animal", "minecraft:cow") + ",Adults:3}");
         motor(12, Y, z);
         // The crucible takes its shaft on the side it faces, so it faces the motor
-        c("setblock 15 " + Y + " " + z + " " + MOD + "pressure_crucible[horizontal_facing=north]{Inventory:{Size:2,Items:[{Slot:0,id:\"minecraft:gravel\",count:64}]}}");
+        c("setblock 15 " + Y + " " + z + " " + MOD + "pressure_crucible[facing=north]{Inventory:{Size:2,Items:[{Slot:0,id:\"minecraft:gravel\",count:64}]}}");
         motor(15, Y, z);
         c("setblock 18 " + Y + " " + z + " " + MOD + "string_tangler[facing=south]{Inventory:{Size:3,Items:[{Slot:0,id:\"minecraft:string\",count:64},{Slot:1,id:\"minecraft:slime_ball\",count:16}]}}");
         motor(18, Y, z);
@@ -222,10 +223,10 @@ final class AddonSteps {
         motor(21, Y, z);
         c("setblock 24 " + Y + " " + z + " " + MOD + "incinerator[facing=south]{Heat:90}");
         // The engine gives rotation out of its front: a shaft there shows it turning
-        c("setblock 27 " + Y + " " + z + " " + MOD + "magma_engine[facing=south]{Tank:{id:\"minecraft:lava\",amount:4000}}");
+        c("setblock 27 " + Y + " " + z + " " + MOD + "magma_engine[facing=south]{Tank:{Fluid:{id:\"minecraft:lava\",amount:4000}}}");
         c("setblock 27 " + Y + " " + (z + 1) + " create:shaft[axis=z]");
         // The generator gives its power out of its sides; the motor takes it in at its base, opposite its shaft
-        c("setblock 30 " + Y + " " + z + " " + MOD + "lava_generator[facing=south]{Tank:{id:\"minecraft:lava\",amount:4000}}");
+        c("setblock 30 " + Y + " " + z + " " + MOD + "lava_generator[facing=south]{Tank:{Fluid:{id:\"minecraft:lava\",amount:4000}}}");
         c("setblock 31 " + Y + " " + z + " " + MOD + "electric_motor[facing=east]{StressSetting:256,Energy:100000}");
         // The dynamo takes rotation in at the side it faces
         c("setblock 34 " + Y + " " + z + " " + MOD + "clockwork_dynamo[facing=north]");
@@ -234,7 +235,7 @@ final class AddonSteps {
         c("setblock 37 " + (Y + 1) + " " + z + " " + MOD + "cuckoo_clock[facing=south]");
         motor(37, Y + 1, z);
         c("setblock 40 " + Y + " " + z + " " + MOD + "fish_tank[facing=south]{Captive:" + bottled("bottled_animal", "minecraft:cod")
-            + ",Adults:4,Water:{id:\"minecraft:water\",amount:8000},Food:{Size:2,Items:[{Slot:0,id:\"" + MOD + "fish_food\",count:32}]}}");
+            + ",Adults:4,Water:{Fluid:{id:\"minecraft:water\",amount:8000}},Food:{Size:2,Items:[{Slot:0,id:\"" + MOD + "fish_food\",count:32}]}}");
         motor(40, Y, z);
         c("setblock 43 " + Y + " " + z + " " + MOD + "monster_cage[facing=south]{Captive:" + bottled("iron_jar", "minecraft:zombie")
             + ",Count:6,Chow:{Size:2,Items:[{Slot:0,id:\"" + MOD + "monster_chow\",count:32}]}}");
@@ -244,11 +245,12 @@ final class AddonSteps {
         c("setblock 47 " + (Y + 1) + " " + z + " " + MOD + "geothermal_core");
         c("setblock 47 " + (Y + 1) + " " + (z + 1) + " " + MOD + "geothermal_controller[facing=south]");
         // Trade Bot's input chest is upgraded too: he opens its lid
-        c("setblock " + INPUT.getX() + " " + Y + " " + INPUT.getZ() + " " + MOD + "upgraded_chest[facing=south,tier=iron]{Items:[{Slot:0b,id:\"minecraft:wheat\",count:64},{Slot:1b,id:\"minecraft:wheat\",count:64}]}");
+        c("setblock " + INPUT.getX() + " " + Y + " " + INPUT.getZ() + " " + MOD + "upgraded_chest[facing=south,tier=iron]{Items:[{Slot:0b,Count:200,Item:{id:\"minecraft:wheat\",count:1}}]}");
         c("setblock " + OUTPUT.getX() + " " + Y + " " + OUTPUT.getZ() + " minecraft:chest[facing=south]");
+        // Fluid tanks are saved as {Fluid:{id,amount}}; an upgraded chest keeps each stack as {Slot,Count,Item}, since its stacks outgrow a byte
         // The turbine forms within a second; its tanks are filled once it has
         Thread.sleep(2500);
-        c("data merge block 47 " + (Y + 1) + " " + (z + 1) + " {Lava:{id:\"minecraft:lava\",amount:16000},Water:{id:\"minecraft:water\",amount:16000}}");
+        c("data merge block 47 " + (Y + 1) + " " + (z + 1) + " {Lava:{Fluid:{id:\"minecraft:lava\",amount:16000}},Water:{Fluid:{id:\"minecraft:water\",amount:16000}}}");
 
         String kind = MOD;
         machine("Cobblestone Generators", "machine: turned from behind, making cobblestone", "cobble_generator", "Speed:-?[1-9]", "Stored:[1-9]");
@@ -394,17 +396,21 @@ final class AddonSteps {
             .need(BestiarySteps.where(bot, "cheering after his trading", thing -> thing.state().contains("anim=expr_happy")))
             .note("his trading animation (the toss, the trade beat, the emerald) is all in one clip whose place, compared tick by tick, is clip=; he is drawn where his animation puts him, from data the server sends; what he carries is not sent, so there is no held item to compare");
         test.sleepTicks(5);
+        // His own route logging, so that the log says what he did if he does not get there
+        quietly("tradebot debug");
         boolean sent = false;
+        String refusal = "";
         for (int attempt = 0; attempt < 5 && !sent; attempt++) {
             sent = c("tradebot trade");
             if (!sent) {
-                // Refused: he may still be winding up. The refusal is not a fault of playback
-                problems.remove(problems.size() - 1);
+                // Refused: he may still be winding up. The refusal is not a fault of playback, but it is logged
+                refusal = problems.remove(problems.size() - 1);
+                test.log("addon: Trade Bot refused to set off (" + refusal + "); " + whatHeSees(minecraft));
                 waitTicks(40);
             }
         }
         if (!sent) {
-            problems.add("Trade Bot would not set off (/tradebot trade was refused five times)");
+            problems.add("Trade Bot would not set off (/tradebot trade was refused five times; the last time: " + refusal + "; " + whatHeSees(minecraft) + ")");
         }
         int at = mark("Trade Bot sets off");
         still("addon-bot-leaving", at + 20, 6.5, -57.0, 25.5, 6.5, -60.0, 17.5, false);
@@ -499,6 +505,40 @@ final class AddonSteps {
         return null;
     }
 
+    /** What the server holds of everything a trading run needs, for the log when he will not go */
+    private static String whatHeSees(Minecraft minecraft) {
+        try {
+            return minecraft.getSingleplayerServer().submit(() -> {
+                net.minecraft.server.level.ServerLevel level = minecraft.getSingleplayerServer().overworld();
+                StringBuilder seen = new StringBuilder("day=" + level.isDay() + " time=" + level.getDayTime());
+                BlockEntity station = level.getBlockEntity(STATION);
+                seen.append(" station=").append(station == null ? "missing" : station.saveWithoutMetadata(level.registryAccess()));
+                net.neoforged.neoforge.items.IItemHandler input = level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, INPUT, null);
+                int wheat = 0;
+                if (input != null) {
+                    for (int slot = 0; slot < input.getSlots(); slot++) {
+                        wheat += input.getStackInSlot(slot).is(net.minecraft.world.item.Items.WHEAT) ? input.getStackInSlot(slot).getCount() : 0;
+                    }
+                }
+                seen.append(" input=").append(input == null ? "no item handler" : wheat + " wheat");
+                seen.append(" output=").append(level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, OUTPUT, null) == null ? "no item handler" : "a container");
+                for (net.minecraft.world.entity.npc.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
+                    seen.append(" villager riding ").append(villager.getVehicle() == null ? "nothing" : BuiltInRegistries.ENTITY_TYPE.getKey(villager.getVehicle().getType()))
+                        .append(" offers ").append(villager.getOffers().size());
+                    for (net.minecraft.world.item.trading.MerchantOffer offer : villager.getOffers()) {
+                        seen.append(" [").append(offer.getCostA()).append(" -> ").append(offer.getResult()).append(offer.isOutOfStock() ? " out of stock" : "").append(']');
+                    }
+                }
+                for (Entity bot : level.getEntitiesOfClass(Entity.class, new net.minecraft.world.phys.AABB(STATION).inflate(40), entity -> entity.hasCustomName() && entity.getCustomName().getString().equals("Trader"))) {
+                    seen.append(" bot at ").append(bot.blockPosition().toShortString());
+                }
+                return seen.toString();
+            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return "the server could not be asked (" + e + ")";
+        }
+    }
+
     private static String told(BlockEntity entity, Minecraft minecraft) {
         return String.valueOf(comedymonkey.dailies.capture.Snapshots.updateTag(entity, minecraft.level.registryAccess()));
     }
@@ -507,6 +547,7 @@ final class AddonSteps {
 
     private static void contraption(SelfTest test, Minecraft minecraft) throws Exception {
         item("A Fluid Wellspring on a bearing's arm").owns("create:contraption", "blocks", "block entity create:mechanical_bearing")
+            .need(present("create:contraption", 1))
             .need(BestiarySteps.where("create:contraption", "carrying the Wellspring", thing -> thing.state().contains("wellspring")))
             .note("the addon says everything works on Create contraptions; the Wellspring is the machine that keeps working there");
         c("fill 58 -58 6 61 -58 6 minecraft:oak_planks");
@@ -531,6 +572,17 @@ final class AddonSteps {
             problems.add("the bearing did not assemble the arm with the Wellspring in four tries");
             return;
         }
+        test.log("addon: the arm as this game holds it: " + test.onClient(() -> {
+            StringBuilder seen = new StringBuilder();
+            for (Entity entity : minecraft.level.entitiesForRendering()) {
+                if (String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType())).contains("contraption")) {
+                    StringBuilder state = new StringBuilder();
+                    describe(entity, state, new StringBuilder());
+                    seen.append(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType())).append(' ').append(state).append("; ");
+                }
+            }
+            return seen.length() == 0 ? "no contraption" : seen.toString();
+        }));
         int at = mark("the Wellspring turning on the arm");
         still("addon-contraption", at + 20, 56.5, -56.0, 11.5, 59.5, -58.0, 6.5, false);
         waitTicks(80);
@@ -543,7 +595,7 @@ final class AddonSteps {
             .need(blockEntity("compact_gyroscope", "Speed:-?[1-9]"))
             .note("blocks on a craft stay real blocks in a plot far away, which is watched once the craft is made");
         c("fill 52 -50 12 55 -50 15 minecraft:stone");
-        c("setblock 53 -49 13 " + MOD + "magma_engine[facing=up]{Tank:{id:\"minecraft:lava\",amount:4000}}");
+        c("setblock 53 -49 13 " + MOD + "magma_engine[facing=up]{Tank:{Fluid:{id:\"minecraft:lava\",amount:4000}}}");
         c("setblock 53 -48 13 " + MOD + "compact_gyroscope");
         c("setblock 54 -49 14 " + MOD + "flight_instruments[facing=south]");
         c("create glue 52 -50 12 55 -48 15");
@@ -636,7 +688,7 @@ final class AddonSteps {
                     }
                 }
             } catch (Throwable t) {
-                state.append("contraption=unreadable;");
+                state.append("contraption=unreadable ").append(t.getClass().getSimpleName()).append(';');
             }
         }
     }

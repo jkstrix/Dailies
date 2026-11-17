@@ -27,12 +27,16 @@ import java.util.UUID;
 public final class CreateCompat {
 
     private static final String EXTENSION = "dailies:create";
+    /** The angle of the bearing that turns each contraption, by the contraption: a bearing runs a tick ahead of what it carries */
+    private static final String BEARINGS = "dailies:create_bearings";
     private static final int ENTRY_BYTES = 16 + 4;
 
     private Class<?> controlled, bearing;
     private Field angle, prevAngle, controllerPos, bearingAngle, bearingPrevAngle, bearingDiff;
     private final Map<UUID, Float> lastWritten = new HashMap<>();
     private final Map<UUID, Float> recorded = new HashMap<>();
+    private final Map<UUID, Float> bearingsWritten = new HashMap<>();
+    private final Map<UUID, Float> bearingsRecorded = new HashMap<>();
     private boolean failed = false;
 
     private CreateCompat() {
@@ -87,6 +91,30 @@ public final class CreateCompat {
                 compat.place();
             }
         });
+        PlaybackExtensions.register(BEARINGS, new PlaybackExtensions.Extension() {
+            @Override
+            public void play(byte[] data, int from, int length, boolean skipping) {
+                ByteBuffer in = ByteBuffer.wrap(data, from, length);
+                while (in.remaining() >= ENTRY_BYTES) {
+                    compat.bearingsRecorded.put(new UUID(in.getLong(), in.getLong()), in.getFloat());
+                }
+            }
+
+            @Override
+            public void reset() {
+                compat.bearingsRecorded.clear();
+            }
+
+            @Override
+            public void describe(java.util.function.Consumer<byte[]> out) {
+                if (compat.bearingsRecorded.isEmpty()) {
+                    return;
+                }
+                ByteBuffer all = ByteBuffer.allocate(compat.bearingsRecorded.size() * ENTRY_BYTES);
+                compat.bearingsRecorded.forEach((id, angle) -> all.putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).putFloat(angle));
+                out.accept(all.array());
+            }
+        });
     }
 
     private static Field field(Class<?> owner, String name) throws NoSuchFieldException {
@@ -126,6 +154,36 @@ public final class CreateCompat {
             if (out != null) {
                 Recorder.get().writeExtension(EXTENSION, java.util.Arrays.copyOf(out.array(), out.position()));
             }
+            // And the bearing's own angle, which the game moves on before the contraption it turns
+            ByteBuffer bearings = null;
+            for (Entity entity : level.entitiesForRendering()) {
+                if (!this.controlled.isInstance(entity)) {
+                    continue;
+                }
+                BlockPos controller = (BlockPos) this.controllerPos.get(entity);
+                BlockEntity blockEntity = controller == null ? null : level.getBlockEntity(controller);
+                if (!this.bearing.isInstance(blockEntity)) {
+                    continue;
+                }
+                float now = this.bearingAngle.getFloat(blockEntity);
+                Float before = this.bearingsWritten.get(entity.getUUID());
+                if (before != null && before == now) {
+                    continue;
+                }
+                this.bearingsWritten.put(entity.getUUID(), now);
+                if (bearings == null) {
+                    bearings = ByteBuffer.allocate(64 * ENTRY_BYTES);
+                }
+                if (bearings.remaining() >= ENTRY_BYTES) {
+                    bearings.putLong(entity.getUUID().getMostSignificantBits()).putLong(entity.getUUID().getLeastSignificantBits()).putFloat(now);
+                }
+            }
+            if (bearings != null) {
+                Recorder.get().writeExtension(BEARINGS, java.util.Arrays.copyOf(bearings.array(), bearings.position()));
+            }
+            if (this.bearingsWritten.size() > 4096) {
+                this.bearingsWritten.clear();
+            }
             if (this.lastWritten.size() > 4096) {
                 this.lastWritten.clear();
             }
@@ -155,8 +213,11 @@ public final class CreateCompat {
                 BlockEntity blockEntity = controller == null ? null : level.getBlockEntity(controller);
                 if (this.bearing.isInstance(blockEntity)) {
                     // The bearing would otherwise ease the contraption back towards its own idea of the angle
-                    this.bearingAngle.setFloat(blockEntity, wanted);
-                    this.bearingPrevAngle.setFloat(blockEntity, wanted);
+                    // At its own recorded angle where the recording has it (older recordings do not), else at the contraption's
+                    Float own = this.bearingsRecorded.get(entity.getUUID());
+                    float bearingWanted = own != null ? own : wanted;
+                    this.bearingAngle.setFloat(blockEntity, bearingWanted);
+                    this.bearingPrevAngle.setFloat(blockEntity, bearingWanted);
                     this.bearingDiff.setFloat(blockEntity, 0.0F);
                 }
                 // Whoever rides it is moved with it now, not on the next tick, which may be a long time coming while paused

@@ -116,6 +116,41 @@ final class CensusPlayback {
         }
     }
 
+    /**
+     * For each item that was not staged, what the live game last showed of what it owns, in the log: the block
+     * entities of its kinds and the entities of its names, at the end of its stretch of the recording
+     */
+    static void explain(SelfTest test, String step) {
+        for (BestiarySteps.Item item : BestiarySteps.items) {
+            if (item.missing.isEmpty() || Census.live.isEmpty()) {
+                continue;
+            }
+            java.util.Map.Entry<Integer, Census> last = Census.live.floorEntry(Math.min(item.to, Census.live.lastKey()));
+            if (last == null) {
+                continue;
+            }
+            StringBuilder seen = new StringBuilder();
+            for (String label : item.labels) {
+                if (label.startsWith("block entity ")) {
+                    String kind = label.substring("block entity ".length());
+                    last.getValue().blockEntities.forEach((place, text) -> {
+                        if (text.startsWith(kind + " ")) {
+                            seen.append(" | ").append(net.minecraft.core.BlockPos.of(place).toShortString()).append(' ').append(text, 0, Math.min(text.length(), 700));
+                        }
+                    });
+                } else {
+                    last.getValue().things.values().forEach(thing -> {
+                        if (thing.label().equals(label)) {
+                            seen.append(" | ").append(label).append(String.format(java.util.Locale.ROOT, " at %.1f %.1f %.1f ", thing.x(), thing.y(), thing.z()))
+                                .append(thing.state(), 0, Math.min(thing.state().length(), 500)).append(' ').append(thing.clocks());
+                        }
+                    });
+                }
+            }
+            test.log(step + ": not staged: " + item.name + " (" + item.missing + "); at tick " + last.getKey() + " the live game showed" + (seen.length() == 0 ? " none of it" : seen));
+        }
+    }
+
     /** A fresh start for a step's own staging: nothing left of the bestiary or another step */
     static void begin(SelfTest test) {
         BestiarySteps.test = test;

@@ -99,13 +99,14 @@ final class TrainSteps {
         c("gamerule commandModificationBlockLimit 4000000");
         c("gamerule sendCommandFeedback false");
         c("fill -14 -61 " + (TRACK_Z - 5) + " 82 -61 " + (TRACK_Z + 8) + " minecraft:smooth_stone");
-        c("fill -12 " + Y + " " + TRACK_Z + " 80 " + Y + " " + TRACK_Z + " create:track[shape=x_ortho]");
+        c("fill -12 " + Y + " " + TRACK_Z + " 80 " + Y + " " + TRACK_Z + " create:track[shape=xo]");
         test.sleepTicks(20);
         // Each station looks at the track beside it, facing east, so that a train assembles eastwards from it
         for (BlockPos station : new BlockPos[]{WEST, EAST}) {
             c("setblock " + station.getX() + " " + station.getY() + " " + station.getZ() + " create:track_station{TargetTrack:[I;0,0,-1],TargetDirection:1b}");
         }
         test.sleepTicks(40);
+        test.log("trains: the stations as the server holds them: " + describeStation(minecraft, WEST) + " || " + describeStation(minecraft, EAST));
         name(WEST, "Dailies West");
         name(EAST, "Dailies East");
         // Two carriages, each two bogeys under a row of casing; controls at both ends of the train
@@ -136,7 +137,7 @@ final class TrainSteps {
                     return "unknown (" + t + ")";
                 }
             }).get();
-            problems.add("the train did not assemble at the west station: " + why);
+            problems.add("the train did not assemble at the west station: " + why + "; the station: " + describeStation(minecraft, WEST));
             BestiarySteps.report("TRAINS", "trains", Host.get().dataDirectory().resolve("trains"), new Census.Tally(), 0, 0, 0);
             return false;
         }
@@ -165,6 +166,7 @@ final class TrainSteps {
                 (seen == null ? item.missing : item.evidence).add(seen == null ? "need " + (item.needs.indexOf(need) + 1) : seen);
             }
         }
+        CensusPlayback.explain(test, "trains");
         test.log("trains: recorded " + Census.live.lastKey() + " ticks; " + problems.size() + " staging problems");
         return true;
     }
@@ -185,17 +187,53 @@ final class TrainSteps {
         end();
     }
 
+    /** A station's saved data and whether it has found its place on a track network, for the log */
+    private static String describeStation(Minecraft minecraft, BlockPos pos) {
+        try {
+            return minecraft.getSingleplayerServer().submit(() -> {
+                BlockEntity entity = minecraft.getSingleplayerServer().overworld().getBlockEntity(pos);
+                if (entity == null) {
+                    return pos.toShortString() + " has no station";
+                }
+                Object station;
+                try {
+                    station = entity.getClass().getMethod("getStation").invoke(entity);
+                } catch (Throwable t) {
+                    station = "unreadable " + t;
+                }
+                String text = String.valueOf(entity.saveWithoutMetadata(minecraft.getSingleplayerServer().registryAccess()));
+                return pos.toShortString() + " " + minecraft.getSingleplayerServer().overworld().getBlockState(pos) + " on a network: " + (station != null) + " " + text.substring(0, Math.min(500, text.length()));
+            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return "unreadable (" + e + ")";
+        }
+    }
+
     private static void carriage(int from, int to) throws Exception {
         c("setblock " + from + " " + (Y + 1) + " " + TRACK_Z + " create:small_bogey[axis=x]");
         c("setblock " + to + " " + (Y + 1) + " " + TRACK_Z + " create:small_bogey[axis=x]");
         c("fill " + from + " " + (Y + 2) + " " + TRACK_Z + " " + to + " " + (Y + 2) + " " + TRACK_Z + " create:railway_casing");
     }
 
+    /** Names a station, trying again for a few seconds while it is still finding its place on the track */
     private static void name(BlockPos station, String name) throws Exception {
-        BestiarySteps.server("the name of a station", (level, player) -> {
-            BlockEntity entity = level.getBlockEntity(station);
-            call(entity, "updateName", new Class<?>[]{String.class}, name);
-        });
+        for (int attempt = 0; attempt < 4; attempt++) {
+            int before = problems.size();
+            boolean named = BestiarySteps.server("the name of a station", (level, player) -> {
+                BlockEntity entity = level.getBlockEntity(station);
+                Object done = call(entity, "updateName", new Class<?>[]{String.class}, name);
+                if (Boolean.FALSE.equals(done)) {
+                    throw new IllegalStateException("the station at " + station.toShortString() + " would not take the name " + name);
+                }
+            });
+            if (named) {
+                return;
+            }
+            if (attempt < 3) {
+                problems.remove(before);
+                BestiarySteps.test.sleepTicks(20);
+            }
+        }
     }
 
     private static void rideEast(SelfTest test, Minecraft minecraft, boolean seated) throws Exception {
@@ -329,7 +367,12 @@ final class TrainSteps {
             throw new IllegalStateException("there is no block entity to call " + name + " on");
         }
         Method method = owner.getClass().getMethod(name, types);
-        return method.invoke(owner, values);
+        try {
+            return method.invoke(owner, values);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            // What went wrong inside Create, not the wrapper reflection puts round it
+            throw new IllegalStateException(name + " failed: " + e.getCause(), e.getCause());
+        }
     }
 
     // --- In playback ---
