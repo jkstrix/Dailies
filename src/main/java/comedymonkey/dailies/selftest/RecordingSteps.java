@@ -74,6 +74,9 @@ final class RecordingSteps {
         Files.delete(recovered);
         test.log("crash recovery kept " + recoveredManifest.totalTicks + " ticks");
 
+        // What the game's frames cost with no recording, to compare against
+        FrameTimes.Result idle = FrameTimes.measure(test, 60);
+
         // The real thing
         JsonObject started = test.tool("recording_start", none);
         check(started.get("active").getAsBoolean(), "recording_start did not start a recording");
@@ -108,11 +111,16 @@ final class RecordingSteps {
 
         // Long enough to cross at least two more segment boundaries with the short test segments (REC-20, REC-24)
         int segmentTicks = Integer.getInteger("dailies.test.segmentTicks", 6000);
+        FrameTimes.begin();
         check(segmentTicks <= 200, "the scripted run needs short segments: set dailies.test.segmentTicks");
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
             test.command("tp @s " + (4.5 + (i % 5)) + " -60 0.5 " + (i * 20 % 360) + " 0");
             test.sleepTicks(20);
         }
+
+        FrameTimes.Result recordingFrames = FrameTimes.end();
+        test.log("frame times idle: " + idle + "; while recording, with teleports and two snapshots: " + recordingFrames);
+        check(recordingFrames.average() <= idle.average() * 1.5 + 2.0, "recording slowed the game: frames averaged " + recordingFrames.average() + " ms against " + idle.average() + " ms idle");
 
         JsonObject finished = test.tool("recording_finish", args("name", "Self test"));
         recording = Path.of(finished.get("path").getAsString());
@@ -145,6 +153,22 @@ final class RecordingSteps {
             check(ownMoves >= 10, "the recorder's own movement was captured only " + ownMoves + " times");
             check(audit.packets.containsKey("ClientboundAddEntityPacket") || audit.bundles > 0, "no entity spawn was captured");
             check(audit.packets.containsKey("ClientboundBlockUpdatePacket") || audit.packets.containsKey("ClientboundSectionBlocksUpdatePacket"), "no block change was captured");
+            // Snapshots (REC-20, REC-21, FILE-5)
+            check(audit.worlds == manifest.segments.size(), "not every snapshot describes its registries");
+            long logins = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundLoginPacket login
+                && login.playerId() == comedymonkey.dailies.capture.Snapshots.VIEWER_ENTITY_ID).count();
+            check(logins == manifest.segments.size(), "not every snapshot starts a world for the viewer");
+            long ownSpawns = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket spawn
+                && spawn.getId() == ownId && spawn.getType() == net.minecraft.world.entity.EntityType.PLAYER).count();
+            check(ownSpawns == manifest.segments.size(), "the recorder is not in every snapshot");
+            long pigs = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket spawn
+                && spawn.getType() == net.minecraft.world.entity.EntityType.PIG).count();
+            check(pigs >= manifest.segments.size() - 1, "the pig is missing from the later snapshots");
+            check(audit.count(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket.class) >= audit.sharedPackets && audit.sharedPackets >= 9 * manifest.segments.size(),
+                "snapshots hold too few chunks: " + audit.sharedPackets);
+            check(file.sharedCount() < audit.sharedPackets / 2, "unchanged chunks were stored again: " + file.sharedCount() + " stored for " + audit.sharedPackets + " uses");
+            test.log("snapshots: " + audit.sharedPackets + " chunk uses stored as " + file.sharedCount() + " pieces; last snapshot held the game for "
+                + String.format("%.1f", comedymonkey.dailies.capture.Snapshots.lastMillis) + " ms; file is " + java.nio.file.Files.size(recording) / 1024 + " KB");
             test.log("recording holds " + manifest.totalTicks + " ticks in " + manifest.segments.size() + " segments, " + audit.packets.values().stream().mapToInt(Integer::intValue).sum()
                 + " packets of " + audit.packets.size() + " kinds, " + audit.bundles + " bundles, " + audit.payloads.size() + " kinds of mod message");
         }

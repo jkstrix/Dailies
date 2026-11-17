@@ -199,6 +199,13 @@ public final class RecordingFile implements Closeable {
         return Packing.unpack(this.container.read(entry), Container.HASH_BYTES);
     }
 
+    /** How many pieces of shared data the recording holds */
+    public int sharedCount() {
+        synchronized (this.container) {
+            return this.container.shared.size();
+        }
+    }
+
     public @Nullable byte[] preview() throws IOException {
         Container.Entry entry = this.container.preview;
         return entry == null ? null : this.container.read(entry);

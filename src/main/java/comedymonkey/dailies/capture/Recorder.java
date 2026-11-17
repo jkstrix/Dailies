@@ -193,6 +193,7 @@ public final class Recorder {
         this.tick = 0;
         this.id = manifest.id;
         this.waitingForSnapshot = true;
+        Snapshots.forget();
         this.state = State.RECORDING;
         Host.LOGGER.info("Dailies: recording {} started", manifest.id);
         Notices.show(Component.translatable("dailies.notice.started"));
@@ -213,6 +214,7 @@ public final class Recorder {
         }
         // The world has moved on while nothing was captured, so what follows starts from a fresh snapshot (REC-3)
         this.waitingForSnapshot = true;
+        Snapshots.forget();
         this.state = State.RECORDING;
         Notices.show(Component.translatable("dailies.notice.resumed"));
     }
@@ -378,6 +380,7 @@ public final class Recorder {
         if (minecraft.level == null || minecraft.player == null || listener == null) {
             // Between worlds. The recording stays open and carries on from a snapshot of the next one (REC-2)
             this.waitingForSnapshot = true;
+            Snapshots.forget();
             return;
         }
         if (minecraft.isPaused()) {
@@ -458,7 +461,13 @@ public final class Recorder {
         }
 
         /** A packet that is likely to recur unchanged, such as a chunk: it is stored once however often it is written */
-        public void sharedPacket(byte[] encoded) {
+        public void sharedRef(int kind, byte[] hash) {
+            Recorder.this.flushTicks();
+            Recorder.this.part.record(kind, hash);
+        }
+
+        /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
+        public byte[] sharedPacket(byte[] encoded) {
             byte[] hash = sha256(encoded);
             String name = HexFormat.of().formatHex(hash);
             if (Recorder.this.sharedSent.add(name)) {
@@ -476,6 +485,7 @@ public final class Recorder {
             }
             Recorder.this.flushTicks();
             Recorder.this.part.record(Records.SHARED_PACKET, hash);
+            return hash;
         }
 
         /** Data stored once and referred to by a record of the given kind */
@@ -571,6 +581,7 @@ public final class Recorder {
             // A new world, or the same one rebuilt. The next tick describes it from scratch in a new segment (REC-17)
             this.flushPart();
             this.waitingForSnapshot = true;
+            Snapshots.forget();
             if (packet instanceof ClientboundRespawnPacket respawn && Host.get().setting("markDimensionChanges", true)) {
                 Minecraft minecraft = Minecraft.getInstance();
                 if (minecraft.level != null && respawn.commonPlayerSpawnInfo().dimension() != minecraft.level.dimension()) {
@@ -579,7 +590,11 @@ public final class Recorder {
             }
             return;
         }
-        if (this.waitingForSnapshot || PacketRules.dropped(packet)) {
+        if (this.waitingForSnapshot) {
+            return;
+        }
+        Snapshots.applied(packet);
+        if (PacketRules.dropped(packet)) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();

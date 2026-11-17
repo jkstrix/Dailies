@@ -32,6 +32,8 @@ final class WorldSteps {
         Minecraft minecraft = Minecraft.getInstance();
         Path saved = minecraft.gameDirectory.toPath().resolve("saves").resolve(WORLD);
         deleteTree(saved);
+        // Every run starts with no recordings, so nothing from an earlier run can pass or fail a check
+        deleteTree(comedymonkey.dailies.capture.Recorder.folder());
 
         test.onClientRun(() -> {
             GameRules rules = new GameRules();

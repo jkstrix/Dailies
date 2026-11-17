@@ -25,6 +25,7 @@ public final class Audit {
     public int bundles = 0;
     public int sharedPackets = 0;
     public int snapshotPackets = 0;
+    public int worlds = 0;
     /** Every packet in the order it was recorded, with the tick it belongs to. Only filled when asked for */
     public final List<Seen> seen = new ArrayList<>();
 
@@ -62,6 +63,10 @@ public final class Audit {
                             audit.sharedPackets++;
                             byte[] shared = recording.shared(java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length()));
                             audit.packet(codec, shared, 0, shared.length, tick, inSnapshot, keep);
+                        }
+                        case Records.WORLD -> {
+                            audit.worlds++;
+                            WorldData.fromBytes(recording.shared(java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length())));
                         }
                         case Records.PAYLOAD -> audit.payloads.merge(reader.name(), 1, Integer::sum);
                         case Records.EXTENSION -> audit.extensions.merge(reader.name(), 1, Integer::sum);
