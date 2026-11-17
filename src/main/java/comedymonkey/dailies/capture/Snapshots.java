@@ -263,12 +263,37 @@ public final class Snapshots {
             out.packet(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
         }
         minecraft.gui.getBossOverlay().events.values().forEach(bar -> out.packet(ClientboundBossEventPacket.createAddPacket(bar)));
+        // What is drawn on each map the game has been sent. A server sends a map's picture once and then only what changes
+        level.getAllMapData().forEach((id, map) -> {
+            List<net.minecraft.world.level.saveddata.maps.MapDecoration> decorations = new ArrayList<>();
+            map.getDecorations().forEach(decorations::add);
+            out.packet(new ClientboundMapItemDataPacket(id, map.scale, map.locked, decorations,
+                new net.minecraft.world.level.saveddata.maps.MapItemSavedData.MapPatch(0, 0, 128, 128, map.colors.clone())));
+        });
+    }
+
+    /**
+     * Lids that stand open. A chest or shulker box is told to open by a block event, once, and says nothing of it in
+     * its own data, so a world rebuilt from its chunks would have every lid shut
+     */
+    private static void openLids(LevelChunk chunk, List<Packet<? super ClientGamePacketListener>> lids) {
+        for (BlockEntity entity : chunk.getBlockEntities().values()) {
+            boolean open = entity instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest ? chest.chestLidController.shouldBeOpen
+                : entity instanceof net.minecraft.world.level.block.entity.EnderChestBlockEntity ender ? ender.chestLidController.shouldBeOpen
+                : entity instanceof net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity box
+                && (box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENING
+                || box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENED);
+            if (open) {
+                lids.add(new ClientboundBlockEventPacket(entity.getBlockPos(), entity.getBlockState().getBlock(), 1, 1));
+            }
+        }
     }
 
     private static int writeChunks(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, ClientLevel level, GameCodec codec) {
         ChunkPos centre = minecraft.player.chunkPosition();
         int radius = Math.max(minecraft.options.getEffectiveRenderDistance(), ((ClientPacketListenerAccess) listener).dailies$serverChunkRadius()) + 4;
         Set<Long> present = new HashSet<>();
+        List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();
         int count = 0;
         for (int x = centre.x - radius; x <= centre.x + radius; x++) {
             for (int z = centre.z - radius; z <= centre.z + radius; z++) {
@@ -279,6 +304,7 @@ public final class Snapshots {
                 long key = ChunkPos.asLong(x, z);
                 present.add(key);
                 count++;
+                openLids(chunk, lids);
                 // A chunk with block entities is described afresh every time: mods change those in ways no packet shows
                 byte[] stored = chunk.getBlockEntities().isEmpty() ? CHUNKS.get(key) : null;
                 if (stored != null) {
@@ -294,11 +320,13 @@ public final class Snapshots {
             }
         }
         CHUNKS.keySet().retainAll(present);
+        lids.forEach(out::packet);
         return count;
     }
 
     /** The chunks of a playback world. One that nothing has touched since it was built is named again, not stored again */
     private static int writePlaybackChunks(Recorder.Out out, ClientLevel level, GameCodec codec, PlaybackWorld playback) {
+        List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();
         int count = 0;
         for (long key : playback.chunks()) {
             LevelChunk chunk = level.getChunkSource().getChunk(ChunkPos.getX(key), ChunkPos.getZ(key), ChunkStatus.FULL, false);
@@ -306,6 +334,7 @@ public final class Snapshots {
                 continue;
             }
             count++;
+            openLids(chunk, lids);
             // As in a live snapshot, a chunk with block entities is described afresh: mods change those in ways no packet shows
             byte[] stored = chunk.getBlockEntities().isEmpty() ? playback.storedChunk(key) : null;
             if (stored != null) {
@@ -318,6 +347,7 @@ public final class Snapshots {
                 warnOnce("chunk", t);
             }
         }
+        lids.forEach(out::packet);
         return count;
     }
 
@@ -346,11 +376,26 @@ public final class Snapshots {
         for (Entity vehicle : vehicles) {
             out.packet(new ClientboundSetPassengersPacket(vehicle));
         }
+        // And leashes are tied once both ends exist. A server says who holds a leash once, when it is tied
+        for (Entity entity : level.entitiesForRendering()) {
+            if (entity instanceof net.minecraft.world.entity.Leashable leashed && !entity.isRemoved() && leashed.getLeashHolder() != null
+                && leashed.getLeashHolder().getId() != VIEWER_ENTITY_ID) {
+                out.packet(new ClientboundSetEntityLinkPacket(entity, leashed.getLeashHolder()));
+            }
+        }
         return count;
     }
 
     private static void writeEntity(Recorder.Out out, Entity entity, GameCodec codec, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
-        Packet<? super ClientGamePacketListener> spawn = spawnPacket(entity, codec);
+        boolean eased = entity.lerpTargetX() != entity.getX() || entity.lerpTargetY() != entity.getY() || entity.lerpTargetZ() != entity.getZ()
+            || entity.lerpTargetYRot() != entity.getYRot() || entity.lerpTargetXRot() != entity.getXRot();
+        // A server says where most things are as steps from where it last said they were, and between its reports the game
+        // moves a fireball, an arrow, an orb or a dropped item along by itself. Such a thing is spawned where the server last
+        // put it, so that the steps that follow still add up, and then set down where the game had really got it to
+        net.minecraft.world.phys.Vec3 told = entity.getPositionCodec().getBase();
+        boolean drifted = !eased && entity != net.minecraft.client.Minecraft.getInstance().player && !(entity instanceof HangingEntity) && !(entity instanceof LeashFenceKnotEntity)
+            && (told.x != entity.getX() || told.y != entity.getY() || told.z != entity.getZ());
+        Packet<? super ClientGamePacketListener> spawn = spawnPacket(entity, codec, drifted ? told : null);
         List<byte[]> extras = playback != null ? playback.spawnExtras(entity.getId()) : Capture.spawnExtras(entity.getId());
         byte[] built = null;
         if (entity instanceof IEntityWithComplexSpawn) {
@@ -382,8 +427,12 @@ public final class Snapshots {
             out.packet(spawn);
         }
 
-        if (entity != net.minecraft.client.Minecraft.getInstance().player && (entity.lerpTargetX() != entity.getX() || entity.lerpTargetY() != entity.getY()
-            || entity.lerpTargetZ() != entity.getZ() || entity.lerpTargetYRot() != entity.getYRot() || entity.lerpTargetXRot() != entity.getXRot())) {
+        if (drifted) {
+            java.nio.ByteBuffer snap = java.nio.ByteBuffer.allocate(4 + 24 + 8);
+            snap.putInt(entity.getId()).putDouble(entity.getX()).putDouble(entity.getY()).putDouble(entity.getZ()).putFloat(entity.getYRot()).putFloat(entity.getXRot());
+            out.extension(Recorder.SNAP, snap.array());
+        }
+        if (entity != net.minecraft.client.Minecraft.getInstance().player && eased) {
             // Caught part way through easing towards where it was last told it is: it is placed where it is drawn, then told again
             RegistryFriendlyByteBuf buffer = codec.buffer();
             try {
@@ -430,14 +479,18 @@ public final class Snapshots {
         }
     }
 
-    private static Packet<? super ClientGamePacketListener> spawnPacket(Entity entity, GameCodec codec) {
+    /**
+     * @param told where the server last said the entity is, when the game has moved it on from there by itself; else null
+     */
+    private static Packet<? super ClientGamePacketListener> spawnPacket(Entity entity, GameCodec codec, @org.jetbrains.annotations.Nullable net.minecraft.world.phys.Vec3 told) {
+        double x = told != null ? told.x : entity.getX(), y = told != null ? told.y : entity.getY(), z = told != null ? told.z : entity.getZ();
         if (entity instanceof ExperienceOrb orb) {
             RegistryFriendlyByteBuf buffer = codec.buffer();
             try {
                 buffer.writeVarInt(orb.getId());
-                buffer.writeDouble(orb.getX());
-                buffer.writeDouble(orb.getY());
-                buffer.writeDouble(orb.getZ());
+                buffer.writeDouble(x);
+                buffer.writeDouble(y);
+                buffer.writeDouble(z);
                 buffer.writeShort(orb.getValue());
                 return ClientboundAddExperienceOrbPacket.STREAM_CODEC.decode(buffer);
             } finally {
@@ -467,7 +520,7 @@ public final class Snapshots {
             return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), shown[0], shown[1], shown[2], (float) shown[4], (float) shown[3],
                 entity.getType(), data, entity.getDeltaMovement(), entity.getYHeadRot());
         }
-        return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), entity.getX(), entity.getY(), entity.getZ(), entity.getXRot(), entity.getYRot(),
+        return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), x, y, z, entity.getXRot(), entity.getYRot(),
             entity.getType(), data, entity.getDeltaMovement(), entity.getYHeadRot());
     }
 

@@ -41,6 +41,9 @@ neoForge {
             gameDirectory = file('run-test')
             systemProperty 'dailies.test.script', 'auto'
             systemProperty 'dailies.test.segmentTicks', '100'
+            if (project.hasProperty('dailiesFlags')) {
+                project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
+            }
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
         // For judging by eye (TEST-3): the test world, sixty seconds at the controls while recording, then the recording open in playback

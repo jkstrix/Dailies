@@ -70,6 +70,11 @@ public final class SelfTest {
                 return;
             }
             this.checkMcp();
+            if (Boolean.getBoolean("dailies.test.bestiaryOnly")) {
+                // For working on the bestiary by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiaryOnly
+                BestiarySteps.run(this);
+                throw new Failure("only the bestiary was run, and it passed");
+            }
             WorldSteps.createWorld(this);
             RecordingSteps.run(this);
             PlaybackSteps.run(this);
@@ -77,6 +82,7 @@ public final class SelfTest {
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
             LibrarySteps.run(this);
+            BestiarySteps.run(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
