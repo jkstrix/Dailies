@@ -1,0 +1,238 @@
+package comedymonkey.dailies.editor;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import comedymonkey.dailies.edit.Evaluator;
+import comedymonkey.dailies.edit.Interpolation;
+import comedymonkey.dailies.edit.Keyframe;
+import comedymonkey.dailies.edit.KeyframeKind;
+import comedymonkey.dailies.edit.Scene;
+import comedymonkey.dailies.edit.Track;
+import comedymonkey.dailies.playback.Playback;
+import comedymonkey.dailies.playback.Viewer;
+import comedymonkey.dailies.smartcamera.SmartCameraHeading;
+import comedymonkey.dailies.smartcamera.SmartCameraMode;
+import comedymonkey.dailies.smartcamera.SmartCameraSettings;
+import comedymonkey.dailies.smartcamera.SmartCameraSolver;
+import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.WeakHashMap;
+
+/**
+ * The link between the editor and the provided Smart Camera (specification chapter VIII). A Smart Camera keyframe is
+ * stored as its settings in snake_case; here they become the solver's own settings, the solver is asked for a pose
+ * every frame, and that pose is handed back for the viewer.
+ */
+public final class SmartCameraDriver {
+
+    /** The height of the viewer's eyes above its feet: the solver gives the eye, the viewer is placed by its feet */
+    private static final double VIEWER_EYE_HEIGHT = 1.62;
+
+    private static final Map<Keyframe.SmartCamera, SmartCameraSettings> PARSED = new WeakHashMap<>();
+    private static volatile SmartCameraSolver lastSolver = null;
+    private static volatile Track lastTrack = null;
+
+    private SmartCameraDriver() {
+    }
+
+    static @Nullable Evaluator.CameraPose pose(Minecraft minecraft, Track track, @Nullable Keyframe.SmartCamera keyframe, double tick) {
+        if (keyframe == null || minecraft.level == null) {
+            return null;
+        }
+        SmartCameraSettings settings = PARSED.computeIfAbsent(keyframe, key -> settings(minecraft, key.settings()));
+        if (settings.target == null) {
+            return null;
+        }
+        SmartCameraSolver solver = SmartCameraSolver.forTrack(track);
+        lastSolver = solver;
+        lastTrack = track;
+        SmartCameraSolver.Result result = solver.solve(settings, keyframe.tick(), (float) tick, minecraft, true);
+        if (result == null) {
+            return null;
+        }
+        if (result.applyFov()) {
+            Viewer.setFov(result.fov());
+        }
+        return new Evaluator.CameraPose(result.cameraX(), result.cameraY() - VIEWER_EYE_HEIGHT, result.cameraZ(), result.yaw(), result.pitch(), 0.0);
+    }
+
+    /** What the Smart Camera last did, for the status tool. Null when none has run in this recording */
+    public static @Nullable SmartCameraSolver lastSolver() {
+        return lastSolver;
+    }
+
+    static void forget() {
+        lastSolver = null;
+        lastTrack = null;
+        PARSED.clear();
+    }
+
+    /**
+     * Adds a Smart Camera keyframe from the arguments of the smart_camera_add tool, as one undoable step.
+     *
+     * @return the index of the track it went on
+     */
+    public static int add(JsonObject arguments) {
+        if (!Playback.loaded()) {
+            throw new IllegalStateException("No recording is open");
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        JsonObject settings = arguments.deepCopy();
+        if (!settings.has("tick")) {
+            throw new IllegalArgumentException("'tick' is required");
+        }
+        int tick = settings.remove("tick").getAsInt();
+        if (tick < 0 || tick > Playback.total()) {
+            throw new IllegalArgumentException("'tick' must be between 0 and " + Playback.total() + "; the nearest allowed value is " + Math.max(0, Math.min(Playback.total(), tick)));
+        }
+        Integer wantedTrack = settings.has("track") ? settings.remove("track").getAsInt() : null;
+        if (!settings.has("target") || settings.get("target").getAsString().isBlank()) {
+            settings.addProperty("target", Playback.manifest().recorderId);
+        }
+        if (!settings.has("mode")) {
+            settings.addProperty("mode", "chase");
+        }
+        String mode = settings.get("mode").getAsString().toLowerCase(Locale.ROOT);
+        settings.addProperty("mode", mode);
+        if (mode.equals("tripod") && !settings.has("position")) {
+            // A tripod stands where the viewer is when the keyframe is made
+            Vec3 at = Viewer.position();
+            JsonObject position = new JsonObject();
+            position.addProperty("x", at.x);
+            position.addProperty("y", at.y + VIEWER_EYE_HEIGHT);
+            position.addProperty("z", at.z);
+            settings.add("position", position);
+        }
+        if (mode.equals("orbit") && !settings.has("start_angle")) {
+            settings.addProperty("start_angle", Viewer.yaw());
+        }
+        // Reject what the solver could not use before anything is stored
+        settings(minecraft, settings);
+
+        Keyframe.SmartCamera keyframe = new Keyframe.SmartCamera(tick, Interpolation.HOLD, settings);
+        var history = EditorSession.history();
+        int track;
+        if (wantedTrack != null) {
+            Scene scene = history.scene();
+            if (wantedTrack < 0 || wantedTrack >= scene.tracks().size() || scene.track(wantedTrack).kind() != KeyframeKind.SMART_CAMERA) {
+                throw new IllegalArgumentException("'track' " + wantedTrack + " is not a Smart Camera track of this scene. Call keyframes_list for the tracks there are");
+            }
+            history.setKeyframe(wantedTrack, keyframe);
+            track = wantedTrack;
+        } else {
+            track = history.setKeyframe(keyframe);
+        }
+        EditorSession.setFollowCamera(true);
+        return track;
+    }
+
+    private static SmartCameraSettings settings(Minecraft minecraft, JsonObject json) {
+        SmartCameraSettings settings = new SmartCameraSettings(target(minecraft, json.has("target") ? json.get("target").getAsString() : ""));
+        String mode = json.has("mode") ? json.get("mode").getAsString() : "chase";
+        try {
+            settings.mode = SmartCameraMode.valueOf(mode.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("'mode' must be chase, tripod, orbit or director");
+        }
+        settings.distance = number(json, "distance", settings.distance, 1, 64);
+        settings.height = number(json, "height", settings.height, -32, 64);
+        settings.sideAngle = number(json, "side_angle", settings.sideAngle, -360, 360);
+        settings.positionSmoothing = number(json, "position_smoothing", settings.positionSmoothing, 0, 5);
+        if (json.has("heading_source")) {
+            try {
+                settings.headingSource = SmartCameraHeading.valueOf(json.get("heading_source").getAsString().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("'heading_source' must be movement or body");
+            }
+        }
+        if (json.has("position")) {
+            JsonElement position = json.get("position");
+            try {
+                if (position.isJsonArray()) {
+                    settings.position.set(position.getAsJsonArray().get(0).getAsDouble(), position.getAsJsonArray().get(1).getAsDouble(), position.getAsJsonArray().get(2).getAsDouble());
+                } else {
+                    JsonObject object = position.getAsJsonObject();
+                    settings.position.set(object.get("x").getAsDouble(), object.get("y").getAsDouble(), object.get("z").getAsDouble());
+                }
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("'position' must be [x, y, z] or {x, y, z}");
+            }
+        }
+        settings.aimSmoothing = number(json, "aim_smoothing", settings.aimSmoothing, 0, 5);
+        settings.radius = number(json, "radius", settings.radius, 1, 128);
+        settings.degreesPerSecond = number(json, "degrees_per_second", settings.degreesPerSecond, -360, 360);
+        settings.startAngle = number(json, "start_angle", settings.startAngle, -100000, 100000);
+        settings.minShotSeconds = number(json, "min_shot_seconds", settings.minShotSeconds, 0.5F, 60);
+        settings.maxShotSeconds = Math.max(settings.minShotSeconds, number(json, "max_shot_seconds", settings.maxShotSeconds, 0.5F, 120));
+        settings.allowChase = flag(json, "allow_chase", settings.allowChase);
+        settings.allowTripod = flag(json, "allow_tripod", settings.allowTripod);
+        settings.allowOrbit = flag(json, "allow_orbit", settings.allowOrbit);
+        settings.seed = json.has("seed") ? json.get("seed").getAsInt() : 0;
+        settings.screenX = number(json, "screen_x", settings.screenX, -1, 1);
+        settings.screenY = number(json, "screen_y", settings.screenY, -1, 1);
+        settings.leadRoom = number(json, "lead_room", settings.leadRoom, 0, 1);
+        settings.autoZoom = flag(json, "auto_zoom", settings.autoZoom);
+        settings.subjectScreenHeight = number(json, "subject_screen_height", settings.subjectScreenHeight, 0.05F, 1);
+        settings.minFov = number(json, "min_fov", settings.minFov, 1, 170);
+        settings.maxFov = Math.max(settings.minFov, number(json, "max_fov", settings.maxFov, 1, 170));
+        settings.fixedFov = number(json, "fixed_fov", settings.fixedFov, 0, 170);
+        settings.frameVehicle = flag(json, "frame_vehicle", settings.frameVehicle);
+        settings.avoidObstructions = flag(json, "avoid_obstructions", settings.avoidObstructions);
+        settings.transitionSeconds = number(json, "transition_seconds", settings.transitionSeconds, 0, 30);
+        return settings;
+    }
+
+    /** A player by uuid, or by name among the players in the world now. The recorder when nothing is given */
+    private static @Nullable UUID target(Minecraft minecraft, String text) {
+        String wanted = text.isBlank() && Playback.manifest() != null ? Playback.manifest().recorderId : text.trim();
+        try {
+            return UUID.fromString(wanted);
+        } catch (IllegalArgumentException notAnId) {
+            if (minecraft.level != null) {
+                for (Player player : minecraft.level.players()) {
+                    if (player.getGameProfile().getName().equalsIgnoreCase(wanted)) {
+                        return player.getUUID();
+                    }
+                }
+            }
+            if (Playback.manifest() != null && Playback.manifest().recorderName.equalsIgnoreCase(wanted)) {
+                return UUID.fromString(Playback.manifest().recorderId);
+            }
+            throw new IllegalArgumentException("There is no player called '" + wanted + "' in the recording at this tick. Give a name from replay_list_entities, or a uuid");
+        }
+    }
+
+    private static float number(JsonObject json, String name, float fallback, float min, float max) {
+        if (!json.has(name)) {
+            return fallback;
+        }
+        try {
+            float value = json.get(name).getAsFloat();
+            if (Float.isNaN(value)) {
+                throw new NumberFormatException();
+            }
+            return Mth.clamp(value, min, max);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("'" + name + "' must be a number");
+        }
+    }
+
+    private static boolean flag(JsonObject json, String name, boolean fallback) {
+        if (!json.has(name)) {
+            return fallback;
+        }
+        try {
+            return json.get(name).getAsBoolean();
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("'" + name + "' must be true or false");
+        }
+    }
+
+}

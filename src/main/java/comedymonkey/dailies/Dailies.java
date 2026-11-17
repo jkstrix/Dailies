@@ -10,7 +10,10 @@ import comedymonkey.dailies.moments.Moments;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
 import comedymonkey.dailies.selftest.SelfTest;
+import comedymonkey.dailies.ui.Keys;
 import comedymonkey.dailies.ui.Notices;
+import comedymonkey.dailies.ui.PlaybackBar;
+import comedymonkey.dailies.ui.Screens;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -42,6 +45,7 @@ public final class Dailies {
         comedymonkey.dailies.compat.sable.SableCompat.init();
         Playback.init();
         Viewer.init();
+        comedymonkey.dailies.export.Export.init();
 
         // Optional, so a server without the Moments Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));
@@ -49,6 +53,10 @@ public final class Dailies {
         modBus.addListener((ModConfigEvent.Reloading event) -> settingsChanged(event));
 
         modBus.addListener(Notices::register);
+        modBus.addListener(Keys::register);
+        modBus.addListener(PlaybackBar::register);
+        Keys.init();
+        Screens.init();
 
         SelfTest.startIfAsked();
     }

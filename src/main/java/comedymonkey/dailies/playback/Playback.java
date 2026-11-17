@@ -156,7 +156,17 @@ public final class Playback {
     }
 
     public static float millisPerTick() {
-        return (float) (1000.0 / Math.max(0.05, ticksPerSecond));
+        double track = comedymonkey.dailies.editor.EditorSession.speedNow();
+        return (float) (1000.0 / Math.max(0.05, track > 0.0 ? track : ticksPerSecond));
+    }
+
+    /** The moment of the recording the frame being drawn shows, in ticks: whole when paused, between two ticks when playing */
+    public static double frameTime() {
+        if (!loaded || paused) {
+            return position;
+        }
+        float partial = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true);
+        return Math.max(0.0, position - 1 + partial);
     }
 
     // --- Controls (client thread) ---
@@ -296,6 +306,9 @@ public final class Playback {
                 feed.skipping = false;
                 settle(minecraft);
             }
+            if (comedymonkey.dailies.export.Export.active()) {
+                comedymonkey.dailies.export.Export.frameStart(minecraft);
+            }
             if (!jumping() && !WHEN_LOADED.isEmpty()) {
                 List<Runnable> actions = new ArrayList<>(WHEN_LOADED);
                 WHEN_LOADED.clear();
@@ -318,6 +331,7 @@ public final class Playback {
     private static void openNow(Minecraft minecraft, Path path) throws Exception {
         if (file != null) {
             // Another recording is open: swap it out without going back to the title screen
+            comedymonkey.dailies.editor.EditorSession.closing();
             feed.close();
             file.close();
             file = null;
@@ -355,6 +369,7 @@ public final class Playback {
         }
         recordingId = manifest.id;
         total = manifest.totalTicks;
+        comedymonkey.dailies.editor.EditorSession.opened(file);
         feed = new Feed(file);
         paused = true;
         pauseAfterJump = true;
@@ -374,6 +389,42 @@ public final class Playback {
         settle(minecraft);
         loaded = true;
         Host.LOGGER.info("Dailies: opened recording {} ({} ticks)", path.getFileName(), total);
+    }
+
+    private static boolean exporting = false;
+
+    /** While an export runs the recording is never paused and never moves on by itself: the export steps it */
+    public static void exportMode(boolean on) {
+        exporting = on;
+        if (on) {
+            paused = false;
+            pauseAfterJump = false;
+            pauseAt = -1;
+        }
+    }
+
+    /**
+     * Plays forward to a tick at once, with everything that happens on the way seen and heard as in normal play.
+     *
+     * @return false when the tick was not reached this time (the world has to be rebuilt first, or the recording ended)
+     */
+    public static boolean runTo(Minecraft minecraft, int target) {
+        while (position < target) {
+            fastTick = true;
+            try {
+                ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(false);
+                minecraft.tick();
+            } finally {
+                fastTick = false;
+            }
+            if (feed.reloadWanted() >= 0) {
+                return false;
+            }
+            if (position >= total) {
+                break;
+            }
+        }
+        return position >= Math.min(target, total);
     }
 
     /** Runs as much of a jump as fits in this frame */
@@ -424,13 +475,13 @@ public final class Playback {
         if (!loaded || feed == null) {
             return;
         }
-        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0;
+        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0 && !exporting;
         if (!fastTick && !playing) {
             return;
         }
         try {
             if (position >= total || !feed.advance(Minecraft.getInstance())) {
-                if (feed.reloadWanted() < 0) {
+                if (feed.reloadWanted() < 0 && !exporting) {
                     paused = true;
                     pauseAfterJump = true;
                 }
@@ -478,6 +529,7 @@ public final class Playback {
     private static void cleanUp() {
         loaded = false;
         try {
+            comedymonkey.dailies.editor.EditorSession.closing();
             if (feed != null) {
                 feed.close();
             }

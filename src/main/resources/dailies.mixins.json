@@ -16,7 +16,9 @@
     "access.MinecraftAccess",
     "playback.MinecraftMixin",
     "playback.SoundEngineMixin",
-    "playback.ParticleEngineMixin"
+    "playback.ParticleEngineMixin",
+    "export.TimerMixin",
+    "export.WindowMixin"
   ],
   "injectors": {
     "defaultRequire": 1

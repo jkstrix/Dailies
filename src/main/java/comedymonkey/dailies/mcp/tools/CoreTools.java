@@ -50,6 +50,10 @@ public final class CoreTools {
 
         RecordingTools.register(registrar);
         PlaybackTools.register(registrar);
+        ExportTools.register(registrar);
+        SmartCameraTools.register(registrar);
+        EditingTools.register(registrar);
+        LooksTools.register(registrar);
     }
 
     /** Refuses arguments the tool does not have, naming the ones it does */
@@ -80,9 +84,7 @@ public final class CoreTools {
 
         json.add("playback", playbackState());
 
-        JsonObject export = new JsonObject();
-        export.addProperty("running", mod.exportRunning());
-        json.add("export", export);
+        json.add("export", ExportTools.status());
         return json;
     }
 

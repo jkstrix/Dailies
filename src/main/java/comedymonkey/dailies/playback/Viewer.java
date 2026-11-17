@@ -131,8 +131,24 @@ public final class Viewer {
         fov = degrees <= 0.0 ? 0.0 : Mth.clamp(degrees, 1.0, 170.0);
     }
 
-    public static void setDriven(boolean nowDriven) {
-        driven = nowDriven;
+    /** Places the camera from a track. Unlike {@link #set} it leaves the flight speed alone */
+    public static void drive(double newX, double newY, double newZ, float newYaw, float newPitch, float newRoll) {
+        x = newX;
+        y = newY;
+        z = newZ;
+        yaw = newYaw;
+        pitch = Mth.clamp(newPitch, -90.0F, 90.0F);
+        roll = newRoll;
+        placed = true;
+        velocity = Vec3.ZERO;
+    }
+
+    private static boolean movementWanted(Minecraft minecraft) {
+        if (minecraft.screen != null || !minecraft.mouseHandler.isMouseGrabbed()) {
+            return false;
+        }
+        Options options = minecraft.options;
+        return options.keyUp.isDown() || options.keyDown.isDown() || options.keyLeft.isDown() || options.keyRight.isDown() || options.keyJump.isDown() || options.keyShift.isDown();
     }
 
     public static double blocksPerSecond() {
@@ -171,11 +187,19 @@ public final class Viewer {
         if (!placed) {
             set(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         }
+        boolean exporting = comedymonkey.dailies.export.Export.holdsClock();
+        if (!exporting && movementWanted(minecraft) && comedymonkey.dailies.editor.EditorSession.followCamera() && !Playback.paused()) {
+            // Flying off by hand takes the camera away from its track until following is switched back on (EDIT-5)
+            comedymonkey.dailies.editor.EditorSession.setFollowCamera(false);
+        }
+        driven = comedymonkey.dailies.editor.EditorSession.drive(minecraft);
         if (!driven) {
             // The mouse turns the player as it always does; that is the camera's direction
             yaw = player.getYRot();
             pitch = Mth.clamp(player.getXRot(), -90.0F, 90.0F);
-            fly(minecraft, seconds);
+            if (!exporting) {
+                fly(minecraft, seconds);
+            }
         }
         apply(player);
     }

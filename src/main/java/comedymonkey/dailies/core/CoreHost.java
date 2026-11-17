@@ -147,24 +147,28 @@ public final class CoreHost implements Host.Mod {
 
     @Override
     public boolean exportRunning() {
-        return false;
+        return comedymonkey.dailies.export.Export.active();
     }
 
     // --- Editor ---
 
     @Override
     public @Nullable Double sceneFov() {
-        return null;
+        if (!comedymonkey.dailies.editor.EditorSession.open()) {
+            return null;
+        }
+        double fov = comedymonkey.dailies.editor.EditorSession.scene().looks().fov;
+        return fov > 0.0 ? fov : null;
     }
 
     @Override
     public @Nullable Double exportAspectRatio() {
-        return null;
+        return comedymonkey.dailies.export.Export.aspectRatio();
     }
 
     @Override
     public void addSmartCamera(JsonObject arguments) throws Exception {
-        throw new IllegalStateException(NOT_BUILT);
+        comedymonkey.dailies.editor.SmartCameraDriver.add(arguments);
     }
 
     // --- MCP ---

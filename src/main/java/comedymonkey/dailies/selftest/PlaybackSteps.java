@@ -146,8 +146,6 @@ final class PlaybackSteps {
         }
         check(longestJumpMillis < 5000, "a jump took " + longestJumpMillis + " ms");
 
-        close(test);
-        check(test.toolError("replay_play", none).contains("No recording is open"), "playing after closing did not say nothing is open");
     }
 
     static void close(SelfTest test) throws Exception {
@@ -155,6 +153,7 @@ final class PlaybackSteps {
         test.tool("replay_close", new JsonObject());
         test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the recording to close");
         check(!DailiesApi.isPlayback(), "the playback check still says playback after closing");
+        check(test.toolError("replay_play", new JsonObject()).contains("No recording is open"), "playing after closing did not say nothing is open");
     }
 
     /** Jumps and waits until the recording is paused at exactly that tick */

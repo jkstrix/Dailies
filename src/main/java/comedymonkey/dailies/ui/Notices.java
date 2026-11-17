@@ -38,7 +38,8 @@ public final class Notices {
 
     private static void draw(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.options.hideGui) {
+        if (minecraft.options.hideGui || comedymonkey.dailies.export.Export.active()) {
+            // Nothing of Dailies' own may end up in an exported picture
             return;
         }
         Font font = minecraft.font;

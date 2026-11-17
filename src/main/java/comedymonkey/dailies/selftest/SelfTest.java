@@ -58,6 +58,8 @@ public final class SelfTest {
             WorldSteps.createWorld(this);
             RecordingSteps.run(this);
             PlaybackSteps.run(this);
+            ExportSteps.run(this);
+            PlaybackSteps.close(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
