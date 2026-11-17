@@ -43,6 +43,16 @@ neoForge {
             systemProperty 'dailies.test.segmentTicks', '100'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
+        // The same scripted run with the built jar (not the dev classes) beside the other mods it has to work with:
+        // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1)
+        testModded {
+            client()
+            gameDirectory = file('run-modded')
+            loadedMods = []
+            systemProperty 'dailies.test.script', 'auto'
+            systemProperty 'dailies.test.segmentTicks', '100'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
     }
 }
 
@@ -56,7 +66,7 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // The game brings its own copy when it runs; unit tests run without the game
-    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
 }
 
 test {
@@ -72,4 +82,30 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// --- The modded test game ---
+// Where the other mods are copied from. Never written to. Override with -Pdailies.modsFolder=...
+def modsSource = file(providers.gradleProperty('dailies.modsFolder').getOrElse("${System.getenv('APPDATA')}/ModrinthApp/profiles/Clockwork Commonwealth/mods"))
+// The mods the scripted run needs or has to prove it works with; their own requirements are added as the game asks for them
+def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*').split(',')
+
+tasks.register('installTestMods', Sync) {
+    description = 'Puts the built Dailies jar and the other test mods into run-modded/mods'
+    dependsOn tasks.named('jar')
+    from(tasks.named('jar'))
+    from(modsSource) {
+        include moddedTestMods.collect { it.trim() + '.jar' }
+    }
+    from(file('companion/build/libs')) {
+        include 'moments-companion-*.jar'
+    }
+    into file('run-modded/mods')
+}
+
+afterEvaluate {
+    tasks.named('runTestModded') {
+        dependsOn 'installTestMods'
+    }
 }

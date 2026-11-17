@@ -310,6 +310,8 @@ public final class Snapshots {
                 buffer.writeByte((byte) net.minecraft.util.Mth.floor(entity.lerpTargetYRot() * 256.0F / 360.0F));
                 buffer.writeByte((byte) net.minecraft.util.Mth.floor(entity.lerpTargetXRot() * 256.0F / 360.0F));
                 buffer.writeBoolean(entity.onGround());
+                // Other mods add fields of their own to this packet (Sable adds a flag). Zeroes stand for "nothing special"
+                buffer.writeZero(16);
                 out.packet(ClientboundTeleportEntityPacket.STREAM_CODEC.decode(buffer));
             } finally {
                 buffer.release();
