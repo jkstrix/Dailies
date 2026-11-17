@@ -175,6 +175,10 @@ final class RecordingSteps {
         test.log("frame times idle: " + idle + "; while recording, with teleports and two snapshots: " + recordingFrames);
         check(recordingFrames.average() <= idle.average() * 1.5 + 2.0, "recording slowed the game: frames averaged " + recordingFrames.average() + " ms against " + idle.average() + " ms idle");
 
+        // A moment late in the recording, far from the kill: the trimming steps cut the stretch it is in
+        test.tool("moments_event_add", args("label", "Late moment", "type", "library_test"));
+        test.sleepTicks(10);
+
         BlockWatch.stop();
         test.tool("config_set", args("key", "recordHud", "value", false));
         JsonObject finished = test.tool("recording_finish", args("name", "Self test"));

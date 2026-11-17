@@ -76,6 +76,7 @@ public final class SelfTest {
             ExportSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
+            LibrarySteps.run(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
