@@ -672,7 +672,8 @@ final class Feed {
      */
     private boolean lightLeftBehind(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet, Minecraft minecraft) {
         net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
-        if (level == null || Boolean.getBoolean("dailies.playback.leaveStaleLight") || !level.getChunkSource().hasChunk(packet.getX(), packet.getZ())) {
+        // Written from reading the game, and never shown to be needed by a test: off unless asked for, until one shows it
+        if (level == null || !Boolean.getBoolean("dailies.playback.forgetStaleLight") || !level.getChunkSource().hasChunk(packet.getX(), packet.getZ())) {
             return false;
         }
         net.minecraft.world.level.lighting.LevelLightEngine engine = level.getLightEngine();

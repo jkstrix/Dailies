@@ -284,13 +284,6 @@ public final class Snapshots {
             out.packet(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
         }
         minecraft.gui.getBossOverlay().events.values().forEach(bar -> out.packet(ClientboundBossEventPacket.createAddPacket(bar)));
-        // What is drawn on each map the game has been sent. A server sends a map's picture once and then only what changes
-        level.getAllMapData().forEach((id, map) -> {
-            List<net.minecraft.world.level.saveddata.maps.MapDecoration> decorations = new ArrayList<>();
-            map.getDecorations().forEach(decorations::add);
-            out.packet(new ClientboundMapItemDataPacket(id, map.scale, map.locked, decorations,
-                new net.minecraft.world.level.saveddata.maps.MapItemSavedData.MapPatch(0, 0, 128, 128, map.colors.clone())));
-        });
     }
 
     /**
@@ -300,7 +293,6 @@ public final class Snapshots {
     private static void openLids(LevelChunk chunk, List<Packet<? super ClientGamePacketListener>> lids) {
         for (BlockEntity entity : chunk.getBlockEntities().values()) {
             boolean open = entity instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest ? chest.chestLidController.shouldBeOpen
-                : entity instanceof net.minecraft.world.level.block.entity.EnderChestBlockEntity ender ? ender.chestLidController.shouldBeOpen
                 : entity instanceof net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity box
                 && (box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENING
                 || box.getAnimationStatus() == net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity.AnimationStatus.OPENED);

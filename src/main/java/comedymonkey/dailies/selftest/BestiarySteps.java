@@ -416,9 +416,8 @@ final class BestiarySteps {
         stops.removeIf(tick -> !Census.live.containsKey(tick) || Census.live.get(tick).blocks == null || tick > length);
         Census.skippedSounds.clear();
 
-        // First with the three light fixes of playback switched off, looking at light alone, so the report can say what they are worth
+        // First with the two light fixes of playback switched off, looking at light alone, so the report can say what they are worth
         System.setProperty("dailies.playback.noSettleLight", "true");
-        System.setProperty("dailies.playback.leaveStaleLight", "true");
         System.setProperty("dailies.playback.lightOutOfOrder", "true");
         try {
             for (int stop : stops) {
@@ -429,7 +428,6 @@ final class BestiarySteps {
             }
         } finally {
             System.clearProperty("dailies.playback.noSettleLight");
-            System.clearProperty("dailies.playback.leaveStaleLight");
             System.clearProperty("dailies.playback.lightOutOfOrder");
         }
         PlaybackSteps.jump(test, 0);

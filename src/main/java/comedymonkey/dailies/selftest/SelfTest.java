@@ -97,7 +97,10 @@ public final class SelfTest {
             LibrarySteps.run(this);
             ResourcePackSteps.play(this);
             WatchingSteps.watch(this);
-            BestiarySteps.run(this);
+            if (Boolean.getBoolean("dailies.test.bestiary")) {
+                // About ten minutes by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiary
+                BestiarySteps.run(this);
+            }
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
