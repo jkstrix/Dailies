@@ -255,6 +255,11 @@ public final class Encoder {
         String codec = settings.videoCodec.toLowerCase(Locale.ROOT);
         List<Codecs.Choice> forCodec = Codecs.forCodec(working, codec);
         List<String> can = working.stream().map(Codecs.Choice::codec).distinct().toList();
+        if (settings.encoder != null && settings.encoder.trim().equals(Codecs.FORBIDDEN)) {
+            // Said before anything else, so the answer is the same on a machine with no H.264 at all
+            throw new IllegalArgumentException("Dailies does not use " + Codecs.FORBIDDEN + ": H.264 is only made by hardware encoders. "
+                + (forCodec.isEmpty() ? "This computer has none; it can encode: " + String.join(", ", can) : "There are: " + String.join(", ", forCodec.stream().map(Codecs.Choice::encoder).toList())));
+        }
         if (forCodec.isEmpty()) {
             String why = Codecs.known(codec) ? Codecs.whyMissing(working, codec) : "There is no codec '" + settings.videoCodec + "'";
             throw new IllegalArgumentException(why + ". This computer can encode: " + String.join(", ", can));
@@ -267,10 +272,6 @@ public final class Encoder {
         List<Codecs.Choice> order = forCodec;
         if (settings.encoder != null && !settings.encoder.isBlank()) {
             String asked = settings.encoder.trim();
-            if (asked.equals(Codecs.FORBIDDEN)) {
-                throw new IllegalArgumentException("Dailies does not use " + Codecs.FORBIDDEN + ": H.264 is only made by hardware encoders. There are: "
-                    + String.join(", ", forCodec.stream().map(Codecs.Choice::encoder).toList()));
-            }
             order = forCodec.stream().filter(choice -> choice.encoder().equals(asked)).toList();
             if (order.isEmpty()) {
                 throw new IllegalArgumentException("There is no working encoder '" + asked + "' for " + settings.videoCodec + " on this computer. There are: "
