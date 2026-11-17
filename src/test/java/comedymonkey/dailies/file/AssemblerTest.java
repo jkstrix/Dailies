@@ -95,7 +95,9 @@ class AssemblerTest {
             for (int tick = start + 1; tick <= start + SEGMENT_TICKS; tick++) {
                 part.number(Records.TICK, 1);
                 if (timed) {
-                    part.record(Records.TIME, times.next(realAt(source, tick, pauseEvery), GAME_START + tick));
+                    // The tick a pause falls on is reached before the pause; the next segment starts on it after
+                    long real = pauseEvery > 0 && tick % pauseEvery == 0 ? realAt(source, tick - 1, pauseEvery) + 50 : realAt(source, tick, pauseEvery);
+                    part.record(Records.TIME, times.next(real, GAME_START + tick));
                 }
                 // What happened on the way to this tick
                 part.record(Records.PACKET, packet(source, tick));
@@ -194,6 +196,38 @@ class AssemblerTest {
                 assertEquals(realAt(0, tick, 200), sample.realTime(), "real time at tick " + tick);
                 assertEquals(GAME_START + tick, sample.gameTime(), "game time at tick " + tick);
             }
+        }
+    }
+
+    @Test
+    void everyTickOfSeveralSegmentsReadsBackItsOwnTimesAndABoundaryTickBoth() throws IOException {
+        // Five segments of 100 ticks; before ticks 200 and 400 the recording stood still for ten seconds (a pause)
+        Path file = this.record("many", 0, 5, 2, true);
+        try (RecordingFile recording = RecordingFile.open(file)) {
+            for (int tick = 0; tick <= 500; tick++) {
+                List<TimeIndex.Sample> times = recording.timesAt(tick);
+                boolean paused = tick == 200 || tick == 400;
+                assertEquals(paused ? 2 : 1, times.size(), "tick " + tick + " has " + times.size() + " times");
+                if (paused) {
+                    // Reached before the pause, gone on from after it
+                    assertEquals(realAt(0, tick - 1, 200) + 50, times.get(0).realTime(), "tick " + tick + " as it was reached");
+                    assertEquals(realAt(0, tick, 200), times.get(1).realTime(), "tick " + tick + " as it went on");
+                    assertEquals(10_000, times.get(1).realTime() - times.get(0).realTime());
+                    assertEquals(times.get(1), recording.timeAt(tick));
+                } else {
+                    assertEquals(realAt(0, tick, 200), times.get(0).realTime(), "tick " + tick);
+                    assertEquals(times.get(0), recording.timeAt(tick));
+                }
+                assertEquals(GAME_START + tick, times.get(0).gameTime(), "game time at tick " + tick);
+            }
+            // A boundary that is not a pause (tick 100, tick 300) has one time: the two segments agree
+            assertEquals(1, recording.timesAt(100).size());
+            assertEquals(1, recording.timesAt(300).size());
+            // A moment in the middle of the pause is nearest the tick the recording stood on, from either side
+            TimeIndex.Nearest inPause = recording.tickNearest(realAt(0, 200, 200) - 4_000);
+            assertEquals(200, inPause.tick());
+            assertEquals(4_000, inPause.errorMillis());
+            assertTrue(recording.timesAt(501).isEmpty());
         }
     }
 

@@ -234,7 +234,31 @@ public final class RecordingFile implements Closeable {
         return !this.segmentTimes().isEmpty();
     }
 
-    /** The real time and game time at a tick, or null when the recording does not hold them. Reads one segment, never plays it */
+    /**
+     * Every time a tick has. Nearly always one. A tick on which one segment ends and the next begins has two, and where
+     * the next does not follow on (a pause, another world, a cut, a join) they can be far apart: the first is when the
+     * recording reached that tick, the second when it went on from it. Whatever happened in between, with the
+     * recording standing still, is on that tick too. Empty when the recording holds no times.
+     */
+    public List<TimeIndex.Sample> timesAt(int tick) throws IOException {
+        List<TimeIndex.Sample> found = new ArrayList<>();
+        for (RecordingManifest.Segment segment : this.manifest.segments) {
+            if (segment.startTick <= tick && tick <= segment.endTick) {
+                TimeIndex.Table table = this.times(segment);
+                TimeIndex.Sample sample = table.any() ? table.exactly(tick) : null;
+                if (sample != null && !found.contains(sample)) {
+                    found.add(sample);
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * The real time and game time at a tick, or null when the recording does not hold them. Reads one segment, never
+     * plays it. For a tick on which two segments meet this is the later time, when the recording went on from it;
+     * {@link #timesAt} gives both.
+     */
     public @Nullable TimeIndex.Sample timeAt(int tick) throws IOException {
         RecordingManifest.Segment holder = null;
         for (RecordingManifest.Segment segment : this.manifest.segments) {

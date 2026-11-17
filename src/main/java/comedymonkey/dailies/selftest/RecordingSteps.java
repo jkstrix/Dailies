@@ -33,10 +33,10 @@ final class RecordingSteps {
     /** Where in the notes the long stretch after the pause begins: everything built is in the world from here on */
     static int laterNotesFrom = -1;
 
-    record Note(int tick, java.util.Map<String, net.minecraft.world.phys.Vec3> positions) {
-        /** Call on the client thread, so the tick and the positions belong together */
+    record Note(int tick, java.util.Map<String, net.minecraft.world.phys.Vec3> positions, long realTime, long gameTime) {
+        /** Call on the client thread, so the tick, the positions and the clocks belong together */
         static Note take(Minecraft minecraft) {
-            return new Note(Recorder.get().recordingTick(), CraftSteps.positions(minecraft, null));
+            return new Note(Recorder.get().recordingTick(), CraftSteps.positions(minecraft, null), System.currentTimeMillis(), minecraft.level.getGameTime());
         }
     }
 

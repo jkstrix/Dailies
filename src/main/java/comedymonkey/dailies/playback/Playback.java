@@ -67,6 +67,7 @@ public final class Playback {
     public static void init() {
         PackPlayback.init();
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> latchPause());
         // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks
         PlaybackExtensions.register(comedymonkey.dailies.capture.Recorder.SNAP, (data, from, length, skipping) -> {
             Minecraft minecraft = Minecraft.getInstance();
@@ -388,6 +389,19 @@ public final class Playback {
 
     // --- The work ---
 
+    /**
+     * Tells the game now whether the recording stands still. The game itself only takes that up at the end of a frame,
+     * and a frame can hold several ticks: without this, a recording that has just stopped on a tick (by a jump landing,
+     * by reaching the tick it was told to play to, by being opened) would have its world ticked on once or more with
+     * nothing from the recording, and whatever moves by its own clock, such as a bearing's contraption, would stand
+     * ahead of where the recording has it at that tick.
+     */
+    private static void latchPause() {
+        if (loaded) {
+            ((comedymonkey.dailies.mixin.access.MinecraftAccess) Minecraft.getInstance()).dailies$setPause(gamePaused());
+        }
+    }
+
     /** The start of every frame, outside any game tick: the only place the world may be torn down and rebuilt */
     public static void frameStart() {
         if (!active || inFrameStart) {
@@ -453,6 +467,7 @@ public final class Playback {
             }
         } finally {
             inFrameStart = false;
+            latchPause();
         }
     }
 
@@ -520,10 +535,6 @@ public final class Playback {
         Viewer.startNear(minecraft, manifest.recorderId);
         settle(minecraft);
         loaded = true;
-        // The game only takes up the pause at the end of a frame, and this frame still has its ticks to run: without this
-        // the freshly built world would be ticked on by itself before the recording moves, and whatever turns by its own
-        // clock (a bearing's contraption) would stand a tick or more ahead of the first tick of the recording
-        ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(true);
         Host.LOGGER.info("Dailies: opened recording {} ({} ticks)", path.getFileName(), total);
         tell(ON_OPENED);
     }

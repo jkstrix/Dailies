@@ -139,6 +139,12 @@ public final class TimeIndex {
             return this.any;
         }
 
+        /** The times of this very tick, or null when the segment has none for it */
+        public @Nullable Sample exactly(int tick) {
+            int index = tick - this.startTick;
+            return index >= 0 && index < this.known.length && this.known[index] ? new Sample(this.real[index], this.game[index]) : null;
+        }
+
         /** The times of a tick, or of the nearest tick before it that has any; null when there is none */
         public @Nullable Sample at(int tick) {
             int index = Math.min(this.known.length - 1, tick - this.startTick);

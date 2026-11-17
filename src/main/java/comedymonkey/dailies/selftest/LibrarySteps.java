@@ -80,11 +80,76 @@ final class LibrarySteps {
             TimeIndex.Sample atKill = file.timeAt(killTick);
             check(atKill != null, "there are no times for the tick of the kill");
             long killReal = kill.get("real_time").getAsLong();
-            check(Math.abs(atKill.realTime() - killReal) <= 250, "the time index says tick " + killTick + " was at " + atKill.realTime() + ", the moment logged on that tick says " + killReal);
-            check(Math.abs(atKill.gameTime() - kill.get("game_time").getAsLong()) <= 3, "the time index says game time " + atKill.gameTime() + " at the kill, the moment says "
-                + kill.get("game_time").getAsLong());
+            // A tick on which the recording stood still (a pause, say) has two times, and a moment logged meanwhile is
+            // stamped with that tick: its time lies between them. For any other tick the two are one
+            java.util.List<TimeIndex.Sample> killTimes = file.timesAt(killTick);
+            long earliest = killTimes.stream().mapToLong(TimeIndex.Sample::realTime).min().orElse(0);
+            long latest = killTimes.stream().mapToLong(TimeIndex.Sample::realTime).max().orElse(0);
+            check(!killTimes.isEmpty() && killReal >= earliest - 250 && killReal <= latest + 250, "the time index says tick " + killTick + " was at " + earliest
+                + (latest > earliest ? " and went on at " + latest : "") + ", the moment logged on that tick says " + killReal);
+            long killGame = kill.get("game_time").getAsLong();
+            check(killTimes.stream().anyMatch(sample -> Math.abs(sample.gameTime() - killGame) <= 3) || killTimes.size() > 1
+                && killGame >= killTimes.stream().mapToLong(TimeIndex.Sample::gameTime).min().getAsLong() - 3 && killGame <= killTimes.stream().mapToLong(TimeIndex.Sample::gameTime).max().getAsLong() + 3,
+                "the time index says game time " + atKill.gameTime() + " at the kill, the moment says " + killGame);
             TimeIndex.Nearest nearest = file.tickNearest(killReal);
-            check(nearest != null && Math.abs(nearest.tick() - killTick) <= 3 && nearest.errorMillis() <= 100, "the tick nearest the kill's real time is given as " + nearest + ", not about " + killTick);
+            long allowed = latest - earliest > 250 ? latest - earliest : 100;
+            check(nearest != null && Math.abs(nearest.tick() - killTick) <= 3 && nearest.errorMillis() <= allowed, "the tick nearest the kill's real time is given as " + nearest + ", not about " + killTick);
+
+            // The index against the game's own clocks, read by this test on the client thread at noted ticks all through
+            // the recording: within segments, either side of segment boundaries, and across the pause
+            int segmentsCrossed = 0;
+            int boundaryNotes = 0;
+            long worst = 0;
+            RecordingSteps.Note firstNote = RecordingSteps.notes.get(0);
+            RecordingSteps.Note lastNote = RecordingSteps.notes.get(RecordingSteps.notes.size() - 1);
+            for (RecordingManifest.Segment segment : file.segments()) {
+                if (segment.startTick > firstNote.tick() && segment.startTick <= lastNote.tick()) {
+                    segmentsCrossed++;
+                }
+            }
+            for (RecordingSteps.Note note : RecordingSteps.notes) {
+                java.util.List<TimeIndex.Sample> times = file.timesAt(note.tick());
+                check(!times.isEmpty(), "the time index has nothing for tick " + note.tick() + ", which the live game was noted on");
+                // The note was taken between two ticks: after the tick it names was recorded, before the next one was
+                long off = Long.MAX_VALUE;
+                for (TimeIndex.Sample sample : times) {
+                    long late = note.realTime() - sample.realTime();
+                    if (Math.abs(late) < Math.abs(off)) {
+                        off = late;
+                    }
+                    check(Math.abs(note.gameTime() - sample.gameTime()) <= 2, "the time index says game time " + sample.gameTime() + " at tick " + note.tick() + ", the game said " + note.gameTime());
+                }
+                worst = Math.max(worst, Math.abs(off));
+                check(off >= -30 && off <= 300, "the time index says tick " + note.tick() + " was at " + times.get(0).realTime() + ", the game's clock read " + note.realTime()
+                    + " while that tick was the newest (" + off + " ms later)");
+                for (RecordingManifest.Segment segment : file.segments()) {
+                    if (segment.startTick > 0 && Math.abs(note.tick() - segment.startTick) <= 30) {
+                        boundaryNotes++;
+                        break;
+                    }
+                }
+            }
+            check(segmentsCrossed >= 2 && boundaryNotes >= 2, "the noted ticks cross " + segmentsCrossed + " segment boundaries with " + boundaryNotes
+                + " of them near one: too few to say anything about the time index at a boundary");
+            // And tick by tick: time never runs backwards, and within a segment a tick is about a twentieth of a second
+            for (RecordingManifest.Segment segment : file.segments()) {
+                TimeIndex.Sample earlier = null;
+                for (int tick = segment.startTick; tick <= segment.endTick; tick++) {
+                    java.util.List<TimeIndex.Sample> both = file.timesAt(tick);
+                    check(!both.isEmpty(), "tick " + tick + " has no times");
+                    // Where two segments meet, this segment's own time for the tick: the later at its start, the earlier at its end
+                    TimeIndex.Sample now = tick == segment.startTick ? both.get(both.size() - 1) : both.get(0);
+                    if (earlier != null) {
+                        long step = now.realTime() - earlier.realTime();
+                        check(step >= 0 && step <= 2000, "from tick " + (tick - 1) + " to tick " + tick + " inside a segment the time index moves " + step + " ms");
+                        check(now.gameTime() - earlier.gameTime() >= 0 && now.gameTime() - earlier.gameTime() <= 3, "from tick " + (tick - 1) + " to tick " + tick
+                            + " the game time in the index moves " + (now.gameTime() - earlier.gameTime()));
+                    }
+                    earlier = now;
+                }
+            }
+            test.log("time index against the game's clock at " + RecordingSteps.notes.size() + " noted ticks across " + segmentsCrossed + " segment boundaries (" + boundaryNotes
+                + " within 30 ticks of one): at most " + worst + " ms apart");
             TimeIndex.Sample first = file.timeAt(0);
             TimeIndex.Sample last = file.timeAt(total);
             check(first != null && last != null && last.realTime() - first.realTime() >= total * 45L, "the times do not run from the first tick to the last: " + first + " to " + last);
@@ -588,6 +653,10 @@ final class LibrarySteps {
      */
     private static void packs(SelfTest test, Minecraft minecraft, Path bare) throws Exception {
         Path source = ResourcePackSteps.recording();
+        if (source == null && Boolean.getBoolean("dailies.test.skipPacks")) {
+            test.skip("the resource pack steps were switched off, so packs through a trim and a combine were not tried (REC-19 with FILE-9 and FILE-10)");
+            return;
+        }
         check(source != null && Files.isRegularFile(source), "the pack recording is not where the pack steps left it");
         int pop = ResourcePackSteps.popTick();
         int push = ResourcePackSteps.pushTick();
