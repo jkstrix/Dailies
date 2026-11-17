@@ -8,6 +8,8 @@ import comedymonkey.dailies.ui.SettingsScreen;
 import net.minecraft.client.Minecraft;
 import net.neoforged.fml.loading.FMLPaths;
 
+import org.lwjgl.glfw.GLFW;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,7 +76,35 @@ final class SettingsSteps {
         check(lines.size() == 2, "the dropdown of controlsLocation lists " + lines);
         List<String> narrowed = test.onClient(() -> Previews.menuFind("le"));
         check(narrowed.size() == 1 && narrowed.get(0).toLowerCase().startsWith("le"), "typing 'le' in the dropdown left " + narrowed);
-        test.onClientRun(Previews::closeMenu);
+        // The keys: Escape closes the list and leaves the screen up; a letter narrows it; an arrow and Enter choose
+        test.onClientRun(() -> screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        check(!test.onClient(Previews::menuOpen) && minecraft.screen == screen, "Escape did not close the dropdown and only the dropdown");
+        test.onClientRun(() -> {
+            screen.choose("controlsLocation", null);
+            screen.charTyped('l', 0);
+        });
+        check(test.onClient(Previews::menuShown).size() == 1, "typing a letter did not narrow the dropdown: " + test.onClient(Previews::menuShown));
+        test.onClientRun(() -> screen.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0));
+        saved(test, screen);
+        check("LEFT".equals(Host.get().setting("controlsLocation", "RIGHT")), "typing 'l' and Enter in the dropdown did not choose Left");
+        test.onClientRun(() -> {
+            screen.choose("controlsLocation", null);
+            screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
+            screen.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0);
+        });
+        saved(test, screen);
+        check("RIGHT".equals(Host.get().setting("controlsLocation", "LEFT")), "the down arrow and Enter in the dropdown did not choose Right");
+        // A click outside the open list closes it and does nothing else: the switch under the mouse stays as it was
+        boolean notices = Host.get().setting("showNotices", true);
+        test.onClientRun(() -> {
+            screen.reveal("showNotices");
+            screen.choose("controlsLocation", null);
+            int[] place = screen.where("showNotices");
+            screen.mouseClicked(place[0] + screen.width * 0.25, place[1] + 5.0, 0);
+        });
+        test.sleepTicks(4);
+        check(!test.onClient(Previews::menuOpen), "a click outside the dropdown did not close it");
+        check(!test.onClient(screen::saving) && notices == Host.get().setting("showNotices", !notices), "the click that closed the dropdown also did something else");
         String refusal = test.onClient(() -> screen.choose("controlsLocation", "LEFT"));
         check(refusal == null, "choosing LEFT from the dropdown failed: " + refusal);
         saved(test, screen);
@@ -148,6 +178,51 @@ final class SettingsSteps {
         check(whisper.equals(Host.get().setting("momentsWhisperUrl", "")), "testing an address changed the setting");
         check(!Host.get().setting("momentsAiEnabled", true), "the settings steps left the AI switch on");
         test.log("settings screen: " + declared.size() + " settings shown, searched, changed, refused, reset and tested");
+    }
+
+    /**
+     * The dropdowns of the editor, which the editor's own screen hands the mouse and keys to: one opens with its
+     * choices, typing narrows it, Enter chooses, Escape closes it without closing the editor.
+     */
+    static void editorDropdown(SelfTest test) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        test.onClientRun(() -> {
+            if (minecraft.screen != null) {
+                minecraft.setScreen(null);
+            }
+            Previews.editorTab(2);
+            comedymonkey.dailies.ui.Controls.openTimeline();
+        });
+        test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor to open");
+        test.sleepTicks(10);
+        net.minecraft.client.gui.screens.Screen editor = minecraft.screen;
+        String before = test.onClient(() -> Previews.editorDropdownShows(0));
+        check(!before.isEmpty(), "the export tab has no dropdown showing a choice");
+        check(test.onClient(() -> Previews.editorDropdown(0)), "the first dropdown of the export tab did not open");
+        List<String> lines = test.onClient(Previews::menuLines);
+        check(lines.size() >= 3 && lines.contains(before), "the open dropdown does not list its choices with the one in force: " + lines);
+        test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        check(!test.onClient(Previews::menuOpen) && minecraft.screen == editor, "Escape did not close the editor's dropdown and only the dropdown");
+        // Another choice by typing its first letters and pressing Enter, then the first one back the same way
+        String other = lines.get(0).equals(before) ? lines.get(1) : lines.get(0);
+        for (String wanted : List.of(other, before)) {
+            test.onClientRun(() -> {
+                Previews.editorDropdown(0);
+                for (char letter : wanted.toCharArray()) {
+                    editor.charTyped(letter, 0);
+                }
+            });
+            List<String> narrowed = test.onClient(Previews::menuShown);
+            check(!narrowed.isEmpty() && narrowed.get(0).equals(wanted), "typing '" + wanted + "' in the editor's dropdown left " + narrowed);
+            test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0));
+            test.sleepTicks(3);
+            String now = test.onClient(() -> Previews.editorDropdownShows(0));
+            check(now.equals(wanted) && !test.onClient(Previews::menuOpen), "choosing '" + wanted + "' with the keys left the dropdown showing '" + now + "'");
+        }
+        check(minecraft.screen == editor, "the editor closed while its dropdown was used");
+        test.onClientRun(() -> minecraft.setScreen(null));
+        test.sleepTicks(5);
+        test.log("editor dropdown: opened, narrowed by typing, chosen with Enter, closed with Escape");
     }
 
     private static List<String> found(SelfTest test, SettingsScreen screen, String words) throws Exception {

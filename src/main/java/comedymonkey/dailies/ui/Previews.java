@@ -31,6 +31,14 @@ public final class Previews {
         return new RecoveryScreen(List.of(Path.of("first.dailies.part"), Path.of("second.dailies.part")), parent);
     }
 
+    /** The question asked before a recording is deleted, with nothing behind its buttons */
+    public static Screen ask() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return new AskScreen(yes -> minecraft.setScreen(null), Component.translatable("dailies.ui.delete.title"),
+                Component.translatable("dailies.ui.delete.question", "A walk round the fire"), Component.translatable("dailies.ui.delete.yes"),
+                Component.translatable("dailies.ui.delete.no"));
+    }
+
     /** Has a Dailies screen draw as though the mouse were at this place, explanation included; -1 gives the mouse back */
     public static void pointAt(Screen screen, int x, int y) {
         if (screen instanceof KitScreen kit) {
@@ -63,7 +71,8 @@ public final class Previews {
             form.collect(order);
             int seen = 0;
             for (Gadget gadget : order) {
-                if (gadget instanceof Gadget.Cycle<?> dropdown && gadget.y > form.y && gadget.y + gadget.height < form.y + form.height && seen++ == which) {
+                if (gadget instanceof Gadget.Cycle<?> dropdown && seen++ == which) {
+                    form.reveal(gadget);
                     dropdown.open();
                     return Menu.open != null;
                 }
@@ -72,6 +81,40 @@ public final class Previews {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /** What a dropdown of the editor's side panel shows while closed: the choice in force. Empty when there is no such dropdown */
+    public static String editorDropdownShows(int which) {
+        Screen screen = Minecraft.getInstance().screen;
+        if (!(screen instanceof EditorScreen)) {
+            return "";
+        }
+        try {
+            Method side = EditorScreen.class.getDeclaredMethod("sideForm");
+            side.setAccessible(true);
+            Form form = (Form) side.invoke(screen);
+            List<Gadget> order = new ArrayList<>();
+            form.collect(order);
+            int seen = 0;
+            for (Gadget gadget : order) {
+                if (gadget instanceof Gadget.Cycle<?> dropdown && seen++ == which) {
+                    return dropdown.showing();
+                }
+            }
+            return "";
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The lines the open menu shows now, after whatever has been typed into it */
+    public static List<String> menuShown() {
+        Menu menu = Menu.open;
+        return menu == null ? List.of() : menu.shownLabels();
+    }
+
+    public static boolean menuOpen() {
+        return Menu.open != null;
     }
 
     /** Types into the menu that is open, to show it narrowing; returns the lines left on show */

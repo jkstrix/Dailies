@@ -358,6 +358,18 @@ public final class SettingsScreen extends KitScreen {
         Kit.text(graphics, font, Kit.clip(font, count.getString(), this.file.x - this.left - 16), this.left + 8, this.bottom - 8 - Kit.ROW + 2, Controls.PARCHMENT_DIM);
     }
 
+    /** Tab goes from the search down through the settings and only then to the buttons at the foot */
+    @Override
+    List<Gadget> order() {
+        List<Gadget> order = new ArrayList<>();
+        this.search.collect(order);
+        this.clear.collect(order);
+        this.list.collect(order);
+        this.file.collect(order);
+        this.done.collect(order);
+        return order;
+    }
+
     @Override
     void typedElsewhere(char character, int modifiers) {
         // Typing anywhere starts a search, as it does in a list of files

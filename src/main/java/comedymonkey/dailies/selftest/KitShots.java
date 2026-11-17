@@ -127,6 +127,7 @@ final class KitShots {
         JsonObject none = new JsonObject();
 
         size(test, 1920, 1080, 2);
+        attempt("the title screen", () -> ManualShots.shot(test, "01-title"));
         attempt("the settings screen", () -> {
             settings(test, "10");
             SettingsScreen screen = openSettings(test, true);
@@ -159,6 +160,19 @@ final class KitShots {
             test.onClientRun(() -> screen.test("momentsWhisperUrl", "192.168.1.5:8000"));
             test.sleepTicks(4);
             ManualShots.shot(test, "10h-settings-address-wrong");
+            // The Tab key walks the controls: the ring shows where the keys are
+            test.onClientRun(() -> {
+                screen.abandon();
+                for (String group : groups()) {
+                    screen.fold(group, !group.equals("recording"));
+                }
+                screen.reveal("autoStart");
+                for (int press = 0; press < 7; press++) {
+                    screen.keyPressed(GLFW.GLFW_KEY_TAB, 0, 0);
+                }
+            });
+            test.sleepTicks(6);
+            ManualShots.shot(test, "10i-settings-focus");
             test.onClientRun(() -> {
                 screen.abandon();
                 minecraft.setScreen(null);
@@ -212,6 +226,15 @@ final class KitShots {
             test.onClientRun(() -> Notices.show(Component.literal("Recording paused")));
             test.sleepTicks(8);
             ManualShots.shot(test, "31-recording-notice");
+        });
+        attempt("the pause menu", () -> {
+            test.onClientRun(() -> minecraft.pauseGame(false));
+            test.sleepTicks(10);
+            ManualShots.shot(test, "31b-pause-menu");
+            test.onClientRun(() -> minecraft.setScreen(Previews.ask()));
+            test.sleepTicks(8);
+            ManualShots.shot(test, "31c-ask");
+            test.onClientRun(() -> minecraft.setScreen(null));
         });
         attempt("the name prompt", () -> {
             test.onClientRun(() -> minecraft.setScreen(Previews.name()));

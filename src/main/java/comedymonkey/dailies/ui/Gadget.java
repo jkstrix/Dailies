@@ -540,6 +540,11 @@ abstract class Gadget {
             Menu.drop(items, this.x, this.y, this.width, Kit.ROW, this);
         }
 
+        /** The words the closed box shows */
+        String showing() {
+            return this.shown().getString();
+        }
+
         /** The choices as the list would offer them now */
         List<T> offered() {
             return List.copyOf(this.choices.get());

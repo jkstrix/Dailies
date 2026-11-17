@@ -81,6 +81,7 @@ public final class SelfTest {
             RecordingSteps.run(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
+            SettingsSteps.editorDropdown(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
             result = "PASSED";
