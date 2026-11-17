@@ -52,6 +52,11 @@ public final class Previews {
         EditorState.sideFolded = false;
     }
 
+    /** Unfolds or folds the rarer settings of the editor's export tab */
+    public static void exportMore(boolean unfolded) {
+        ExportForms.showMore(unfolded);
+    }
+
     /**
      * Opens a dropdown of the editor's side panel as a click on it would.
      *

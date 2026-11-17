@@ -310,6 +310,10 @@ final class KitShots {
             String[] tabs = {"keyframe", "looks", "export"};
             for (int tab = 0; tab < 3; tab++) {
                 editor(test, tab);
+                if (tab == 2) {
+                    // The tab first asks the encoder what this machine can do, which takes a few seconds
+                    test.sleepTicks(100);
+                }
                 ManualShots.shot(test, "50-editor-" + tabs[tab]);
                 int which = tab;
                 boolean opened = test.onClient(() -> Previews.editorDropdown(which == 1 ? 1 : 0));
@@ -319,6 +323,10 @@ final class KitShots {
                 }
                 test.onClientRun(Previews::closeMenu);
             }
+            test.onClientRun(() -> Previews.exportMore(true));
+            test.sleepTicks(10);
+            ManualShots.shot(test, "50b-editor-export-more");
+            test.onClientRun(() -> Previews.exportMore(false));
             for (int[] size : SIZES) {
                 for (int scale = 1; scale <= 3; scale++) {
                     test.onClientRun(() -> minecraft.setScreen(null));

@@ -139,11 +139,18 @@ final class ExportSteps {
     private static void video(SelfTest test, Minecraft minecraft, int from, int to) throws Exception {
         java.util.Map<String, List<String>> offered = Encoder.offered();
         test.log("the packed encoder offers " + offered);
-        check(offered.containsKey("h264"), "the packed encoder cannot encode H.264 at all: " + offered);
-        Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test.mp4");
+        // H.264 comes from hardware encoders only (decided by the owner): a machine without one exports what stands in for it
+        java.util.List<comedymonkey.dailies.export.Codecs.Choice> working = Encoder.choices();
+        comedymonkey.dailies.export.Codecs.Pick pick = comedymonkey.dailies.export.Codecs.pick(List.of("h264"), "mp4", working);
+        check(pick.codec() != null, "this machine can encode no video at all: " + offered);
+        check(offered.containsKey("h264") == !pick.fellBack(), "H.264 is offered and was not chosen, or the other way round: " + offered);
+        String codec = pick.codec();
+        String label = comedymonkey.dailies.export.Codecs.forCodec(working, codec).get(0).label();
+        test.log(pick.fellBack() ? "this machine has no hardware H.264 encoder: the video checks use " + label + " instead" : "the video checks use " + label);
+        Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test." + pick.container());
         Files.deleteIfExists(file);
         long started = System.currentTimeMillis();
-        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "video_codec", "h264", "width", 1920, "height", 1080, "framerate", 30,
+        test.tool("export_start", args("output_path", file.toString(), "container", pick.container(), "video_codec", codec, "width", 1920, "height", 1080, "framerate", 30,
             "start_tick", from, "end_tick", to, "no_gui", true, "bitrate", "8m"));
         test.waitFor(() -> !Export.active(), 300, "the video to export");
         JsonObject done = test.tool("export_status", new JsonObject());
@@ -156,7 +163,7 @@ final class ExportSteps {
         String told = run(probe.toString(), "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
             "stream=codec_name,width,height,nb_read_frames,r_frame_rate:format=duration", "-of", "default=noprint_wrappers=1", file.toString());
         int expected = (int) Math.round((to - from) / 20.0 * 30.0);
-        check(told.contains("codec_name=h264"), "the video is not H.264: " + told);
+        check(told.contains("codec_name=" + comedymonkey.dailies.export.Codecs.probeName(codec)), "the video is not " + codec + ": " + told);
         check(told.contains("width=1920") && told.contains("height=1080"), "the video is not 1920x1080: " + told);
         check(told.contains("nb_read_frames=" + expected), "the video does not hold " + expected + " frames: " + told);
         double seconds = Double.parseDouble(told.lines().filter(line -> line.startsWith("duration=")).findFirst().orElse("duration=0").substring(9));
@@ -172,7 +179,7 @@ final class ExportSteps {
         int top = picture.getRGB(960, 40) & 0xFF;
         int bottom = picture.getRGB(960, 1040) & 0xFF;
         check(top > bottom, "the video is upside down or scrambled: blue at the top is " + top + " and at the bottom " + bottom);
-        test.log("exported " + expected + " frames of 1920x1080 H.264 in " + (System.currentTimeMillis() - started) + " ms, " + Files.size(file) / 1024 + " KB; the file reports "
+        test.log("exported " + expected + " frames of 1920x1080 " + label + " in " + (System.currentTimeMillis() - started) + " ms, " + Files.size(file) / 1024 + " KB; the file reports "
             + told.replace('\n', ' ').trim());
     }
 
@@ -211,7 +218,8 @@ final class ExportSteps {
     private static void sound(SelfTest test, Minecraft minecraft, int from) throws Exception {
         Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test-sound.mp4");
         Files.deleteIfExists(file);
-        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "video_codec", "h264", "width", 640, "height", 360, "framerate", 30,
+        // No codec named: the fastest this machine has, which is hardware H.264 where there is any
+        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "width", 640, "height", 360, "framerate", 30,
             "start_tick", from, "end_tick", from + 20, "no_gui", true, "bitrate", "2m", "record_audio", true, "stereo_audio", true));
         test.waitFor(() -> !Export.active(), 300, "the export with sound");
         JsonObject done = test.tool("export_status", new JsonObject());
