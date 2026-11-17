@@ -286,6 +286,12 @@ public final class Export {
                 finish(minecraft, cancelRequested);
                 return;
             }
+            if (comedymonkey.dailies.playback.PackPlayback.covered()) {
+                // The game is loading the recording's resource packs and draws its loading screen over the picture
+                frameReady = false;
+                worldRebuilt = true;
+                return;
+            }
             if (settings.still) {
                 frameReady = true;
                 return;
@@ -310,6 +316,11 @@ public final class Export {
                 return;
             }
             if (!Playback.runTo(minecraft, position)) {
+                return;
+            }
+            if (Playback.jumping()) {
+                // The tick just played changed the server's resource packs: no picture until they have been loaded
+                worldRebuilt = true;
                 return;
             }
             partialTick = partial;

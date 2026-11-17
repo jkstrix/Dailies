@@ -279,4 +279,54 @@ class RecordingFileTest {
         assertFalse(Files.exists(file));
     }
 
+    /** REC-19: a resource pack from a server is kept whole in the recording, once, and comes back out byte for byte */
+    @Test
+    void aStoredFileIsKeptOnceAndComesBackWhole() throws IOException {
+        byte[] pack = data(77, RecordingWriter.PIECE_BYTES * 2 + 12_345);
+        Path source = this.folder.resolve("pack.zip");
+        Files.write(source, pack);
+        Path file = this.folder.resolve("packs" + RecordingFile.EXTENSION);
+        RecordingWriter writer = RecordingWriter.create(file, manifest());
+        writer.beginSegment(0);
+        writer.appendToSegment(new byte[]{1, 2, 3}, 0, 3, 20);
+        RecordingManifest.Pack stored = writer.putFile(source);
+        stored.key = "first";
+        writer.manifest().packs.add(stored);
+        long sizeWithOne = writer.bytesWritten();
+        // Pushed again: nothing more is written
+        RecordingManifest.Pack again = writer.putFile(source);
+        assertEquals(sizeWithOne, writer.bytesWritten());
+        assertEquals(stored.sha256, again.sha256);
+        assertEquals(stored.pieces, again.pieces);
+        assertEquals(3, stored.pieces.size());
+        assertEquals(pack.length, stored.size);
+        writer.finish();
+
+        try (RecordingFile recording = RecordingFile.open(file)) {
+            RecordingManifest read = recording.manifest();
+            assertEquals(1, read.packs.size());
+            assertEquals("first", read.packs.get(0).key);
+            assertEquals(3, recording.sharedCount());
+            Path out = this.folder.resolve("cache").resolve("out.zip");
+            recording.extractFile(read.packs.get(0), out);
+            assertArrayEquals(pack, Files.readAllBytes(out));
+            // What is written out is checked against what was put in
+            RecordingManifest.Pack wrong = read.packs.get(0);
+            wrong.sha256 = "00" + wrong.sha256.substring(2);
+            Path refused = this.folder.resolve("cache").resolve("refused.zip");
+            assertThrows(RecordingFormatException.class, () -> recording.extractFile(wrong, refused));
+            assertFalse(Files.exists(refused));
+            try (java.util.stream.Stream<Path> left = Files.list(this.folder.resolve("cache"))) {
+                assertEquals(1, left.count());
+            }
+        }
+    }
+
+    /** A recording from before packs were kept has none, and still opens */
+    @Test
+    void aManifestWithoutPacksReadsAsHavingNone() throws IOException {
+        RecordingManifest old = RecordingManifest.fromBytes("{\"id\":\"abc\",\"name\":\"Old\"}".getBytes(StandardCharsets.UTF_8));
+        assertTrue(old.packs.isEmpty());
+    }
+
 }

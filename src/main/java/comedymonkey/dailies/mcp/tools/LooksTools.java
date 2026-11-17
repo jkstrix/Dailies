@@ -50,7 +50,7 @@ final class LooksTools {
     static void register(McpProtocol.Registrar registrar) {
         EditingTools.add(registrar, "visuals_get",
             "The current scene's looks, the settings that are not on the timeline: what is drawn (HUD, chat, boss bars, titles, name tags, particles, held items, sky), "
-                + "weather, fog, night vision, field of view, roll and the framing guides. Each setting comes with its type, its value, what it allows and what it does.",
+                + "weather, fog, night vision, whether the server's resource packs are used, field of view, roll and the framing guides. Each setting comes with its type, its value, what it allows and what it does.",
             McpSchema.object(), (args, history) -> {
                 JsonObject json = new JsonObject();
                 json.addProperty("scene", history.state().currentSceneIndex());

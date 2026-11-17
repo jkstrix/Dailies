@@ -249,7 +249,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
 			<tbody>
 				<tr><td>REC-10</td><td>Everything the game receives about the world is kept, in order, with the tick it arrived on.</td><td>World, blocks, entities, effects, sound, weather, time, scoreboard, boss bars, titles, chat.</td></tr>
-				<tr><td>REC-11</td><td>Nothing about the connection or the recorder's private screens is kept: keep-alives, pings, login and resource pack steps, chat signing and session data, container windows, recipe books, advancement screens, statistics replies.</td><td>The test is "would showing this again need the original server or leak the recorder's account?"</td></tr>
+				<tr><td>REC-11</td><td>Nothing about the connection or the recorder's private screens is kept: keep-alives, pings, login and resource pack steps, chat signing and session data, container windows, recipe books, advancement screens, statistics replies.</td><td>The test is "would showing this again need the original server or leak the recorder's account?" One exception: what became of each server resource pack is kept, with the pack itself (REC-19), because without it the world is shown with the wrong textures, models and sounds.</td></tr>
 				<tr><td>REC-12</td><td>The recorder's own player is captured so that it appears in playback like any other player: position, look and head direction, pose (sneaking, swimming, gliding, sleeping, riding), arm swings, held and worn items, item use, hurt and death, and the vehicle it rides.</td><td>Update rate is an option, 1 to 20 per second; default 20.</td></tr>
 				<tr><td>REC-13</td><td>An option also captures the recorder's hotbar, selected slot, health, hunger and experience, so playback can show their HUD. Default off.</td><td></td></tr>
 				<tr><td>REC-14</td><td>Other players' skins and names are captured as the recorder's game knew them, so playback needs no network.</td><td>Playback must work offline.</td></tr>
@@ -257,6 +257,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>REC-16</td><td>NeoForge's extra spawn data for an entity is kept with that entity's spawn and survives into every later snapshot that contains the entity.</td><td>Without it, Create contraptions cannot be rebuilt.</td></tr>
 				<tr><td>REC-17</td><td>Recording continues unbroken across dimension changes, respawns and a return to the configuration phase. A dimension change is, optionally, marked (default on).</td><td></td></tr>
 				<tr><td>REC-18</td><td>If Simple Voice Chat is installed, an option captures the voice audio the recorder heard, per speaker, with positions. Default off.</td><td>Use that mod's public API only. Also feeds Moments (MOM-30).</td></tr>
+				<tr><td>REC-19</td><td>Every resource pack the server pushes, which the player accepts and the game loads, is recorded at the tick it comes into force with what the server said about it (id, address, hash, required or not, prompt), and the pack's bytes are stored inside the recording, once however often the pack is pushed. A pack the server takes off is recorded as removed at its tick. A pack the player declined, or that could not be fetched or loaded, is recorded as not applied. Packs applied before the recording started, as most are, are known from the moment of joining, and every snapshot says which packs are in force.</td><td>The bytes are the game's own downloaded copy; nothing is ever fetched by Dailies. A pack is tens of megabytes against recordings of gigabytes, and the recording never depends on a cache or a server that may be gone (principle 2). Writing it must not stall the game.</td></tr>
 			</tbody>
 		</table></div>
 
@@ -318,6 +319,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<tr><td>preview.png</td><td>The preview image.</td></tr>
 					<tr><td>seg/000001.bin ...</td><td>One per segment, each compressed by itself. A snapshot block, then a stream of records: a tick advance, a received game packet in the game's own wire encoding, a recorder-player update, a custom payload, a voice frame, an extension record with an id and a length.</td></tr>
 					<tr><td>chunks/&lt;hash&gt;.bin</td><td>Chunk data shared between snapshots, named by a hash of its content.</td></tr>
+					<tr><td>packs/&lt;hash&gt;.zip</td><td>Each server resource pack, once, named by a hash of its content (REC-19).</td></tr>
 					<tr><td>edit/state.json</td><td>The editor state.</td></tr>
 				</tbody>
 			</table></div>
@@ -363,6 +365,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>PLAY-14</td><td>Motion is smooth at every playback rate and at any export frame rate, including rates far below normal speed.</td><td>Interpolate in recording time, not wall-clock time.</td></tr>
 				<tr><td>PLAY-15</td><td>A jump across one segment takes at most a few seconds on ordinary hardware, and the game stays responsive while it happens.</td><td></td></tr>
 				<tr><td>PLAY-16</td><td>Where recorded, voice chat is heard in playback at normal speed, placed in the world where each speaker was.</td><td></td></tr>
+				<tr><td>PLAY-17</td><td>The recorded server resource packs (REC-19) are applied in playback, in their recorded order and from their recorded ticks, above the viewer's own packs, and are taken off when the recording is closed, leaving the viewer's own packs exactly as they were. A pack that was not applied when recording is not applied in playback. A scene look setting, "use the server's resource packs" (default on), turns them off for that scene; exports use the packs as the scene says. A recording whose pack cannot be applied still plays, with a notice.</td><td>Changing packs reloads the game's resources, which takes seconds. It is done once on opening for the packs in force there, and again only when the packs in force really differ: during play at the recorded tick, or where a jump lands. Never once per jump. The recording stands still while it happens.</td></tr>
 			</tbody>
 		</table></div>
 
@@ -429,6 +432,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li>Fog: as recorded, off, or a chosen start and end distance and colour.</li>
 					<li>Sky on or off, with a plain background colour when off (for keying).</li>
 					<li>Night vision without the potion's tint.</li>
+					<li>Use the server's resource packs, as recorded (PLAY-17). On unless turned off, which shows the scene with the viewer's own packs alone.</li>
 				</ul>
 			</div>
 			<div class="card"><h3>The frame</h3>
@@ -948,6 +952,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<li><div><h3>Record</h3><p>Create a flat creative world, start recording, summon a named animal, place and break a block, kill a mob, drop a marker, feed in a known voice clip as if from voice chat, and cross at least two segment boundaries (with short test segments). <i>REC-1, 10, 12, 20, 30; MOM-31.</i></p></div></li>
 			<li><div><h3>Build machines</h3><p>Place a bearing contraption driven by a motor, a Sable platform, a helicopter with a seat (sit in it before assembling), and a hot air balloon with a lit burner (stand in it before assembling). Note the live position of each at several ticks. <i>MOD-1 to 4, REC-22.</i></p></div></li>
 			<li><div><h3>Play back</h3><p>Open the recording. At each noted tick, reached once by playing and once by jumping, each machine is within a third of a block of its live position, the seated player is on the seat and the standing player is on the deck. Jump backwards twice; nothing is duplicated. <i>PLAY-11, MOD-2 to 5.</i></p></div></li>
+			<li><div><h3>Server resource packs</h3><p>The world's built-in server pushes a small pack, made by the test and served from the same machine, and the script accepts the game's question; then, while recording, the server takes it off, pushes one that is declined, and pushes the first again. The recording holds the pack's bytes once. Playback has the pack in force on opening and not after closing, off at a tick before the second push and on after it, off with the scene's look setting off, and never has the declined pack; a jump between two ticks with the same packs reloads nothing; stills exported with and without the pack differ; the viewer's own pack list is unchanged afterwards. <i>REC-19, PLAY-17.</i></p></div></li>
 			<li><div><h3>Edit and export</h3><p>Add camera keyframes, undo and redo them, export ten seconds at 1080p with sound, and check the file's length, frame count and that its frames are not blank or scrambled. Export a still. <i>EDIT-3, 6; EXP-1, 2, 7.</i></p></div></li>
 			<li><div><h3>Smart Camera</h3><p>For each mode, play a stretch and check: chase holds its distance and composition, orbit turns at its rate, a tripod stays put and pans, auto zoom changes the field of view with distance, the director cuts and gives reasons, a wall between camera and subject is detected, and a craft is framed whole. Same stretch twice gives the same director shots. <i>CAM-1 to 8.</i></p></div></li>
 			<li><div><h3>Moments</h3><p>The kill, the placed and mined blocks, the biome and the marker are logged with recording ticks in the order they happened. The voice segment is logged with its length. Clips are built; the kill's clip contains the voice segment whole and has a suggested camera. <i>MOM-2 to 5, clips.</i></p></div></li>
@@ -959,7 +964,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 		<h3>Needs a person or a second machine</h3>
 		<div class="rules">
-			<div class="rule"><b>A dedicated server</b><span>Record on a real server running Create, Sable, Aeronautics and the companion, with a client that has only Dailies. <i>MOD-7, SRV-2, SRV-5.</i></span></div>
+			<div class="rule"><b>A dedicated server</b><span>Record on a real server running Create, Sable, Aeronautics and the companion, with a client that has only Dailies. Use one that pushes its own resource pack while the player is joining, before there is a world. <i>MOD-7, SRV-2, SRV-5, REC-19.</i></span></div>
 			<div class="rule"><b>Two players</b><span>Meetings, groups, another player's death, another player on your craft, real voice chat. <i>MOM-20 to 22, 30.</i></span></div>
 			<div class="rule"><b>The eye test</b><span>Fly the helicopter and the balloon by hand, then watch them. Judge whether the Smart Camera's shots look good. No script can.</span></div>
 			<div class="rule"><b>The page in a browser</b><span>Open it, browse a real session, cue a clip from a live world and from the title screen.</span></div>

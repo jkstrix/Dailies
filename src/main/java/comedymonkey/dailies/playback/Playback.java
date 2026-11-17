@@ -66,6 +66,7 @@ public final class Playback {
     }
 
     public static void init() {
+        PackPlayback.init();
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
         // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks
         PlaybackExtensions.register(comedymonkey.dailies.capture.Recorder.SNAP, (data, from, length, skipping) -> {
@@ -142,9 +143,9 @@ public final class Playback {
         return recordingId;
     }
 
-    /** Whether a jump is under way */
+    /** Whether a jump is under way, or the game is still loading the recording's resource packs where one landed (PLAY-17) */
     public static boolean jumping() {
-        return jumpTarget >= 0 || reloadIndex >= 0;
+        return jumpTarget >= 0 || reloadIndex >= 0 || PackPlayback.covered();
     }
 
     /** Whether recorded time is being skipped over right now, so nothing from it should be heard or pile up */
@@ -428,6 +429,8 @@ public final class Playback {
                 feed.skipping = false;
                 settle(minecraft);
             }
+            // The recording's own resource packs, changed only here, between frames, and only once a jump has landed
+            PackPlayback.frame(minecraft, jumpTarget < 0 && reloadIndex < 0);
             if (comedymonkey.dailies.export.Export.active()) {
                 comedymonkey.dailies.export.Export.frameStart(minecraft);
             }
@@ -602,7 +605,8 @@ public final class Playback {
         if (!loaded || feed == null) {
             return;
         }
-        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0 && !exporting;
+        // While resource packs load the picture is held: the recording does not run on under the loading screen
+        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0 && !exporting && !PackPlayback.busy();
         if (!fastTick && !playing) {
             return;
         }
@@ -680,6 +684,7 @@ public final class Playback {
         pendingOpen = null;
         pendingClose = false;
         WHEN_LOADED.clear();
+        PackPlayback.closed(Minecraft.getInstance());
         Session.forgetRegistries();
         if (serverConfigsLoaded) {
             serverConfigsLoaded = false;

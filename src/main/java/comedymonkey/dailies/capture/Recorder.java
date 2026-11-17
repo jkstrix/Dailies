@@ -116,6 +116,7 @@ public final class Recorder {
     }
 
     public static void init() {
+        PackCapture.init();
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
             try {
                 INSTANCE.onClientTick();
@@ -664,6 +665,14 @@ public final class Recorder {
             if (this.warnedPayloads.add(id)) {
                 Host.LOGGER.warn("Dailies: mod message {} cannot be recorded and is being left out. Said once per kind", id, t);
             }
+        }
+    }
+
+    /** Hands the writer thread a piece of work of its own, done in turn with everything else that is written. Client thread */
+    void spool(Spool.Job job) {
+        Spool spool = this.spool;
+        if (spool != null) {
+            spool.add(job);
         }
     }
 

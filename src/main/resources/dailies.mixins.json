@@ -9,6 +9,8 @@
     "capture.ConnectionMixin",
     "capture.LocalPlayerMixin",
     "capture.BlockEntityInfoMixin",
+    "packs.ServerPackManagerMixin",
+    "packs.PackPushMixin",
     "access.ClientPacketListenerAccess",
     "access.BiomeManagerAccess",
     "access.ConnectionAccess",
