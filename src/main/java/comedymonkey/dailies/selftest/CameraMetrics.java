@@ -113,6 +113,8 @@ final class CameraMetrics {
                 frame.eyeY = feet.y + entity.getEyeHeight();
                 frame.eyeZ = feet.z;
                 frame.subjectYaw = entity.getVisualRotationYInDegrees();
+                frame.vehicle = entity.getVehicle() == null ? -1 : entity.getVehicle().getId();
+                frame.dimension = minecraft.level.dimension().location().toString();
                 frame.minX = box.minX;
                 frame.minY = box.minY;
                 frame.minZ = box.minZ;

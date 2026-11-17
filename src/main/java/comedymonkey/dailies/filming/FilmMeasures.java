@@ -12,15 +12,22 @@ import java.util.Set;
  * how smoothly it moved, and for the director how it cut. Everything is worked out from the frames alone, so a film's
  * measures can be worked out again from its CSV.
  * <p>
- * A "cut" is a deliberate change of shot by the director. A "subject jump" is the player going somewhere no camera could
- * follow (a teleport, a portal, getting on a vehicle from afar): more than {@value #JUMP_BLOCKS} blocks between two frames
- * at more than {@value #JUMP_SPEED} blocks a second, the same rule the Smart Camera uses for starting again. Both break
- * the film into stretches, and the smoothness is measured only inside a stretch.
+ * A "cut" is a deliberate change of shot by the director. A "subject jump" is a break in the player's own movement that
+ * a camera may meet with a cut of its own: a teleport (more than {@value #JUMP_BLOCKS} blocks between two frames at more
+ * than {@value #JUMP_SPEED} blocks a second, the rule the Smart Camera uses for starting again), a sudden step (over
+ * {@value #SUDDEN_BLOCKS} block and {@value #SUDDEN_FACTOR} times their usual step of the half second before), getting on
+ * or off a vehicle, or going to another world. Both break the film into stretches, and the smoothness is measured only
+ * inside a stretch. A camera that answers a subject jump a few frames late, as one stepping in whole ticks does, is not
+ * counted as popping for it, nor is a cut it makes then judged as the director's choice.
  */
 public final class FilmMeasures {
 
     public static final double JUMP_BLOCKS = 3.0;
     public static final double JUMP_SPEED = 100.0;
+    public static final double SUDDEN_BLOCKS = 1.0;
+    public static final double SUDDEN_FACTOR = 5.0;
+    /** How long after a subject jump a camera's own break is put down to it: two ticks at 60 frames a second */
+    public static final int ANSWER_FRAMES = 6;
     /** Longest the player may be out of frame or mostly hidden at a stretch, in seconds */
     public static final double MOST_LOST_SECONDS = 2.0;
     /** Shortest shot the director may hold, in seconds */
@@ -161,7 +168,10 @@ public final class FilmMeasures {
         boolean[] cut = new boolean[n];
         boolean[] jump = new boolean[n];
         int[] stretch = new int[n];
+        double[] subjectStep = new double[n];
+        Arrays.fill(subjectStep, Double.NaN);
         int current = 0;
+        int recent = (int) Math.round(fps / 2.0);
         for (int i = 0; i < n; i++) {
             FilmFrame now = frames.get(i);
             if (i > 0) {
@@ -171,7 +181,11 @@ public final class FilmMeasures {
                     jump[i] = true;
                 } else if (now.subjectPresent) {
                     double moved = distance(now.eyeX, now.eyeY, now.eyeZ, before.eyeX, before.eyeY, before.eyeZ);
-                    jump[i] = moved > JUMP_BLOCKS && moved * fps > JUMP_SPEED;
+                    subjectStep[i] = moved;
+                    jump[i] = (moved > JUMP_BLOCKS && moved * fps > JUMP_SPEED)
+                        || (moved > SUDDEN_BLOCKS && moved > SUDDEN_FACTOR * usualStep(subjectStep, jump, i, recent))
+                        || now.vehicle != before.vehicle
+                        || !now.dimension.equals(before.dimension);
                 }
                 if (cut[i] || jump[i] || now.frame != before.frame + 1) {
                     current++;
@@ -181,6 +195,15 @@ public final class FilmMeasures {
                 }
             }
             stretch[i] = current;
+        }
+
+        int[] sinceJump = new int[n];
+        int last = -1_000_000;
+        for (int i = 0; i < n; i++) {
+            if (jump[i]) {
+                last = i;
+            }
+            sinceJump[i] = i - last;
         }
 
         // Tracking
@@ -279,7 +302,7 @@ public final class FilmMeasures {
             if (pop == null) {
                 pop = pop(blockStep, stretch, i, window, POP_FLOOR_BLOCKS, "blocks");
             }
-            if (pop != null) {
+            if (pop != null && sinceJump[i] > ANSWER_FRAMES) {
                 if (result.pops == 0) {
                     result.firstPop = String.format(Locale.ROOT, "at %.2f s %s", frames.get(i).seconds, pop);
                 }
@@ -302,9 +325,10 @@ public final class FilmMeasures {
                 shotStart = i;
             } else if (cut[i]) {
                 result.cuts++;
-                shots.add(new int[]{shotStart, i, jump[i] ? 1 : 0});
+                boolean answered = sinceJump[i] <= ANSWER_FRAMES;
+                shots.add(new int[]{shotStart, i, answered ? 1 : 0});
                 shotStart = i;
-                if (!jump[i]) {
+                if (!answered) {
                     if (angleBetween(directions[i - 1], directions[i]) < JUMP_CUT_DEGREES) {
                         result.jumpCuts++;
                     }
@@ -357,6 +381,21 @@ public final class FilmMeasures {
     }
 
     /** The usual step is taken within the same stretch: a still shot before a cut says nothing of how the next one moves */
+    /** The median of the subject's steps over the frames before this one, back to the last subject jump */
+    private static double usualStep(double[] steps, boolean[] jump, int i, int window) {
+        double[] before = new double[window];
+        int count = 0;
+        for (int j = i - 1; j >= Math.max(1, i - window); j--) {
+            if (jump[j]) {
+                break;
+            }
+            if (!Double.isNaN(steps[j])) {
+                before[count++] = steps[j];
+            }
+        }
+        return count == 0 ? 0.0 : median(Arrays.copyOf(before, count));
+    }
+
     private static String pop(double[] steps, int[] stretch, int i, int window, double floor, String unit) {
         if (Double.isNaN(steps[i])) {
             return null;
@@ -416,16 +455,16 @@ public final class FilmMeasures {
     // ------------------------------------------------------------------ Writing it down
 
     public static final String CSV_HEADER = "frame,seconds,tick,cam_x,cam_y,cam_z,yaw,pitch,roll,fov,subject_present,eye_x,eye_y,eye_z,box_min_x,box_min_y,box_min_z,"
-        + "box_max_x,box_max_y,box_max_z,in_frame,visible_fraction,occluded_fraction,camera_in_block,shot,shot_kind,screen_x,screen_y,target_x,target_y";
+        + "box_max_x,box_max_y,box_max_z,in_frame,visible_fraction,occluded_fraction,camera_in_block,shot,shot_kind,screen_x,screen_y,target_x,target_y,vehicle,dimension";
 
     public static String csv(List<FilmFrame> frames) {
         StringBuilder out = new StringBuilder(CSV_HEADER).append('\n');
         for (FilmFrame f : frames) {
             double[] at = screen(f, f.aimX, f.aimY, f.aimZ);
-            out.append(String.format(Locale.ROOT, "%d,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.2f,%d,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%d,%s,%.4f,%.4f,%.3f,%.3f",
+            out.append(String.format(Locale.ROOT, "%d,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.2f,%d,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%d,%s,%.4f,%.4f,%.3f,%.3f,%d,%s",
                 f.frame, f.seconds, f.tick, f.camX, f.camY, f.camZ, f.yaw, f.pitch, f.roll, f.fov, f.subjectPresent ? 1 : 0, f.eyeX, f.eyeY, f.eyeZ,
                 f.minX, f.minY, f.minZ, f.maxX, f.maxY, f.maxZ, inFrame(f) ? 1 : 0, visibleFraction(f), f.subjectPresent ? hiddenFraction(f) : 0.0,
-                f.cameraInBlock ? 1 : 0, f.shot, f.shotKind.replace(',', ' '), at[0], at[1], f.targetX, f.targetY)).append('\n');
+                f.cameraInBlock ? 1 : 0, f.shot, f.shotKind.replace(',', ' '), at[0], at[1], f.targetX, f.targetY, f.vehicle, f.dimension.replace(',', ' '))).append('\n');
         }
         return out.toString();
     }

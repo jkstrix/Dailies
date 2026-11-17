@@ -48,6 +48,11 @@ public final class FilmFrame {
     /** Bit i set when sample point i was hidden from the camera by blocks */
     public int occludedMask;
 
+    /** What the subject rides, by entity id; -1 when on their own feet */
+    public int vehicle = -1;
+    /** The world the subject is in, such as minecraft:the_nether */
+    public String dimension = "";
+
     public boolean cameraInBlock;
     /** The director's shot, counted from 0; -1 for a camera that has no shots */
     public int shot = -1;

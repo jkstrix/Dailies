@@ -54,10 +54,23 @@ final class CameraRoute {
     static final String WORLD = "Dailies Camera Route";
     private static final long SEED = 20261117L;
     static final List<String> PLACES = List.of("forest", "buildings", "cave", "nether", "flying", "vehicles");
+    /**
+     * The parts of a place that are each filmed from their own start, so every one is in a film: marked "place: part"
+     * and "place: part end", and filmed as "place-part"
+     */
+    static final java.util.Map<String, List<String>> PARTS = java.util.Map.of(
+        "flying", List.of("elytra", "creative"),
+        "vehicles", List.of("boat", "minecart", "horse", "balloon"));
+    /**
+     * Goes up whenever the route is played differently, so that a fixture recorded before is recorded again by itself.
+     * Kept in the fixture as a marker. 2: house doors walked through, the route kept out of water, parts marked
+     */
+    static final int VERSION = 2;
+    private static final String VERSION_MARKER = "camera route version " + VERSION;
     /** How long each place is played for, in ticks: a little over the minute each camera films */
     private static final int STRETCH = 70 * 20;
-    /** Each vehicle's share of the vehicles stretch */
-    private static final int VEHICLE = 18 * 20;
+    /** Each vehicle's part of the vehicles stretch */
+    private static final int VEHICLE = 30 * 20;
 
     /** One place's stretch of the route, in recording ticks */
     record Stretch(String place, int start, int end) {
@@ -112,23 +125,50 @@ final class CameraRoute {
         try (RecordingFile recording = RecordingFile.open(file)) {
             RecordingManifest manifest = recording.manifest();
             check(manifest.recorderId != null && !manifest.recorderId.isBlank(), "the route names no recorder");
+            check(manifest.markers.stream().anyMatch(marker -> marker.description.equals(VERSION_MARKER)),
+                "the route was recorded by an older version of its script (this one is " + VERSION + ")");
             List<Stretch> stretches = new ArrayList<>();
             for (String place : PLACES) {
-                int start = -1;
-                int end = -1;
-                for (RecordingManifest.Marker marker : manifest.markers) {
-                    if (marker.description.equals(place) && start < 0) {
-                        start = marker.tick;
-                    } else if (marker.description.equals(place + " end") && start >= 0 && marker.tick > start) {
-                        end = marker.tick;
+                List<Stretch> parts = new ArrayList<>();
+                for (String part : PARTS.getOrDefault(place, List.of())) {
+                    Stretch found = marked(manifest, place + ": " + part, place + "-" + part);
+                    if (found != null) {
+                        parts.add(found);
                     }
                 }
-                if (start >= 0 && end > start) {
-                    stretches.add(new Stretch(place, start, end));
+                Stretch whole = marked(manifest, place, place);
+                if (!parts.isEmpty()) {
+                    stretches.addAll(parts);
+                } else if (whole != null) {
+                    stretches.add(whole);
                 }
             }
             check(!stretches.isEmpty(), "the route has none of its places marked");
             return new Route(file, manifest.totalTicks, stretches);
+        }
+    }
+
+    /** The stretch between a marker and its end marker, or null */
+    private static Stretch marked(RecordingManifest manifest, String marker, String name) {
+        int start = -1;
+        int end = -1;
+        for (RecordingManifest.Marker one : manifest.markers) {
+            if (one.description.equals(marker) && start < 0) {
+                start = one.tick;
+            } else if (one.description.equals(marker + " end") && start >= 0 && one.tick > start && end < 0) {
+                end = one.tick;
+            }
+        }
+        return start >= 0 && end > start ? new Stretch(name, start, end) : null;
+    }
+
+    /** Marks the start of a part of a place, and its end once it is over however it ends */
+    private static void part(SelfTest test, String place, String part, Part play) throws Exception {
+        test.tool("recording_add_marker", args("description", place + ": " + part));
+        try {
+            play.run();
+        } finally {
+            test.tool("recording_add_marker", args("description", place + ": " + part + " end"));
         }
     }
 
@@ -183,6 +223,7 @@ final class CameraRoute {
         JsonObject started = test.tool("recording_start", new JsonObject());
         check(started.get("active").getAsBoolean(), "the camera route's recording did not start");
         test.waitFor(() -> now() >= 5, 30, "the camera route's recording to get going");
+        test.tool("recording_add_marker", args("description", VERSION_MARKER));
 
         BlockPos forestAt = forest;
         if (forestAt != null) {
@@ -262,7 +303,7 @@ final class CameraRoute {
     /**
      * Walks with the keys until the recording reaches a tick or the walk is done, turning smoothly, never more than
      * eight degrees a tick, towards the heading asked for. A player who has not got anywhere for a second and a half
-     * turns away.
+     * turns away, and one who has got into water anyway heads for the nearest dry ground: every walk is on land.
      */
     private static void walk(SelfTest test, int until, Heading heading, boolean sprint, int jumpEvery, java.util.function.BooleanSupplier done) throws Exception {
         Minecraft minecraft = minecraft();
@@ -274,7 +315,8 @@ final class CameraRoute {
         while (now() < until && (done == null || !done.getAsBoolean())) {
             int tick = now();
             if (tick - checked >= 5) {
-                wanted = heading.next(wanted);
+                Float ashore = test.onClient(() -> ashore(minecraft));
+                wanted = ashore != null ? ashore : heading.next(wanted);
                 checked = tick;
             }
             if (tick - lastAtTick >= 30) {
@@ -297,16 +339,53 @@ final class CameraRoute {
         return from + Mth.clamp(Mth.wrapDegrees(to - from), -most, most);
     }
 
-    /** Wanders where there is room ahead, drifting off to one side or the other every few seconds */
-    private static Heading wandering(SelfTest test) {
+    /**
+     * Wanders where there is room ahead, drifting off to one side or the other every few seconds, and turning back
+     * towards home when it strays further than the reach given, so a forest walk stays in the forest
+     *
+     * @param home null to wander anywhere
+     */
+    private static Heading wandering(SelfTest test, Vec3 home, double reach) {
         int[] drift = {0};
         return wanted -> {
             if (++drift[0] % 16 == 0) {
                 wanted += (RANDOM.nextBoolean() ? 1 : -1) * (30 + RANDOM.nextInt(40));
             }
             float from = wanted;
-            return test.onClient(() -> roomiest(minecraft(), from));
+            return test.onClient(() -> {
+                Vec3 at = minecraft().player.position();
+                float aim = from;
+                if (home != null && Math.hypot(at.x - home.x, at.z - home.z) > reach) {
+                    aim = RealWorldSteps.yawTowards(at, home.x, home.z);
+                }
+                return roomiest(minecraft(), aim);
+            });
         };
+    }
+
+    private static Heading wandering(SelfTest test) {
+        return wandering(test, null, 0.0);
+    }
+
+    /** Where the player is now, as the home of a wander */
+    private static Vec3 here(SelfTest test) throws Exception {
+        return RealWorldSteps.playerAt(test);
+    }
+
+    /** The way to the nearest dry place to stand when the player is in water; null when they are not. Client thread */
+    private static Float ashore(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || !player.isInWater()) {
+            return null;
+        }
+        BlockPos from = player.blockPosition();
+        BlockPos best = null;
+        for (BlockPos pos : BlockPos.betweenClosed(from.offset(-16, -3, -16), from.offset(16, 4, 16))) {
+            if (standable(minecraft.level, pos) && (best == null || pos.distSqr(from) < best.distSqr(from))) {
+                best = pos.immutable();
+            }
+        }
+        return best == null ? null : RealWorldSteps.yawTowards(player.position(), best.getX() + 0.5, best.getZ() + 0.5);
     }
 
     /** Heads for a place, round whatever is in the way */
@@ -363,7 +442,7 @@ final class CameraRoute {
 
     /**
      * How far a player on foot could go this way, up to eight blocks: a step up is fine, a wall is not, and neither is
-     * lava or a drop of five blocks or more.
+     * water, lava or a drop of five blocks or more. The route is meant to be on land wherever it walks.
      */
     private static int clearance(Minecraft minecraft, Vec3 from, float yaw) {
         ClientLevel level = minecraft.level;
@@ -379,8 +458,13 @@ final class CameraRoute {
                 if (drop >= 5 || level.getFluidState(at.below(drop + 1)).is(FluidTags.LAVA)) {
                     return step - 1;
                 }
+                for (int down = -1; down <= drop + 1; down++) {
+                    if (level.getFluidState(at.below(down)).is(FluidTags.WATER)) {
+                        return step - 1;
+                    }
+                }
                 y -= drop;
-            } else if (!open(level, at) && open(level, at.above()) && open(level, at.above(2))) {
+            } else if (!open(level, at) && open(level, at.above()) && open(level, at.above(2)) && !wet(level, at.above()) && !wet(level, at)) {
                 y++;
             } else {
                 return step - 1;
@@ -394,8 +478,13 @@ final class CameraRoute {
         return state.getCollisionShape(level, pos).isEmpty() && !state.getFluidState().is(FluidTags.LAVA);
     }
 
+    private static boolean wet(Level level, BlockPos pos) {
+        return level.getFluidState(pos).is(FluidTags.WATER);
+    }
+
+    /** Two blocks of dry air over solid ground that is not under water */
     private static boolean standable(Level level, BlockPos pos) {
-        return open(level, pos) && open(level, pos.above()) && !open(level, pos.below());
+        return open(level, pos) && open(level, pos.above()) && !open(level, pos.below()) && !wet(level, pos) && !wet(level, pos.above()) && !wet(level, pos.below());
     }
 
     // ------------------------------------------------------------------ The forest
@@ -416,7 +505,7 @@ final class CameraRoute {
     /** Walking and jumping between the trunks, now sprinting, now not */
     private static void forest(SelfTest test) throws Exception {
         int end = now() + STRETCH;
-        Heading heading = wandering(test);
+        Heading heading = wandering(test, here(test), 40.0);
         while (now() < end) {
             walk(test, Math.min(end, now() + 200), heading, true, 50, null);
             walk(test, Math.min(end, now() + 160), heading, false, 0, null);
@@ -425,13 +514,36 @@ final class CameraRoute {
 
     // ------------------------------------------------------------------ A village
 
+    /** The village's house doors, found when the player gets there: each as the door, a place outside it and one inside */
+    private static List<BlockPos[]> houseDoors = List.of();
+    private static Vec3 villageCentre = Vec3.ZERO;
+
     private static void buildingsSetup(SelfTest test, BlockPos village) throws Exception {
         RealWorldSteps.flying(test, true, 0.05F);
         int ground = RealWorldSteps.surface(village.getX(), village.getZ(), Heightmap.Types.MOTION_BLOCKING_NO_LEAVES);
-        RealWorldSteps.goTo(test, village.getX() + 0.5, ground + 1, village.getZ() + 0.5, 0, 0);
-        BlockPos stand = RealWorldSteps.standNear(test, new BlockPos(village.getX(), ground, village.getZ()), 6);
-        if (stand != null) {
-            RealWorldSteps.goTo(test, stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5, 0, 0);
+        RealWorldSteps.goTo(test, village.getX() + 0.5, ground + 12, village.getZ() + 0.5, 0, 0);
+        villageCentre = new Vec3(village.getX() + 0.5, ground, village.getZ() + 0.5);
+        houseDoors = doors(test, new BlockPos(village.getX(), ground, village.getZ()));
+        test.log("camera route: " + houseDoors.size() + " house doors found in the village");
+        // In the street a few steps from the first house's door, facing it, so the stretch begins with the walk up to it
+        BlockPos start = null;
+        if (!houseDoors.isEmpty()) {
+            BlockPos[] door = houseDoors.get(0);
+            BlockPos outside = door[1];
+            int dx = Integer.signum(outside.getX() - door[0].getX());
+            int dz = Integer.signum(outside.getZ() - door[0].getZ());
+            for (int far = 6; far >= 2 && start == null; far--) {
+                BlockPos wanted = outside.offset(dx * far, 0, dz * far);
+                start = test.onClient(() -> standable(minecraft().level, wanted)) ? wanted : RealWorldSteps.standNear(test, wanted, 2);
+            }
+        }
+        if (start == null) {
+            start = RealWorldSteps.standNear(test, new BlockPos(village.getX(), ground, village.getZ()), 6);
+        }
+        if (start != null) {
+            Vec3 at = Vec3.atBottomCenterOf(start);
+            float facing = houseDoors.isEmpty() ? 0.0F : RealWorldSteps.yawTowards(at, houseDoors.get(0)[1].getX() + 0.5, houseDoors.get(0)[1].getZ() + 0.5);
+            RealWorldSteps.goTo(test, at.x, at.y, at.z, facing, 0);
         }
         RealWorldSteps.flying(test, false, 0.05F);
         test.command("item replace entity @s weapon.mainhand with minecraft:air");
@@ -439,33 +551,38 @@ final class CameraRoute {
     }
 
     /**
-     * Wooden doors with open sky on one side and a roof on the other: the doors of houses. Each as the door, a place to
-     * stand outside it and one inside, nearest first and then each nearest the one before, so the walk goes round the
-     * streets.
+     * Wooden doors with a roof over one side and open sky over the other: the doors of houses. Looked for across the
+     * whole village, several houses. Each comes as the door, a place to stand outside it and one inside, one or two
+     * blocks off and a step up or down allowed, since village doors often have a step in front; the first is the door
+     * nearest the middle of the village, then each the nearest to the one before, so the walk goes round the streets.
      */
     private static List<BlockPos[]> doors(SelfTest test, BlockPos centre) throws Exception {
         List<BlockPos[]> found = test.onClient(() -> {
             ClientLevel level = minecraft().level;
             List<BlockPos[]> doors = new ArrayList<>();
-            for (BlockPos pos : BlockPos.betweenClosed(centre.offset(-48, -8, -48), centre.offset(48, 8, 48))) {
+            for (BlockPos pos : BlockPos.betweenClosed(centre.offset(-80, -12, -80), centre.offset(80, 14, 80))) {
                 BlockState state = level.getBlockState(pos);
                 if (!(state.getBlock() instanceof DoorBlock) || !state.is(BlockTags.WOODEN_DOORS) || state.getValue(DoorBlock.HALF) != DoubleBlockHalf.LOWER) {
                     continue;
                 }
                 Direction facing = state.getValue(DoorBlock.FACING);
-                BlockPos one = pos.relative(facing, 2);
-                BlockPos other = pos.relative(facing.getOpposite(), 2);
-                boolean oneSky = level.canSeeSky(one.above(2));
-                boolean otherSky = level.canSeeSky(other.above(2));
-                if (oneSky != otherSky && standable(level, one) && standable(level, other)) {
-                    doors.add(new BlockPos[]{pos.immutable(), oneSky ? one.immutable() : other.immutable(), oneSky ? other.immutable() : one.immutable()});
+                int oneCovered = covered(level, pos, facing);
+                int otherCovered = covered(level, pos, facing.getOpposite());
+                if (Math.abs(oneCovered - otherCovered) < 2) {
+                    continue;
+                }
+                Direction out = oneCovered < otherCovered ? facing : facing.getOpposite();
+                BlockPos outside = spotBeside(level, pos, out);
+                BlockPos inside = spotBeside(level, pos, out.getOpposite());
+                if (outside != null && inside != null) {
+                    doors.add(new BlockPos[]{pos.immutable(), outside, inside});
                 }
             }
             return doors;
         });
         List<BlockPos[]> ordered = new ArrayList<>();
         BlockPos from = centre;
-        while (!found.isEmpty() && ordered.size() < 8) {
+        while (!found.isEmpty() && ordered.size() < 10) {
             BlockPos[] nearest = null;
             for (BlockPos[] door : found) {
                 if (nearest == null || door[1].distSqr(from) < nearest[1].distSqr(from)) {
@@ -479,40 +596,94 @@ final class CameraRoute {
         return ordered;
     }
 
-    /** Along the streets from door to door, in at the first door and out again, then round the corners to the others */
-    private static void buildings(SelfTest test, BlockPos village) throws Exception {
+    /** How many of the three columns beyond a door on one side have something over them: a roof inside, sky outside */
+    private static int covered(Level level, BlockPos door, Direction side) {
+        int count = 0;
+        for (int far = 1; far <= 3; far++) {
+            if (!level.canSeeSky(door.relative(side, far).above(2))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** A place to stand one or two blocks out from a door on one side, level with it or a step up or down; null when none */
+    private static BlockPos spotBeside(Level level, BlockPos door, Direction side) {
+        for (int far = 1; far <= 2; far++) {
+            for (int up : new int[]{0, -1, 1}) {
+                BlockPos spot = door.relative(side, far).above(up);
+                if (standable(level, spot)) {
+                    return spot.immutable();
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean near(SelfTest test, Vec3 target, double within) throws Exception {
+        Vec3 at = RealWorldSteps.playerAt(test);
+        return Math.hypot(at.x - target.x, at.z - target.z) < within;
+    }
+
+    /**
+     * Up to a house's door, opened with a use as a player opens it, in, a look round, then turned about and out again
+     *
+     * @return whether the player got in and out
+     */
+    private static boolean throughDoor(SelfTest test, BlockPos[] door, int end) throws Exception {
         Minecraft minecraft = minecraft();
+        Vec3 outside = Vec3.atBottomCenterOf(door[1]);
+        Vec3 inside = Vec3.atBottomCenterOf(door[2]);
+        walkTo(test, outside, Math.min(end - now(), 15 * 20), 0.35, false);
+        if (!near(test, outside, 0.9)) {
+            test.log("camera route: could not get to the door at " + door[0].toShortString());
+            return false;
+        }
+        turnTo(test, RealWorldSteps.yawTowards(RealWorldSteps.playerAt(test), door[0].getX() + 0.5, door[0].getZ() + 0.5));
+        for (int attempt = 0; attempt < 2 && test.onClient(() -> !minecraft.level.getBlockState(door[0]).getValue(DoorBlock.OPEN)); attempt++) {
+            // The empty hand used on the door, which is what a right click on it does
+            RealWorldSteps.useOn(test, attempt == 0 ? door[0] : door[0].above(), Direction.UP);
+            RealWorldSteps.ticks(test, 8);
+        }
+        if (test.onClient(() -> !minecraft.level.getBlockState(door[0]).getValue(DoorBlock.OPEN))) {
+            test.log("camera route: the door at " + door[0].toShortString() + " would not open");
+            return false;
+        }
+        walkTo(test, inside, Math.min(end - now(), 8 * 20), 0.35, false);
+        boolean gotIn = near(test, inside, 0.9);
+        RealWorldSteps.ticks(test, 25);
+        turnTo(test, RealWorldSteps.yawTowards(RealWorldSteps.playerAt(test), outside.x, outside.z));
+        walkTo(test, outside, Math.min(end - now(), 8 * 20), 0.35, false);
+        // A few steps on into the street, clear of the doorway
+        Vec3 away = outside.add(outside.subtract(inside).multiply(1.0, 0.0, 1.0).normalize().scale(3.0));
+        walkTo(test, away, Math.min(end - now(), 4 * 20), 0.6, false);
+        if (!gotIn) {
+            test.log("camera route: the door at " + door[0].toShortString() + " opened but the player did not get inside");
+        }
+        return gotIn;
+    }
+
+    /** Along the streets from house to house, in through a door and out again at each of the first two, then on round the village */
+    private static void buildings(SelfTest test, BlockPos village) throws Exception {
         int end = now() + STRETCH;
-        List<BlockPos[]> doors = doors(test, RealWorldSteps.playerBlock(test));
-        test.log("camera route: " + doors.size() + " house doors found in the village");
-        boolean wentIn = false;
-        for (BlockPos[] door : doors) {
-            if (now() >= end) {
+        int wentIn = 0;
+        for (BlockPos[] door : houseDoors) {
+            if (now() >= end - 10 * 20) {
                 break;
             }
-            Vec3 outside = Vec3.atBottomCenterOf(door[1]);
-            Vec3 inside = Vec3.atBottomCenterOf(door[2]);
-            walkTo(test, outside, Math.min(end - now(), 20 * 20), wentIn ? 1.5 : 0.4, false);
-            if (wentIn || now() >= end || Math.hypot(RealWorldSteps.playerAt(test).x - outside.x, RealWorldSteps.playerAt(test).z - outside.z) > 1.0) {
-                continue;
+            if (wentIn < 2) {
+                if (throughDoor(test, door, end)) {
+                    wentIn++;
+                    test.log("camera route: in and out through the door at " + door[0].toShortString());
+                }
+            } else {
+                walkTo(test, Vec3.atBottomCenterOf(door[1]), Math.min(end - now(), 12 * 20), 1.5, false);
             }
-            // In through the door and out again, as anyone looking round a village does
-            turnTo(test, RealWorldSteps.yawTowards(outside, inside.x, inside.z));
-            boolean shut = test.onClient(() -> !minecraft.level.getBlockState(door[0]).getValue(DoorBlock.OPEN));
-            if (shut) {
-                RealWorldSteps.useOn(test, door[0], Direction.UP);
-                RealWorldSteps.ticks(test, 6);
-            }
-            walkTo(test, inside, Math.min(end - now(), 6 * 20), 0.5, false);
-            RealWorldSteps.ticks(test, 20);
-            turnTo(test, RealWorldSteps.yawTowards(inside, outside.x, outside.z));
-            walkTo(test, outside, Math.min(end - now(), 6 * 20), 0.5, false);
-            wentIn = true;
         }
-        if (!wentIn) {
+        if (wentIn == 0) {
             test.skip("camera route: no house door in the village could be walked through; the buildings stretch only walks the streets");
         }
-        walk(test, end, wandering(test), false, 0, null);
+        walk(test, end, wandering(test, villageCentre, 40.0), false, 0, null);
     }
 
     // ------------------------------------------------------------------ A cave
@@ -577,7 +748,7 @@ final class CameraRoute {
         walk(test, now() + 60, wanted -> test.onClient(() -> minecraft.player.getYRot()), false, 0,
             () -> minecraft.player != null && !minecraft.player.onGround());
         test.waitFor(() -> minecraft.player.onGround() || now() >= end, 20, "the drop into the cave");
-        Heading heading = wandering(test);
+        Heading heading = wandering(test, here(test), 40.0);
         while (now() < end) {
             walk(test, Math.min(end, now() + 100), heading, false, 0, null);
             BlockPos floor = test.onClient(() -> {
@@ -638,7 +809,7 @@ final class CameraRoute {
         test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Nether to appear");
         RealWorldSteps.flying(test, false, 0.05F);
         RealWorldSteps.ticks(test, 20);
-        walk(test, end, wandering(test), false, 0, null);
+        walk(test, end, wandering(test, here(test), 60.0), false, 0, null);
     }
 
     // ------------------------------------------------------------------ Flying
@@ -666,9 +837,20 @@ final class CameraRoute {
 
     /** Half the stretch on an elytra with rockets, turning and diving, and half in creative flight */
     private static void flying(SelfTest test) throws Exception {
+        float[] heading = new float[3];
+        part(test, "flying", "elytra", () -> elytra(test, heading));
+        part(test, "flying", "creative", () -> creativeFlight(test, heading));
+        test.command("item replace entity @s weapon.mainhand with minecraft:air");
+    }
+
+    /**
+     * On an elytra with rockets, turning and diving, for half the flying stretch
+     *
+     * @param heading the yaw, pitch and yaw wanted, handed on to the creative flight that follows
+     */
+    private static void elytra(SelfTest test, float[] heading) throws Exception {
         Minecraft minecraft = minecraft();
         int begin = now();
-        int end = begin + STRETCH;
         RealWorldSteps.flying(test, false, 0.05F);
         RealWorldSteps.ticks(test, 6);
         boolean gliding = test.onClient(() -> {
@@ -713,13 +895,27 @@ final class CameraRoute {
             }
             test.sleepTicks(1);
         }
-        // Then creative flight: the elytra off, fast turns, climbs and dives
+        RealWorldSteps.drive = null;
+        heading[0] = yaw;
+        heading[1] = pitch;
+        heading[2] = wantedYaw;
+        // The elytra off, for the creative flight after it
         test.command("item replace entity @s armor.chest with minecraft:air");
         RealWorldSteps.ticks(test, 3);
         RealWorldSteps.flying(test, true, 0.08F);
+    }
+
+    /** Creative flight, with fast turns, climbs and dives, for the other half of the flying stretch */
+    private static void creativeFlight(SelfTest test, float[] heading) throws Exception {
+        Minecraft minecraft = minecraft();
+        float yaw = heading[0];
+        float pitch = heading[1];
+        float wantedYaw = heading[2];
+        int turn = 0;
         int creativeBegin = now();
+        int end = creativeBegin + STRETCH / 2;
         boolean shiftDown = false;
-        nextTurn = creativeBegin;
+        int nextTurn = creativeBegin;
         while (now() < end) {
             int since = now() - creativeBegin;
             double height = test.onClient(() -> heightAboveGround(minecraft));
@@ -741,7 +937,6 @@ final class CameraRoute {
         }
         test.onClientRun(() -> minecraft.options.keyShift.setDown(false));
         RealWorldSteps.drive = null;
-        test.command("item replace entity @s weapon.mainhand with minecraft:air");
     }
 
     // ------------------------------------------------------------------ Vehicles
@@ -771,15 +966,17 @@ final class CameraRoute {
         Minecraft minecraft = minecraft();
         // The boat: rowing on, with a turn to the left every few seconds
         if (water != null) {
-            int boatEnd = now() + VEHICLE;
-            RealWorldSteps.drive = new Drive(Float.NaN, 0.0F, true, false, false, false, false);
-            while (now() < boatEnd) {
-                boolean left = (now() / 20) % 6 >= 4;
-                test.onClientRun(() -> minecraft.options.keyLeft.setDown(left));
-                test.sleepTicks(5);
-            }
-            test.onClientRun(() -> minecraft.options.keyLeft.setDown(false));
-            RealWorldSteps.drive = null;
+            part(test, "vehicles", "boat", () -> {
+                int boatEnd = now() + VEHICLE;
+                RealWorldSteps.drive = new Drive(Float.NaN, 0.0F, true, false, false, false, false);
+                while (now() < boatEnd) {
+                    boolean left = (now() / 20) % 6 >= 4;
+                    test.onClientRun(() -> minecraft.options.keyLeft.setDown(left));
+                    test.sleepTicks(5);
+                }
+                test.onClientRun(() -> minecraft.options.keyLeft.setDown(false));
+                RealWorldSteps.drive = null;
+            });
             test.command("ride @s dismount");
             test.command("kill @e[type=minecraft:boat]");
         }
@@ -818,19 +1015,21 @@ final class CameraRoute {
         RealWorldSteps.goTo(test, x + 2.5, y + 0.5, z + 0.5, -90, 10);
         test.command("ride @s mount @e[type=minecraft:minecart,limit=1,sort=nearest]");
         RealWorldSteps.ticks(test, 5);
-        test.command("data merge entity @e[type=minecraft:minecart,limit=1,sort=nearest] {Motion:[0.6d,0.0d,0.0d]}");
         if (!test.onClient(() -> minecraft.player.isPassenger())) {
             test.skip("camera route: the recorder could not get into the minecart");
         }
-        RealWorldSteps.ticks(test, VEHICLE);
+        part(test, "vehicles", "minecart", () -> {
+            test.command("data merge entity @e[type=minecraft:minecart,limit=1,sort=nearest] {Motion:[0.6d,0.0d,0.0d]}");
+            RealWorldSteps.ticks(test, VEHICLE);
+        });
         test.command("ride @s dismount");
         test.command("kill @e[type=minecraft:minecart]");
 
         // The horse: tame, saddled and quick, ridden at a gallop over open ground
-        BlockPos field = platform(test, plains, 40, 30, 2, 2);
-        RealWorldSteps.goTo(test, field.getX() + 0.5, field.getY() + 1, field.getZ() + 0.5, 0, 0);
+        BlockPos meadow = platform(test, plains, 40, 30, 2, 2);
+        RealWorldSteps.goTo(test, meadow.getX() + 0.5, meadow.getY() + 1, meadow.getZ() + 0.5, 0, 0);
         RealWorldSteps.command(test, "summon minecraft:horse %.1f %d %.1f {Tame:1b,SaddleItem:{id:\"minecraft:saddle\",count:1},Variant:1,"
-            + "attributes:[{id:\"minecraft:generic.movement_speed\",base:0.3375},{id:\"minecraft:generic.jump_strength\",base:0.9}]}", field.getX() + 0.5, field.getY(), field.getZ() + 0.5);
+            + "attributes:[{id:\"minecraft:generic.movement_speed\",base:0.3375},{id:\"minecraft:generic.jump_strength\",base:0.9}]}", meadow.getX() + 0.5, meadow.getY(), meadow.getZ() + 0.5);
         RealWorldSteps.ticks(test, 5);
         test.command("ride @s mount @e[type=minecraft:horse,limit=1,sort=nearest]");
         RealWorldSteps.flying(test, false, 0.05F);
@@ -838,7 +1037,8 @@ final class CameraRoute {
         if (!test.onClient(() -> minecraft.player.isPassenger())) {
             test.skip("camera route: the recorder could not get on the horse");
         }
-        walk(test, now() + VEHICLE, wandering(test), true, 0, null);
+        Vec3 field = here(test);
+        part(test, "vehicles", "horse", () -> walk(test, now() + VEHICLE, wandering(test, field, 50.0), true, 0, null));
         test.command("ride @s dismount");
         test.command("kill @e[type=minecraft:horse]");
 
@@ -848,11 +1048,13 @@ final class CameraRoute {
             RealWorldSteps.command(test, "fill %d %d %d %d %d %d minecraft:air", ground.getX() - 1, ground.getY(), ground.getZ() - 1, ground.getX() + 18, ground.getY() + 30, ground.getZ() + 18);
             RealWorldSteps.goTo(test, ground.getX() - 1.5, ground.getY(), ground.getZ() - 1.5, -45, 10);
             RealWorldSteps.flying(test, false, 0.05F);
-            try {
-                CraftSteps.buildBalloon(test, minecraft, ground.offset(2, 0, 2), false);
-            } catch (Throwable t) {
-                test.skip("camera route: the hot air balloon could not be flown: " + t);
-            }
+            part(test, "vehicles", "balloon", () -> {
+                try {
+                    CraftSteps.buildBalloon(test, minecraft, ground.offset(2, 0, 2), false);
+                } catch (Throwable t) {
+                    test.skip("camera route: the hot air balloon could not be flown: " + t);
+                }
+            });
         } else {
             test.skip("camera route: Sable or Create Aeronautics is not installed; the vehicles stretch has no hot air balloon");
         }

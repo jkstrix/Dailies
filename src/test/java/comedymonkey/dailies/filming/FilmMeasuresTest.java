@@ -231,4 +231,89 @@ class FilmMeasuresTest {
         assertEquals(FilmMeasures.CSV_HEADER.split(",").length, lines[5].split(",", -1).length);
     }
 
+    private static void shiftSubject(FilmFrame frame, double dx) {
+        frame.eyeX += dx;
+        frame.minX += dx;
+        frame.maxX += dx;
+        frame.aimX += dx;
+    }
+
+    @Test
+    void gettingOnAVehicleBreaksTheFilmAndALateAnswerIsNoPop() {
+        List<FilmFrame> frames = chase(300);
+        for (int i = 150; i < frames.size(); i++) {
+            frames.get(i).vehicle = 7;
+        }
+        // The camera answers two frames later by stepping two blocks aside
+        for (int i = 152; i < frames.size(); i++) {
+            frames.get(i).camX += 2.0;
+        }
+        FilmMeasures.Analysis analysis = FilmMeasures.analyse(frames, FPS, false);
+        assertEquals(1, analysis.subjectJumps);
+        assertEquals(0, analysis.pops);
+
+        List<FilmFrame> late = chase(300);
+        for (int i = 150; i < late.size(); i++) {
+            late.get(i).vehicle = 7;
+        }
+        for (int i = 180; i < late.size(); i++) {
+            late.get(i).camX += 2.0;
+        }
+        assertEquals(1, FilmMeasures.analyse(late, FPS, false).pops, "a snap half a second after the jump is the camera's own");
+    }
+
+    @Test
+    void aSuddenStepOrAnotherWorldIsASubjectJump() {
+        List<FilmFrame> frames = chase(300);
+        for (int i = 200; i < frames.size(); i++) {
+            shiftSubject(frames.get(i), 1.5);
+        }
+        assertEquals(1, FilmMeasures.analyse(frames, FPS, false).subjectJumps, "a block and a half in one frame from a walk");
+
+        List<FilmFrame> portal = chase(300);
+        for (int i = 0; i < portal.size(); i++) {
+            portal.get(i).dimension = i < 100 ? "minecraft:overworld" : "minecraft:the_nether";
+        }
+        assertEquals(1, FilmMeasures.analyse(portal, FPS, false).subjectJumps);
+    }
+
+    @Test
+    void fastSteadyFlightIsNoJump() {
+        List<FilmFrame> frames = new ArrayList<>();
+        double z = 0.0;
+        for (int i = 0; i < 600; i++) {
+            // Speeding up from 6 to 42 blocks a second over the ten seconds, as rockets do
+            z += (0.1 + 0.6 * i / 600.0);
+            FilmFrame frame = subjectAt(i, 0.0, 120.0, z);
+            frame.camY = 123.0;
+            frame.camZ = z - 8.0;
+            lookAt(frame, frame.aimX, frame.aimY, frame.aimZ);
+            frames.add(frame);
+        }
+        FilmMeasures.Analysis analysis = FilmMeasures.analyse(frames, FPS, false);
+        assertEquals(0, analysis.subjectJumps);
+        assertTrue(analysis.faults.isEmpty(), analysis.faults.toString());
+    }
+
+    @Test
+    void aCutAnsweringAPortalIsNotJudgedAsTheDirectors() {
+        List<FilmFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            double z = i / FPS * 4.0;
+            FilmFrame frame = subjectAt(i, 0.0, 64.0, z);
+            frame.dimension = i < 200 ? "minecraft:overworld" : "minecraft:the_nether";
+            // The new shot three frames after arriving, from nearly the same angle, after a shot of only a second
+            frame.shot = i < 140 ? 0 : i < 203 ? 1 : 2;
+            frame.camX = i < 140 ? 0 : i < 203 ? -6 : -6;
+            frame.camY = 66;
+            frame.camZ = i < 140 ? z - 6 : i < 203 ? z : z - 1;
+            lookAt(frame, frame.aimX, frame.aimY, frame.aimZ);
+            frames.add(frame);
+        }
+        FilmMeasures.Analysis analysis = FilmMeasures.analyse(frames, FPS, true);
+        assertEquals(2, analysis.cuts);
+        assertEquals(0, analysis.jumpCuts);
+        assertTrue(analysis.faults.isEmpty(), analysis.faults.toString());
+    }
+
 }

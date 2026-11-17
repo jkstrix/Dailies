@@ -98,8 +98,14 @@ final class CameraFilms {
             }
         }
         for (String place : CameraRoute.PLACES) {
-            if (route.stretches().stream().noneMatch(stretch -> stretch.place().equals(place))) {
+            if (route.stretches().stream().noneMatch(stretch -> stretch.place().equals(place) || stretch.place().startsWith(place + "-"))) {
                 test.skip("the camera route has no " + place + " stretch: no camera was filmed there");
+                continue;
+            }
+            for (String part : CameraRoute.PARTS.getOrDefault(place, List.of())) {
+                if (route.stretches().stream().noneMatch(stretch -> stretch.place().equals(place + "-" + part))) {
+                    test.skip("the camera route has no " + part + " in its " + place + " stretch: no camera was filmed on it");
+                }
             }
         }
 
