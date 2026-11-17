@@ -63,6 +63,8 @@ public final class EditorSession {
         savedRevision = fresh.revision();
         followCamera = true;
         history = fresh;
+        PointOfView.home(recording);
+        PointOfView.prepare(fresh.scene());
     }
 
     /** The recording is about to be closed: nothing edited may be lost (EDIT-7) */
@@ -168,7 +170,7 @@ public final class EditorSession {
         }
         try {
             Scene scene = current.scene();
-            double tick = Playback.frameTime();
+            double tick = PointOfView.sceneTime(Playback.frameTime());
             return Evaluator.applyingTrack(scene, KeyframeKind.SPEED, tick) == null ? 0.0 : Evaluator.speed(scene, tick);
         } catch (RuntimeException e) {
             return 0.0;
@@ -186,12 +188,17 @@ public final class EditorSession {
             return false;
         }
         autosave();
+        Scene scene = current.scene();
+        // Every keyframe is in the scene's own ticks, whichever point of view is shown (PLAY-19)
+        double tick = PointOfView.sceneTime(Playback.frameTime());
         // Keyframes take effect while playing or exporting, never while the recording stands still (EDIT-5)
         if (Playback.paused() && !exporting) {
+            PointOfView.frame(scene, tick, false);
             return false;
         }
-        Scene scene = current.scene();
-        double tick = Playback.frameTime();
+        if (!exporting) {
+            PointOfView.frame(scene, tick, true);
+        }
         boolean placed = false;
         try {
             Double fov = Evaluator.fieldOfView(scene, tick);

@@ -131,6 +131,7 @@ final class KeyframeForms {
             form.add(new Gadget.Push(Kit.t("kind." + kind.id()), () -> add(kind)).tip(Kit.t("add." + kind.id() + ".tip")));
         }
         form.add(new Gadget.Heading(Kit.t("add.more")));
+        form.add(new Gadget.Push(Kit.t("pov.link"), KeyframeForms::linkPointsOfView).tip(Kit.t("pov.link.tip")));
         form.add(new Gadget.Push(Kit.t("keyframe.paste"), EditorState::pasteAtPlayhead)
                 .when(() -> EditorState.clipboard != null && !EditorState.clipboard.isEmpty()).tip(Kit.t("keyframe.paste.tip")));
         List<String> blends = new ArrayList<>();
@@ -199,6 +200,23 @@ final class KeyframeForms {
                 EditorState.selection.clear();
                 EditorState.audioDraft = true;
                 EditorState.tab = EditorState.TAB_KEYFRAME;
+            }
+            case POINT_OF_VIEW -> {
+                List<comedymonkey.dailies.edit.LinkedRecording> linked = EditorState.scene().linked();
+                if (linked.isEmpty()) {
+                    EditorState.say(Kit.t("pov.none"));
+                } else {
+                    // The first other point of view; the form then offers every recording the scene holds
+                    String shown = comedymonkey.dailies.edit.Evaluator.pointOfView(EditorState.scene(), tick, comedymonkey.dailies.editor.PointOfView.homeId());
+                    comedymonkey.dailies.edit.LinkedRecording pick = linked.get(0);
+                    for (comedymonkey.dailies.edit.LinkedRecording candidate : linked) {
+                        if (!candidate.recordingId().equals(shown)) {
+                            pick = candidate;
+                            break;
+                        }
+                    }
+                    put(new Keyframe.PointOfView(tick, Interpolation.HOLD, pick.recordingId(), pick.label()));
+                }
             }
             default -> {
             }
@@ -403,6 +421,16 @@ final class KeyframeForms {
                 form.add(new Gadget.Pair(label("file"), new Entry(() -> text("file"), typed -> change("file", new JsonPrimitive(typed.trim())))).tip(tip("file")));
                 numbers(form, "volume");
             }
+            case POINT_OF_VIEW -> {
+                form.add(new Gadget.Note(Kit.t("pov.note")));
+                form.add(new Gadget.Pair(label("recording_id"), new Gadget.Cycle<String>(KeyframeForms::pointsOfView, KeyframeForms::pointOfViewName,
+                        () -> text("recording_id"), id -> {
+                            JsonObject values = new JsonObject();
+                            values.addProperty("recording_id", id);
+                            values.addProperty("label", pointOfViewName(id).getString());
+                            refuse(changeAll(values));
+                        })).tip(tip("recording_id")));
+            }
             default -> {
             }
         }
@@ -505,6 +533,78 @@ final class KeyframeForms {
         }
         switches(form, "frame_vehicle", "avoid_obstructions");
         dials(form, "transition_seconds");
+    }
+
+    // ------------------------------------------------------------------ Points of view (PLAY-19)
+
+    /** The recordings a point of view keyframe can show: the scene's own, then the linked ones */
+    private static List<String> pointsOfView() {
+        List<String> ids = new ArrayList<>();
+        String own = comedymonkey.dailies.editor.PointOfView.homeId();
+        if (own != null) {
+            ids.add(own);
+        }
+        for (comedymonkey.dailies.edit.LinkedRecording linked : EditorState.scene().linked()) {
+            if (!ids.contains(linked.recordingId())) {
+                ids.add(linked.recordingId());
+            }
+        }
+        String current = text("recording_id");
+        if (!current.isBlank() && !ids.contains(current)) {
+            ids.add(current);
+        }
+        return ids;
+    }
+
+    private static Component pointOfViewName(String id) {
+        if (id.equals(comedymonkey.dailies.editor.PointOfView.homeId())) {
+            RecordingManifest manifest = Playback.manifest();
+            String recorder = manifest == null || comedymonkey.dailies.editor.PointOfView.away() ? "" : manifest.recorderName;
+            return recorder == null || recorder.isBlank() ? Kit.t("pov.own") : Kit.t("pov.own_named", recorder);
+        }
+        comedymonkey.dailies.edit.LinkedRecording linked = EditorState.scene().linked(id);
+        return linked != null ? Component.literal(linked.label()) : Kit.t("pov.unlinked");
+    }
+
+    /**
+     * Links every other player's recording of the same stretch to the scene, as lanes and as choices for point of view
+     * keyframes. The library is searched away from the client thread.
+     */
+    static void linkPointsOfView() {
+        String own = comedymonkey.dailies.editor.PointOfView.homeId();
+        if (own == null) {
+            return;
+        }
+        List<comedymonkey.dailies.edit.LinkedRecording> found = new ArrayList<>();
+        Controls.offThread(() -> {
+            for (comedymonkey.dailies.library.Links.Link link : comedymonkey.dailies.library.Links.linked(own)) {
+                found.add(new comedymonkey.dailies.edit.LinkedRecording(link.id(), link.manifest().name, link.manifest().recorderName));
+            }
+        }, Kit.t("pov.link.failed"), () -> {
+            if (!EditorSession.open() || !own.equals(comedymonkey.dailies.editor.PointOfView.homeId())) {
+                return;
+            }
+            List<comedymonkey.dailies.edit.LinkedRecording> fresh = new ArrayList<>();
+            for (comedymonkey.dailies.edit.LinkedRecording recording : found) {
+                if (EditorState.scene().linked(recording.recordingId()) == null) {
+                    fresh.add(recording);
+                }
+            }
+            if (fresh.isEmpty()) {
+                EditorState.say(found.isEmpty() ? Kit.t("pov.link.none_found") : Kit.t("pov.link.all_there"));
+                return;
+            }
+            EditorState.history().beginGroup(Kit.t("pov.link.step").getString());
+            try {
+                for (comedymonkey.dailies.edit.LinkedRecording recording : fresh) {
+                    EditorState.history().linkRecording(recording);
+                }
+            } finally {
+                EditorState.history().endGroup();
+            }
+            comedymonkey.dailies.editor.PointOfView.prepare(EditorState.scene());
+            EditorState.say(Kit.t("pov.link.done", fresh.size()));
+        });
     }
 
     // ------------------------------------------------------------------ Rows

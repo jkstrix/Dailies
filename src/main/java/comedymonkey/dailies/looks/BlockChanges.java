@@ -84,7 +84,7 @@ final class BlockChanges {
                 return;
             }
             Map<BlockPos, BlockState> wanted = new HashMap<>();
-            for (Map.Entry<Evaluator.BlockPosition, String> change : Evaluator.blockChanges(scene, Playback.frameTime()).entrySet()) {
+            for (Map.Entry<Evaluator.BlockPosition, String> change : Evaluator.blockChanges(scene, comedymonkey.dailies.editor.PointOfView.sceneTime(Playback.frameTime())).entrySet()) {
                 BlockState state = parse(now, change.getValue());
                 if (state != null) {
                     Evaluator.BlockPosition at = change.getKey();

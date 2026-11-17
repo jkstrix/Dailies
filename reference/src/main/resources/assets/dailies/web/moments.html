@@ -86,6 +86,10 @@
   .strip .dot.pictured { background: var(--verdigris); }
   .strip .dot:hover { background: var(--rust); }
   .strip .ends { position: absolute; top: 3px; font-size: 11px; color: var(--muted); padding: 0 6px; pointer-events: none; }
+  .strip.people .dot { bottom: auto; height: 12px !important; }
+  .strip .person { position: absolute; left: 0; right: 0; height: 20px; border-top: 1px solid var(--rule); }
+  .strip .person .name { position: absolute; left: 6px; top: 3px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  .strip .person.theirs .name { color: var(--verdigris); }
 
   .tabs { display: flex; gap: 2px; margin: 0 0 14px; border-bottom: 2px solid var(--rule); overflow-x: auto; }
   .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 9px 14px; color: var(--muted);
@@ -283,7 +287,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let rpcId = 0;
-const state = { session: null, sessions: [], events: [], clips: [], dialogue: [], ignored: [], excluded: [], types: new Set(), meta: null, byId: new Map(), selected: new Set() };
+const state = { session: null, sessions: [], events: [], clips: [], dialogue: [], ignored: [], excluded: [], types: new Set(), meta: null, byId: new Map(), selected: new Set(), rows: [] };
 
 // ---- Talking to the game ----
 
@@ -437,6 +441,56 @@ async function cue(args, label) {
   }
 }
 
+// A friend's event on the strip: their session knows their recording, so it is cued from their session
+async function cueTheirs(row, event) {
+  try {
+    let result;
+    try {
+      result = await tool('moments_cue', { session: row.session, event_id: event.id });
+    } catch (error) {
+      if (!String(error.message).startsWith('LEAVE_WORLD_NEEDED')) throw error;
+      if (!confirm('You are in a world right now.\n\nCueing this will leave it and open the replay. Carry on?')) return;
+      result = await tool('moments_cue', { session: row.session, event_id: event.id, leave_world: true });
+    }
+    toast((result.opening ? 'Opening ' : 'Cued ') + ((row.player && row.player.name) || 'their') + "'s recording: " + (event.description || event.type));
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+// "Export every point of view": the clip's stretch from this recording and every linked one, queued as one batch. The
+// game works out the other recordings' ticks from the one that is open, so the clip is cued first when it is not.
+async function exportEveryView(clip, button) {
+  const place = (clip.locations || [])[0];
+  const piece = place && (place.stretches || [])[0];
+  const args = { start_tick: piece ? piece.tick : clip.start_replay_tick, end_tick: piece ? piece.end_tick : clip.end_replay_tick };
+  if (button) button.disabled = true;
+  try {
+    let result = null;
+    try {
+      result = await tool('export_points_of_view', args);
+    } catch (error) {
+      if (!/^No recording is open/.test(String(error.message))) throw error;
+      await cue({ clip_id: clip.id }, clip.title || 'clip');
+      const deadline = Date.now() + 180000;
+      while (!result) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          result = await tool('export_points_of_view', args);
+        } catch (waiting) {
+          if (Date.now() > deadline || !/^No recording is open/.test(String(waiting.message))) throw waiting;
+        }
+      }
+    }
+    const count = (result.jobs || []).length;
+    toast(result.queued ? 'Queued ' + count + ' exports, one for each point of view' : count + ' points of view found. ' + (result.note || ''));
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 // "Make scene": a scene of the recording for this clip, with its export range and the suggested camera. The game can
 // only do that in the recording that holds the clip, so when another is open, or none, the clip is cued first and
 // the scene is made as soon as the recording has loaded.
@@ -560,7 +614,8 @@ async function loadSessions() {
   select.replaceChildren(...list.sessions.map(session => {
     const name = session.world_name || session.server_address || session.id;
     const when = session.start_real_time ? day(session.start_real_time) + ' ' + clock(session.start_real_time) : '';
-    return el('option', { value: session.id }, (session.running ? '● ' : '') + name + '  ·  ' + when);
+    const theirs = session.theirs ? ((session.shared_by && session.shared_by.name) || 'A friend') + "'s  ·  " : '';
+    return el('option', { value: session.id }, (session.running ? '● ' : '') + theirs + name + '  ·  ' + when);
   }));
   if (!list.sessions.length) { state.session = null; return; }
   state.session = list.sessions.some(session => session.id === wanted) ? wanted : list.sessions[0].id;
@@ -594,12 +649,14 @@ async function loadAll() {
     return;
   }
   const args = { session: state.session };
-  const [events, clips, dialogue, ignored] = await Promise.all([
+  const [events, clips, dialogue, ignored, everyone] = await Promise.all([
     tool('moments_events_query', Object.assign({ limit: 5000 }, args)),
     tool('moments_clips_list', Object.assign({ limit: 500 }, args)),
     tool('moments_dialogue_query', Object.assign({ limit: 2000 }, args)),
-    tool('moments_ignored_events')
+    tool('moments_ignored_events'),
+    tool('moments_everyone', Object.assign({ min_importance: 10 }, args)).catch(() => ({ rows: [] }))
   ]);
+  state.rows = everyone.rows || [];
   state.events = events.events;
   state.clips = clips.clips;
   state.dialogue = dialogue.dialogue;
@@ -636,6 +693,28 @@ function renderStrip() {
   for (const clip of state.clips) {
     nodes.push(el('div', { class: 'band', title: clip.title, style: 'left:' + at(clip.start_real_time) + ';width:' + (100 * (clip.end_real_time - clip.start_real_time) / (end - start)).toFixed(3) + '%',
       onclick: () => reveal('clips', 'clip-' + clip.id) }));
+  }
+  // With friends' sessions of the same evening, everyone's events: one row per person (PLAY-18)
+  const rows = state.rows || [];
+  $('strip').classList.toggle('people', rows.length > 1);
+  $('strip').style.height = rows.length > 1 ? (20 + rows.length * 20) + 'px' : '';
+  if (rows.length > 1) {
+    rows.forEach((row, index) => {
+      const top = 18 + index * 20;
+      const who = (row.player && row.player.name) || 'Someone';
+      nodes.push(el('div', { class: 'person' + (row.theirs ? ' theirs' : ''), style: 'top:' + top + 'px', title: row.own ? 'Your events' : who + "'s events" + (row.theirs ? ', from their shared session' : '') },
+        el('span', { class: 'name' }, who + (row.theirs ? " (theirs)" : ''))));
+      for (const event of row.events || []) {
+        if (event.real_time < start || event.real_time > end) continue;
+        const mine = row.own;
+        nodes.push(el('div', { class: 'dot' + (mine && state.byId.get(event.id) && state.byId.get(event.id).picture ? ' pictured' : ''),
+          title: who + '  ' + clock(event.real_time) + '  ' + (event.description || event.type),
+          style: 'left:' + at(event.real_time) + ';top:' + (top + 4) + 'px',
+          onclick: () => mine ? reveal('events', 'event-' + event.id) : (event.replay_uuid ? cueTheirs(row, event) : toast(who + ': ' + (event.description || event.type))) }));
+      }
+    });
+    $('strip').replaceChildren(...nodes);
+    return;
   }
   for (const event of state.events) {
     const score = event.importance || 0;
@@ -708,6 +787,13 @@ function renderClips() {
               place.open ? el('span', { class: 'pill on' }, 'open') : null,
               place.cut ? el('span', { class: 'pill', title: 'Part of this clip was cut from this recording. What is left plays back to back' }, 'cut, ' + span(place.removed_seconds || 0) + ' removed') : null,
               el('span', { class: 'when' }, ' ' + (place.stretches || []).map(piece => 'ticks ' + piece.tick + ' to ' + piece.end_tick).join(', ')))))) : null,
+          (clip.points_of_view || []).length ? el('details', { open: '' }, el('summary', {}, 'Seen from ' + clip.points_of_view.length + ' other point' + (clip.points_of_view.length === 1 ? '' : 's') + ' of view'),
+            el('ul', { class: 'lines' }, clip.points_of_view.map(view => el('li', {},
+              el('button', { class: 'small', title: 'Open ' + (view.recorder || view.name) + "'s recording at this clip, paused", onclick: () => cue({ clip_id: clip.id, recording_id: view.recording_id }, (clip.title || 'clip') + ' as ' + (view.recorder || view.name) + ' saw it') }, 'Cue'),
+              ' ', el('span', { class: 'who' }, view.recorder || view.name),
+              view.open ? el('span', { class: 'pill on' }, 'open') : null,
+              el('span', { class: 'when' }, ' ticks ' + view.start_tick + ' to ' + view.end_tick)))),
+            el('div', { class: 'controls' }, el('button', { class: 'small', disabled: !hasReplay || gone, title: 'Queue an export of this clip from your point of view and from every other one, as one batch', onclick: event => exportEveryView(clip, event.currentTarget) }, 'Export every point of view'))) : null,
           transcript.length ? el('details', {}, el('summary', {}, 'What was said (' + transcript.length + ' line' + (transcript.length === 1 ? '' : 's') + ')'),
             el('ul', { class: 'lines' }, transcript.map(line => el('li', {}, el('span', { class: 'who' }, (line.speaker && line.speaker.name || line.speaker || 'Someone') + ': '), line.text || '(not transcribed)')))) : null,
           null),

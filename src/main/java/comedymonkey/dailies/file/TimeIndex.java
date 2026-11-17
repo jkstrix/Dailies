@@ -161,6 +161,30 @@ public final class TimeIndex {
             return null;
         }
 
+        /**
+         * The first tick of this segment whose game time is the one given, or the tick just before it was passed;
+         * -1 when the segment never had it. Game time is the server's clock, so this is where another player's
+         * recording of the same moment lines up with this one (PLAY-18)
+         */
+        public int tickAtGame(long gameTime) {
+            int before = -1;
+            for (int index = 0; index < this.known.length; index++) {
+                if (!this.known[index]) {
+                    continue;
+                }
+                if (this.game[index] == gameTime) {
+                    return this.startTick + index;
+                }
+                if (this.game[index] < gameTime) {
+                    before = this.startTick + index;
+                } else if (before >= 0) {
+                    // Passed between two ticks: the server ran ahead of the client for a moment
+                    return before;
+                }
+            }
+            return -1;
+        }
+
         /** The tick of this segment whose real time is closest to the one given, or null when the segment has no times */
         public @Nullable Nearest nearest(long realTime) {
             Nearest best = null;

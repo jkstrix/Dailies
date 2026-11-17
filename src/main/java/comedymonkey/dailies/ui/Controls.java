@@ -250,7 +250,13 @@ public final class Controls {
 
     /** While the playhead is dragged */
     public static void scrubTo(int tick) {
-        watching(() -> Playback.scrubTo(tick));
+        watching(() -> {
+            if (comedymonkey.dailies.editor.PointOfView.away()) {
+                comedymonkey.dailies.editor.PointOfView.goHome(tick, false);
+            } else {
+                Playback.scrubTo(tick);
+            }
+        });
     }
 
     /** When the playhead is let go */
@@ -259,7 +265,14 @@ public final class Controls {
     }
 
     public static void jumpTo(int tick) {
-        watching(() -> Playback.viewTo(tick, Playback.paused()));
+        watching(() -> {
+            if (comedymonkey.dailies.editor.PointOfView.away()) {
+                // A tick of the scene: someone else's recording is shown, so the jump goes back to the scene's own
+                comedymonkey.dailies.editor.PointOfView.goHome(tick, !Playback.paused());
+            } else {
+                Playback.viewTo(tick, Playback.paused());
+            }
+        });
     }
 
     public static void slower() {

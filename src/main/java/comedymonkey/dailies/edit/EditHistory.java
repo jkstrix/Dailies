@@ -322,6 +322,25 @@ public final class EditHistory {
         this.edit("Clear export range", next -> next.currentScene().clearExportRange());
     }
 
+    /** Lets the current scene show another recording of the same stretch (PLAY-19). Linking one already there renames it */
+    public void linkRecording(LinkedRecording recording) {
+        this.edit("Link the point of view of " + recording.label(), next -> next.currentScene().link(recording));
+    }
+
+    /**
+     * Takes a linked recording out of the current scene. Its point of view keyframes stay, and show the scene's own
+     * recording until it is linked again.
+     */
+    public void unlinkRecording(String recordingId) {
+        this.step(next -> {
+            LinkedRecording recording = next.currentScene().linked(recordingId);
+            if (recording == null || !next.currentScene().unlink(recordingId)) {
+                throw new IllegalArgumentException("The scene has no linked recording " + recordingId);
+            }
+            return "Unlink the point of view of " + recording.label();
+        });
+    }
+
     // ------------------------------------------------------------------ Tracks
 
     /**

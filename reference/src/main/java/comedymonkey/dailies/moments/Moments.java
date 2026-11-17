@@ -523,6 +523,14 @@ public final class Moments {
         }
     }
 
+    /** A command the player sent to the server; "/sable assemble" counts as assembling a craft (plan 2.1). Client thread */
+    public static void onCommandSent(String command) {
+        Active session = active;
+        if (session != null) {
+            guarded(() -> session.gameplay.crafts().onCommand(command));
+        }
+    }
+
     public static void onCombatKill(Component message) {
         Active session = active;
         if (session != null) {

@@ -61,6 +61,27 @@ The reply says how many of the players were listening.
 | `treasure_fished` | A player fishes up treasure. | That player. |
 | `night_skipped` | The night is slept through. | Everyone in that world. |
 | `first_join` | A player joins the server for the first time. | Everyone online. |
+| `craft_assembled` | Sable makes a new physics craft: assembled at an assembler block, with `/sable assemble`, or by another mod. Craft that load with the world never count. | The player who assembled it, and players within `nearbyRadius` of the craft. |
+| `craft_lost` | A craft is destroyed, splits in two, or loses over half its mass. Taking one apart at an assembler on purpose does not count, and nor does a craft unloading with its chunk. | Players within `nearbyRadius` of the craft. |
+| `train_departed` | A Create train leaves a station with the player aboard, seated or standing, the first time for that train and player since the server started. | That player. |
+| `train_arrived` | That train reaches its next station. | That player. |
+
+### Craft and trains
+
+The last four need Sable (for craft) or Create (for trains) on the server. The companion reaches both by reflection,
+so it loads and works as before without them; if a different version of either has moved something, it switches that
+part off with one line in the log. The names it relies on are those of Sable 2.0.6 and Create 6.0.10.
+
+What each carries in its JSON:
+
+| Type | Data |
+|---|---|
+| `craft_assembled` | `craft_id` (Sable's id for the craft, the same one the player's game sees), `craft_name` when it has one, `assembled_by` when known, `speed`, `x`, `y`, `z` |
+| `craft_lost` | the same, and `cause`: `destroyed`, `explosion` (an explosion went off at it in the last three seconds), `split` or `lost_blocks`, with `mass_before` and `mass_after` for the last |
+| `train_departed`, `train_arrived` | `train_id`, `train_name`, `station` |
+
+Dailies logs these as moments of their own type, not as `custom` ones. Its own game watches for craft being assembled
+and lost too; when both report the same thing within five seconds, they become one event that lists both sources.
 
 ## Settings
 

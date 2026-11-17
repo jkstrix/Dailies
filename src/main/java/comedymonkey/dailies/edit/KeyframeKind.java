@@ -22,7 +22,9 @@ public enum KeyframeKind {
     FREEZE("Freeze", false),
     TIME_OF_DAY("Time of day", true),
     BLOCK_CHANGE("Block change", false),
-    AUDIO("Audio", false);
+    AUDIO("Audio", false),
+    /** Which of the scene's linked recordings is shown from this tick (PLAY-19, EDIT-11). A cut, never a blend */
+    POINT_OF_VIEW("Point of view", false);
 
     private final String title;
     private final boolean blends;
@@ -72,6 +74,9 @@ public enum KeyframeKind {
         String wanted = id.trim().toLowerCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
         if (wanted.equals("fov")) {
             return FIELD_OF_VIEW;
+        }
+        if (wanted.equals("pov")) {
+            return POINT_OF_VIEW;
         }
         for (KeyframeKind kind : values()) {
             if (kind.id().equals(wanted)) {

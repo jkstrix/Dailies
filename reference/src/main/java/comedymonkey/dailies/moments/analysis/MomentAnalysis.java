@@ -45,6 +45,16 @@ public class MomentAnalysis {
         Map.entry("block_placed", 5.0),
         // Laughter and shouting; see VOICE_BURST_PER_SPEAKER
         Map.entry("voice_burst", comedymonkey.dailies.moments.voice.VoiceBurstDetector.BASE_WEIGHT),
+        // Craft, contraptions and trains (plan 2.1)
+        Map.entry("craft_lost", 55.0),
+        Map.entry("craft_first_flight", 50.0),
+        Map.entry("craft_assembled", 40.0),
+        Map.entry("altitude_record", 35.0),
+        Map.entry("speed_record", 30.0),
+        Map.entry("train_departed", 30.0),
+        Map.entry("train_arrived", 25.0),
+        Map.entry("contraption_assembled", 20.0),
+        Map.entry("craft_boarded", 15.0),
         // McpCraft's job board
         Map.entry("job_finished", 45.0),
         Map.entry("job_posted", 30.0),
@@ -456,6 +466,16 @@ public class MomentAnalysis {
             case "job_finished":
             case "job_removed":
                 return describeJob(type, metadata, player);
+            case "craft_assembled":
+            case "craft_boarded":
+            case "craft_first_flight":
+            case "altitude_record":
+            case "speed_record":
+            case "craft_lost":
+            case "contraption_assembled":
+            case "train_departed":
+            case "train_arrived":
+                return describeCraft(type, metadata, player);
             case "marker":
             case "custom": {
                 String label = MJson.str(metadata, "label");
@@ -464,6 +484,31 @@ public class MomentAnalysis {
             default:
                 return pretty(type) + (subject != null ? ": " + pretty(subject) : "");
         }
+    }
+
+    /** Craft, contraption and train events (plan 2.1). The server's own words win where it sent some */
+    private static String describeCraft(String type, JsonObject metadata, String player) {
+        String label = MJson.str(metadata, "label");
+        if (label != null && !label.isBlank() && !label.equals(type)) {
+            return label;
+        }
+        String named = MJson.str(metadata, "craft_name");
+        String craft = named != null && !named.isBlank() ? "the craft \"" + named + "\"" : "a craft";
+        return switch (type) {
+            case "craft_assembled" -> player + " assembled " + craft;
+            case "craft_boarded" -> player + " boarded " + craft;
+            case "craft_first_flight" -> player + " took " + craft + " up for the first time";
+            case "altitude_record" -> player + " flew higher than ever, to " + Math.round(MJson.dbl(metadata, "altitude", 0)) + " blocks";
+            case "speed_record" -> player + " flew faster than ever, at " + Math.round(MJson.dbl(metadata, "speed", 0)) + " blocks a second";
+            case "craft_lost" -> {
+                String cause = MJson.str(metadata, "cause");
+                yield Character.toUpperCase(craft.charAt(0)) + craft.substring(1) + " was lost" + (cause == null ? "" : " (" + cause.replace('_', ' ') + ")");
+            }
+            case "contraption_assembled" -> player + " assembled a contraption";
+            case "train_departed" -> "The train left " + MJson.str(metadata, "station", "the station");
+            case "train_arrived" -> "The train reached " + MJson.str(metadata, "station", "its stop");
+            default -> pretty(type);
+        };
     }
 
     /** McpCraft job board events: who did what to which job */

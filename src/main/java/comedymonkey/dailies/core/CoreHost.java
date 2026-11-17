@@ -217,6 +217,16 @@ public final class CoreHost implements Host.Mod {
     }
 
     @Override
+    public java.util.List<Host.PointOfView> pointsOfView(String recordingId, int startTick, int endTick) {
+        return comedymonkey.dailies.library.Links.pointsOfView(recordingId, startTick, endTick);
+    }
+
+    @Override
+    public java.util.List<String> linkedRecordings(String recordingId) {
+        return comedymonkey.dailies.library.Links.linked(recordingId).stream().map(comedymonkey.dailies.library.Links.Link::id).toList();
+    }
+
+    @Override
     public void openRecording(Path file) throws Exception {
         if (Recorder.get().state() != Recorder.State.IDLE) {
             throw new IllegalStateException("A recording is being made. Finish it first");

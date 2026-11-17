@@ -75,6 +75,17 @@ public final class Host {
     public record ClipLocation(Path file, String recordingId, String name, List<Stretch> stretches, boolean cut, int removedTicks, boolean open, boolean original) {
     }
 
+    /**
+     * Another player's recording of the same stretch of play (PLAY-18): made on the same server at the same time, and
+     * lined up with the one asked about by the server's game time.
+     *
+     * @param startTick where the stretch asked about starts in this recording (or where this recording starts, when later)
+     * @param endTick   where it ends here
+     * @param open      whether this is the recording open in playback right now
+     */
+    public record PointOfView(Path file, String recordingId, String name, String recorder, int startTick, int endTick, boolean open) {
+    }
+
     /** Edits to make together, see {@link Mod#asOneEdit} */
     @FunctionalInterface
     public interface EditWork {
@@ -166,6 +177,21 @@ public final class Host {
          * @return the id of the job
          */
         String queueExport(int scene, @Nullable String preset, String file) throws Exception;
+
+        // --- Several points of view (PLAY-18) ---
+
+        /**
+         * The other players' recordings that hold some of a stretch of this recording (ticks startTick to endTick), each
+         * with the same stretch in its own ticks. Reads recordings' descriptions: not for the client thread
+         */
+        default List<PointOfView> pointsOfView(String recordingId, int startTick, int endTick) {
+            return List.of();
+        }
+
+        /** The ids of the other players' recordings linked to this one: the same server, at the same time. Not for the client thread */
+        default List<String> linkedRecordings(String recordingId) {
+            return List.of();
+        }
 
         // --- MCP ---
         /** Register the tool groups that belong to the core */

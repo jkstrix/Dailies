@@ -118,6 +118,8 @@ public final class RecordingsScreen extends KitScreen {
     private Gadget.Push folders;
     private Gadget.Push openFolder;
     private Gadget.Push done;
+    private Gadget.Push share;
+    private Gadget.Push importing;
 
     public RecordingsScreen(@Nullable Screen parent) {
         super(Component.translatable("dailies.ui.list.title"), parent);
@@ -173,6 +175,8 @@ public final class RecordingsScreen extends KitScreen {
         this.settings = push("settings", () -> SettingsScreen.open(this), () -> true);
         this.folders = push("folders", this::openFolderMenu, () -> true);
         this.openFolder = push("open_folder", this::openFolder, () -> true);
+        this.share = push("share", this::shareChosen, () -> this.chosenEntries().size() == 1);
+        this.importing = push("import", this::importShared, () -> true);
         this.done = new Gadget.Push(t("done"), this::onClose);
         this.done.tip(t("done.tip"));
 
@@ -183,7 +187,7 @@ public final class RecordingsScreen extends KitScreen {
         this.fixed.add(this.starredCheck);
         this.fixed.add(this.barWords);
         for (Gadget button : List.of(this.watch, this.edit, this.star, this.moveTo, this.combine, this.trim, this.delete, this.restore, this.emptyBin,
-                this.measure, this.settings, this.folders, this.openFolder, this.done)) {
+                this.measure, this.settings, this.folders, this.openFolder, this.share, this.importing, this.done)) {
             this.fixed.add(button);
         }
         this.forms.add(this.rows);
@@ -321,22 +325,22 @@ public final class RecordingsScreen extends KitScreen {
         this.side.place(font, split + 6, listTop, this.right - 5 - split - 6, listBottom - listTop);
         this.refreshSide();
 
-        Gadget[] recordingButtons = {this.watch, this.edit, this.star, this.moveTo, this.combine, this.trim, this.delete};
+        Gadget[] recordingButtons = {this.watch, this.edit, this.star, this.moveTo, this.combine, this.trim, this.delete, this.share};
         switch (this.view) {
             case RECORDINGS -> {
                 hide(font, this.restore, this.emptyBin, this.measure, this.settings);
                 this.footLeft(font, recordingButtons);
-                this.foot(font, this.folders, this.openFolder, this.done);
+                this.foot(font, this.importing, this.folders, this.openFolder, this.done);
             }
             case BIN -> {
                 hide(font, recordingButtons);
-                hide(font, this.measure, this.settings, this.folders);
+                hide(font, this.measure, this.settings, this.folders, this.importing);
                 this.footLeft(font, this.restore, this.emptyBin);
                 this.foot(font, this.openFolder, this.done);
             }
             case STORAGE -> {
                 hide(font, recordingButtons);
-                hide(font, this.restore, this.emptyBin, this.folders);
+                hide(font, this.restore, this.emptyBin, this.folders, this.importing);
                 this.footLeft(font, this.measure, this.settings);
                 this.foot(font, this.openFolder, this.done);
             }
@@ -977,6 +981,66 @@ public final class RecordingsScreen extends KitScreen {
             }
             then.accept(name.trim());
         }, () -> this.minecraft.setScreen(this)));
+    }
+
+    /** "Share session" (FILE-15): the chosen recording and its moments, packed into one file for a friend */
+    private void shareChosen() {
+        List<LibraryIndex.Entry> chosen = this.chosenEntries();
+        if (chosen.size() != 1) {
+            return;
+        }
+        LibraryIndex.Entry entry = chosen.get(0);
+        Path file = comedymonkey.dailies.capture.Recorder.folder().resolve(entry.file);
+        Path[] made = new Path[1];
+        Notices.show(Component.translatable("dailies.ui.share.working", nameOf(entry)));
+        Controls.offThread(() -> {
+            made[0] = comedymonkey.dailies.library.Sharing.share(file, null);
+            Util.getPlatform().openPath(made[0].getParent());
+        }, Component.translatable("dailies.ui.share.failed"), () -> {
+            if (made[0] != null) {
+                Notices.show(Component.translatable("dailies.ui.share.done", made[0].getFileName().toString()));
+            }
+        });
+    }
+
+    /**
+     * "Import" (FILE-15): every friend's shared session put in the import folder is taken into the library, and their
+     * moments onto the page. With nothing there yet, the folder is opened so that one can be put in it.
+     */
+    private void importShared() {
+        int[] counts = new int[2];
+        Controls.offThread(() -> {
+            Path inbox = comedymonkey.dailies.Host.get().dataDirectory().resolve("import");
+            Files.createDirectories(inbox);
+            java.util.List<Path> packs;
+            try (java.util.stream.Stream<Path> list = Files.list(inbox)) {
+                packs = list.filter(path -> path.getFileName().toString().endsWith(comedymonkey.dailies.library.SharePack.EXTENSION)).sorted().toList();
+            }
+            if (packs.isEmpty()) {
+                Util.getPlatform().openPath(inbox);
+                counts[1] = -1;
+                return;
+            }
+            Path done = inbox.resolve("imported");
+            Files.createDirectories(done);
+            for (Path pack : packs) {
+                try {
+                    comedymonkey.dailies.library.Sharing.importPack(pack);
+                    Files.move(pack, done.resolve(pack.getFileName()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    counts[0]++;
+                } catch (java.io.IOException | RuntimeException e) {
+                    Host.LOGGER.warn("Dailies: the shared session {} could not be imported", pack.getFileName(), e);
+                    counts[1]++;
+                }
+            }
+        }, Component.translatable("dailies.ui.import.failed"), () -> {
+            if (counts[1] < 0) {
+                Notices.show(Component.translatable("dailies.ui.import.empty"));
+            } else {
+                Notices.show(Component.translatable(counts[1] == 0 ? "dailies.ui.import.done" : "dailies.ui.import.some_failed", counts[0], counts[1]));
+            }
+            this.lookAgain();
+        });
     }
 
     private void openFolder() {

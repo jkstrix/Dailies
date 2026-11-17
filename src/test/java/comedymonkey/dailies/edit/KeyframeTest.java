@@ -34,8 +34,8 @@ class KeyframeTest {
     }
 
     @Test
-    void thereAreTwelveKinds() {
-        assertEquals(12, KeyframeKind.values().length);
+    void thereAreThirteenKinds() {
+        assertEquals(13, KeyframeKind.values().length);
     }
 
     @Test

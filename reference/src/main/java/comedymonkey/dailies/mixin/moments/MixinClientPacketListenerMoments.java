@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The two packets the moments system uses for exact kill/death attribution: the player's own statistics and the
@@ -21,6 +22,21 @@ public class MixinClientPacketListenerMoments {
     public void dailies$momentsAwardStats(ClientboundAwardStatsPacket packet, CallbackInfo ci) {
         if (Minecraft.getInstance().isSameThread()) {
             Moments.onStats(packet.stats());
+        }
+    }
+
+    /** Commands the player sends: assembling a craft with /sable assemble is one of the ways a craft moment starts */
+    @Inject(method = "sendCommand", at = @At("HEAD"))
+    public void dailies$momentsCommand(String command, CallbackInfo ci) {
+        if (Minecraft.getInstance().isSameThread()) {
+            Moments.onCommandSent(command);
+        }
+    }
+
+    @Inject(method = "sendUnsignedCommand", at = @At("HEAD"))
+    public void dailies$momentsUnsignedCommand(String command, CallbackInfoReturnable<Boolean> cir) {
+        if (Minecraft.getInstance().isSameThread()) {
+            Moments.onCommandSent(command);
         }
     }
 

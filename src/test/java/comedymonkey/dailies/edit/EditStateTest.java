@@ -150,8 +150,8 @@ class EditStateTest {
         assertEquals("Opening", scene.name());
         assertEquals(20, scene.exportStart());
         assertEquals(400, scene.exportEnd());
-        assertEquals(12, scene.tracks().size());
-        for (int i = 0; i < 12; i++) {
+        assertEquals(KeyframeKind.values().length, scene.tracks().size());
+        for (int i = 0; i < KeyframeKind.values().length; i++) {
             KeyframeKind kind = KeyframeKind.values()[i];
             Track track = scene.track(i);
             assertEquals(kind, track.kind());

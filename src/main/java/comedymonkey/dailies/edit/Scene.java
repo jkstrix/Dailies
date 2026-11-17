@@ -22,6 +22,8 @@ public final class Scene {
     private int exportStart = -1;
     private int exportEnd = -1;
     private Looks looks = new Looks();
+    /** Other recordings of the same stretch that this scene can show (PLAY-19), in the order they were linked */
+    private final List<LinkedRecording> linked = new ArrayList<>();
 
     public Scene(String name) {
         this.name = name == null ? "" : name;
@@ -136,6 +138,42 @@ public final class Scene {
         return this.looks;
     }
 
+    /** The other recordings this scene can show, as lanes on the timeline. The list cannot be changed through this view */
+    public List<LinkedRecording> linked() {
+        return Collections.unmodifiableList(this.linked);
+    }
+
+    /** The linked recording with this id, or null */
+    public @Nullable LinkedRecording linked(String recordingId) {
+        for (LinkedRecording recording : this.linked) {
+            if (recording.recordingId().equals(recordingId)) {
+                return recording;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Adds a recording the scene can show, or brings the name of one already there up to date.
+     *
+     * @return false when it was there already
+     */
+    public boolean link(LinkedRecording recording) {
+        for (int i = 0; i < this.linked.size(); i++) {
+            if (this.linked.get(i).recordingId().equals(recording.recordingId())) {
+                this.linked.set(i, recording);
+                return false;
+            }
+        }
+        this.linked.add(recording);
+        return true;
+    }
+
+    /** @return false when the scene had no such recording */
+    public boolean unlink(String recordingId) {
+        return this.linked.removeIf(recording -> recording.recordingId().equals(recordingId));
+    }
+
     /** A separate scene with the same content */
     public Scene copy() {
         Scene copy = new Scene(this.name);
@@ -145,6 +183,7 @@ public final class Scene {
         copy.exportStart = this.exportStart;
         copy.exportEnd = this.exportEnd;
         copy.looks = this.looks.copy();
+        copy.linked.addAll(this.linked);
         return copy;
     }
 
@@ -161,6 +200,13 @@ public final class Scene {
         }
         json.add("tracks", array);
         json.add("looks", this.looks.toJson());
+        if (!this.linked.isEmpty()) {
+            JsonArray linked = new JsonArray();
+            for (LinkedRecording recording : this.linked) {
+                linked.add(recording.toJson());
+            }
+            json.add("linked", linked);
+        }
         return json;
     }
 
@@ -186,6 +232,15 @@ public final class Scene {
         }
         JsonElement looks = json.get("looks");
         scene.looks = Looks.fromJson(looks != null && looks.isJsonObject() ? looks.getAsJsonObject() : null);
+        JsonElement linked = json.get("linked");
+        if (linked != null && linked.isJsonArray()) {
+            for (JsonElement element : linked.getAsJsonArray()) {
+                LinkedRecording recording = LinkedRecording.fromJson(element);
+                if (recording != null) {
+                    scene.link(recording);
+                }
+            }
+        }
         return scene;
     }
 

@@ -65,7 +65,7 @@ public final class Detectors {
 	private Detectors() {}
 
 	static final List<String> EVENTS = List.of("boss_fight", "close_call", "totem_saved", "big_fall", "explosion", "lightning_strike", "animal_tamed",
-		"animal_bred", "treasure_fished", "night_skipped", "first_join");
+		"animal_bred", "treasure_fished", "night_skipped", "first_join", "craft_assembled", "craft_lost", "train_departed", "train_arrived");
 
 	// ------------------------------------------------------------------ boss fights
 	private static final class Fight {
