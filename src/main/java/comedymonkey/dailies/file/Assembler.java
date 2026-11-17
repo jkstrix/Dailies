@@ -22,8 +22,12 @@ import java.util.Map;
  * records from that tick on follow it. The first segment of every piece is marked as not following on from what is
  * before it, so playback rebuilds the world there: that is all a boundary costs, and no ticks are added.
  * <p>
+ * Server resource packs come along (specification REC-19): the records that say which are in force are copied with
+ * the rest, and every pack those records name is stored in the new recording, once, with its pieces. A pack that only
+ * a stretch that was cut used is left behind.
+ * <p>
  * Nothing here knows the game. What to put in the new recording's description is the caller's business; this fills
- * in the segments, their times and the length.
+ * in the segments, their times, the length and the resource packs.
  */
 public final class Assembler {
 
@@ -52,8 +56,16 @@ public final class Assembler {
     public record Snapshot(byte[] records, Map<String, byte[]> shared) {
     }
 
-    /** Ticks from (included) to to (not included) of a source */
-    public record Piece(RecordingFile source, int from, int to, @Nullable Snapshot snapshot) {
+    /**
+     * Ticks from (included) to to (not included) of a source.
+     *
+     * @param packKeys other keys for resource packs of this source, by the key the source knows them by, for when
+     *                 another piece's source calls a different pack by the same key; null or empty for none
+     */
+    public record Piece(RecordingFile source, int from, int to, @Nullable Snapshot snapshot, @Nullable Map<String, String> packKeys) {
+        public Piece(RecordingFile source, int from, int to, @Nullable Snapshot snapshot) {
+            this(source, from, to, snapshot, null);
+        }
     }
 
     private Assembler() {
@@ -98,6 +110,7 @@ public final class Assembler {
                 job.piece(piece, here);
                 here += piece.to() - piece.from();
             }
+            manifest.packs = new ArrayList<>(job.packs.values());
             if (preview != null) {
                 out.append(Container.PREVIEW, 0, 0, 0, preview);
             }
@@ -127,6 +140,10 @@ public final class Assembler {
         private final long allTicks;
         private long doneTicks = 0;
         private int number = 0;
+        /** The resource packs the new recording holds so far, by the key its records know them by */
+        final Map<String, RecordingManifest.Pack> packs = new java.util.LinkedHashMap<>();
+        private List<RecordingManifest.Pack> sourcePacks = List.of();
+        private Map<String, String> packKeys = Map.of();
 
         Job(Container out, RecordingManifest manifest, Progress progress, long allTicks) {
             this.out = out;
@@ -146,6 +163,10 @@ public final class Assembler {
             List<RecordingManifest.Segment> segments = new ArrayList<>(source.segments());
             segments.sort(Comparator.comparingInt((RecordingManifest.Segment segment) -> segment.startTick).thenComparingInt(segment -> segment.number));
             boolean whole = piece.from() == 0 && piece.to() == source.totalTicks();
+            this.sourcePacks = source.manifest().packs;
+            this.packKeys = piece.packKeys() == null ? Map.of() : piece.packKeys();
+            // Records that name a pack by another key have to be written again, so nothing is copied as it stands then
+            boolean rekeyed = !this.packKeys.isEmpty();
             if (whole) {
                 // Everything a recording stores is used by it somewhere, so there is nothing to pick out
                 Container from = source.container();
@@ -158,6 +179,9 @@ public final class Assembler {
                     if (!this.has(blob.getKey())) {
                         this.out.appendShared(blob.getKey(), from.read(blob.getValue()));
                     }
+                }
+                for (RecordingManifest.Pack pack : this.sourcePacks) {
+                    this.usePack(source, pack.key);
                 }
             }
             Map<Integer, RecordingManifest.SegmentTime> times = new HashMap<>();
@@ -175,7 +199,7 @@ public final class Assembler {
                 }
                 this.check();
                 int newStart = here + (lo - piece.from());
-                boolean untouched = lo == segment.startTick && hi == segment.endTick && (!first || startsAfresh(source, segment));
+                boolean untouched = !rekeyed && lo == segment.startTick && hi == segment.endTick && (!first || startsAfresh(source, segment));
                 if (untouched && whole) {
                     this.copyParts(source, segment, newStart);
                     RecordingManifest.SegmentTime time = times.get(segment.number);
@@ -203,6 +227,41 @@ public final class Assembler {
             synchronized (this.out) {
                 return this.out.shared.containsKey(name);
             }
+        }
+
+        /** A record names a resource pack of the source: the new recording is to hold it, under the key the record will have */
+        private void usePack(RecordingFile source, String key) throws IOException {
+            String newKey = this.packKeys.getOrDefault(key, key);
+            if (key.isEmpty() || this.packs.containsKey(newKey)) {
+                return;
+            }
+            for (RecordingManifest.Pack known : this.sourcePacks) {
+                if (known.key.equals(key)) {
+                    RecordingManifest.Pack kept = new RecordingManifest.Pack();
+                    kept.key = newKey;
+                    kept.sha256 = known.sha256;
+                    kept.size = known.size;
+                    kept.pieces = new ArrayList<>(known.pieces);
+                    for (String piece : known.pieces) {
+                        this.bring(source, null, piece);
+                    }
+                    this.packs.put(newKey, kept);
+                    return;
+                }
+            }
+            // The source names a pack it does not hold: playback says so there, and will here
+        }
+
+        /** Takes note of the packs an extension record names. @return the record under its new keys, or null to write it as it is */
+        private @Nullable byte[] packRecord(RecordingFile source, Records.Reader reader) throws IOException {
+            if (!reader.name().equals(comedymonkey.dailies.packs.PackLog.ID)) {
+                return null;
+            }
+            int from = reader.bodyStart();
+            for (String key : comedymonkey.dailies.packs.PackLog.keys(reader.payload(), from, reader.length() - from)) {
+                this.usePack(source, key);
+            }
+            return this.packKeys.isEmpty() ? null : comedymonkey.dailies.packs.PackLog.rekey(reader.payload(), from, reader.length() - from, key -> this.packKeys.getOrDefault(key, key));
         }
 
         /** Whether a segment already says that it does not follow on from the one before it */
@@ -274,6 +333,8 @@ public final class Assembler {
                     int kind = reader.kind();
                     if (kind == Records.SHARED_PACKET || kind == Records.WORLD) {
                         this.bring(source, null, HexFormat.of().formatHex(reader.payload(), 0, reader.length()));
+                    } else if (kind == Records.EXTENSION) {
+                        this.packRecord(source, reader);
                     } else if (kind == Records.TIME && !timed) {
                         decoder.read(reader.payload(), reader.length());
                         this.manifest.times.add(new RecordingManifest.SegmentTime(this.number, decoder.realTime(), decoder.gameTime()));
@@ -327,6 +388,11 @@ public final class Assembler {
                         }
                         if (kind == Records.SHARED_PACKET || kind == Records.WORLD) {
                             this.bring(source, snapshot, HexFormat.of().formatHex(described.payload(), 0, described.length()));
+                        }
+                        byte[] rekeyed = kind == Records.EXTENSION ? this.packRecord(source, described) : null;
+                        if (rekeyed != null) {
+                            writer.named(Records.EXTENSION, described.name(), rekeyed, 0, rekeyed.length);
+                            continue;
                         }
                         writer.record(kind, described.payload(), 0, described.length());
                     }
@@ -393,7 +459,12 @@ public final class Assembler {
                         if (kind == Records.SHARED_PACKET || kind == Records.WORLD) {
                             this.bring(source, null, HexFormat.of().formatHex(reader.payload(), 0, reader.length()));
                         }
-                        writer.record(kind, reader.payload(), 0, reader.length());
+                        byte[] rekeyed = kind == Records.EXTENSION ? this.packRecord(source, reader) : null;
+                        if (rekeyed != null) {
+                            writer.named(Records.EXTENSION, reader.name(), rekeyed, 0, rekeyed.length);
+                        } else {
+                            writer.record(kind, reader.payload(), 0, reader.length());
+                        }
                     }
                     if (writer.size() >= PART_BYTES) {
                         this.part(writer, newStart, reached);

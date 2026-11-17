@@ -91,6 +91,12 @@ public final class PackPlayback implements GamePacks.Listener {
                 // The snapshot about to be read says what is in force; a recording from before packs were kept says nothing
                 LOG.clear();
             }
+
+            @Override
+            public void describe(java.util.function.Consumer<byte[]> out) {
+                // A snapshot written from playback, for a trimmed recording, says what is in force as every snapshot does
+                out.accept(PackLog.state(LOG.inForce()));
+            }
         });
     }
 

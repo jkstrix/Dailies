@@ -451,6 +451,8 @@ final class LibrarySteps {
         JsonObject jobs = test.tool("replay_job_status", none);
         check(jobs.getAsJsonArray("jobs").size() >= 3, "replay_job_status does not list the jobs that ran: " + jobs);
         PlaybackSteps.close(test);
+
+        packs(test, minecraft, secondFile);
     }
 
     /**
@@ -576,6 +578,167 @@ final class LibrarySteps {
         test.tool("replay_open", args("path", original.toString()));
         waitOpen(test, originalId, 0);
         Library.delete(file);
+    }
+
+    /**
+     * Server resource packs through a trim and a combine (REC-19 and PLAY-17 with FILE-9 and FILE-10), on the recording
+     * the pack steps made: trimmed across its pop and across its second push, each cut inside a segment, and combined
+     * with a recording that has no pack. The right packs must be in force at every tick, and the pack stored once.
+     * Comes in at the title screen and leaves there, with no recorded pack in force.
+     */
+    private static void packs(SelfTest test, Minecraft minecraft, Path bare) throws Exception {
+        Path source = ResourcePackSteps.recording();
+        check(source != null && Files.isRegularFile(source), "the pack recording is not where the pack steps left it");
+        int pop = ResourcePackSteps.popTick();
+        int push = ResourcePackSteps.pushTick();
+        RecordingManifest sourceManifest = RecordingFile.readManifest(source);
+        int total = sourceManifest.totalTicks;
+        String sha = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(ResourcePackSteps.pack()));
+        int firstFrom = pop - 12;
+        int secondFrom = push - 10;
+        try (RecordingFile file = RecordingFile.open(source)) {
+            while (!Assembler.needsSnapshot(file, firstFrom)) {
+                firstFrom--;
+            }
+            while (!Assembler.needsSnapshot(file, secondFrom)) {
+                secondFrom--;
+            }
+        }
+        int aFrom = firstFrom;
+        int aTo = pop + 12;
+        int bFrom = secondFrom;
+        int bTo = Math.min(total, push + 25);
+        check(aFrom > 0 && aTo < bFrom - 6 && bTo > push + 5, "the pop at tick " + pop + " and the push at tick " + push + " are too close together, or to the ends, to cut around");
+        check(!test.onClient(() -> ResourcePackSteps.packOn(minecraft)), "the test pack is in force before any recording with it is open");
+
+        // --- A trim across the pop and across the second push ---
+        JsonArray keep = ranges(aFrom, aTo);
+        keep.addAll(ranges(bFrom, bTo));
+        JsonObject trimmed = finish(test, test.tool("replay_trim", args("source", source.toString(), "keep", keep, "name", "Pack trim")));
+        check(trimmed.get("through_game").getAsBoolean(), "the trim of the pack recording should have gone through the game");
+        Path trimmedFile = Path.of(trimmed.get("path").getAsString());
+        String trimmedId = trimmed.get("recording_id").getAsString();
+        int firstLength = aTo - aFrom;
+        check(trimmed.get("total_ticks").getAsInt() == firstLength + (bTo - bFrom), "the trimmed pack recording has the wrong length: " + trimmed.get("total_ticks"));
+        test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the game to be put back at the title screen after the trim");
+        test.waitFor(() -> comedymonkey.dailies.packs.GamePacks.inForce().isEmpty(), 120, "the recorded pack to be taken off after the trim");
+        ResourcePackSteps.waitForReload(test, minecraft);
+        try (RecordingFile file = RecordingFile.open(trimmedFile)) {
+            RecordingManifest manifest = file.manifest();
+            check(manifest.packs.size() == 1 && manifest.packs.get(0).sha256.equals(sha) && manifest.packs.get(0).key.equals(sourceManifest.packs.get(0).key),
+                "the trimmed recording should hold the one pack once, under its key: " + manifest.packs.size() + " packs");
+            Path out = trimmedFile.resolveSibling("pack-out.zip.tmp");
+            file.extractFile(manifest.packs.get(0), out);
+            boolean same = java.util.Arrays.equals(Files.readAllBytes(out), ResourcePackSteps.pack());
+            Files.delete(out);
+            check(same, "the pack read back out of the trimmed recording is not the pack that was pushed");
+            check(!manifest.packs.get(0).pieces.isEmpty(), "the pack has no pieces");
+            for (String piece : manifest.packs.get(0).pieces) {
+                check(file.hasShared(piece), "a piece of the pack is missing from the trimmed recording");
+            }
+            // What the snapshots written from playback say: the pack at the first cut, none at the second
+            java.util.List<String> states = new java.util.ArrayList<>();
+            for (RecordingManifest.Segment segment : manifest.segments) {
+                comedymonkey.dailies.packs.PackLog log = new comedymonkey.dailies.packs.PackLog();
+                boolean said = false;
+                try (Records.Reader reader = new Records.Reader(file.openSegment(segment.number))) {
+                    while (reader.next() && reader.kind() != Records.SNAPSHOT_END) {
+                        if (reader.kind() == Records.EXTENSION && reader.name().equals(comedymonkey.dailies.packs.PackLog.ID)) {
+                            said |= log.apply(reader.payload(), reader.bodyStart(), reader.length() - reader.bodyStart());
+                        }
+                    }
+                }
+                check(said, "the snapshot at tick " + segment.startTick + " of the trimmed recording does not say which packs are in force");
+                states.add(segment.startTick + ":" + log.contents().size());
+            }
+            check(states.contains("0:1") && states.contains(firstLength + ":0"), "the snapshots at the cuts should say one pack in force at the first and none at the second: " + states);
+        }
+
+        int changesBefore = comedymonkey.dailies.playback.PackPlayback.changes();
+        test.tool("replay_open", args("path", trimmedFile.toString()));
+        test.waitFor(() -> Playback.lastError() != null || Playback.loaded() && !Playback.jumping() && trimmedId.equals(Playback.recordingId()), 180, "the trimmed pack recording to open");
+        check(Playback.lastError() == null, "the trimmed pack recording did not open: " + Playback.lastError());
+        int popHere = pop - aFrom;
+        int pushHere = firstLength + (push - bFrom);
+        packAt(test, minecraft, 0, true, "at the first tick of the trim, where the fresh snapshot says the pack is on");
+        packAt(test, minecraft, popHere - 1, true, "just before the pop");
+        packAt(test, minecraft, popHere, false, "at the pop");
+        packAt(test, minecraft, firstLength, false, "at the cut, where the fresh snapshot says no pack is on");
+        packAt(test, minecraft, pushHere - 1, false, "just before the second push");
+        packAt(test, minecraft, pushHere, true, "at the second push");
+        packAt(test, minecraft, firstLength + (bTo - bFrom), true, "at the end");
+        packAt(test, minecraft, firstLength + 2, false, "back to just after the cut");
+        packAt(test, minecraft, 2, true, "back at the start");
+        test.onClientRun(() -> Playback.playTo(popHere + 6));
+        test.waitFor(() -> Playback.paused() && Playback.position() == popHere + 6, 180, "play through the pop in the trimmed recording");
+        test.waitFor(() -> !Playback.jumping(), 180, "the packs to settle after playing through the pop");
+        check(!test.onClient(() -> ResourcePackSteps.packOn(minecraft)), "playing through the pop in the trimmed recording left the pack in force");
+        check(test.onClient(comedymonkey.dailies.playback.PackPlayback::failed).isEmpty(), "the trimmed recording has packs that could not be applied: "
+            + test.onClient(comedymonkey.dailies.playback.PackPlayback::failed));
+        int trimChanges = comedymonkey.dailies.playback.PackPlayback.changes() - changesBefore;
+        PlaybackSteps.close(test);
+
+        // --- A trim that keeps only the stretch with no pack in force holds no pack ---
+        JsonObject gap = finish(test, test.tool("replay_trim", args("source", source.toString(), "keep", ranges(pop + 3, push - 3), "name", "Pack gap")));
+        Path gapFile = Path.of(gap.get("path").getAsString());
+        test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the game to be put back at the title screen after the second pack trim");
+        RecordingManifest gapManifest = RecordingFile.readManifest(gapFile);
+        check(gapManifest.packs.isEmpty(), "a trim that kept only ticks with no pack in force still holds " + gapManifest.packs.size() + " pack(s)");
+        check(Files.size(gapFile) < Files.size(trimmedFile), "the trim without the pack is not smaller than the trim with it");
+
+        // --- Combined with a recording that has no pack, on either side of it ---
+        RecordingManifest bareManifest = RecordingFile.readManifest(bare);
+        check(bareManifest.packs.isEmpty(), "the second world's recording was expected to have no pack");
+        JsonObject combined = finish(test, test.tool("replay_combine", args("sources", array(source.toString(), bare.toString(), source.toString()), "name", "Pack episode")));
+        Path episodeFile = Path.of(combined.get("path").getAsString());
+        String episodeId = combined.get("recording_id").getAsString();
+        int bareTicks = bareManifest.totalTicks;
+        check(combined.get("total_ticks").getAsInt() == total + bareTicks + total, "the combined pack recording has the wrong length: " + combined.get("total_ticks"));
+        try (RecordingFile file = RecordingFile.open(episodeFile); RecordingFile once = RecordingFile.open(source)) {
+            RecordingManifest manifest = file.manifest();
+            check(manifest.packs.size() == 1 && manifest.packs.get(0).sha256.equals(sha), "the pack should be stored once in a recording that uses it twice: " + manifest.packs.size() + " packs");
+            for (String piece : manifest.packs.get(0).pieces) {
+                check(file.hasShared(piece), "a piece of the pack is missing from the combined recording");
+            }
+            check(once.manifest().packs.size() == 1, "the source lost its pack");
+        }
+        test.tool("replay_open", args("path", episodeFile.toString()));
+        test.waitFor(() -> Playback.lastError() != null || Playback.loaded() && !Playback.jumping() && episodeId.equals(Playback.recordingId()), 180, "the combined pack recording to open");
+        check(Playback.lastError() == null, "the combined pack recording did not open: " + Playback.lastError());
+        packAt(test, minecraft, 3, true, "at the start of the combined recording");
+        packAt(test, minecraft, total - 3, true, "just before the first boundary");
+        packAt(test, minecraft, total + 5, false, "after the boundary, in the recording that has no pack");
+        packAt(test, minecraft, total + bareTicks - 2, false, "just before the second boundary");
+        check(named(test, minecraft, "Second") == 1, "between the boundaries the world is not the second recording's");
+        packAt(test, minecraft, total + bareTicks + 5, true, "after the second boundary, back in the recording with the pack");
+        packAt(test, minecraft, total + bareTicks + pop + 2, false, "after the pop of the second copy");
+        // Play runs across a boundary by itself, and the packs switch with the world
+        packAt(test, minecraft, total - 8, true, "before playing across the boundary");
+        test.onClientRun(() -> Playback.playTo(total + 8));
+        test.waitFor(() -> Playback.paused() && Playback.position() == total + 8, 180, "play across the boundary into the recording with no pack");
+        test.waitFor(() -> !Playback.jumping(), 180, "the packs to settle after the boundary");
+        check(!test.onClient(() -> ResourcePackSteps.packOn(minecraft)), "playing across the boundary left the first recording's pack in force");
+        check(test.onClient(comedymonkey.dailies.playback.PackPlayback::failed).isEmpty(), "the combined recording has packs that could not be applied");
+        PlaybackSteps.close(test);
+        test.waitFor(() -> comedymonkey.dailies.packs.GamePacks.inForce().isEmpty(), 120, "the recorded pack to be taken off on closing");
+        ResourcePackSteps.waitForReload(test, minecraft);
+        check(!test.onClient(() -> ResourcePackSteps.packOn(minecraft)), "the test pack is still in force after the combined recording was closed");
+        test.log("server resource packs across edits: trimmed ticks " + aFrom + " to " + aTo + " and " + bFrom + " to " + bTo + " of " + total + " (pop at " + pop + ", push at " + push
+            + "), the pack on and off at the right ticks with " + trimChanges + " changes of packs; a trim of the stretch between holds no pack; combined with a recording without one, "
+            + combined.get("total_ticks") + " ticks, the pack stored once (" + Files.size(episodeFile) / 1024 + " KB against " + Files.size(source) / 1024 + " KB for the source) and switched at both boundaries");
+        Library.delete(trimmedFile);
+        Library.delete(gapFile);
+        Library.delete(episodeFile);
+    }
+
+    /** Jumps to a tick and checks whether the test pack is in force there */
+    private static void packAt(SelfTest test, Minecraft minecraft, int tick, boolean wanted, String where) throws Exception {
+        test.onClientRun(() -> Playback.jumpTo(tick, true));
+        test.waitFor(() -> !Playback.jumping() && Playback.position() == tick, 180, "the jump to tick " + tick + " (" + where + ")");
+        Thread.sleep(60);
+        test.waitFor(() -> !Playback.jumping(), 180, "the recording's resource packs to be loaded");
+        boolean inForce = test.onClient(() -> ResourcePackSteps.packOn(minecraft));
+        check(inForce == wanted, where + " (tick " + tick + ") the pack is " + (inForce ? "in force" : "not in force"));
     }
 
     // --- Helpers ---

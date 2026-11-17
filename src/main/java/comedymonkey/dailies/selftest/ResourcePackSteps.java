@@ -73,6 +73,29 @@ final class ResourcePackSteps {
     private ResourcePackSteps() {
     }
 
+    // For the steps that combine and trim the pack recording
+
+    static Path recording() {
+        return recording;
+    }
+
+    static int popTick() {
+        return popTick;
+    }
+
+    static int pushTick() {
+        return pushTick;
+    }
+
+    static byte[] pack() {
+        return pack;
+    }
+
+    /** Whether the test pack is in force in the game right now. Client thread */
+    static boolean packOn(Minecraft minecraft) {
+        return on(minecraft, MARKER);
+    }
+
     // ------------------------------------------------------------------ Live: the server pushes, the player answers
 
     static void record(SelfTest test) throws Exception {
@@ -357,7 +380,7 @@ final class ResourcePackSteps {
         test.waitFor(() -> !(minecraft.screen instanceof ConfirmScreen), 30, "the resource pack question to close");
     }
 
-    private static void waitForReload(SelfTest test, Minecraft minecraft) throws Exception {
+    static void waitForReload(SelfTest test, Minecraft minecraft) throws Exception {
         test.waitFor(() -> minecraft.getOverlay() == null, 120, "the game to finish reloading its resources");
         test.sleepTicks(5);
     }

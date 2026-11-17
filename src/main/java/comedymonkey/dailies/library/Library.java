@@ -296,6 +296,7 @@ public final class Library {
             List<EditState> states = new ArrayList<>();
             List<Assembler.Piece> pieces = new ArrayList<>();
             Map<String, List<RecordingManifest.ModEntry>> modsOfSource = new java.util.HashMap<>();
+            Map<String, String> packShas = new java.util.HashMap<>();
             int offset = 0;
             for (int i = 0; i < open.size(); i++) {
                 RecordingManifest source = manifests.get(i);
@@ -328,7 +329,20 @@ public final class Library {
                 names.add(source.name);
                 byte[] edit = open.get(i).editState();
                 states.add(edit == null ? null : readEdit(edit));
-                pieces.add(new Assembler.Piece(open.get(i), 0, source.totalTicks, null));
+                // Two sources may call different packs by the same key (a world's own pack goes by where its file was).
+                // The later one's is given a key of its own, and its records are written to match
+                Map<String, String> otherKeys = new java.util.HashMap<>();
+                for (RecordingManifest.Pack pack : source.packs) {
+                    String known = packShas.get(pack.key);
+                    if (known == null) {
+                        packShas.put(pack.key, pack.sha256);
+                    } else if (!known.equals(pack.sha256)) {
+                        String key = pack.key + "-" + pack.sha256.substring(0, Math.min(12, pack.sha256.length()));
+                        otherKeys.put(pack.key, key);
+                        packShas.put(key, pack.sha256);
+                    }
+                }
+                pieces.add(new Assembler.Piece(open.get(i), 0, source.totalTicks, null, otherKeys));
                 offset += source.totalTicks;
             }
             manifest.worldName = String.join(" + ", worlds);

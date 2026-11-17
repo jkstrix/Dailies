@@ -164,6 +164,67 @@ public final class PackLog {
         }
     }
 
+    /**
+     * The content keys a record names: the packs whose bytes a recording has to hold for the record to mean anything.
+     * For whoever copies records into another recording (combining and trimming). Empty for a record that names none
+     */
+    public static List<String> keys(byte[] data, int from, int length) {
+        List<String> keys = new ArrayList<>();
+        rekey(data, from, length, key -> {
+            keys.add(key);
+            return key;
+        });
+        return keys;
+    }
+
+    /**
+     * The same record with every content key put through a function, for when two recordings that are being joined
+     * call different packs by the same key.
+     *
+     * @return the record to write in its place, or null when nothing in it changed or it could not be read
+     */
+    public static byte[] rekey(byte[] data, int from, int length, java.util.function.UnaryOperator<String> rename) {
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data, from, length))) {
+            boolean[] changed = {false};
+            java.util.function.UnaryOperator<Pack> renamed = pack -> {
+                if (pack.content().isEmpty()) {
+                    return pack;
+                }
+                String key = rename.apply(pack.content());
+                if (key.equals(pack.content())) {
+                    return pack;
+                }
+                changed[0] = true;
+                return new Pack(pack.id(), pack.url(), pack.hash(), pack.required(), pack.prompt(), key);
+            };
+            byte[] written;
+            switch (in.readUnsignedByte()) {
+                case PUSHED -> {
+                    int index = in.readInt();
+                    written = pushed(renamed.apply(readPack(in)), index);
+                }
+                case NOT_APPLIED -> {
+                    Pack pack = readPack(in);
+                    written = notApplied(renamed.apply(pack), in.readUTF());
+                }
+                case STATE -> {
+                    int count = in.readInt();
+                    List<Pack> listed = new ArrayList<>();
+                    for (int i = 0; i < count; i++) {
+                        listed.add(renamed.apply(readPack(in)));
+                    }
+                    written = state(listed);
+                }
+                default -> {
+                    return null;
+                }
+            }
+            return changed[0] ? written : null;
+        } catch (IOException | RuntimeException damaged) {
+            return null;
+        }
+    }
+
     private interface Body {
         void write(DataOutputStream out) throws IOException;
     }
