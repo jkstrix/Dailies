@@ -235,8 +235,15 @@ final class CraftSteps {
     }
 
     private static void buildBalloon(SelfTest test, Minecraft minecraft) throws Exception {
+        buildBalloon(test, minecraft, new BlockPos(-24, -60, -24), true);
+    }
+
+    /**
+     * @param origin the lowest corner of the balloon's scene, in the overworld near the recorder
+     * @param goBack whether the recorder is put back where it stood once the flight is noted; the camera route stays aboard
+     */
+    static void buildBalloon(SelfTest test, Minecraft minecraft, BlockPos origin, boolean goBack) throws Exception {
         ResourceLocation name = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope");
-        BlockPos origin = new BlockPos(-24, -60, -24);
         ServerLevel level = minecraft.getSingleplayerServer().overworld();
         // The structure is one of the mod's own demonstration scenes, which live with its client resources
         ResourceLocation file = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope.nbt");
@@ -391,7 +398,9 @@ final class CraftSteps {
         // back to where it stood before, so the steps after this one find it where they always have
         test.command("kill @e[type=minecraft:pig,name=Aeronaut]");
         test.command("kill @e[type=minecraft:pig,name=Ballast]");
-        test.command(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f", wasAt.x, wasAt.y, wasAt.z));
+        if (goBack) {
+            test.command(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f", wasAt.x, wasAt.y, wasAt.z));
+        }
         test.sleepTicks(30);
     }
 

@@ -81,6 +81,12 @@ public final class SelfTest {
                 this.finish("PASSED");
                 return;
             }
+            if (Boolean.getBoolean("dailies.test.cameraFilmsOnly")) {
+                // Only the camera films, for working on the cameras: -PdailiesFlags=dailies.test.cameraFilmsOnly (add dailies.test.cameraFilmsQuick for ten seconds a film)
+                CameraFilms.run(this, Boolean.getBoolean("dailies.test.cameraFilmsQuick"));
+                this.finish("PASSED");
+                return;
+            }
             // The tour first and everything else after it, with the tour's verdict at the end: one long run that tells both
             // what the tour found and whether the rest still passes. -PdailiesFlags=dailies.test.realWorldFirst
             boolean tourFirst = Boolean.getBoolean("dailies.test.realWorldFirst");
@@ -143,6 +149,15 @@ public final class SelfTest {
                 this.step("RealWorldSteps.run", () -> RealWorldSteps.run(this));
             } else {
                 this.skip("the tour of generated terrain was not asked for (dailies.test.realWorld)");
+            }
+            // Every tracking camera filmed in every place of a recorded route and measured (FILM-1 to FILM-9). About an hour and
+            // a quarter: -PdailiesFlags=dailies.test.cameraFilms; ten seconds a film, to check the harness: dailies.test.cameraFilmsQuick.
+            // The route is recorded once and kept; dailies.test.recordRoute records it again
+            boolean quickFilms = Boolean.getBoolean("dailies.test.cameraFilmsQuick");
+            if (Boolean.getBoolean("dailies.test.cameraFilms") || quickFilms) {
+                this.step("CameraFilms.run", () -> CameraFilms.run(this, quickFilms));
+            } else {
+                this.skip("the camera films were not asked for (dailies.test.cameraFilms)");
             }
             // Last, so the tour's measures are there to be reported with its own. About three minutes, in a world of its own
             if (!Boolean.getBoolean("dailies.test.skipBudgets")) {

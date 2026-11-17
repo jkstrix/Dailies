@@ -120,7 +120,7 @@ final class RealWorldSteps {
     private static volatile boolean watching = false;
     private static volatile boolean noteHud = false;
     private static volatile String phase = "start";
-    private static volatile Drive drive = null;
+    static volatile Drive drive = null;
     private static boolean driven = false;
     private static Snapshots.Cost lastCost = null;
     private static volatile int frames = 0;
@@ -133,7 +133,7 @@ final class RealWorldSteps {
     }
 
     /** Keys held down for the player, and where they look, until it is set to null */
-    private record Drive(float yaw, float pitch, boolean forward, boolean sprint, boolean jump, boolean attack, boolean use) {
+    record Drive(float yaw, float pitch, boolean forward, boolean sprint, boolean jump, boolean attack, boolean use) {
     }
 
     private RealWorldSteps() {
@@ -203,7 +203,7 @@ final class RealWorldSteps {
         }
     }
 
-    private static synchronized void hook() {
+    static synchronized void hook() {
         if (hooked) {
             return;
         }
@@ -345,11 +345,11 @@ final class RealWorldSteps {
         }
     }
 
-    private static void command(SelfTest test, String format, Object... values) throws Exception {
+    static void command(SelfTest test, String format, Object... values) throws Exception {
         test.command(String.format(Locale.ROOT, format, values));
     }
 
-    private static <T> T onServer(Callable<T> action) throws Exception {
+    static <T> T onServer(Callable<T> action) throws Exception {
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         check(server != null, "the generated world has no built-in server");
         CompletableFuture<T> done = new CompletableFuture<>();
@@ -369,7 +369,7 @@ final class RealWorldSteps {
 
     /** The nearest of some structures to a place, in the dimension the player is in; null when none is within reach */
     @SafeVarargs
-    private static BlockPos structure(SelfTest test, BlockPos from, ResourceKey<Structure>... kinds) throws Exception {
+    static BlockPos structure(SelfTest test, BlockPos from, ResourceKey<Structure>... kinds) throws Exception {
         long started = System.currentTimeMillis();
         BlockPos found = onServer(() -> {
             ServerLevel level = serverLevel(Minecraft.getInstance().getSingleplayerServer());
@@ -387,7 +387,7 @@ final class RealWorldSteps {
         return found;
     }
 
-    private static BlockPos biome(SelfTest test, BlockPos from, int reach, String name, Predicate<Holder<Biome>> wanted) throws Exception {
+    static BlockPos biome(SelfTest test, BlockPos from, int reach, String name, Predicate<Holder<Biome>> wanted) throws Exception {
         long started = System.currentTimeMillis();
         BlockPos found = onServer(() -> {
             ServerLevel level = serverLevel(Minecraft.getInstance().getSingleplayerServer());
@@ -401,7 +401,7 @@ final class RealWorldSteps {
     }
 
     /** The first free height above the ground at a column, generating the chunk if it has to */
-    private static int surface(int x, int z, Heightmap.Types kind) throws Exception {
+    static int surface(int x, int z, Heightmap.Types kind) throws Exception {
         return onServer(() -> {
             ServerLevel level = serverLevel(Minecraft.getInstance().getSingleplayerServer());
             level.getChunk(x >> 4, z >> 4);
@@ -409,7 +409,7 @@ final class RealWorldSteps {
         });
     }
 
-    private static void flying(SelfTest test, boolean on, float speed) throws Exception {
+    static void flying(SelfTest test, boolean on, float speed) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
             minecraft.player.getAbilities().flying = on && minecraft.player.getAbilities().mayfly;
@@ -419,7 +419,7 @@ final class RealWorldSteps {
     }
 
     /** Waits until the chunks have stopped arriving and the one the player is in is there */
-    private static void settle(SelfTest test) throws Exception {
+    static void settle(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         long deadline = System.currentTimeMillis() + 90_000;
         int last = -1;
@@ -447,14 +447,14 @@ final class RealWorldSteps {
         test.log("real world: the chunks never stopped arriving; carrying on with " + last);
     }
 
-    private static void goTo(SelfTest test, double x, double y, double z, float yaw, float pitch) throws Exception {
+    static void goTo(SelfTest test, double x, double y, double z, float yaw, float pitch) throws Exception {
         command(test, "tp @s %.2f %.2f %.2f %.1f %.1f", x, y, z, yaw, pitch);
         test.sleepTicks(10);
         settle(test);
     }
 
     /** Lets this many ticks of the recording go by */
-    private static void ticks(SelfTest test, int count) throws Exception {
+    static void ticks(SelfTest test, int count) throws Exception {
         if (Recorder.get().state() != Recorder.State.RECORDING) {
             test.sleepTicks(count);
             return;
@@ -523,23 +523,23 @@ final class RealWorldSteps {
         return probe;
     }
 
-    private static BlockPos playerBlock(SelfTest test) throws Exception {
+    static BlockPos playerBlock(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         return test.onClient(() -> minecraft.player.blockPosition());
     }
 
-    private static Vec3 playerAt(SelfTest test) throws Exception {
+    static Vec3 playerAt(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         return test.onClient(() -> minecraft.player.position());
     }
 
-    private static BlockState blockAt(SelfTest test, BlockPos pos) throws Exception {
+    static BlockState blockAt(SelfTest test, BlockPos pos) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         return test.onClient(() -> minecraft.level.getBlockState(pos));
     }
 
     /** Uses the held item on a block's face as a click would */
-    private static void useOn(SelfTest test, BlockPos pos, Direction face) throws Exception {
+    static void useOn(SelfTest test, BlockPos pos, Direction face) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
             Vec3 middle = Vec3.atCenterOf(pos).add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
@@ -572,7 +572,7 @@ final class RealWorldSteps {
     }
 
     /** Somewhere to stand near a place: two blocks of air over something solid. Null when there is nowhere within reach */
-    private static BlockPos standNear(SelfTest test, BlockPos target, int reach) throws Exception {
+    static BlockPos standNear(SelfTest test, BlockPos target, int reach) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         return test.onClient(() -> {
             BlockPos best = null;
@@ -587,7 +587,7 @@ final class RealWorldSteps {
         });
     }
 
-    private static float yawTowards(Vec3 from, double x, double z) {
+    static float yawTowards(Vec3 from, double x, double z) {
         return (float) Math.toDegrees(Math.atan2(-(x - from.x), z - from.z));
     }
 
@@ -1892,7 +1892,7 @@ final class RealWorldSteps {
     }
 
     /** The nearest place in the Nether with a floor, three blocks of air over it and some room around; null when there is none within reach */
-    private static BlockPos openSpot(SelfTest test, BlockPos near, int reach) throws Exception {
+    static BlockPos openSpot(SelfTest test, BlockPos near, int reach) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         return test.onClient(() -> {
             ClientLevel level = minecraft.level;
@@ -1921,7 +1921,7 @@ final class RealWorldSteps {
     }
 
     /** The way to face, of eight, that looks furthest before meeting anything solid */
-    private static float openYaw(SelfTest test) throws Exception {
+    static float openYaw(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         return test.onClient(() -> {
             Vec3 eyes = minecraft.player.getEyePosition();
