@@ -49,6 +49,11 @@ import java.util.List;
  */
 public final class EditorScreen extends Screen {
 
+    /** Shows a line of words in the editor's own place for them, or as an ordinary notice while the editor is closed */
+    public static void say(net.minecraft.network.chat.Component words) {
+        EditorState.say(words);
+    }
+
     private static final int ROW = EditorLayout.ROW;
     private static final int GAP = EditorLayout.GAP;
     private static final int PAD = EditorLayout.PAD;

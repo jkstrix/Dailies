@@ -309,6 +309,11 @@ public final class Playback {
 
     /** Whether the world as it stands was reached by a jump that skipped the run-up */
     private static boolean rough = false;
+
+    /** Whether the world as it stands was reached by a jump made while the playhead was dragged, not yet refined */
+    static boolean rough() {
+        return rough;
+    }
     /** Whether the world as it stands is one with mod machines in it that was kept across a jump */
     private static boolean loose = false;
     /** Whether the jump under way must build such a world from nothing */
@@ -713,6 +718,8 @@ public final class Playback {
             settleLight(minecraft);
         }
         PlaybackExtensions.arrivedAll();
+        // Whoever the view rode with or followed is a new entity now, in this world or a new one
+        Viewer.arrived(minecraft, rough);
     }
 
     /**

@@ -813,6 +813,8 @@ final class WatchingSteps {
         test.onClientRun(() -> PlayerList.ride(recorderId));
         check(test.onClient(() -> Viewer.riding() == null), "pressing 'ride' again did not leave the recorder");
 
+        rideThroughJumps(test, minecraft, recorderId);
+
         // Follow keeps them in view while they walk
         lookFrom(test, new Vec3(X - 2.0, Y + 2.0, Z - 7.0), new Vec3(X, Y + 1.0, Z));
         Vec3 standingAt = test.onClient(() -> minecraft.level.getPlayerByUUID(recorderId).position());
@@ -866,6 +868,62 @@ final class WatchingSteps {
      * and the packet that brings a player into sight, for one of them. So one is there to be seen and one is only
      * known of, as someone far off is. A singleplayer test world has nobody else to record.
      */
+    /**
+     * Riding with the recorder through jumps back and forward and a drag of the playhead: a jump puts a new entity in
+     * the world for them, and the view must go with it, not stand frozen where the one taken out was
+     */
+    private static void rideThroughJumps(SelfTest test, Minecraft minecraft, UUID recorderId) throws Exception {
+        int before = Playback.position();
+        test.onClientRun(() -> PlayerList.ride(recorderId));
+        int[] ticks = {walkEnd, walkStart, walkEnd, walkStart + (walkEnd - walkStart) / 2};
+        for (int tick : ticks) {
+            jump(test, tick);
+            check(ridingRecorder(test, minecraft, recorderId), "after a jump to tick " + tick + " the view is not through the recorder's eyes");
+            double off = cameraOnRecorder(test, minecraft, recorderId);
+            check(off < 0.6, "after a jump to tick " + tick + " the picture is " + off + " blocks from the recorder's eyes");
+        }
+        // Dragged back and forth as a person drags the playhead: many rough jumps, then one exact one
+        int[] drag = {walkEnd, walkEnd - 10, walkStart + 20, walkStart + 5, walkStart, walkStart + 15};
+        for (int tick : drag) {
+            int target = Math.max(0, tick);
+            test.onClientRun(() -> Playback.scrubTo(target));
+            test.waitFor(() -> !Playback.jumping(), 30, "the rough jump to tick " + target);
+            frames(test, 2);
+            check(recorderId.equals(Viewer.ridingId()), "a drag to tick " + target + " forgot whom the view rides with");
+            check(ridingRecorder(test, minecraft, recorderId), "during a drag, at tick " + target + ", the view is not through the recorder's eyes");
+            double off = cameraOnRecorder(test, minecraft, recorderId);
+            check(off < 0.6, "during a drag, at tick " + target + ", the picture stood " + off + " blocks from the recorder's eyes");
+        }
+        test.onClientRun(Playback::refine);
+        test.waitFor(() -> !Playback.jumping(), 30, "the exact jump after the drag");
+        frames(test, 3);
+        check(ridingRecorder(test, minecraft, recorderId) && cameraOnRecorder(test, minecraft, recorderId) < 0.6, "after the drag ended the view is not through the recorder's eyes");
+        test.onClientRun(() -> Viewer.ride(null));
+        check(test.onClient(() -> Viewer.riding() == null && Viewer.ridingId() == null), "leaving the ride after the jumps left the view through someone's eyes");
+        // Back where the steps after this one expect the recording to be
+        jump(test, before);
+    }
+
+    /** Whether the game's camera entity is the recorder as the world holds them now, not one taken out by a jump */
+    private static boolean ridingRecorder(SelfTest test, Minecraft minecraft, UUID recorderId) throws Exception {
+        return test.onClient(() -> {
+            Player recorder = minecraft.level == null ? null : minecraft.level.getPlayerByUUID(recorderId);
+            return recorder != null && minecraft.getCameraEntity() == recorder && !recorder.isRemoved();
+        });
+    }
+
+    /** How far the picture was last taken from the recorder's eyes, in blocks */
+    private static double cameraOnRecorder(SelfTest test, Minecraft minecraft, UUID recorderId) throws Exception {
+        return test.onClient(() -> {
+            Player recorder = minecraft.level == null ? null : minecraft.level.getPlayerByUUID(recorderId);
+            if (recorder == null) {
+                return Double.MAX_VALUE;
+            }
+            Vec3 eyes = recorder.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true)).add(0.0, recorder.getEyeHeight(), 0.0);
+            return minecraft.gameRenderer.getMainCamera().getPosition().distanceTo(eyes);
+        });
+    }
+
     private static void addPlayers(SelfTest test, Vec3 at) throws Exception {
         test.onClientRun(() -> {
             Minecraft minecraft = Minecraft.getInstance();

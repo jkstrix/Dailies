@@ -1059,6 +1059,8 @@
   "dailies.editor.players.fold": "Fold the list of players away, or bring it back",
   "dailies.editor.players.none": "No other players are in the recording at this moment.",
   "dailies.editor.players.gone": "That player is not in sight at this moment of the recording",
+  "dailies.editor.ride.gone": "The one you were seeing through is not here at this moment of the recording, so the camera flies free",
+  "dailies.editor.follow.gone": "The player you were following is not here at this moment of the recording, so the camera stops following",
   "dailies.editor.players.distance": "%s m",
   "dailies.editor.players.out_of_sight": "out of sight",
   "dailies.editor.players.look": "Look",
