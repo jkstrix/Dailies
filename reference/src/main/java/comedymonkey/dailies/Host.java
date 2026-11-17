@@ -155,6 +155,17 @@ public final class Host {
         int createScene(String name, int startTick, int endTick) throws Exception;
         /** Run several edits so that they are one step to undo, under this description. Client thread */
         void asOneEdit(String description, EditWork edits) throws Exception;
+        /**
+         * Put an export of a scene of the open recording on the export queue (EXP-10). It runs when the queue is
+         * started, in this game or in the background. Client thread.
+         *
+         * @param scene  the index of the scene, as {@link #createScene} returns it
+         * @param preset the name of an export preset, or null for the first one
+         * @param file   the file to write: a name for the exports folder, or an absolute path. Its ending is the
+         *               preset's; a name already taken gets a number when the job runs
+         * @return the id of the job
+         */
+        String queueExport(int scene, @Nullable String preset, String file) throws Exception;
 
         // --- MCP ---
         /** Register the tool groups that belong to the core */

@@ -2,7 +2,11 @@ package comedymonkey.dailies.ui;
 
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.edit.Scene;
+import comedymonkey.dailies.editor.EditorSession;
+import comedymonkey.dailies.export.Captions;
 import comedymonkey.dailies.export.Codecs;
+import comedymonkey.dailies.export.ExportQueue;
+import comedymonkey.dailies.export.QueueRunner;
 import comedymonkey.dailies.export.Encoder;
 import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.export.ExportPreset;
@@ -47,6 +51,13 @@ final class ExportForms {
     private static final List<String> SOUND_CODECS = List.of("auto", "aac", "opus", "pcm");
     private static final List<String> APART = List.of("none", "files", "tracks", "both");
     private static final String DEFAULT_FOLDER = "dailies/exports";
+    private static final List<String> CAPTION_FILES = List.of("none", "srt", "vtt", "both");
+    private static final List<String> CAPTION_STYLES = List.of("lines", "word_by_word");
+    /** Caption files to write and whether to draw captions into the picture; the look is in the settings */
+    private static String captionFiles = "none";
+    private static boolean burnCaptions = false;
+    /** lines or word_by_word; null until chosen here, for the setting */
+    private static @Nullable String captionStyle = null;
 
     /** The codec choices that work on this machine, fastest first. Null until the encoder has been asked */
     private static volatile @Nullable List<Codecs.Choice> known = null;
@@ -339,7 +350,7 @@ final class ExportForms {
     /** A word for what the tab should hold now; when it changes the tab is built afresh */
     static String shape() {
         ask();
-        return (known == null ? "asking" : "known") + "|" + pictures() + "|" + naming + "|" + presetsRevision;
+        return (known == null ? "asking" : "known") + "|" + pictures() + "|" + naming + "|" + presetsRevision + "|" + queueRevision + "|" + queueShape();
     }
 
     static void build(Form form) {
@@ -437,6 +448,18 @@ final class ExportForms {
             form.add(new Gadget.Check(Kit.t("export.sound"), () -> EditorState.exportSound, on -> EditorState.exportSound = on).tip(Kit.t("export.sound.tip")));
         }
 
+        // --- What was said (EXP-11, EXP-15)
+        form.add(new Gadget.Heading(Kit.t("export.heading.captions")));
+        form.add(pair("export.captions.files", "export.captions.files.tip", new Gadget.Dropdown<>(CAPTION_FILES, id -> Kit.t("export.captions.files." + id),
+            () -> captionFiles, id -> captionFiles = id)));
+        form.add(new Gadget.Check(Kit.t("export.captions.burn"), () -> burnCaptions, on -> burnCaptions = on).tip(Kit.t("export.captions.burn.tip")));
+        form.add(new Told(pair("export.captions.style", "export.captions.style.tip", new Gadget.Dropdown<>(CAPTION_STYLES, id -> Kit.t("export.captions.style." + id),
+            ExportForms::captionStyleNow, id -> captionStyle = id))).unless(() -> burnCaptions ? null : Kit.t("export.captions.needs_burn")));
+        form.add(new Gadget.Check(Kit.t("export.captions.speakers"), () -> Host.get().setting("captionSpeakerNames", true), on -> saveSetting("captionSpeakerNames", on))
+            .tip(Kit.t("export.captions.speakers.tip")));
+        form.add(new Gadget.Check(Kit.t("export.captions.preview"), () -> Host.get().setting("captionPreview", false), on -> saveSetting("captionPreview", on))
+            .tip(Kit.t("export.captions.preview.tip")));
+
         // --- Where it goes
         form.add(new Gadget.Heading(Kit.t("export.heading.output")));
         form.add(pair("export.folder", "export.folder.tip", new Entry(() -> folder, typed -> {
@@ -466,7 +489,8 @@ final class ExportForms {
         Supplier<Component> busy = () -> Export.active() ? Kit.t("export.result.running") : !Playback.loaded() || Playback.jumping() ? Kit.t("export.not_now") : null;
         Gadget begin = new Gadget.Push(Kit.t("export.start"), () -> start(false)).when(() -> busy.get() == null).tip(Kit.t("export.start.tip"));
         Gadget still = new Gadget.Push(Kit.t("export.still"), () -> start(true)).when(() -> busy.get() == null).tip(Kit.t("export.still.tip"));
-        form.add(new Told(new Gadget.Line(begin, still)).unless(busy));
+        Gadget queue = new Gadget.Push(Kit.t("export.queue.add"), ExportForms::addToQueue).when(() -> Playback.loaded() && !Playback.jumping()).tip(Kit.t("export.queue.add.tip"));
+        form.add(new Told(new Gadget.Line(begin, still, queue)).unless(busy));
         form.add(new Gadget.Note(ExportForms::resultWords, Controls.PARCHMENT).action(ExportForms::openFolder).tip(Kit.t("export.result.tip")));
         form.add(new Gadget.Note(() -> {
             String note = Export.lastNote();
@@ -522,6 +546,9 @@ final class ExportForms {
         }
         rarer.add(new Gadget.Check(Kit.t("export.overwrite"), () -> overwrite, on -> overwrite = on).tip(Kit.t("export.overwrite.tip")));
         form.add(rarer);
+
+        // --- Exports waiting to run, here or in the background
+        addQueue(form);
     }
 
     /** A named row whose control and name give the same explanation */
@@ -686,36 +713,10 @@ final class ExportForms {
             EditorState.say(Kit.t("export.result.running"));
             return;
         }
-        boolean pictures = still || pictures();
-        Export.Settings settings = new Export.Settings();
-        settings.width = EditorState.exportWidth;
-        settings.height = EditorState.exportHeight;
-        if (!pictures) {
-            // Video formats want even sizes
-            settings.width += settings.width & 1;
-            settings.height += settings.height & 1;
-            if (choice() == null) {
-                EditorState.say(Kit.t("export.no_encoder"));
-                return;
-            }
-            settings.bitrate = bitrate();
-            settings.videoCodec = EditorState.exportCodec;
-            settings.encoder = EditorState.exportEncoder.isEmpty() ? null : EditorState.exportEncoder;
-            settings.audio = EditorState.exportSound;
-            settings.stereo = EditorState.exportStereo;
-            settings.audioCodec = EditorState.exportSoundCodec;
-            settings.stemFiles = EditorState.exportSound && stemFiles;
-            settings.stemTracks = EditorState.exportSound && stemTracks;
-            Component fallback = fallbackWords();
-            ExportPreset from = chosen();
-            settings.note = from != null && matches(from) && !fallback.getString().isEmpty() ? fallback.getString() : null;
+        Export.Settings settings = settingsNow(still);
+        if (settings == null) {
+            return;
         }
-        settings.container = still ? PICTURES : EditorState.exportContainer;
-        settings.framesPerSecond = EditorState.exportRate;
-        settings.hideGui = EditorState.exportHideHud;
-        settings.supersample = EditorState.exportSupersample;
-        settings.transparent = EditorState.exportTransparent;
-        settings.still = still;
 
         Path target = folder();
         String wanted = fileName(still);
@@ -742,6 +743,214 @@ final class ExportForms {
                 Host.LOGGER.error("Dailies: the export could not start", e);
                 EditorState.say(Kit.t("export.result.failed", String.valueOf(e.getMessage())));
             }
+        });
+    }
+
+    /** What the tab holds, as export settings without a file; null, having said why, when it cannot be exported */
+    private static Export.@Nullable Settings settingsNow(boolean still) {
+        boolean pictures = still || pictures();
+        Export.Settings settings = new Export.Settings();
+        settings.width = EditorState.exportWidth;
+        settings.height = EditorState.exportHeight;
+        if (!pictures) {
+            // Video formats want even sizes
+            settings.width += settings.width & 1;
+            settings.height += settings.height & 1;
+            if (choice() == null) {
+                EditorState.say(Kit.t("export.no_encoder"));
+                return null;
+            }
+            settings.bitrate = bitrate();
+            settings.videoCodec = EditorState.exportCodec;
+            settings.encoder = EditorState.exportEncoder.isEmpty() ? null : EditorState.exportEncoder;
+            settings.audio = EditorState.exportSound;
+            settings.stereo = EditorState.exportStereo;
+            settings.audioCodec = EditorState.exportSoundCodec;
+            settings.stemFiles = EditorState.exportSound && stemFiles;
+            settings.stemTracks = EditorState.exportSound && stemTracks;
+            Component fallback = fallbackWords();
+            ExportPreset from = chosen();
+            settings.note = from != null && matches(from) && !fallback.getString().isEmpty() ? fallback.getString() : null;
+        }
+        settings.container = still ? PICTURES : EditorState.exportContainer;
+        settings.framesPerSecond = EditorState.exportRate;
+        settings.hideGui = EditorState.exportHideHud;
+        settings.supersample = EditorState.exportSupersample;
+        settings.transparent = EditorState.exportTransparent;
+        settings.still = still;
+        if (!still) {
+            boolean[] files = Captions.files(captionFiles);
+            settings.captionSrt = files[0];
+            settings.captionVtt = files[1];
+            settings.captionSpeakers = Host.get().setting("captionSpeakerNames", true);
+            settings.burnCaptions = burnCaptions;
+            settings.captionStyle = Captions.style(captionStyleNow());
+        }
+        return settings;
+    }
+
+    // ------------------------------------------------------------------ The queue (EXP-10, EXP-13)
+
+    /** Puts what the tab holds on the export queue, exactly as it is, to run later */
+    static void addToQueue() {
+        if (!Playback.loaded() || Playback.jumping()) {
+            EditorState.say(Kit.t("export.not_now"));
+            return;
+        }
+        Export.Settings settings = settingsNow(false);
+        if (settings == null) {
+            return;
+        }
+        ExportPreset from = chosen();
+        ExportQueue.Job job = QueueRunner.jobForOpen(-1, from == null ? null : from.name(), folder().resolve(fileName(false)).toString());
+        job.settings = QueueRunner.snapshot(settings);
+        job.captionFiles = captionFiles;
+        job.captionSpeakers = settings.captionSpeakers;
+        job.burnCaptions = burnCaptions;
+        job.captionStyle = captionStyleNow();
+        Controls.offThread(() -> {
+            // The background game reads the scene from the recording's file
+            QueueRunner.add(job);
+        }, Kit.t("export.queue.add_failed"), () -> {
+            EditorSession.saveNow();
+            queueRevision++;
+            EditorState.say(Kit.t("export.queue.added", job.title()));
+        });
+    }
+
+    private static int queueRevision = 0;
+
+    /** Changes the queue file away from the client thread; a refusal is said in the editor */
+    private static void changeQueue(java.util.function.Consumer<ExportQueue> change) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                ExportQueue.update(QueueRunner.file(), queue -> {
+                    change.accept(queue);
+                    return null;
+                });
+                QueueRunner.refresh();
+            } catch (IllegalStateException | IllegalArgumentException refused) {
+                Minecraft.getInstance().execute(() -> EditorState.say(Component.literal(String.valueOf(refused.getMessage()))));
+            } catch (Exception e) {
+                Host.LOGGER.error("Dailies: the export queue could not be changed", e);
+                Minecraft.getInstance().execute(() -> EditorState.say(Kit.t("export.queue.change_failed")));
+            }
+        }, Util.ioPool());
+    }
+
+    private static void startQueue(boolean background) {
+        CompletableFuture.runAsync(() -> {
+            String said;
+            try {
+                said = QueueRunner.start(background, false);
+            } catch (IllegalStateException | IllegalArgumentException refused) {
+                said = refused.getMessage();
+            } catch (Exception e) {
+                Host.LOGGER.error("Dailies: the export queue could not start", e);
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                said = String.valueOf(cause.getMessage());
+            }
+            String words = said;
+            Minecraft.getInstance().execute(() -> EditorState.say(Component.literal(String.valueOf(words))));
+        }, Util.ioPool());
+    }
+
+    /** The job's line in the list: its file, its scene, and how it stands */
+    private static Component jobWords(String id) {
+        ExportQueue.Job job = QueueRunner.view().job(id);
+        if (job == null) {
+            return Component.empty();
+        }
+        ExportQueue.Job here = QueueRunner.current();
+        String state;
+        if (job.state == ExportQueue.State.RUNNING) {
+            double share = here != null && here.id.equals(id) && Export.active() && Export.totalFrames() > 0 ? (double) Export.frame() / Export.totalFrames() : job.progress();
+            state = Kit.t("export.queue.state.running_at", Math.round(share * 100.0)).getString();
+        } else {
+            state = Kit.t("export.queue.state." + job.state.word()).getString();
+        }
+        return Kit.t("export.queue.job", job.title(), job.scene, state);
+    }
+
+    private static Component jobTip(String id) {
+        ExportQueue.Job job = QueueRunner.view().job(id);
+        if (job == null) {
+            return Kit.t("export.queue.job.tip_gone");
+        }
+        String why = job.error != null ? job.error : job.note != null ? job.note : "";
+        return Kit.t("export.queue.job.tip", job.title(), job.recordingName.isEmpty() ? job.recording : job.recordingName, job.scene,
+            job.preset == null ? "-" : job.preset, why);
+    }
+
+    private static Component queueStatus() {
+        if (QueueRunner.runningHere()) {
+            String because = QueueRunner.hereBecause();
+            return because == null ? Kit.t("export.queue.status.here") : Kit.t("export.queue.status.here_because", because);
+        }
+        if (QueueRunner.workerAlive()) {
+            ExportQueue.Worker worker = QueueRunner.view().worker();
+            return Kit.t("export.queue.status.background", worker == null ? 0 : worker.done);
+        }
+        String last = QueueRunner.lastWords();
+        return last == null ? Component.empty() : Component.literal(last);
+    }
+
+    private static boolean queueBusy() {
+        return QueueRunner.runningHere() || QueueRunner.workerAlive();
+    }
+
+    /** The jobs by id, so the tab is built again when they come and go */
+    private static String queueShape() {
+        StringBuilder shape = new StringBuilder();
+        for (ExportQueue.Job job : QueueRunner.view().jobs()) {
+            // The state too, so the explanation of a job that has failed says why
+            shape.append(job.id).append(':').append(job.state.word()).append(',');
+        }
+        return shape.toString();
+    }
+
+    private static void addQueue(Form form) {
+        form.add(new Gadget.Heading(Kit.t("export.heading.queue")));
+        List<ExportQueue.Job> jobs = QueueRunner.view().jobs();
+        if (jobs.isEmpty()) {
+            form.add(new Gadget.Note(Kit.t("export.queue.empty")));
+        }
+        for (ExportQueue.Job job : jobs) {
+            String id = job.id;
+            Supplier<ExportQueue.State> state = () -> {
+                ExportQueue.Job now = QueueRunner.view().job(id);
+                return now == null ? ExportQueue.State.DONE : now.state;
+            };
+            Gadget.Words line = new Gadget.Words(() -> jobWords(id), Controls.PARCHMENT);
+            Gadget up = Gadget.Push.icon(Kit.Icon.UP, Kit.t("export.queue.up.tip"), () -> changeQueue(queue -> queue.move(id, queue.indexOf(id) - 1)));
+            Gadget down = Gadget.Push.icon(Kit.Icon.DOWN, Kit.t("export.queue.down.tip"), () -> changeQueue(queue -> queue.move(id, queue.indexOf(id) + 1)));
+            Gadget.Push hold = Gadget.Push.icon(() -> state.get() == ExportQueue.State.WAITING ? Kit.Icon.PAUSE : Kit.Icon.PLAY, Kit.t("export.queue.hold.tip"),
+                () -> changeQueue(queue -> queue.setPaused(id, state.get() == ExportQueue.State.WAITING)));
+            hold.liveTip(() -> Kit.t(state.get() == ExportQueue.State.WAITING ? "export.queue.hold.tip" : "export.queue.release.tip"));
+            hold.when(() -> state.get() != ExportQueue.State.RUNNING && state.get() != ExportQueue.State.DONE);
+            Gadget remove = Gadget.Push.icon(Kit.Icon.CROSS, Kit.t("export.queue.remove.tip"), () -> changeQueue(queue -> queue.remove(id)))
+                .when(() -> state.get() != ExportQueue.State.RUNNING);
+            Gadget.Line row = new Gadget.Line(line, up, down, hold, remove);
+            row.tip(jobTip(id));
+            form.add(row);
+        }
+        form.add(new Gadget.Note(ExportForms::queueStatus, Controls.PARCHMENT_DIM));
+        Supplier<Component> nothingWaiting = () -> QueueRunner.view().next() == null ? Kit.t("export.queue.nothing_waiting") : queueBusy() ? Kit.t("export.queue.busy") : null;
+        Gadget background = new Gadget.Push(Kit.t("export.queue.background"), () -> startQueue(true)).tip(Kit.t("export.queue.background.tip"));
+        Gadget here = new Gadget.Push(Kit.t("export.queue.here"), () -> startQueue(false)).tip(Kit.t("export.queue.here.tip"));
+        form.add(new Told(new Gadget.Line(background, here)).unless(nothingWaiting));
+        Gadget stop = new Gadget.Push(Kit.t("export.queue.stop"), QueueRunner::stop).when(ExportForms::queueBusy).tip(Kit.t("export.queue.stop.tip"));
+        Gadget clear = new Gadget.Push(Kit.t("export.queue.clear"), () -> changeQueue(ExportQueue::clearEnded))
+            .when(() -> QueueRunner.view().jobs().stream().anyMatch(one -> one.state.ended())).tip(Kit.t("export.queue.clear.tip"));
+        form.add(new Gadget.Line(stop, clear));
+    }
+
+    private static String captionStyleNow() {
+        return captionStyle != null ? captionStyle : Host.get().setting("captionStyle", "LINES").toLowerCase(Locale.ROOT);
+    }
+
+    private static void saveSetting(String name, Object value) {
+        Controls.offThread(() -> Host.get().saveSetting(name, value), Kit.t("export.captions.save_failed"), () -> {
         });
     }
 

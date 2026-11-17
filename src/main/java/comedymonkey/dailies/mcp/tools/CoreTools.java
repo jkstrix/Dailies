@@ -52,6 +52,7 @@ public final class CoreTools {
         PlaybackTools.register(registrar);
         LibraryTools.register(registrar);
         ExportTools.register(registrar);
+        ExportQueueTools.register(registrar);
         SmartCameraTools.register(registrar);
         EditingTools.register(registrar);
         LooksTools.register(registrar);

@@ -113,6 +113,7 @@ public final class SelfTest {
             ExportPresetSteps.run(this);
             // With the recording that has the machines in it still open: Flywheel's contraption, Iris's clock, Distant Horizons
             RendererSteps.run(this);
+            QueueSteps.run(this);
             PlaybackSteps.close(this);
             // While the recording with the machines in it is still there: the library steps take it apart
             WatchingSteps.machines(this);

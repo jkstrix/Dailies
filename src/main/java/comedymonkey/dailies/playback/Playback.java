@@ -520,7 +520,8 @@ public final class Playback {
             net.neoforged.fml.config.ConfigTracker.INSTANCE.loadDefaultServerConfigs();
             serverConfigsLoaded = true;
         }
-        file = RecordingFile.openForEditing(path);
+        // The background export game only reads recordings (EXP-13)
+        file = comedymonkey.dailies.export.Worker.active() ? RecordingFile.open(path) : RecordingFile.openForEditing(path);
         manifest = file.manifest();
         if (manifest.segments.isEmpty()) {
             throw new IllegalStateException("The recording is empty");

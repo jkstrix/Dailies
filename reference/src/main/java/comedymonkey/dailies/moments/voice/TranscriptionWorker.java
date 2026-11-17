@@ -14,7 +14,8 @@ import comedymonkey.dailies.moments.storage.MomentsStorage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -148,13 +149,17 @@ public class TranscriptionWorker {
 
         String model = MomentsConfig.whisperModel();
         String language = MomentsConfig.whisperLanguage();
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("model", model);
-        fields.put("response_format", "verbose_json");
+        List<Map.Entry<String, String>> fields = new ArrayList<>();
+        fields.add(Map.entry("model", model));
+        fields.add(Map.entry("response_format", "verbose_json"));
+        // When each word was said, for captions that follow the speech (EXP-11, EXP-15); the sentences as well, which
+        // the filter below works on. A server that knows neither leaves the words out and they are spread evenly later
+        fields.add(Map.entry("timestamp_granularities[]", "segment"));
+        fields.add(Map.entry("timestamp_granularities[]", "word"));
         // Lets the server skip stretches without voice instead of inventing words for them
-        fields.put("vad_filter", "true");
+        fields.add(Map.entry("vad_filter", "true"));
         if (!language.isEmpty()) {
-            fields.put("language", language);
+            fields.add(Map.entry("language", language));
         }
 
         MomentsHttp.Result result;
@@ -202,6 +207,9 @@ public class TranscriptionWorker {
         int nonSpeech = 0;
 
         JsonArray segments = MJson.arr(response, "segments");
+        // Word timings come either inside each segment or as one list beside them, as OpenAI's API gives them
+        JsonArray looseWords = MJson.arr(response, "words");
+        boolean[] wordTaken = new boolean[looseWords.size()];
         for (JsonElement element : segments) {
             if (!element.isJsonObject()) {
                 continue;
@@ -227,6 +235,10 @@ public class TranscriptionWorker {
                 all.add(json);
                 nonSpeech += 1;
                 continue;
+            }
+            JsonArray words = segmentWords(segment, looseWords, wordTaken);
+            if (!words.isEmpty()) {
+                json.add("words", words);
             }
             all.add(json);
             kept.add(json);
@@ -260,6 +272,53 @@ public class TranscriptionWorker {
         metadata.addProperty("non_speech_segments", nonSpeech);
         metadata.addProperty("raw_text", MJson.str(response, "text", "").trim());
         metadata.addProperty("transcribed_at", System.currentTimeMillis());
+    }
+
+    /**
+     * The words of one kept segment, each with its start and end in seconds of the audio: the segment's own list when
+     * it has one, else the words of the list beside the segments whose middle falls inside it, each used once. Empty
+     * when the server gave no word timings; the transcript then spreads the words evenly over the segment.
+     */
+    static JsonArray segmentWords(JsonObject segment, JsonArray looseWords, boolean[] taken) {
+        JsonArray words = new JsonArray();
+        JsonArray own = MJson.arr(segment, "words");
+        if (!own.isEmpty()) {
+            for (JsonElement element : own) {
+                addWord(words, element);
+            }
+            return words;
+        }
+        double start = MJson.dbl(segment, "start", 0);
+        double end = MJson.dbl(segment, "end", start);
+        for (int i = 0; i < looseWords.size(); i++) {
+            if (taken[i] || !looseWords.get(i).isJsonObject()) {
+                continue;
+            }
+            JsonObject word = looseWords.get(i).getAsJsonObject();
+            double middle = (MJson.dbl(word, "start", 0) + MJson.dbl(word, "end", 0)) / 2.0;
+            if (middle >= start - 0.05 && middle <= end + 0.05) {
+                taken[i] = true;
+                addWord(words, word);
+            }
+        }
+        return words;
+    }
+
+    private static void addWord(JsonArray words, JsonElement element) {
+        if (!element.isJsonObject()) {
+            return;
+        }
+        JsonObject given = element.getAsJsonObject();
+        String said = MJson.str(given, "word", MJson.str(given, "text", "")).trim();
+        if (said.isEmpty()) {
+            return;
+        }
+        double start = MJson.dbl(given, "start", 0);
+        JsonObject word = new JsonObject();
+        word.addProperty("start", MJson.round(start));
+        word.addProperty("end", MJson.round(Math.max(start, MJson.dbl(given, "end", start))));
+        word.addProperty("word", said);
+        words.add(word);
     }
 
     private void fail(MomentsSession session, Job job, String error, boolean permanent) {

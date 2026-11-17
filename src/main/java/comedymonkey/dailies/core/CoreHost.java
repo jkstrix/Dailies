@@ -293,6 +293,12 @@ public final class CoreHost implements Host.Mod {
         }
     }
 
+    @Override
+    public String queueExport(int scene, @Nullable String preset, String file) throws Exception {
+        comedymonkey.dailies.export.ExportQueue.Job job = comedymonkey.dailies.export.QueueRunner.jobForOpen(scene, preset, file);
+        return comedymonkey.dailies.export.QueueRunner.add(job).id;
+    }
+
     private comedymonkey.dailies.edit.EditHistory openHistory() {
         if (!Playback.loaded() || !comedymonkey.dailies.editor.EditorSession.open()) {
             throw new IllegalStateException("No recording is open");

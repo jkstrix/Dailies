@@ -152,7 +152,7 @@ public final class Screens {
         event.addListener(new ReelButton(x, y - 24, true, Component.translatable("dailies.ui.title.settings"), button -> SettingsScreen.open(title)));
         event.addListener(new MomentsButton(x, y - 48, Component.translatable("dailies.ui.title.moments"), button -> Controls.openMomentsPage()));
 
-        if (!lookedForUnfinished && !SelfTest.asked()) {
+        if (!lookedForUnfinished && !SelfTest.asked() && !comedymonkey.dailies.export.Worker.active()) {
             lookedForUnfinished = true;
             CompletableFuture.supplyAsync(Recorder::unfinished, Util.ioPool()).whenComplete((found, error) -> minecraft.execute(() -> {
                 if (error != null) {

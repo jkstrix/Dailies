@@ -172,6 +172,10 @@ public final class LibraryIndex {
     }
 
     private void save() {
+        if (comedymonkey.dailies.export.Worker.active()) {
+            // The background export game keeps its index in memory: the game being played owns the file (EXP-13)
+            return;
+        }
         Stored stored = new Stored();
         stored.recordings = new ArrayList<>(this.entries.values());
         stored.recordings.sort(Comparator.comparing((Entry entry) -> entry.file));

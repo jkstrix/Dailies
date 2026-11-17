@@ -23,6 +23,18 @@ public final class DailiesConfig {
         HOLD, LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT, SMOOTH
     }
 
+    public enum CaptionStyle {
+        LINES, WORD_BY_WORD
+    }
+
+    public enum CaptionFont {
+        DEFAULT, UNIFORM
+    }
+
+    public enum CaptionPosition {
+        BOTTOM, MIDDLE, TOP
+    }
+
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
     private static final Map<String, Setting<?>> SETTINGS = new LinkedHashMap<>();
     private static String group = "";
@@ -51,6 +63,15 @@ public final class DailiesConfig {
         group("export", "Exporting video", () -> {
             text("defaultFileName", "{date}_{time}", "Default name of an exported file. {date} and {time} are filled in when the export starts");
             integer("throwawayFrames", 0, 0, 240, "Extra frames rendered and thrown away before each captured one, for shader packs that build up their image over time");
+            bool("exportQueueNotify", true, "Show a notification on the desktop when the export queue is done");
+            choice("captionStyle", CaptionStyle.LINES, "How captions drawn into the video show what was said: a line at a time, or each word as it is said, as short videos have them");
+            choice("captionFont", CaptionFont.DEFAULT, "The font of captions drawn into the video");
+            decimal("captionSize", 5.0, 2.0, 20.0, "The height of a line of captions drawn into the video, as a percentage of the picture's height");
+            text("captionColour", "white", "The colour of captions drawn into the video: red, orange, yellow, green, cyan, blue, purple, white, or #RRGGBB");
+            text("captionOutline", "black", "The colour of the outline round captions drawn into the video, as above. Empty for a plain shadow");
+            choice("captionPosition", CaptionPosition.BOTTOM, "Where captions drawn into the video sit");
+            bool("captionSpeakerNames", true, "Begin each caption with the name of whoever said it");
+            bool("captionPreview", false, "Show the captions in the editor's view, as they would be drawn into the video. They are never drawn into an export unless it asks for them");
         });
         group("editor", "The editor", () -> {
             choice("defaultInterpolation", Blend.SMOOTH, "How a new keyframe blends towards the next one");
@@ -125,6 +146,10 @@ public final class DailiesConfig {
 
     /** Write the settings file after one or more {@link Setting#setFrom} calls */
     public static void save() {
+        if (comedymonkey.dailies.export.Worker.active()) {
+            // The background export game never writes the settings (EXP-13); a change lasts until it closes
+            return;
+        }
         SPEC.save();
     }
 

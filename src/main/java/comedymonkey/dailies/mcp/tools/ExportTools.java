@@ -67,6 +67,11 @@ final class ExportTools {
                 .bool("transparent", "Keep the background transparent. Needs the scene's sky switched off and a format that can hold it")
                 .bool("reset_rng", "Accepted for compatibility. Frames are already drawn at exact recording times")
                 .bool("overwrite", "Replace output_path when it exists (default false)")
+                .string("caption_files", "Also write what was said in the range as captions beside the video, timed in video time: none (default), srt, vtt or both. "
+                    + "export_status lists them under 'caption_files'")
+                .bool("caption_speakers", "Begin each caption with the speaker's name (default: the captionSpeakerNames setting)")
+                .bool("burn_captions", "Draw what was said into the picture, in the font, size, colour, outline and place the caption settings give (default false)")
+                .string("caption_style", "lines or word_by_word, for captions drawn into the picture (default: the captionStyle setting)")
                 .required("output_path"),
             ExportTools::start);
 
@@ -182,7 +187,8 @@ final class ExportTools {
 
     private static JsonElement start(McpArgs args) throws Exception {
         CoreTools.allowOnly(args, "output_path", "width", "height", "framerate", "start_tick", "end_tick", "preset", "container", "video_codec", "encoder", "bitrate",
-            "record_audio", "stereo_audio", "audio_codec", "separate_audio", "no_gui", "ssaa", "transparent", "reset_rng", "overwrite");
+            "record_audio", "stereo_audio", "audio_codec", "separate_audio", "no_gui", "ssaa", "transparent", "reset_rng", "overwrite",
+            "caption_files", "caption_speakers", "burn_captions", "caption_style");
         ExportPreset preset = args.has("preset") ? preset(args.string("preset")) : null;
         String asked = args.has("container") ? args.string("container").toLowerCase(Locale.ROOT) : preset != null ? preset.container() : "mp4";
         String container = asked;
@@ -238,6 +244,22 @@ final class ExportTools {
             settings.stemTracks = apart[1];
         } catch (IllegalArgumentException e) {
             throw new McpToolException(e.getMessage());
+        }
+        try {
+            boolean[] captions = comedymonkey.dailies.export.Captions.files(args.optString("caption_files"));
+            settings.captionSrt = captions[0];
+            settings.captionVtt = captions[1];
+        } catch (IllegalArgumentException e) {
+            throw new McpToolException(e.getMessage());
+        }
+        settings.captionSpeakers = args.optBool("caption_speakers", comedymonkey.dailies.Host.get().setting("captionSpeakerNames", true));
+        settings.burnCaptions = args.optBool("burn_captions", false);
+        if (args.has("caption_style")) {
+            String style = args.string("caption_style").toLowerCase(Locale.ROOT);
+            if (!style.equals("lines") && !style.equals("word_by_word")) {
+                throw new McpToolException("'caption_style' must be lines or word_by_word");
+            }
+            settings.captionStyle = comedymonkey.dailies.export.Captions.style(style);
         }
         if (preset != null && preset.maxSeconds() > 0) {
             double seconds = Export.rangeSeconds(settings.startTick, settings.endTick);
@@ -458,6 +480,14 @@ final class ExportTools {
         }
         if (Export.lastNote() != null) {
             json.addProperty("note", Export.lastNote());
+        }
+        if (Export.captionNote() != null) {
+            json.addProperty("captions", Export.captionNote());
+        }
+        if (!Export.captionFiles().isEmpty()) {
+            JsonArray names = new JsonArray();
+            Export.captionFiles().forEach(file -> names.add(file.toAbsolutePath().toString()));
+            json.add("caption_files", names);
         }
         if (!Export.active()) {
             List<String> tracks = comedymonkey.dailies.sound.ExportSound.tracks();

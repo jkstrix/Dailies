@@ -8,6 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -34,9 +35,15 @@ public final class MomentsHttp {
     /** POST multipart/form-data with text fields and one file */
     public static Result postMultipart(String url, Map<String, String> fields, String fileField, String fileName, String fileContentType,
             byte[] fileContent, Duration timeout) throws IOException, InterruptedException {
+        return postMultipart(url, List.copyOf(fields.entrySet()), fileField, fileName, fileContentType, fileContent, timeout);
+    }
+
+    /** As above, for fields that may be given more than once, such as "timestamp_granularities[]" */
+    public static Result postMultipart(String url, List<Map.Entry<String, String>> fields, String fileField, String fileName, String fileContentType,
+            byte[] fileContent, Duration timeout) throws IOException, InterruptedException {
         String boundary = "----dailies" + UUID.randomUUID().toString().replace("-", "");
         ByteArrayOutputStream body = new ByteArrayOutputStream(fileContent.length + 1024);
-        for (Map.Entry<String, String> field : fields.entrySet()) {
+        for (Map.Entry<String, String> field : fields) {
             body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + field.getKey() + "\"\r\n\r\n"
                 + field.getValue() + "\r\n").getBytes(StandardCharsets.UTF_8));
         }
