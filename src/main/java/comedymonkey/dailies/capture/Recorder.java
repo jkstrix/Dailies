@@ -60,6 +60,8 @@ public final class Recorder {
 
     /** What an unfinished recording is called on disk until it is finished properly */
     public static final String WORKING_EXTENSION = ".dailies.recording";
+    /** The record that says an entity has just teleported and is to be shown at its new place at once */
+    public static final String SNAP = "dailies:snap";
 
     private static final int DEFAULT_SEGMENT_TICKS = 5 * 60 * 20;
     private static final int PART_TICKS = 40;
@@ -402,6 +404,12 @@ public final class Recorder {
             this.beginSegment(minecraft, listener);
         }
         this.own.tick(minecraft.player, 20 / Math.max(1, Math.min(20, Host.get().setting("recorderUpdatesPerSecond", 20))), this::write);
+        if (this.own.takeJumped()) {
+            LocalPlayer player = minecraft.player;
+            java.nio.ByteBuffer snap = java.nio.ByteBuffer.allocate(4 + 24 + 8);
+            snap.putInt(player.getId()).putDouble(player.getX()).putDouble(player.getY()).putDouble(player.getZ()).putFloat(player.getYRot()).putFloat(player.getXRot());
+            this.writeExtension(SNAP, snap.array());
+        }
 
         this.tick++;
         this.pendingTicks++;

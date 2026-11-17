@@ -67,6 +67,23 @@ public final class Playback {
 
     public static void init() {
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
+        // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks
+        PlaybackExtensions.register(comedymonkey.dailies.capture.Recorder.SNAP, (data, from, length, skipping) -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (length < 36 || minecraft.level == null) {
+                return;
+            }
+            java.nio.ByteBuffer in = java.nio.ByteBuffer.wrap(data, from, length);
+            net.minecraft.world.entity.Entity entity = minecraft.level.getEntity(in.getInt());
+            if (entity == null || entity == minecraft.player) {
+                return;
+            }
+            double x = in.getDouble(), y = in.getDouble(), z = in.getDouble();
+            float yaw = in.getFloat(), pitch = in.getFloat();
+            entity.moveTo(x, y, z, yaw, pitch);
+            entity.setOldPosAndRot();
+            entity.lerpTo(x, y, z, yaw, pitch, 1);
+        });
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> Viewer.frame());
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> {
             if (active && !leaving) {

@@ -34,6 +34,16 @@ final class OwnPlayer {
     private boolean known = false;
     private final Map<EquipmentSlot, ItemStack> equipment = new EnumMap<>(EquipmentSlot.class);
     private int ticks = 0;
+    /** A move of more than this many blocks in one report is a teleport, not travel */
+    private static final double JUMP_BLOCKS = 4.0;
+    private boolean jumped = false;
+
+    /** Whether the last tick reported a teleport. Asking clears it */
+    boolean takeJumped() {
+        boolean was = this.jumped;
+        this.jumped = false;
+        return was;
+    }
 
     // Where a game watching this player would be drawing them: it eases towards each reported position over three
     // ticks. A snapshot places the recorder here, so a jump shows them exactly where continuous play would
@@ -113,8 +123,21 @@ final class OwnPlayer {
                     out.accept(new ClientboundMoveEntityPacket.Rot(player.getId(), angle(player.getYRot()), angle(player.getXRot()), player.onGround()));
                 }
             } else if (moved || turned) {
+                // Further in one step than anyone walks, runs or flies: a teleport. A watching game would slide the player
+                // there over three ticks, through whatever lies between, so playback is told to put them there at once
+                double far = this.known ? (player.getX() - this.x) * (player.getX() - this.x) + (player.getY() - this.y) * (player.getY() - this.y)
+                    + (player.getZ() - this.z) * (player.getZ() - this.z) : 0.0;
                 this.report(player, true);
                 out.accept(new ClientboundTeleportEntityPacket(player));
+                if (far > JUMP_BLOCKS * JUMP_BLOCKS) {
+                    this.jumped = true;
+                    this.shownX = this.targetX;
+                    this.shownY = this.targetY;
+                    this.shownZ = this.targetZ;
+                    this.shownYRot = this.targetYRot;
+                    this.shownXRot = this.targetXRot;
+                    this.steps = 0;
+                }
             }
             this.x = player.getX();
             this.y = player.getY();
