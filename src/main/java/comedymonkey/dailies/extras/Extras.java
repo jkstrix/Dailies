@@ -12,6 +12,20 @@ public final class Extras {
     private Extras() {
     }
 
+    /** The recorder's HUD at this moment of the open recording, as {@link HudLayer#numbers()} gives it; null when there is none */
+    public static float[] recordedHud() {
+        return HudLayer.numbers();
+    }
+
+    /** The same numbers for the live game's own player, as a recording would hold them now; null outside a world */
+    public static float[] liveHud() {
+        net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (minecraft.player == null || minecraft.gameMode == null) {
+            return null;
+        }
+        return HudLayer.numbers(HudState.of(minecraft.player, minecraft.gameMode.getPlayerMode()));
+    }
+
     /**
      * @param modBus the mod's own event bus, for the key binding and the HUD layer
      */

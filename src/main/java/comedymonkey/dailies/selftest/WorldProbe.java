@@ -1,0 +1,574 @@
+package comedymonkey.dailies.selftest;
+
+import comedymonkey.dailies.capture.Snapshots;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.AgeableMob;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Leashable;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.Function;
+
+/**
+ * Everything about the world a game holds at one moment that the generated-terrain steps compare between the live
+ * game and playback: which chunks are loaded and what is in each (blocks, biomes, light, block entities), every
+ * entity, the sky, and whatever a step has asked to be watched closely. Taken on the client thread.
+ * <p>
+ * How exact each comparison is, and why:
+ * <ul>
+ * <li>Loaded chunks, blocks, biomes, block entities, the set of entities: exact. A recording holds every packet that
+ * changed them, so nothing excuses a difference.</li>
+ * <li>Blocks in the seven-by-seven chunks around the recorder are compared place by place; further out, by how many of
+ * each block state every sixteen-block section holds, which misses only two blocks swapping places.</li>
+ * <li>Light: exact, at a lattice of places in every chunk and at every block of a watched box.</li>
+ * <li>A named entity's place: a third of a block (MOD-2) plus one tick of its own travel, because a jump runs one
+ * more game tick after the last recorded packet than the live game had run when the note was taken.</li>
+ * <li>The recorder's place: a third of a block plus two and a half ticks of travel. A watching game eases another
+ * player towards each reported place over three ticks, so at speed they are drawn two ticks behind where the live
+ * player stood; that is how every multiplayer game shows other players, and playback is one.</li>
+ * <li>The time of day: two ticks. Rain and thunder: 0.03, three ticks of a change. Sky colour: 0.03 a channel.</li>
+ * </ul>
+ */
+final class WorldProbe {
+
+    record Tracked(String type, Vec3 at, double speed, String state) {
+    }
+
+    /** A box of blocks compared place by place, with its light when asked */
+    record Region(String name, BlockPos min, BlockPos max, boolean light) {
+        static Region around(String name, BlockPos centre, int across, int down, int up, boolean light) {
+            return new Region(name, centre.offset(-across, -down, -across), centre.offset(across, up, across), light);
+        }
+
+        /** Where a block of the box is in the arrays a note keeps for it */
+        int index(BlockPos pos) {
+            int width = this.max.getX() - this.min.getX() + 1;
+            int depth = this.max.getZ() - this.min.getZ() + 1;
+            return ((pos.getY() - this.min.getY()) * depth + pos.getZ() - this.min.getZ()) * width + pos.getX() - this.min.getX();
+        }
+
+        int size() {
+            return (this.max.getX() - this.min.getX() + 1) * (this.max.getY() - this.min.getY() + 1) * (this.max.getZ() - this.min.getZ() + 1);
+        }
+    }
+
+    /** The columns of a chunk whose light is sampled, as x then z */
+    private static final int[] LIGHT_COLUMNS = {1, 1, 8, 8, 14, 14, 3, 12, 12, 3};
+    private static final int LIGHT_STEP = 24;
+    /** How far from the recorder's chunk blocks are compared place by place */
+    private static final int NEAR = 3;
+    /** How far from the recorder's chunk every block entity's own data is compared */
+    private static final int NEAR_DATA = 2;
+    /** Further than any chunk a game can hold from its player */
+    private static final int REACH = 40;
+
+    int tick;
+    String label;
+    String dimension;
+    int centreX, centreZ;
+    long dayTime;
+    float rain, thunder;
+    /** Null while lightning lights the sky, which each game times for itself */
+    double[] sky;
+    String screen;
+    float[] hud;
+    Tracked recorder;
+    final Map<Long, long[]> blocks = new HashMap<>();
+    final Map<Long, Long> biomes = new HashMap<>();
+    final Map<Long, byte[]> light = new HashMap<>();
+    final Map<Long, String> blockEntities = new HashMap<>();
+    final Map<String, String> blockEntityData = new TreeMap<>();
+    final TreeMap<Integer, String> entities = new TreeMap<>();
+    final Map<String, Tracked> named = new TreeMap<>();
+    final Map<Region, int[]> regionBlocks = new LinkedHashMap<>();
+    final Map<Region, byte[]> regionLight = new LinkedHashMap<>();
+    final Map<String, Function<Minecraft, String>> askers = new LinkedHashMap<>();
+    final Map<String, String> facts = new LinkedHashMap<>();
+    long nanos;
+
+    private WorldProbe() {
+    }
+
+    /**
+     * @param like     the live note this is to be compared with, or null when this is the live note
+     * @param recorder the recorder's player: the game's own player live, the recorded one in playback
+     */
+    static WorldProbe take(Minecraft minecraft, WorldProbe like, Entity recorder, int tick, String label, List<Region> regions, Map<String, Function<Minecraft, String>> askers) {
+        long started = System.nanoTime();
+        ClientLevel level = minecraft.level;
+        WorldProbe probe = new WorldProbe();
+        probe.tick = tick;
+        probe.label = label;
+        probe.dimension = level.dimension().location().toString();
+        // What is waiting to be lit is lit first, as the next drawn frame would do: both games are read as they would be seen
+        for (int i = 0; i < 4000 && !level.isLightUpdateQueueEmpty(); i++) {
+            level.pollLightUpdates();
+        }
+        level.getChunkSource().getLightEngine().runLightUpdates();
+
+        ChunkPos centre = recorder != null ? recorder.chunkPosition() : new ChunkPos(0, 0);
+        probe.centreX = like != null ? like.centreX : centre.x;
+        probe.centreZ = like != null ? like.centreZ : centre.z;
+        probe.dayTime = level.getDayTime();
+        probe.rain = level.getRainLevel(1.0F);
+        probe.thunder = level.getThunderLevel(1.0F);
+        if (level.getSkyFlashTime() <= 0 && recorder != null) {
+            Vec3 colour = level.getSkyColor(recorder.getEyePosition(), 1.0F);
+            probe.sky = new double[]{colour.x, colour.y, colour.z};
+        }
+        probe.screen = minecraft.screen == null ? "none" : minecraft.screen.getClass().getName();
+        if (recorder != null) {
+            probe.recorder = tracked(recorder);
+        }
+
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int minY = level.getMinBuildHeight();
+        int maxY = level.getMaxBuildHeight();
+        for (int x = probe.centreX - REACH; x <= probe.centreX + REACH; x++) {
+            for (int z = probe.centreZ - REACH; z <= probe.centreZ + REACH; z++) {
+                LevelChunk chunk = level.getChunkSource().getChunk(x, z, ChunkStatus.FULL, false);
+                if (chunk == null) {
+                    continue;
+                }
+                long key = ChunkPos.asLong(x, z);
+                boolean near = Math.abs(x - probe.centreX) <= NEAR && Math.abs(z - probe.centreZ) <= NEAR;
+                LevelChunkSection[] sections = chunk.getSections();
+                long[] hashes = new long[sections.length];
+                long biomeHash = 7;
+                for (int i = 0; i < sections.length; i++) {
+                    LevelChunkSection section = sections[i];
+                    hashes[i] = section.hasOnlyAir() ? 0 : near ? placeByPlace(section) : byCount(section);
+                    for (int quart = 0; quart < 4; quart++) {
+                        Holder<Biome> biome = section.getNoiseBiome(quart, quart ^ 1, 3 - quart);
+                        biomeHash = biomeHash * 31 + biome.unwrapKey().map(name -> name.location().hashCode()).orElse(0);
+                    }
+                }
+                probe.blocks.put(key, hashes);
+                probe.biomes.put(key, biomeHash);
+
+                int perColumn = (maxY - minY) / LIGHT_STEP + 1;
+                byte[] lit = new byte[LIGHT_COLUMNS.length / 2 * perColumn];
+                int index = 0;
+                for (int column = 0; column < LIGHT_COLUMNS.length; column += 2) {
+                    int blockX = (x << 4) + LIGHT_COLUMNS[column];
+                    int blockZ = (z << 4) + LIGHT_COLUMNS[column + 1];
+                    lit[index++] = lightAt(level, pos.set(blockX, lightY(chunk, blockX, blockZ, 0, minY, maxY), blockZ));
+                    for (int step = 1; step < perColumn; step++) {
+                        lit[index++] = lightAt(level, pos.set(blockX, lightY(chunk, blockX, blockZ, step, minY, maxY), blockZ));
+                    }
+                }
+                probe.light.put(key, lit);
+
+                if (!chunk.getBlockEntities().isEmpty()) {
+                    TreeMap<String, Integer> kinds = new TreeMap<>();
+                    boolean data = Math.abs(x - probe.centreX) <= NEAR_DATA && Math.abs(z - probe.centreZ) <= NEAR_DATA;
+                    for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                        String kind = String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType()));
+                        kinds.merge(kind, 1, Integer::sum);
+                        if (data) {
+                            String said;
+                            try {
+                                said = blockEntity.getUpdateTag(level.registryAccess()).toString();
+                            } catch (Throwable t) {
+                                said = "cannot say (" + t.getClass().getSimpleName() + ")";
+                            }
+                            probe.blockEntityData.put(kind + " at " + blockEntity.getBlockPos().toShortString(), said);
+                        }
+                    }
+                    probe.blockEntities.put(key, kinds.toString());
+                }
+            }
+        }
+
+        for (Entity entity : level.entitiesForRendering()) {
+            if (entity.getId() == Snapshots.VIEWER_ENTITY_ID || (like != null && entity == minecraft.player)) {
+                // The person watching is not in the recording
+                continue;
+            }
+            probe.entities.put(entity.getId(), BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath());
+            if (entity.hasCustomName() && entity != recorder) {
+                probe.named.put(entity.getCustomName().getString(), tracked(entity));
+            }
+        }
+
+        for (Region region : regions) {
+            int[] states = new int[region.size()];
+            byte[] lit = region.light() ? new byte[region.size()] : null;
+            int index = 0;
+            for (int y = region.min().getY(); y <= region.max().getY(); y++) {
+                for (int z = region.min().getZ(); z <= region.max().getZ(); z++) {
+                    for (int x = region.min().getX(); x <= region.max().getX(); x++) {
+                        pos.set(x, y, z);
+                        states[index] = Block.getId(level.getBlockState(pos));
+                        if (lit != null) {
+                            lit[index] = lightAt(level, pos);
+                        }
+                        index++;
+                    }
+                }
+            }
+            probe.regionBlocks.put(region, states);
+            if (lit != null) {
+                probe.regionLight.put(region, lit);
+            }
+        }
+
+        probe.askers.putAll(askers);
+        probe.askers.forEach((what, asker) -> {
+            String answer;
+            try {
+                answer = asker.apply(minecraft);
+            } catch (Throwable t) {
+                answer = "cannot say (" + t + ")";
+            }
+            probe.facts.put(what, answer);
+        });
+        probe.nanos = System.nanoTime() - started;
+        return probe;
+    }
+
+    /** The heights a column's light is read at: just above the ground first, then a ladder from the bottom of the world */
+    private static int lightY(LevelChunk chunk, int x, int z, int step, int minY, int maxY) {
+        if (step == 0) {
+            return Math.min(maxY - 1, chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15) + 1);
+        }
+        return Math.min(maxY - 1, minY + 8 + (step - 1) * LIGHT_STEP);
+    }
+
+    private static byte lightAt(ClientLevel level, BlockPos pos) {
+        return (byte) (level.getBrightness(LightLayer.SKY, pos) << 4 | level.getBrightness(LightLayer.BLOCK, pos));
+    }
+
+    private static long placeByPlace(LevelChunkSection section) {
+        long hash = 1125899906842597L;
+        BlockState last = null;
+        int id = 0;
+        for (int y = 0; y < 16; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    BlockState state = section.getBlockState(x, y, z);
+                    if (state != last) {
+                        last = state;
+                        id = Block.getId(state);
+                    }
+                    hash = hash * 31 + id;
+                }
+            }
+        }
+        return hash == 0 ? 1 : hash;
+    }
+
+    private static long byCount(LevelChunkSection section) {
+        long[] sum = {0};
+        section.getStates().count((state, count) -> sum[0] += (Block.getId(state) + 1) * 0x9E3779B97F4A7C15L * count);
+        return sum[0] == 0 ? 1 : sum[0];
+    }
+
+    private static Tracked tracked(Entity entity) {
+        double speed = entity.position().distanceTo(new Vec3(entity.xo, entity.yo, entity.zo));
+        return new Tracked(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath(), entity.position(), speed, state(entity));
+    }
+
+    /** What can be seen of an entity besides where it is: how it stands, what it holds, what holds it */
+    private static String state(Entity entity) {
+        StringBuilder state = new StringBuilder(entity.getPose().name().toLowerCase(java.util.Locale.ROOT));
+        if (entity.isOnFire()) {
+            state.append(" burning");
+        }
+        if (entity.isPassenger()) {
+            state.append(" riding ").append(entity.getVehicle().getId());
+        }
+        if (entity instanceof Leashable leashed && leashed.getLeashHolder() != null) {
+            state.append(" leashed to ").append(leashed.getLeashHolder().getId());
+        }
+        if (entity instanceof EnderMan enderman && enderman.getCarriedBlock() != null) {
+            state.append(" carrying ").append(BuiltInRegistries.BLOCK.getKey(enderman.getCarriedBlock().getBlock()).getPath());
+        }
+        if (entity instanceof AgeableMob young && young.isBaby()) {
+            state.append(" baby");
+        }
+        if (entity instanceof LivingEntity living) {
+            if (living.isDeadOrDying()) {
+                state.append(" dead");
+            }
+            if (living.isSleeping()) {
+                state.append(" asleep");
+            }
+            if (living.isUsingItem()) {
+                state.append(" using");
+            }
+            if (!living.getMainHandItem().isEmpty()) {
+                state.append(" holding ").append(BuiltInRegistries.ITEM.getKey(living.getMainHandItem().getItem()).getPath());
+            }
+        }
+        return state.toString();
+    }
+
+    /** The recorded player in a playback world */
+    static Entity recorderIn(Minecraft minecraft, String recorderId) {
+        return minecraft.level == null ? null : minecraft.level.getPlayerByUUID(UUID.fromString(recorderId));
+    }
+
+    // ------------------------------------------------------------------ Comparing
+
+    /** What a playback world shows differently from the live note, one line each; empty when nothing does */
+    static List<String> differences(WorldProbe live, WorldProbe played) {
+        List<String> found = new ArrayList<>();
+        if (!live.dimension.equals(played.dimension)) {
+            found.add("dimension: live " + live.dimension + ", playback " + played.dimension);
+            return found;
+        }
+
+        // Chunks: none missing, none left over
+        TreeSet<String> missing = new TreeSet<>();
+        TreeSet<String> extra = new TreeSet<>();
+        for (long key : live.blocks.keySet()) {
+            if (!played.blocks.containsKey(key)) {
+                missing.add(chunkName(key, live));
+            }
+        }
+        for (long key : played.blocks.keySet()) {
+            if (!live.blocks.containsKey(key)) {
+                extra.add(chunkName(key, live));
+            }
+        }
+        if (!missing.isEmpty()) {
+            found.add("chunks: " + missing.size() + " of " + live.blocks.size() + " missing in playback: " + some(missing));
+        }
+        if (!extra.isEmpty()) {
+            found.add("chunks: " + extra.size() + " in playback that the live game did not hold: " + some(extra));
+        }
+
+        List<String> wrongBlocks = new ArrayList<>();
+        List<String> wrongBiomes = new ArrayList<>();
+        List<String> wrongLight = new ArrayList<>();
+        List<String> wrongBlockEntities = new ArrayList<>();
+        int perColumn = 0;
+        for (Map.Entry<Long, long[]> entry : live.blocks.entrySet()) {
+            long key = entry.getKey();
+            long[] theirs = played.blocks.get(key);
+            if (theirs == null) {
+                continue;
+            }
+            long[] ours = entry.getValue();
+            for (int i = 0; i < ours.length; i++) {
+                if (ours[i] != theirs[i]) {
+                    wrongBlocks.add(chunkName(key, live) + " section " + i);
+                }
+            }
+            if (!live.biomes.get(key).equals(played.biomes.get(key))) {
+                wrongBiomes.add(chunkName(key, live));
+            }
+            byte[] lit = live.light.get(key);
+            byte[] litThere = played.light.get(key);
+            perColumn = lit.length / (LIGHT_COLUMNS.length / 2);
+            for (int i = 0; i < lit.length; i++) {
+                if (lit[i] != litThere[i]) {
+                    wrongLight.add(chunkName(key, live) + " column " + i / perColumn + (i % perColumn == 0 ? " above ground" : " rung " + i % perColumn)
+                        + " live sky " + (lit[i] >> 4 & 15) + " block " + (lit[i] & 15) + ", playback sky " + (litThere[i] >> 4 & 15) + " block " + (litThere[i] & 15));
+                    break;
+                }
+            }
+            String kinds = live.blockEntities.getOrDefault(key, "{}");
+            String kindsThere = played.blockEntities.getOrDefault(key, "{}");
+            if (!kinds.equals(kindsThere)) {
+                wrongBlockEntities.add(chunkName(key, live) + " live " + kinds + ", playback " + kindsThere);
+            }
+        }
+        if (!wrongBlocks.isEmpty()) {
+            found.add("blocks: " + wrongBlocks.size() + " sections differ: " + some(wrongBlocks));
+        }
+        if (!wrongBiomes.isEmpty()) {
+            found.add("biomes: " + wrongBiomes.size() + " chunks differ: " + some(wrongBiomes));
+        }
+        if (!wrongLight.isEmpty()) {
+            found.add("light: " + wrongLight.size() + " chunks differ: " + some(wrongLight));
+        }
+        if (!wrongBlockEntities.isEmpty()) {
+            found.add("block entities: " + wrongBlockEntities.size() + " chunks differ: " + some(wrongBlockEntities));
+        }
+        List<String> wrongData = new ArrayList<>();
+        live.blockEntityData.forEach((what, said) -> {
+            String there = played.blockEntityData.get(what);
+            if (there != null && !steady(there).equals(steady(said))) {
+                wrongData.add(what + " live " + shortened(said) + ", playback " + shortened(there));
+            }
+        });
+        if (!wrongData.isEmpty()) {
+            found.add("block entity data: " + wrongData.size() + " differ: " + some(wrongData));
+        }
+
+        // Watched boxes, place by place
+        for (Map.Entry<Region, int[]> entry : live.regionBlocks.entrySet()) {
+            Region region = entry.getKey();
+            int[] ours = entry.getValue();
+            int[] theirs = played.regionBlocks.get(region);
+            byte[] lit = live.regionLight.get(region);
+            byte[] litThere = played.regionLight.get(region);
+            List<String> wrong = new ArrayList<>();
+            List<String> wrongLit = new ArrayList<>();
+            int width = region.max().getX() - region.min().getX() + 1;
+            int depth = region.max().getZ() - region.min().getZ() + 1;
+            for (int i = 0; i < ours.length; i++) {
+                String at = (region.min().getX() + i % width) + " " + (region.min().getY() + i / (width * depth)) + " " + (region.min().getZ() + i / width % depth);
+                if (theirs == null || ours[i] != theirs[i]) {
+                    wrong.add(at + " live " + stateName(ours[i]) + ", playback " + (theirs == null ? "not looked at" : stateName(theirs[i])));
+                }
+                if (lit != null && litThere != null && lit[i] != litThere[i]) {
+                    wrongLit.add(at + " live sky " + (lit[i] >> 4 & 15) + " block " + (lit[i] & 15) + ", playback sky " + (litThere[i] >> 4 & 15) + " block " + (litThere[i] & 15));
+                }
+            }
+            if (!wrong.isEmpty()) {
+                found.add("box '" + region.name() + "': " + wrong.size() + " of " + ours.length + " blocks differ: " + some(wrong));
+            }
+            if (!wrongLit.isEmpty()) {
+                found.add("box '" + region.name() + "': light differs at " + wrongLit.size() + " of " + ours.length + " places: " + some(wrongLit));
+            }
+        }
+
+        // Entities: the same ones, of the same kinds
+        List<String> wrongEntities = new ArrayList<>();
+        live.entities.forEach((id, kind) -> {
+            String there = played.entities.get(id);
+            if (!kind.equals(there)) {
+                wrongEntities.add(kind + " " + id + (there == null ? " missing in playback" : " is a " + there + " in playback"));
+            }
+        });
+        played.entities.forEach((id, kind) -> {
+            if (!live.entities.containsKey(id)) {
+                wrongEntities.add(kind + " " + id + " only in playback");
+            }
+        });
+        if (!wrongEntities.isEmpty()) {
+            found.add("entities: " + wrongEntities.size() + " differ (live " + live.entities.size() + ", playback " + played.entities.size() + "): " + some(wrongEntities));
+        }
+        live.named.forEach((name, ours) -> {
+            Tracked theirs = played.named.get(name);
+            if (theirs == null) {
+                found.add("'" + name + "' is missing in playback");
+                return;
+            }
+            double off = ours.at().distanceTo(theirs.at());
+            double allowed = 0.34 + Math.max(ours.speed(), theirs.speed());
+            if (off > allowed) {
+                found.add(String.format("'%s' is %.2f blocks from its live place (allowed %.2f): live %s, playback %s", name, off, allowed, place(ours.at()), place(theirs.at())));
+            }
+            if (!ours.state().equals(theirs.state())) {
+                found.add("'" + name + "' live: " + ours.state() + "; playback: " + theirs.state());
+            }
+        });
+        if (live.recorder != null) {
+            if (played.recorder == null) {
+                found.add("the recorder is missing in playback");
+            } else {
+                double off = live.recorder.at().distanceTo(played.recorder.at());
+                double allowed = 0.34 + 2.5 * Math.max(live.recorder.speed(), played.recorder.speed());
+                if (off > allowed) {
+                    found.add(String.format("the recorder is %.2f blocks from their live place (allowed %.2f): live %s, playback %s", off, allowed,
+                        place(live.recorder.at()), place(played.recorder.at())));
+                }
+                if (!live.recorder.state().equals(played.recorder.state())) {
+                    found.add("the recorder live: " + live.recorder.state() + "; playback: " + played.recorder.state());
+                }
+            }
+        }
+
+        // The sky
+        if (Math.abs(live.dayTime - played.dayTime) > 2) {
+            found.add("time of day: live " + live.dayTime + ", playback " + played.dayTime);
+        }
+        if (Math.abs(live.rain - played.rain) > 0.03F || Math.abs(live.thunder - played.thunder) > 0.03F) {
+            found.add("weather: live rain " + live.rain + " thunder " + live.thunder + ", playback rain " + played.rain + " thunder " + played.thunder);
+        }
+        if (live.sky != null && played.sky != null) {
+            for (int i = 0; i < 3; i++) {
+                if (Math.abs(live.sky[i] - played.sky[i]) > 0.03) {
+                    found.add(String.format("sky colour: live %.3f %.3f %.3f, playback %.3f %.3f %.3f", live.sky[0], live.sky[1], live.sky[2], played.sky[0], played.sky[1], played.sky[2]));
+                    break;
+                }
+            }
+        }
+
+        live.facts.forEach((what, ours) -> {
+            String theirs = played.facts.get(what);
+            if (!ours.equals(theirs)) {
+                found.add(what + ": live " + ours + ", playback " + theirs);
+            }
+        });
+        if (live.hud != null) {
+            if (played.hud == null) {
+                found.add("HUD: playback has none");
+            } else if (!java.util.Arrays.equals(live.hud, played.hud)) {
+                found.add("HUD (health, most, absorption, hunger, air, most, level, progress, mode): live " + java.util.Arrays.toString(live.hud)
+                    + ", playback " + java.util.Arrays.toString(played.hud));
+            }
+        }
+        return found;
+    }
+
+    /** A spawner counts down to its next mob on every tick of each game for itself; the count is left out */
+    private static String steady(String said) {
+        return said.replaceAll("Delay:-?[0-9]+s", "Delay");
+    }
+
+    private static String chunkName(long key, WorldProbe live) {
+        int x = ChunkPos.getX(key);
+        int z = ChunkPos.getZ(key);
+        return "chunk " + x + "," + z + " (" + Math.max(Math.abs(x - live.centreX), Math.abs(z - live.centreZ)) + " from the recorder)";
+    }
+
+    private static String stateName(int id) {
+        return String.valueOf(Block.stateById(id)).replace("Block{minecraft:", "{");
+    }
+
+    private static String place(Vec3 at) {
+        return String.format("%.2f %.2f %.2f", at.x, at.y, at.z);
+    }
+
+    private static String shortened(String text) {
+        return text.length() > 160 ? text.substring(0, 160) + "..." : text;
+    }
+
+    private static String some(java.util.Collection<String> lines) {
+        StringBuilder text = new StringBuilder();
+        int count = 0;
+        for (String line : lines) {
+            if (count++ == 4) {
+                text.append("; ...");
+                break;
+            }
+            text.append(count == 1 ? "" : "; ").append(line);
+        }
+        return text.toString();
+    }
+
+    /** A line for the log: what this note took in */
+    String summary() {
+        return this.blocks.size() + " chunks, " + this.blockEntities.size() + " with block entities, " + this.entities.size() + " entities, " + this.named.size() + " named";
+    }
+
+}

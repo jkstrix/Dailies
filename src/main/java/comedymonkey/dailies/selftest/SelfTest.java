@@ -75,6 +75,12 @@ public final class SelfTest {
                 }
                 return;
             }
+            if (Boolean.getBoolean("dailies.test.realWorldOnly")) {
+                // Only the tour of generated terrain, for working on it: gradlew runTestClient -PdailiesFlags=dailies.test.realWorldOnly
+                RealWorldSteps.run(this);
+                this.finish("PASSED");
+                return;
+            }
             this.checkMcp();
             SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
@@ -92,11 +98,17 @@ public final class SelfTest {
             LibrarySteps.run(this);
             ResourcePackSteps.play(this);
             WatchingSteps.watch(this);
+            // Last, in a world and with a recording of its own: everything above is in a flat world, this is in generated terrain
+            RealWorldSteps.run(this);
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
             result = "FAILED: " + (t instanceof Failure ? t.getMessage() : t.toString());
         }
+        this.finish(result);
+    }
+
+    private void finish(String result) {
         for (String line : this.skipped) {
             Host.LOGGER.info("DAILIES TEST skipped: {}", line);
         }

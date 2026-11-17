@@ -171,8 +171,12 @@ public final class Snapshots {
         try {
             ClientLevel level = minecraft.level;
             writeWorld(out, minecraft, listener, level, playback);
+            long worldDone = System.nanoTime();
+            encoded = 0;
             int chunks = playback == null ? writeChunks(out, minecraft, listener, level, codec) : writePlaybackChunks(out, level, codec, playback);
+            long chunksDone = System.nanoTime();
             int entities = writeEntities(out, level, codec, playback);
+            long entitiesDone = System.nanoTime();
             (playback == null ? SnapshotExtensions.all() : SnapshotExtensions.inPlayback()).forEach((id, extension) -> {
                 try {
                     extension.write(out, codec);
@@ -182,7 +186,10 @@ public final class Snapshots {
             });
             Host.LOGGER.debug("Dailies: snapshot of {} chunks and {} entities took {} ms", chunks, entities, (System.nanoTime() - started) / 1_000_000);
             if (playback == null) {
-                lastMillis = (System.nanoTime() - started) / 1_000_000.0;
+                long ended = System.nanoTime();
+                lastMillis = (ended - started) / 1_000_000.0;
+                last = new Cost(lastMillis, (worldDone - started) / 1_000_000.0, (chunksDone - worldDone) / 1_000_000.0, (entitiesDone - chunksDone) / 1_000_000.0,
+                    (ended - entitiesDone) / 1_000_000.0, chunks, encoded, entities);
             }
         } finally {
             taking = false;
@@ -197,6 +204,17 @@ public final class Snapshots {
 
     /** How long the last snapshot held the game up, for the tests that watch what recording costs */
     public static volatile double lastMillis = 0;
+
+    /**
+     * Where the time of one snapshot of the live game went, in milliseconds, and how much it described: the chunks it
+     * named, how many of those had to be written out afresh, and the entities
+     */
+    public record Cost(double millis, double world, double chunkMillis, double entityMillis, double extensions, int chunks, int encoded, int entities) {
+    }
+
+    /** The cost of the last snapshot of the live game; a new object each time, so a watcher can tell one from the next */
+    public static volatile Cost last = null;
+    private static int encoded = 0;
 
     private static void writeWorld(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, ClientLevel level, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
         if (playback != null) {
@@ -286,8 +304,9 @@ public final class Snapshots {
                     continue;
                 }
                 try {
-                    byte[] encoded = codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
-                    CHUNKS.put(key, out.sharedPacket(encoded));
+                    byte[] bytes = codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+                    CHUNKS.put(key, out.sharedPacket(bytes));
+                    encoded++;
                 } catch (Throwable t) {
                     warnOnce("chunk", t);
                 }

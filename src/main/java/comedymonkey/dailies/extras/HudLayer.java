@@ -109,6 +109,20 @@ final class HudLayer implements PlaybackExtensions.Extension {
         this.stale = false;
     }
 
+    /**
+     * The recorder's HUD as playback holds it now, in numbers: health, greatest health, absorption, hunger, air,
+     * greatest air, experience level, experience progress and game mode. Null when the recording holds none here.
+     * For the tests and tools that compare a recording with the game it was made from.
+     */
+    public static float[] numbers() {
+        HudState hud = INSTANCE.current(Minecraft.getInstance());
+        return hud == null ? null : numbers(hud);
+    }
+
+    static float[] numbers(HudState hud) {
+        return new float[]{hud.health, hud.maxHealth, hud.absorption, hud.food, hud.air, hud.maxAir, hud.level, hud.progress, hud.gameMode.getId()};
+    }
+
     private HudState current(Minecraft minecraft) {
         if (this.stale) {
             this.stale = false;

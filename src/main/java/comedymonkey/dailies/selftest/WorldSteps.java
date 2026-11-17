@@ -58,6 +58,26 @@ final class WorldSteps {
         test.log("test world ready");
     }
 
+    /**
+     * A fresh world of generated terrain: the game's own default kind, with structures, mobs spawning, and the day and
+     * the weather running, as a person plays it. Creative, so the script can fly and build; the steps that need survival
+     * switch to it. The seed is fixed so that a run can be repeated, but nothing may rely on what is where: the steps
+     * look for what they need. The recordings are left alone
+     */
+    static void createRealWorld(SelfTest test, String name, long seed) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        deleteTree(minecraft.gameDirectory.toPath().resolve("saves").resolve(name));
+        test.onClientRun(() -> {
+            LevelSettings settings = new LevelSettings(name, GameType.CREATIVE, false, Difficulty.NORMAL, true, new GameRules(), WorldDataConfiguration.DEFAULT);
+            minecraft.createWorldOpenFlows().createFreshLevel(name, settings, new WorldOptions(seed, true, false),
+                registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.NORMAL).createWorldDimensions(), new TitleScreen());
+        });
+        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
+            300, "the generated test world to open");
+        test.sleepTicks(60);
+        test.log("generated test world ready");
+    }
+
     static void leaveWorld(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
