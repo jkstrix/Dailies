@@ -51,6 +51,36 @@ public final class SmartCameraRig {
     private double startTick;
     /** Outside the director: how many times the solver itself cut (a tripod moving to a new place) */
     private int ownCuts = 0;
+    /** Every cut since the rig was made (starts, jumps, the director's cuts, a tripod moving): the shot number the films split on */
+    private int cuts = -1;
+    /** What is framed, smoothed: getting on or off something changes it at once, which the camera must not copy */
+    private final Spring.Point aimOffset = new Spring.Point();
+    private final Spring size = new Spring();
+    private final Spring extra = new Spring();
+    private final Spring height = new Spring();
+    private static final double FRAMING_TIME = 0.4;
+
+    /**
+     * The subject with what is framed eased over: its aim point (as an offset from the feet), size, height and the
+     * distance to its edge follow springs, so mounting a boat or a horse, or stepping off one, moves the camera over
+     * in a moment instead of at once. The feet are as they are.
+     */
+    private SubjectSample smoothed(SubjectSample raw, boolean reset, double dt) {
+        Vec offset = raw.aim().sub(raw.feet());
+        if (reset || !this.initialised) {
+            this.aimOffset.reset(offset);
+            this.size.reset(raw.size());
+            this.extra.reset(raw.extra());
+            this.height.reset(raw.height());
+        } else {
+            this.aimOffset.step(offset, FRAMING_TIME, FRAMING_TIME, dt);
+            this.size.step(raw.size(), FRAMING_TIME, dt);
+            this.extra.step(raw.extra(), FRAMING_TIME, dt);
+            this.height.step(raw.height(), FRAMING_TIME, dt);
+        }
+        return new SubjectSample(raw.feet(), raw.feet().add(this.aimOffset.value()), this.height.value, this.size.value, Math.max(0.0, this.extra.value),
+            raw.bodyYaw(), raw.riding(), raw.gliding(), raw.flying(), raw.airborne(), raw.swimming(), raw.framed());
+    }
 
     /** Forgets everything: the next step starts afresh (after a jump, a change of subject or of world) */
     public void restart() {
@@ -97,6 +127,8 @@ public final class SmartCameraRig {
         }
         boolean reset = resetReason != null;
         boolean changed = !reset && (settings != this.lastSettings || keyframeTick != this.lastKeyframeTick || settings.mode != this.lastMode);
+        Vec rawFeet = subject.feet();
+        subject = this.smoothed(subject, reset, dt);
         if (reset) {
             dt = 0.0;
             this.motion.reset(subject, velocityHint, world);
@@ -117,6 +149,11 @@ public final class SmartCameraRig {
         ShotSolver.Pose pose;
         if (reset || changed || this.solver == null) {
             this.director = settings.mode == SmartCameraMode.DIRECTOR ? new DirectorSolver() : null;
+            if (this.director != null && REASON_SUBJECT_JUMPED.equals(resetReason) && this.lastStep != null) {
+                // The cut a jump forces is still a cut: the new shot looks from well away from the last one
+                Step last = this.lastStep;
+                this.director.after(new ShotSolver.Pose(last.eye(), last.yaw(), last.pitch(), false, 0.0, 0.0, false));
+            }
             this.solver = switch (settings.mode) {
                 case ORBIT -> new OrbitSolver();
                 case TRIPOD -> new TripodSolver();
@@ -136,6 +173,9 @@ public final class SmartCameraRig {
             }
         }
         boolean cut = reset || pose.cut() && !(changed && this.transitionFrom != null);
+        if (cut) {
+            this.cuts++;
+        }
         if (pose.cut() && !changed) {
             // A cut ends any blend still going on
             this.transitionFrom = null;
@@ -190,12 +230,11 @@ public final class SmartCameraRig {
         double visibility = CameraProbe.visibility(world, eye, aim, subject.height());
 
         String shotKind;
-        int shotIndex = this.ownCuts;
+        int shotIndex = Math.max(0, this.cuts);
         double shotStart = this.startTick;
         String shotReason = this.startReason;
         if (this.director != null && this.director.kind() != null) {
             shotKind = this.director.kind().id();
-            shotIndex = this.director.index();
             shotStart = this.director.startTick();
             shotReason = this.director.startReason();
         } else {
@@ -207,7 +246,7 @@ public final class SmartCameraRig {
         this.lastSettings = settings;
         this.lastKeyframeTick = keyframeTick;
         this.lastMode = settings.mode;
-        this.lastFeet = subject.feet();
+        this.lastFeet = rawFeet;
         this.lastStep = new Step(tick, settings.mode, shotKind, shotIndex, shotStart, (tick - shotStart) / 20.0, shotReason, aim, subject.size(), eye, yaw, pitch,
             fov, applyFov, screen.x(), screen.y(), screen.inFront(), pose.targetScreenX(), pose.targetScreenY(), pose.obstructed(), visibility, transition, cut,
             this.motion.activity().id());

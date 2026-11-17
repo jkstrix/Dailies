@@ -19,6 +19,15 @@ public final class Clearance {
     private static final double IN_TIME = 0.3;
     private static final double OUT_TIME = 1.0;
     private static final double NEAREST = 0.6;
+    /** The longest step a sliding camera takes at once: shorter than the room it keeps round itself, so it cannot skip a block */
+    private static final double SLIDE_STEP = 0.2;
+    /** How closely the camera follows where it should be, and how fast its speed may change, blocks a second each second */
+    private static final double FOLLOW_TIME = 0.06;
+    private static final double MOST_ACCELERATION = 8.0;
+    private final Spring.Point follow = new Spring.Point();
+    private Vec eyeVelocity = Vec.ZERO;
+    private Vec targetVelocity = Vec.ZERO;
+    private Vec lastTarget = Vec.ZERO;
 
     private final Spring share = new Spring(1.0);
     private boolean started = false;
@@ -91,7 +100,7 @@ public final class Clearance {
         double full = pivot.distanceTo(wanted);
         if (full < 1.0e-3) {
             this.blocked = false;
-            return this.settle(world, CameraProbe.pushOut(world, wanted, pivot.add(0.0, 0.5, 0.0)), pivot);
+            return this.settle(world, CameraProbe.pushOut(world, wanted, pivot.add(0.0, 0.5, 0.0)), pivot, dt);
         }
         double now = allowedShare(world, pivot, wanted, start);
         double goal = now;
@@ -108,7 +117,7 @@ public final class Clearance {
         this.blocked = now < 0.999;
         Vec eye = pivot.add(wanted.sub(pivot).scale(this.share.value));
         this.jumped = false;
-        Vec settled = this.settle(world, eye, pivot);
+        Vec settled = this.settle(world, eye, pivot, dt);
         boolean held = settled.distanceTo(eye) > 0.5;
         boolean unseen = CameraProbe.visibility(world, settled, pivot, 1.0) < 0.5;
         this.stuckSeconds = held && unseen ? this.stuckSeconds + dt : 0.0;
@@ -116,31 +125,87 @@ public final class Clearance {
             // Walled off from the subject for good: rather than stay looking at a wall, go to where it can see, at once
             this.lastEye = null;
             this.share.reset(now);
-            settled = this.settle(world, pivot.add(wanted.sub(pivot).scale(now)), pivot);
+            settled = this.settle(world, pivot.add(wanted.sub(pivot).scale(now)), pivot, dt);
             this.stuckSeconds = 0.0;
             this.jumped = true;
         }
         return settled;
     }
 
-    /** Moves from the last place towards the new one only through open space, and never ends in a block */
-    private Vec settle(CameraWorld world, Vec eye, Vec pivot) {
+    /**
+     * Moves from the last place towards the new one the way a small ball would: in short steps, one axis at a time,
+     * stopping at a face and sliding along it rather than going in. So the camera never enters a block or passes
+     * through one, never freezes against an obstacle it can slide round, and never jumps. Only a camera with no last
+     * place (a start or a cut) is put down, at the nearest place on the way to the pivot that has room.
+     */
+    private Vec settle(CameraWorld world, Vec eye, Vec pivot, double dt) {
         Vec from = this.lastEye;
-        if (from != null && CameraProbe.roomFor(world, from)) {
-            Vec along = eye.sub(from);
-            double length = along.length();
-            if (length > 1.0e-4) {
-                Vec direction = along.scale(1.0 / length);
-                Vec beyond = eye.add(direction.scale(CameraProbe.MARGIN));
-                double reach = world.clip(from, beyond) * (length + CameraProbe.MARGIN);
-                if (reach < length + CameraProbe.MARGIN - 1.0e-6) {
-                    eye = from.add(direction.scale(Math.max(0.0, reach - CameraProbe.MARGIN)));
-                }
+        Vec target = eye;
+        if (from == null || !CameraProbe.roomFor(world, from)) {
+            eye = CameraProbe.pushOut(world, eye, pivot);
+            this.eyeVelocity = Vec.ZERO;
+            this.targetVelocity = Vec.ZERO;
+        } else if (dt <= 0.0) {
+            eye = from;
+        } else {
+            // The camera itself follows where it should be closely, but its speed never changes with a jolt: after
+            // sliding along a face it catches up smoothly instead of springing free
+            this.targetVelocity = this.targetVelocity.lerp(target.sub(this.lastTarget).scale(1.0 / dt), SmartCameraMath.blendFactor(0.1, dt));
+            this.follow.reset(from, this.eyeVelocity);
+            Vec next = this.follow.step(target.add(this.targetVelocity.scale(Math.max(0.0, FOLLOW_TIME - dt * 0.5))), FOLLOW_TIME, FOLLOW_TIME, dt);
+            // Only speeding up is held back, in proportion to how fast it goes: a camera at walking pace never bursts
+            // into a run. Slowing down and turning are free, so it never overshoots where it should be
+            Vec velocity = next.sub(from).scale(1.0 / dt);
+            double before = this.eyeVelocity.length();
+            double most = before + (MOST_ACCELERATION + 1.5 * before) * dt;
+            if (velocity.length() > most) {
+                velocity = velocity.scale(most / velocity.length());
             }
+            eye = slide(world, from, from.add(velocity.scale(dt)));
+            this.eyeVelocity = eye.sub(from).scale(1.0 / dt);
         }
-        eye = CameraProbe.pushOut(world, eye, pivot);
+        this.lastTarget = target;
         this.lastEye = eye;
         return eye;
+    }
+
+    /** The farthest a camera with room at {@code from} gets towards {@code to}, sliding along faces */
+    static Vec slide(CameraWorld world, Vec from, Vec to) {
+        Vec delta = to.sub(from);
+        double length = delta.length();
+        if (length < 1.0e-6) {
+            return from;
+        }
+        int steps = Math.max(1, (int) Math.ceil(length / SLIDE_STEP));
+        Vec step = delta.scale(1.0 / steps);
+        Vec at = from;
+        for (int i = 0; i < steps; i++) {
+            at = slideAxis(world, at, new Vec(step.x(), 0.0, 0.0));
+            at = slideAxis(world, at, new Vec(0.0, 0.0, step.z()));
+            at = slideAxis(world, at, new Vec(0.0, step.y(), 0.0));
+        }
+        return at;
+    }
+
+    private static Vec slideAxis(CameraWorld world, Vec at, Vec move) {
+        if (move.length() < 1.0e-9) {
+            return at;
+        }
+        if (CameraProbe.roomFor(world, at.add(move))) {
+            return at.add(move);
+        }
+        // Up to the face, as near as an eighth of a step allows
+        double low = 0.0;
+        double high = 1.0;
+        for (int i = 0; i < 4; i++) {
+            double middle = (low + high) / 2.0;
+            if (CameraProbe.roomFor(world, at.add(move.scale(middle)))) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        return at.add(move.scale(low));
     }
 
     /** The share of the way from pivot to camera that is clear, less the margin a camera keeps from a wall */

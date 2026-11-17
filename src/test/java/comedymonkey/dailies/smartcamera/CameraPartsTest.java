@@ -130,4 +130,46 @@ class CameraPartsTest {
         assertEquals(4.5, back.z(), 1.0e-6);
     }
 
+
+    @Test
+    void aJumpOfTheSubjectIsADeliberateCutOnItsOwnTickAndANewShot() {
+        SmartCameraRig rig = new SmartCameraRig();
+        SmartCameraSettings settings = new SmartCameraSettings(java.util.UUID.randomUUID());
+        int before = -1;
+        for (int tick = 0; tick <= 60; tick++) {
+            Vec feet = tick < 40 ? new Vec(0.5, 64, tick * 0.2) : new Vec(400.5, 80, tick * 0.2);
+            SmartCameraRig.Step step = rig.step(settings, 0, tick, SubjectSample.walking(feet, 0.0), Vec.ZERO, new VoxelWorld(64), 70.0, 16.0 / 9.0);
+            if (tick == 39) {
+                before = step.shotIndex();
+            }
+            if (tick == 40) {
+                assertTrue(step.cut(), "the camera did not cut on the tick the subject jumped");
+                assertEquals(before + 1, step.shotIndex(), "the cut a jump forces is not reported as a new shot");
+                assertTrue(step.eye().distanceTo(feet) < 20.0, "the camera was not put down by the subject after the jump");
+            }
+        }
+    }
+
+    @Test
+    void stayingToWatchMovesToANewPlaceWhenTheSubjectIsHiddenForASecond() {
+        // A wall between the watching place and where the subject walks to
+        VoxelWorld world = new VoxelWorld(64).box(-10, 64, 10, 3, 70, 10);
+        TetherSolver watcher = new TetherSolver();
+        Vec given = new Vec(0.5, 66.5, 0.5);
+        int cuts = 0;
+        double hiddenFor = 0.0;
+        double longest = 0.0;
+        for (int step = 0; step < 200; step++) {
+            Vec eyes = new Vec(0.5, 65.62, 5.0 + step * 0.1);
+            TetherSolver.Result result = watcher.watch(world, given, eyes, eyes, 1.8, 0.25, 70.0, 16.0 / 9.0, step == 0 ? -1.0 : DT);
+            if (result.cut() && step > 0) {
+                cuts++;
+            }
+            hiddenFor = CameraProbe.visibility(world, result.eye(), eyes, 1.8) < 0.5 ? hiddenFor + DT : 0.0;
+            longest = Math.max(longest, hiddenFor);
+        }
+        assertTrue(cuts >= 1, "the watching camera never moved");
+        assertTrue(longest < 1.5, "the watched subject was hidden for " + longest + " s");
+    }
+
 }

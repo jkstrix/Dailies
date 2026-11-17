@@ -28,6 +28,9 @@ public final class TetherSolver {
     public void reset() {
         this.started = false;
         this.aimed = false;
+        this.watchPlace = null;
+        this.hiddenSeconds = 0.0;
+        this.sinceMoved = 0.0;
     }
 
     /** The smoothed point, as the camera keeps to it */
@@ -61,14 +64,52 @@ public final class TetherSolver {
         }
         Vec wanted = followed.add(offset);
         Vec eye = avoid ? this.clearance.solve(world, point, wanted, 0.0, this.velocity, this.velocity, dt) : wanted;
-        return this.aim(eye, look, aimTime, fov, aspect, dt, avoid && this.clearance.blocked(), dt <= 0.0 || avoid && this.clearance.jumped());
+        return this.aim(eye, look, aimTime, fov, aspect, dt, avoid && this.clearance.blocked(), this.jumpedNow || avoid && this.clearance.jumped());
     }
 
-    /** Stays where it is and turns to watch a moving point */
+    /** Stays where it is and turns to watch a moving point, in open air: it never needs to move */
     public Result watch(Vec eye, Vec point, Vec look, double aimTime, double fov, double aspect, double dt) {
-        dt = this.follow(point, dt);
-        return this.aim(eye, look, aimTime, fov, aspect, dt, false, dt <= 0.0);
+        return this.watch(CameraWorld.OPEN, eye, point, look, 1.8, aimTime, fov, aspect, dt);
     }
+
+    /**
+     * Stays where it is and turns to watch a moving point. When the point has been out of its sight for over a second
+     * (behind trees, round a bend of a cave, through a portal), it moves by a cut to a new place to watch from, chosen
+     * as a tripod chooses one; the place it was given is only the first.
+     *
+     * @param given  the place it was given to watch from
+     * @param height the height of what is watched, for how much of it is seen
+     */
+    public Result watch(CameraWorld world, Vec given, Vec point, Vec look, double height, double aimTime, double fov, double aspect, double dt) {
+        boolean wasStarted = this.started;
+        dt = this.follow(point, dt);
+        boolean jumped = wasStarted && this.jumpedNow;
+        Vec eye = this.watchPlace != null ? this.watchPlace : given;
+        boolean seen = CameraProbe.visibility(world, eye, point, height) >= 0.5;
+        this.hiddenSeconds = seen ? 0.0 : this.hiddenSeconds + Math.max(dt, 0.0);
+        this.sinceMoved += Math.max(dt, 0.0);
+        boolean cut = false;
+        if ((jumped && !seen) || (this.hiddenSeconds > MOST_HIDDEN_SECONDS && this.sinceMoved > MOST_HIDDEN_SECONDS)) {
+            double heading = this.velocity.horizontalLength() > 0.5 ? SmartCameraMath.yawOf(this.velocity.x(), this.velocity.z()) : 0.0;
+            SubjectSample subject = new SubjectSample(point.add(0.0, -height * 0.75, 0.0), point, height, height, 0.0, heading, false, false, false, false, false,
+                SubjectSample.FRAMED_NONE);
+            eye = TripodSolver.placeFor(world, subject, this.velocity, heading, this.velocity.length() > 1.0, 0.0, 0, Vec.ZERO);
+            this.watchPlace = eye;
+            this.hiddenSeconds = 0.0;
+            this.sinceMoved = 0.0;
+            this.aimed = false;
+            cut = true;
+        }
+        return this.aim(eye, look, aimTime, fov, aspect, dt, false, cut || this.jumpedNow);
+    }
+
+    /** Seconds the watched point may be out of sight before a watching camera moves */
+    private static final double MOST_HIDDEN_SECONDS = 1.0;
+    private Vec watchPlace = null;
+    /** Whether the last step started afresh: the first, or after a jump in time or a teleport */
+    private boolean jumpedNow = false;
+    private double hiddenSeconds = 0.0;
+    private double sinceMoved = 0.0;
 
     /** Takes in where the point is; a jump (backwards in time, a long gap or a teleport) starts afresh */
     private double follow(Vec point, double dt) {
@@ -77,6 +118,7 @@ public final class TetherSolver {
             double moved = point.distanceTo(this.lastPoint);
             jumped = moved > 3.0 && moved / dt > 100.0;
         }
+        this.jumpedNow = jumped;
         if (jumped) {
             this.started = true;
             this.aimed = false;
@@ -98,10 +140,10 @@ public final class TetherSolver {
         if (eye.distanceTo(look) < 1.0e-3) {
             goal = new SmartCameraMath.Aim(this.aimer.yaw(), this.aimer.pitch(), false);
         }
-        if (aimTime <= 0.0 || !this.aimed || dt <= 0.0) {
+        if (aimTime <= 0.0 || !this.aimed) {
             this.aimer.reset(goal);
             this.aimed = true;
-        } else {
+        } else if (dt > 0.0) {
             this.aimer.step(goal.yaw(), goal.pitch(), aimTime, fov, aspect, dt);
         }
         return new Result(eye, SmartCameraMath.wrapDegrees(this.aimer.yaw()), this.aimer.pitch(), blocked, cut);

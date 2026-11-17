@@ -33,6 +33,8 @@ public final class ChaseSolver implements ShotSolver {
     private final Spring trail = new Spring();
     private final Spring.Point lead = new Spring.Point();
     private final Spring trailLift = new Spring();
+    /** How far back along the way the camera goes: its distance, or less where the way bends out of sight (back out of a door) */
+    private final Spring trailReach = new Spring();
     /** A last, short smoothing of the camera's wanted place, for the corners where heading, trail and roof meet */
     private final Spring.Point place = new Spring.Point();
     private static final double PLACE_TIME = 0.15;
@@ -56,6 +58,7 @@ public final class ChaseSolver implements ShotSolver {
         this.distance.reset(this.wantedDistance(input));
         this.height.reset(this.wantedHeight(input));
         this.trail.reset(this.trailGoal(input, this.headingIdeal(input)));
+        this.trailReach.reset(this.visibleReach(input));
         this.trailLift.reset(this.trailLiftGoal(input));
         this.clearance.reset();
         Vec ideal = this.ideal(input);
@@ -85,6 +88,7 @@ public final class ChaseSolver implements ShotSolver {
         this.distance.step(this.wantedDistance(input), SHAPE_TIME, dt);
         this.height.step(this.wantedHeight(input), SHAPE_TIME, dt);
         this.trail.step(this.trailGoal(input, this.headingIdeal(input)), TRAIL_TIME, dt);
+        this.trailReach.step(this.visibleReach(input), 0.5, dt);
         this.trailLift.step(this.trailLiftGoal(input), 0.4, dt);
         Vec wanted = this.place.step(this.ideal(input).add(motion.velocity().scale(PLACE_TIME)), PLACE_TIME, PLACE_TIME * 1.6, dt);
         Vec eye = this.clear(input, wanted);
@@ -158,14 +162,26 @@ public final class ChaseSolver implements ShotSolver {
         if (this.trail.value < 1.0e-3) {
             return byHeading;
         }
-        Vec back = input.motion().trailPoint(input.subject().aim(), this.distance.value);
+        Vec back = input.motion().trailPoint(input.subject().aim(), this.trailReach.value);
         Vec byTrail = back.add(0.0, this.trailLift.value, 0.0);
         return byHeading.lerp(byTrail, SmartCameraMath.clamp(this.trail.value, 0.0, 1.0));
     }
 
+    /** The farthest back along the way, up to the camera's distance, from where the subject can still be seen */
+    private double visibleReach(Input input) {
+        Vec aim = input.subject().aim();
+        double extra = input.subject().extra();
+        for (double reach = this.distance.value; reach > 1.5; reach -= 0.5) {
+            if (Clearance.allowedShare(input.world(), aim, input.motion().trailPoint(aim, reach), extra) >= 1.0) {
+                return reach;
+            }
+        }
+        return 1.5;
+    }
+
     /** How far above the way behind the camera goes when it follows the way: a little, as far as the roof there allows */
     private double trailLiftGoal(Input input) {
-        Vec back = input.motion().trailPoint(input.subject().aim(), this.distance.value);
+        Vec back = input.motion().trailPoint(input.subject().aim(), this.trailReach.value);
         double lift = Math.max(0.0, this.height.value) * 0.6;
         double roof = CameraProbe.ceilingAbove(input.world(), back, lift + 0.6);
         return Double.isNaN(roof) ? lift : Math.max(0.0, roof - 0.6 - back.y());
