@@ -136,7 +136,7 @@ final class OwnerFeatureSteps {
         JsonObject chase = test.tool("smart_camera_status", none);
         check(chase.has("camera") && chase.get("mode").getAsString().equals("chase"), "the chase camera did not run: " + shorten(chase.toString()));
         double chaseDistance = distance(chase);
-        check(chaseDistance > 3.5 && chaseDistance < 9.5, "the chase camera is " + chaseDistance + " blocks from its subject, not about 6: " + shorten(chase.toString()));
+        check(chaseDistance > 3.5 && chaseDistance < 9.5, "the chase camera is " + chaseDistance + " blocks from its subject, not about 6");
 
         // A tripod stays put
         test.tool("smart_camera_add", args("tick", start + 30, "mode", "tripod", "transition_seconds", 0));
