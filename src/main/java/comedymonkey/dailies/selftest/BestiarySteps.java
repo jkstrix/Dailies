@@ -42,6 +42,11 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  * earlier, because a game changes its own player at once and hears the same from the server afterwards; the HUD may
  * be three ticks old; rain and thunder may differ by a hundredth. State, blocks, block entities and boss bars must
  * be equal. A few animation counters that are fed by drawing rather than by ticks have slack, listed in Census.
+ * <p>
+ * The staging and recording take most of the ten minutes, so the recording and everything the live game showed are kept
+ * as a fixture (dailies/fixtures/bestiary.dailies and bestiary.json.gz) and later runs only play it back and compare.
+ * It is recorded again when it is missing or unreadable, when {@link #VERSION} differs, when the code that writes
+ * recordings has changed (see {@link FixtureRules}), or when asked for with dailies.test.recordTours.
  */
 final class BestiarySteps {
 
@@ -50,6 +55,8 @@ final class BestiarySteps {
     static final String WORLD = "Dailies Bestiary";
     static final String OVERWORLD = "minecraft:overworld";
     static final String END = "minecraft:the_end";
+    /** Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself */
+    static final int VERSION = 1;
 
     static SelfTest test;
     static Minecraft minecraft;
@@ -71,6 +78,9 @@ final class BestiarySteps {
         final List<Function<Item, String>> needs = new ArrayList<>();
         int from, to;
         String note = "";
+        /** What the live game showed of each need, weighed once the recording is over, and the needs it never showed */
+        final List<String> evidence = new ArrayList<>();
+        final List<String> missing = new ArrayList<>();
 
         Item(String name) {
             this.name = name;
@@ -356,14 +366,12 @@ final class BestiarySteps {
     static void run(SelfTest self) throws Exception {
         test = self;
         minecraft = Minecraft.getInstance();
-        JsonObject none = new JsonObject();
         if (Playback.active()) {
             PlaybackSteps.close(test);
         }
         if (minecraft.level != null) {
             WorldSteps.leaveWorld(test);
         }
-        WorldSteps.createWorld(test, WORLD);
         Path folder = Host.get().dataDirectory().resolve("bestiary");
         Files.createDirectories(folder);
         try (java.util.stream.Stream<Path> old = Files.list(folder)) {
@@ -371,24 +379,29 @@ final class BestiarySteps {
                 Files.deleteIfExists(file);
             }
         }
-
-        // --- Record ---
-        Census.watch(OVERWORLD, 0, -40, -64, -40, 40, -46, 40);
-        test.tool("config_set", args("key", "recordHud", "value", true));
-        BestiaryStages.prepare();
-        test.tool("recording_start", none);
-        Census.start(Census.Mode.LIVE);
-        test.sleepTicks(20);
-        BestiaryStages.all();
-        test.sleepTicks(10);
-        Census.stop();
-        test.tool("config_set", args("key", "recordHud", "value", false));
-        JsonObject finished = test.tool("recording_finish", args("name", "Bestiary"));
         // Out of the recordings folder, where other steps count what is there
         Path recording = folder.resolve("Bestiary.dailies");
-        Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);
+        Path fixture = TourFixtures.folder().resolve("bestiary" + comedymonkey.dailies.file.RecordingFile.EXTENSION);
+        Path notes = TourFixtures.folder().resolve("bestiary.json.gz");
+        boolean reused = false;
+        if (TourFixtures.reuse(test, "the bestiary", fixture, notes, TourFixtures.RECORD_TOURS, VERSION)) {
+            try {
+                String made = TourFixtures.read(notes, in -> readNotes(in, folder));
+                // Playback and the editor may write into what they open: the fixture itself is never opened
+                TourFixtures.copy(fixture, recording);
+                reused = true;
+                test.log("bestiary: the fixture was recorded " + made + ": " + Census.live.lastKey() + " ticks with " + items.size() + " items staged, " + marks.size()
+                    + " ticks marked; " + problems.size() + " staging problems");
+            } catch (Exception e) {
+                test.log("bestiary: the fixture could not be used (" + e + "); recording it again");
+                forget();
+            }
+        }
+        if (!reused) {
+            record(recording);
+            keep(folder, recording, fixture, notes);
+        }
         int total = Census.live.lastKey();
-        test.log("bestiary: recorded " + total + " ticks with " + items.size() + " items staged, " + marks.size() + " ticks marked; " + problems.size() + " staging problems");
 
         // --- Play it through, comparing every tick ---
         Census.Tally tally = new Census.Tally();
@@ -472,6 +485,158 @@ final class BestiarySteps {
 
         // --- The result, item by item ---
         report(folder, tally, total, played, stops.size());
+    }
+
+    /** Stages everything in a world of its own and records it, with the live game written down at every tick */
+    private static void record(Path recording) throws Exception {
+        JsonObject none = new JsonObject();
+        WorldSteps.createWorld(test, WORLD);
+        Census.watch(OVERWORLD, 0, -40, -64, -40, 40, -46, 40);
+        test.tool("config_set", args("key", "recordHud", "value", true));
+        BestiaryStages.prepare();
+        test.tool("recording_start", none);
+        Census.start(Census.Mode.LIVE);
+        test.sleepTicks(20);
+        BestiaryStages.all();
+        test.sleepTicks(10);
+        Census.stop();
+        test.tool("config_set", args("key", "recordHud", "value", false));
+        JsonObject finished = test.tool("recording_finish", args("name", "Bestiary"));
+        Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);
+        weigh();
+        test.log("bestiary: recorded " + Census.live.lastKey() + " ticks with " + items.size() + " items staged, " + marks.size() + " ticks marked; " + problems.size() + " staging problems");
+    }
+
+    /** What the live game showed of each item's needs: it all lies in the census of the recording, so it is weighed once, as the recording ends */
+    private static void weigh() {
+        for (Item item : items) {
+            for (Function<Item, String> need : item.needs) {
+                String seen;
+                try {
+                    seen = need.apply(item);
+                } catch (Throwable t) {
+                    seen = null;
+                }
+                if (seen == null) {
+                    item.missing.add("need " + (item.needs.indexOf(need) + 1));
+                } else {
+                    item.evidence.add(seen);
+                }
+            }
+        }
+    }
+
+    // --- The fixture ---
+
+    /** Keeps the recording and all the live game showed for later runs; a run that cannot keep them still goes on */
+    private static void keep(Path folder, Path recording, Path fixture, Path notes) {
+        try {
+            TourFixtures.keep(recording, fixture);
+            TourFixtures.write(notes, VERSION, out -> writeNotes(out, folder));
+            test.log("bestiary: kept as a fixture at " + fixture + " (" + Files.size(fixture) / 1048576 + " MB) with its notes, " + Files.size(notes) / 1048576 + " MB");
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies self test: the bestiary could not be kept as a fixture", t);
+            test.log("bestiary: could not be kept as a fixture (" + t + "); the next run records it again");
+        }
+    }
+
+    /** Back to nothing staged, after notes that could not be read all the way through */
+    private static void forget() {
+        problems.clear();
+        items.clear();
+        marks.clear();
+        stills.clear();
+        comparisons.clear();
+        Census.forgetLive();
+    }
+
+    private static void writeNotes(TourFixtures.Out out, Path folder) throws Exception {
+        out.name("problems").strings(problems);
+        out.name("marks");
+        out.json.beginArray();
+        for (Map.Entry<Integer, String> mark : marks.entrySet()) {
+            out.json.value(mark.getKey());
+            out.string(mark.getValue());
+        }
+        out.json.endArray();
+        out.name("stills");
+        out.json.beginArray();
+        for (Still still : stills) {
+            out.json.beginArray();
+            out.string(still.name());
+            out.json.value(still.tick()).value(still.x()).value(still.y()).value(still.z()).value((double) still.yaw()).value((double) still.pitch()).value(still.byPlay());
+            out.json.endArray();
+        }
+        out.json.endArray();
+        out.name("comparisons");
+        out.json.beginArray();
+        for (Object[] comparison : comparisons) {
+            out.json.beginArray();
+            out.string((String) comparison[0]);
+            out.json.value((Integer) comparison[1]).value((Integer) comparison[2]);
+            // The live game's screen at the tick, to set beside playback's
+            out.file(folder.resolve("light-" + comparison[0] + "-live.png"));
+            out.json.endArray();
+        }
+        out.json.endArray();
+        out.name("items");
+        out.json.beginArray();
+        for (Item item : items) {
+            out.json.beginArray();
+            out.string(item.name);
+            out.strings(item.labels);
+            out.json.value(item.from).value(item.to);
+            out.string(item.note);
+            out.strings(item.evidence);
+            out.strings(item.missing);
+            out.json.endArray();
+        }
+        out.json.endArray();
+        Census.writeLive(out);
+    }
+
+    private static void readNotes(TourFixtures.In in, Path folder) throws Exception {
+        problems.addAll(in.name("problems").strings());
+        in.name("marks");
+        in.json.beginArray();
+        while (in.more()) {
+            marks.put(in.integer(), in.string());
+        }
+        in.json.endArray();
+        in.name("stills");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            stills.add(new Still(in.string(), in.integer(), in.decimal(), in.decimal(), in.decimal(), (float) in.decimal(), (float) in.decimal(), in.truth()));
+            in.json.endArray();
+        }
+        in.json.endArray();
+        in.name("comparisons");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            String name = in.string();
+            comparisons.add(new Object[]{name, in.integer(), in.integer()});
+            in.file(folder.resolve("light-" + name + "-live.png"));
+            in.json.endArray();
+        }
+        in.json.endArray();
+        in.name("items");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            Item item = new Item(in.string());
+            item.labels.addAll(in.strings());
+            item.from = in.integer();
+            item.to = in.integer();
+            item.note = in.string();
+            item.evidence.addAll(in.strings());
+            item.missing.addAll(in.strings());
+            in.json.endArray();
+            items.add(item);
+        }
+        in.json.endArray();
+        Census.readLive(in);
     }
 
     /** Jumps, and returns the light as it stood on the very frame the jump arrived, before anything was drawn */
@@ -592,21 +757,9 @@ final class BestiarySteps {
         java.util.Set<Census.Entry> claimed = new java.util.HashSet<>();
         int fine = 0;
         for (Item item : items) {
-            List<String> evidence = new ArrayList<>();
-            List<String> missing = new ArrayList<>();
-            for (Function<Item, String> need : item.needs) {
-                String seen;
-                try {
-                    seen = need.apply(item);
-                } catch (Throwable t) {
-                    seen = null;
-                }
-                if (seen == null) {
-                    missing.add("need " + (item.needs.indexOf(need) + 1));
-                } else {
-                    evidence.add(seen);
-                }
-            }
+            // Weighed as the recording ended, or kept with the fixture
+            List<String> evidence = item.evidence;
+            List<String> missing = item.missing;
             List<String> wrong = new ArrayList<>();
             List<String> noted = new ArrayList<>();
             for (Census.Entry entry : tally.entries.values()) {

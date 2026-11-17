@@ -893,6 +893,117 @@ final class Census {
         return false;
     }
 
+    // --- Kept with a fixture (see TourFixtures), in the order read back ---
+
+    static void writeLive(TourFixtures.Out out) throws java.io.IOException {
+        out.name("boxes");
+        out.json.beginArray();
+        for (Object[] box : BOXES) {
+            out.json.beginArray();
+            out.string((String) box[0]);
+            out.json.value((Integer) box[1]);
+            for (int edge : (int[]) box[2]) {
+                out.json.value(edge);
+            }
+            out.json.endArray();
+        }
+        out.json.endArray();
+        out.name("sounds").strings(liveSounds);
+        out.name("census");
+        out.json.beginArray();
+        for (Census census : live.values()) {
+            out.json.beginArray();
+            out.json.value(census.tick);
+            out.string(census.dimension);
+            out.json.value(census.recorderId);
+            out.string(census.bars);
+            out.string(census.hud);
+            out.json.value(census.dayTime).value((double) census.rain).value((double) census.thunder).value(census.particles);
+            out.json.beginArray();
+            for (Map.Entry<Integer, Thing> entry : census.things.entrySet()) {
+                Thing thing = entry.getValue();
+                out.json.value(entry.getKey());
+                out.string(thing.type);
+                out.string(thing.label);
+                out.json.value(thing.x).value(thing.y).value(thing.z).value((double) thing.yaw);
+                out.string(thing.state);
+                out.string(thing.clocks);
+            }
+            out.json.endArray();
+            out.json.beginArray();
+            for (Map.Entry<Long, String> entry : census.blockEntities.entrySet()) {
+                out.json.value(entry.getKey());
+                out.string(entry.getValue());
+            }
+            out.json.endArray();
+            out.shorts(census.blocks);
+            out.strings(census.changes);
+            out.bytes(census.light);
+            out.bytes(census.lightLater);
+            out.json.endArray();
+        }
+        out.json.endArray();
+    }
+
+    static void readLive(TourFixtures.In in) throws java.io.IOException {
+        in.name("boxes");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            String dimension = in.string();
+            int from = in.integer();
+            int[] edges = new int[6];
+            for (int i = 0; i < 6; i++) {
+                edges[i] = in.integer();
+            }
+            in.json.endArray();
+            BOXES.add(new Object[]{dimension, from, edges});
+        }
+        in.json.endArray();
+        liveSounds.addAll(in.name("sounds").strings());
+        in.name("census");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            Census census = new Census(in.integer());
+            census.dimension = in.string();
+            census.recorderId = in.integer();
+            census.bars = in.string();
+            census.hud = in.string();
+            census.dayTime = in.number();
+            census.rain = (float) in.decimal();
+            census.thunder = (float) in.decimal();
+            census.particles = in.integer();
+            in.json.beginArray();
+            while (in.more()) {
+                int id = in.integer();
+                census.things.put(id, new Thing(in.string(), in.string(), in.decimal(), in.decimal(), in.decimal(), (float) in.decimal(), in.string(), in.string()));
+            }
+            in.json.endArray();
+            in.json.beginArray();
+            while (in.more()) {
+                census.blockEntities.put(in.number(), in.string());
+            }
+            in.json.endArray();
+            census.blocks = in.shorts();
+            census.changes = in.strings();
+            census.light = in.bytes();
+            census.lightLater = in.bytes();
+            in.json.endArray();
+            live.put(census.tick, census);
+        }
+        in.json.endArray();
+    }
+
+    /** Forgets the live game, for notes that could not be read to the end */
+    static void forgetLive() {
+        live.clear();
+        keyTicks.clear();
+        BOXES.clear();
+        liveSounds.clear();
+        liveGrabs.clear();
+    }
+
     private static String few(List<String> lines) {
         return lines.size() <= 6 ? lines.toString() : lines.subList(0, 6) + " and " + (lines.size() - 6) + " more";
     }

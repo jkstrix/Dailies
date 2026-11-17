@@ -94,6 +94,12 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  * <p>
  * A difference does not stop the run. Each is logged as it is found and they are all reported together at the end,
  * because one run of this costs many minutes and should tell everything it can.
+ * <p>
+ * Staging and recording the tour is most of its seventeen minutes, so the recording is kept as a fixture with all that
+ * was noted while it was made (dailies/fixtures/realworld.dailies and realworld.json.gz: the notes, the live stills, the
+ * measurements and the differences found while recording), and later runs only play it back and compare. It is recorded
+ * again when it is missing or unreadable, when {@link #VERSION} differs, when the code that writes recordings has
+ * changed (see {@link FixtureRules}), or when asked for with dailies.test.recordTours.
  */
 final class RealWorldSteps {
 
@@ -101,6 +107,8 @@ final class RealWorldSteps {
     private static final long SEED = 20261117L;
     private static final int STILL_WIDTH = 960;
     private static final int STILL_HEIGHT = 540;
+    /** Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself */
+    static final int VERSION = 1;
 
     private static final List<String> faults = new ArrayList<>();
     private static final List<WorldProbe> notes = new ArrayList<>();
@@ -113,6 +121,8 @@ final class RealWorldSteps {
     /** By still name: the tick it was taken at */
     private static final Map<String, Integer> stills = new LinkedHashMap<>();
     private static final Map<String, long[]> bytesByPhase = new LinkedHashMap<>();
+    /** The budgets measured while recording, kept with the fixture: id, what, value, target, at most, unit, where */
+    private static final List<Object[]> stagedMeasures = new ArrayList<>();
 
     private static Path folder;
     private static Path recording;
@@ -130,6 +140,28 @@ final class RealWorldSteps {
 
     private static Minecraft minecraft() {
         return Minecraft.getInstance();
+    }
+
+    /**
+     * A question put to the game at each note, live and again in playback, by its kind and the block it is about, so
+     * that a fixture can put it again in a later run
+     */
+    record Asker(String kind, BlockPos pos) implements Function<Minecraft, String> {
+        static final String CHEST_LID = "chest lid";
+        static final String CRACKS = "cracks";
+
+        @Override
+        public String apply(Minecraft game) {
+            return switch (this.kind) {
+                case CHEST_LID -> {
+                    BlockEntity blockEntity = game.level.getBlockEntity(this.pos);
+                    yield blockEntity instanceof LidBlockEntity lid ? (lid.getOpenNess(1.0F) > 0.01F ? "open" : "shut") : "no chest";
+                }
+                // Whether there are any, not how far they have spread: the stage moves on a tick that live and playback count a tick apart
+                case CRACKS -> cracks(game, this.pos) >= 0 ? "cracked" : "whole";
+                default -> "cannot say (no question called " + this.kind + ")";
+            };
+        }
     }
 
     /** Keys held down for the player, and where they look, until it is set to null */
@@ -169,17 +201,53 @@ final class RealWorldSteps {
             }
         }
         hook();
-        long started = System.currentTimeMillis();
-        WorldSteps.createRealWorld(test, WORLD, SEED);
-        test.log("real world: created in " + (System.currentTimeMillis() - started) + " ms");
-        watching = true;
-        try {
-            stage(test);
-        } finally {
-            watching = false;
-            drive = null;
+        // Out of the recordings folder: other steps count the recordings there
+        recording = folder.resolve("Real world" + RecordingFile.EXTENSION);
+        Path fixture = TourFixtures.folder().resolve("realworld" + RecordingFile.EXTENSION);
+        Path kept = TourFixtures.folder().resolve("realworld.json.gz");
+        boolean reused = false;
+        if (TourFixtures.reuse(test, "the tour of generated terrain", fixture, kept, TourFixtures.RECORD_TOURS, VERSION)) {
+            try {
+                List<String> stagedTable = new ArrayList<>();
+                List<String> stagedFaults = new ArrayList<>();
+                String made = TourFixtures.read(kept, in -> readNotes(in, stagedTable, stagedFaults));
+                // Playback and the editor may write into what they open: the fixture itself is never opened
+                TourFixtures.copy(fixture, recording);
+                reused = true;
+                test.log("real world: the fixture was recorded " + made + ": " + notes.size() + " live notes, " + stills.size() + " stills, " + stagedFaults.size()
+                    + " differences found while it was recorded, which count again");
+                for (String line : stagedTable) {
+                    table.add("(recorded " + made + ") " + line);
+                }
+                for (String fault : stagedFaults) {
+                    test.log("real world: FAULT (found while the fixture was recorded) " + fault);
+                    faults.add(fault);
+                }
+                for (Object[] measure : stagedMeasures) {
+                    BudgetSteps.measured((String) measure[0], (String) measure[1], (Double) measure[2], (Double) measure[3], (Boolean) measure[4], (String) measure[5],
+                        measure[6] + ", in the fixture recorded " + made);
+                }
+            } catch (Exception e) {
+                test.log("real world: the fixture could not be used (" + e + "); recording it again");
+                notes.clear();
+                stills.clear();
+                stagedMeasures.clear();
+            }
         }
-        WorldSteps.leaveWorld(test);
+        if (!reused) {
+            long started = System.currentTimeMillis();
+            WorldSteps.createRealWorld(test, WORLD, SEED);
+            test.log("real world: created in " + (System.currentTimeMillis() - started) + " ms");
+            watching = true;
+            try {
+                stage(test);
+            } finally {
+                watching = false;
+                drive = null;
+            }
+            WorldSteps.leaveWorld(test);
+            keep(test, fixture, kept);
+        }
         play(test);
         test.tool("replay_close", new JsonObject());
         test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the generated world's recording to close");
@@ -607,6 +675,89 @@ final class RealWorldSteps {
         });
     }
 
+    // ------------------------------------------------------------------ The fixture
+
+    /** A budget measured while recording: reported now, and kept with the fixture to be reported again when it is used */
+    private static void budget(String id, String what, double value, double target, String unit, String where) {
+        BudgetSteps.measured(id, what, value, target, true, unit, where);
+        stagedMeasures.add(new Object[]{id, what, value, target, true, unit, where});
+    }
+
+    /** Keeps the recording and everything noted while it was made for later runs; a run that cannot keep them still goes on */
+    private static void keep(SelfTest test, Path fixture, Path kept) {
+        try {
+            TourFixtures.keep(recording, fixture);
+            TourFixtures.write(kept, VERSION, RealWorldSteps::writeNotes);
+            test.log("real world: kept as a fixture at " + fixture + " (" + Files.size(fixture) / 1048576 + " MB) with its notes, " + Files.size(kept) / 1048576 + " MB");
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies self test: the tour of generated terrain could not be kept as a fixture", t);
+            test.log("real world: could not be kept as a fixture (" + t + "); the next run records it again");
+        }
+    }
+
+    /** All the staging found and noted, which is everything up to here: the tour is staged first in every run */
+    private static void writeNotes(TourFixtures.Out out) throws Exception {
+        out.name("table").strings(table);
+        out.name("faults").strings(faults);
+        out.name("measures");
+        out.json.beginArray();
+        for (Object[] measure : stagedMeasures) {
+            out.json.beginArray();
+            out.string((String) measure[0]);
+            out.string((String) measure[1]);
+            out.json.value((Double) measure[2]).value((Double) measure[3]).value((Boolean) measure[4]);
+            out.string((String) measure[5]);
+            out.string((String) measure[6]);
+            out.json.endArray();
+        }
+        out.json.endArray();
+        out.name("stills");
+        out.json.beginArray();
+        for (Map.Entry<String, Integer> still : stills.entrySet()) {
+            out.json.beginArray();
+            out.string(still.getKey());
+            out.json.value(still.getValue());
+            out.file(folder.resolve(still.getKey() + "-live.png"));
+            out.json.endArray();
+        }
+        out.json.endArray();
+        out.name("notes");
+        out.json.beginArray();
+        for (WorldProbe note : notes) {
+            note.write(out);
+        }
+        out.json.endArray();
+    }
+
+    private static void readNotes(TourFixtures.In in, List<String> stagedTable, List<String> stagedFaults) throws Exception {
+        stagedTable.addAll(in.name("table").strings());
+        stagedFaults.addAll(in.name("faults").strings());
+        in.name("measures");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            stagedMeasures.add(new Object[]{in.string(), in.string(), in.decimal(), in.decimal(), in.truth(), in.string(), in.string()});
+            in.json.endArray();
+        }
+        in.json.endArray();
+        in.name("stills");
+        in.json.beginArray();
+        while (in.more()) {
+            in.json.beginArray();
+            String name = in.string();
+            stills.put(name, in.integer());
+            in.file(folder.resolve(name + "-live.png"));
+            in.json.endArray();
+        }
+        in.json.endArray();
+        in.name("notes");
+        in.json.beginArray();
+        while (in.more()) {
+            notes.add(WorldProbe.read(in));
+        }
+        in.json.endArray();
+    }
+
     // ------------------------------------------------------------------ The tour
 
     private static void stage(SelfTest test) throws Exception {
@@ -709,8 +860,6 @@ final class RealWorldSteps {
         test.tool("config_set", args("key", "recordHud", "value", false));
         JsonObject finished = test.tool("recording_finish", args("name", "Real world"));
         Path saved = Path.of(finished.get("path").getAsString());
-        // Out of the recordings folder: other steps count the recordings there
-        recording = folder.resolve("Real world" + RecordingFile.EXTENSION);
         Files.move(saved, recording, StandardCopyOption.REPLACE_EXISTING);
 
         // What the file holds
@@ -876,8 +1025,8 @@ final class RealWorldSteps {
         if (recording.average() > idle.average() * 1.5 + 2.0) {
             fault(test, "recording slowed the game while " + what + ": frames averaged " + recording.average() + " ms against " + idle.average() + " ms idle");
         }
-        BudgetSteps.measured("BUD-1", "recording's cost, added a frame", Math.max(0, added), 1.0, true, "ms", "the tour of generated terrain, " + what);
-        BudgetSteps.measured("BUD-1", "recording's cost, of a frame at 144 a second", Math.max(0, added) / (1000.0 / 144) * 100, 3.0, true, "%", "the tour of generated terrain, " + what);
+        budget("BUD-1", "recording's cost, added a frame", Math.max(0, added), 1.0, "ms", "the tour of generated terrain, " + what);
+        budget("BUD-1", "recording's cost, of a frame at 144 a second", Math.max(0, added) / (1000.0 / 144) * 100, 3.0, "%", "the tour of generated terrain, " + what);
     }
 
     // --- 1. Travel: chunks arriving ahead and forgotten behind
@@ -975,10 +1124,7 @@ final class RealWorldSteps {
         command(test, "fill %d %d %d %d %d %d minecraft:air", chest.getX() - 1, chest.getY(), chest.getZ() - 1, chest.getX() + 1, chest.getY() + 2, chest.getZ() + 3);
         command(test, "setblock %d %d %d minecraft:chest{LootTable:\"minecraft:chests/village/village_plains_house\"}", chest.getX(), chest.getY(), chest.getZ());
         regions.add(Region.around("village centre", new BlockPos(x, ground, z), 12, 6, 10, true));
-        askers.put("chest lid", game -> {
-            BlockEntity blockEntity = game.level.getBlockEntity(chest);
-            return blockEntity instanceof LidBlockEntity lid ? (lid.getOpenNess(1.0F) > 0.01F ? "open" : "shut") : "no chest";
-        });
+        askers.put("chest lid", new Asker(Asker.CHEST_LID, chest));
         ticks(test, 30);
         note(test, "the village at noon");
         int beds = test.onClient(() -> {
@@ -1047,7 +1193,7 @@ final class RealWorldSteps {
         if (hourly > 450) {
             fault(test, "ordinary play in a village filled the recording at " + (int) hourly + " MB an hour, three times what the plan allows");
         }
-        BudgetSteps.measured("BUD-2", "recording size, an hour", hourly, 150, true, "MB", "the tour of generated terrain, ordinary play on foot in a village for " + length + " ticks");
+        budget("BUD-2", "recording size, an hour", hourly, 150, "MB", "the tour of generated terrain, ordinary play on foot in a village for " + length + " ticks");
         note(test, "after a walk round the village");
     }
 
@@ -1300,8 +1446,7 @@ final class RealWorldSteps {
         // Mining a block with the bare hand: the cracks spread over it for a second and a half
         BlockPos target = new BlockPos(x + 3, y + 1, z - 2);
         command(test, "fill %d %d %d %d %d %d minecraft:oak_log", target.getX(), y, target.getZ(), target.getX(), y + 1, target.getZ());
-        // Whether there are any, not how far they have spread: the stage moves on a tick that live and playback count a tick apart
-        askers.put("cracks in the block being mined", game -> cracks(game, target) >= 0 ? "cracked" : "whole");
+        askers.put("cracks in the block being mined", new Asker(Asker.CRACKS, target));
         ticks(test, 10);
         note(test, "a log to mine, untouched");
         Vec3 eyes = test.onClient(() -> minecraft.player.getEyePosition());
