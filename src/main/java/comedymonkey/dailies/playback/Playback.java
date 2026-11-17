@@ -600,7 +600,30 @@ public final class Playback {
         TimerAccess timer = (TimerAccess) minecraft.getTimer();
         timer.dailies$setPausedPartialTick(1.0F);
         timer.dailies$setPartialTick(0.0F);
+        settleLight(minecraft);
         PlaybackExtensions.arrivedAll();
+    }
+
+    /**
+     * Brings the light up to date at once. The game takes the light the server sends a little at a time, a tenth of
+     * what is waiting each frame, which in live play nobody sees. A jump hands it several seconds of the recording in
+     * one go, or a whole world: left to itself the light would then arrive over many frames, with chunks drawn in
+     * the old light, or none, until it did.
+     */
+    private static void settleLight(Minecraft minecraft) {
+        net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
+        if (level == null) {
+            return;
+        }
+        try {
+            // Each call takes a share of what is waiting, so it is asked until nothing is
+            for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
+                level.pollLightUpdates();
+            }
+            level.getChunkSource().getLightEngine().runLightUpdates();
+        } catch (RuntimeException e) {
+            Host.LOGGER.warn("Dailies: the light could not be brought up to date after a jump; it will catch up over the next frames", e);
+        }
     }
 
     /** The start of every game tick */
