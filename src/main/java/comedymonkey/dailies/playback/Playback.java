@@ -578,21 +578,34 @@ public final class Playback {
                 break;
             }
             if (System.nanoTime() > deadline) {
+                hold(minecraft, true);
                 return;
             }
         }
         if (feed.reloadWanted() >= 0 && position < jumpTarget) {
             // The stretch ahead starts from its own snapshot; carry on from there next frame
             reloadIndex = feed.reloadWanted();
+            hold(minecraft, true);
             return;
         }
         jumpTarget = -1;
         skipping = false;
         feed.skipping = false;
         paused = pauseAfterJump;
+        hold(minecraft, paused);
         minecraft.getSoundManager().stop();
         minecraft.particleEngine.setLevel(minecraft.level);
         settle(minecraft);
+    }
+
+    /**
+     * The game's own pause flag, put back after a jump has ticked the game by hand. The game only looks at what playback
+     * wants at the end of a frame, and until then it would run the ticks it thinks this frame owes with the flag as the
+     * jump left it, off: the world moved on by up to ten ticks that were not the recording's, in the frame a jump landed
+     * and in every frame of a long one
+     */
+    private static void hold(Minecraft minecraft, boolean still) {
+        ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(still);
     }
 
     /** Shows the world exactly as it is at the end of the tick just played, not part way into the next */
@@ -600,7 +613,10 @@ public final class Playback {
         TimerAccess timer = (TimerAccess) minecraft.getTimer();
         timer.dailies$setPausedPartialTick(1.0F);
         timer.dailies$setPartialTick(0.0F);
-        settleLight(minecraft);
+        // The switch is for the tests, which measure what the light is like without this
+        if (!Boolean.getBoolean("dailies.playback.noSettleLight")) {
+            settleLight(minecraft);
+        }
         PlaybackExtensions.arrivedAll();
     }
 
@@ -610,7 +626,7 @@ public final class Playback {
      * one go, or a whole world: left to itself the light would then arrive over many frames, with chunks drawn in
      * the old light, or none, until it did.
      */
-    private static void settleLight(Minecraft minecraft) {
+    static void settleLight(Minecraft minecraft) {
         net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
         if (level == null) {
             return;

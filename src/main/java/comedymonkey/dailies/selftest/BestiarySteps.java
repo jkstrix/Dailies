@@ -144,6 +144,15 @@ final class BestiarySteps {
         stills.add(new Still(name, tick, x, y, z, yaw, pitch, byPlay));
     }
 
+    /** Runs a command that may well have nothing to do: tidying up */
+    static void quietly(String command) throws Exception {
+        int before = problems.size();
+        c(command);
+        while (problems.size() > before) {
+            problems.remove(problems.size() - 1);
+        }
+    }
+
     /** Runs a command as the player and notes it when the game refuses it */
     static boolean c(String command) throws Exception {
         net.minecraft.client.server.IntegratedServer server = minecraft.getSingleplayerServer();
@@ -176,7 +185,6 @@ final class BestiarySteps {
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
         if (!said.isEmpty()) {
             problems.add("command refused: " + command + " -> " + said);
-            test.log("bestiary: command refused: " + command + " -> " + said);
         }
         return said.isEmpty();
     }
@@ -407,6 +415,25 @@ final class BestiarySteps {
         }
         stops.removeIf(tick -> !Census.live.containsKey(tick) || Census.live.get(tick).blocks == null || tick > length);
         Census.skippedSounds.clear();
+
+        // First with the three light fixes of playback switched off, looking at light alone, so the report can say what they are worth
+        System.setProperty("dailies.playback.noSettleLight", "true");
+        System.setProperty("dailies.playback.leaveStaleLight", "true");
+        System.setProperty("dailies.playback.lightOutOfOrder", "true");
+        try {
+            for (int stop : stops) {
+                landForLight(stop, "without the light fixes, jump", tally);
+            }
+            for (int stop : stops.descendingSet()) {
+                landForLight(stop, "without the light fixes, jump back", tally);
+            }
+        } finally {
+            System.clearProperty("dailies.playback.noSettleLight");
+            System.clearProperty("dailies.playback.leaveStaleLight");
+            System.clearProperty("dailies.playback.lightOutOfOrder");
+        }
+        PlaybackSteps.jump(test, 0);
+        pictures(folder);
         for (int stop : stops) {
             land(stop, "jump", tally);
         }
@@ -449,14 +476,112 @@ final class BestiarySteps {
         report(folder, tally, total, played, stops.size());
     }
 
+    /** Jumps, and returns the light as it stood on the very frame the jump arrived, before anything was drawn */
+    private static byte[] arrive(int stop) throws Exception {
+        byte[][] arrival = new byte[1][];
+        boolean[] there = new boolean[1];
+        long started = System.nanoTime();
+        test.onClientRun(() -> {
+            Playback.jumpTo(stop, true);
+            Playback.whenLoaded(() -> {
+                arrival[0] = Census.lightNow(minecraft, stop);
+                there[0] = true;
+            });
+        });
+        test.waitFor(() -> there[0] && !Playback.jumping() && Playback.position() == stop, 60, "the jump to tick " + stop);
+        PlaybackSteps.longestJumpMillis = Math.max(PlaybackSteps.longestJumpMillis, (System.nanoTime() - started) / 1_000_000);
+        return arrival[0];
+    }
+
+    private static void frames(int count) throws Exception {
+        long until = Census.frames + count;
+        test.waitFor(() -> Census.frames >= until, 30, count + " frames to be drawn");
+    }
+
+    private static void landForLight(int stop, String mode, Census.Tally tally) throws Exception {
+        try {
+            byte[] arrival = arrive(stop);
+            Census then = Census.live.get(stop);
+            Census.compareLight(then, arrival, mode + ", on the frame it arrives", tally, true);
+            frames(20);
+            Census.compareLight(then, test.onClient(() -> Census.lightNow(minecraft, stop)), mode + ", twenty frames on", tally, true);
+        } catch (Throwable t) {
+            tally.add(mode, "the jump", "failed", stop, String.valueOf(t.getMessage()), false);
+            check(Playback.loaded(), "playback closed during the bestiary's jump to tick " + stop + ": " + Playback.lastError());
+        }
+    }
+
+    /** Stills that are to be set against the live game's own screen: {name, tick to jump from, tick to land on} */
+    static final List<Object[]> comparisons = new ArrayList<>();
+
+    /**
+     * For each comparison: the screen on the frame a jump arrives and forty frames later, seen through the recorder's eyes,
+     * beside the live game's screen at that tick. How far apart the pictures are is logged; a person looks at them too
+     */
+    private static void pictures(Path folder) throws Exception {
+        for (Object[] comparison : comparisons) {
+            String name = (String) comparison[0];
+            int from = (Integer) comparison[1], to = (Integer) comparison[2];
+            try {
+                PlaybackSteps.jump(test, from);
+                test.onClientRun(() -> {
+                    Viewer.ride(minecraft.level.getPlayerByUUID(java.util.UUID.fromString(Playback.manifest().recorderId)));
+                    Playback.jumpTo(to, true);
+                    Playback.whenLoaded(() -> {
+                        Viewer.ride(minecraft.level.getPlayerByUUID(java.util.UUID.fromString(Playback.manifest().recorderId)));
+                        Census.grab(folder.resolve("light-" + name + "-arrival.png"), 0);
+                        Census.grab(folder.resolve("light-" + name + "-forty-frames-on.png"), 40);
+                    });
+                });
+                test.waitFor(() -> !Playback.jumping() && Playback.position() == to, 60, "the jump for the picture " + name);
+                frames(50);
+                test.onClientRun(() -> Viewer.ride(null));
+                double settling = apart(folder.resolve("light-" + name + "-arrival.png"), folder.resolve("light-" + name + "-forty-frames-on.png"));
+                double fromLive = apart(folder.resolve("light-" + name + "-live.png"), folder.resolve("light-" + name + "-forty-frames-on.png"));
+                double arrivalFromLive = apart(folder.resolve("light-" + name + "-live.png"), folder.resolve("light-" + name + "-arrival.png"));
+                pictureNotes.add(String.format("%s (jump from tick %d to %d): arrival frame against forty frames on %.2f; arrival against live %.2f; forty frames on against live %.2f (mean difference of a pixel, of 255)",
+                    name, from, to, settling, arrivalFromLive, fromLive));
+            } catch (Throwable t) {
+                problems.add("the pictures for " + name + " could not be taken: " + t);
+            }
+        }
+    }
+
+    static final List<String> pictureNotes = new ArrayList<>();
+
+    private static double apart(Path one, Path two) throws Exception {
+        java.awt.image.BufferedImage a = javax.imageio.ImageIO.read(one.toFile()), b = javax.imageio.ImageIO.read(two.toFile());
+        if (a == null || b == null || a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+            return -1.0;
+        }
+        long sum = 0;
+        int count = 0;
+        // The world, not the bars along the top and bottom of the screen
+        for (int y = a.getHeight() / 8; y < a.getHeight() * 3 / 4; y += 2) {
+            for (int x = 0; x < a.getWidth(); x += 2) {
+                int p = a.getRGB(x, y), q = b.getRGB(x, y);
+                sum += Math.abs((p >> 16 & 255) - (q >> 16 & 255)) + Math.abs((p >> 8 & 255) - (q >> 8 & 255)) + Math.abs((p & 255) - (q & 255));
+                count += 3;
+            }
+        }
+        return (double) sum / count;
+    }
+
     private static void land(int stop, String mode, Census.Tally tally) throws Exception {
         try {
-            PlaybackSteps.jump(test, stop);
+            byte[] arrival = arrive(stop);
+            Census then = Census.live.get(stop);
+            Census.compareLight(then, arrival, mode + ", on the frame it arrives", tally, false);
             test.onClientRun(() -> Census.aim(stop));
-            // A few drawn frames from where the recorder stood, for the counters that drawing feeds
-            Thread.sleep(80);
+            // Twenty drawn frames from where the recorder stood: for the counters that drawing feeds, and for light to have settled if it was going to
+            frames(20);
             Census now = test.onClient(() -> Census.ofPlayback(minecraft));
-            Census.compare(Census.live.get(stop), now, mode, tally);
+            Census.compare(then, now, mode, tally);
+            java.util.List<String> moved = arrival == null || now.light == null || arrival.length != now.light.length ? null : java.util.stream.IntStream.range(0, arrival.length)
+                .filter(i -> arrival[i] != now.light[i]).mapToObj(String::valueOf).toList();
+            if (moved != null && !moved.isEmpty()) {
+                tally.add(mode, "light", "went on changing after the jump arrived", stop, moved.size() + " places differ between the arrival frame and twenty frames on", false);
+            }
         } catch (Throwable t) {
             tally.add(mode, "the jump", "failed", stop, String.valueOf(t.getMessage()), false);
             check(Playback.loaded(), "playback closed during the bestiary's jump to tick " + stop + ": " + Playback.lastError());
@@ -525,6 +650,8 @@ final class BestiarySteps {
             }
         });
         lines.add("BESTIARY furthest from the live place, in blocks (only those over 0.05):" + far);
+        lines.add("BESTIARY places with the wrong light, summed over the ticks looked at: " + tally.lightPlaces);
+        pictureNotes.forEach(note -> lines.add("BESTIARY pictures: " + note));
         lines.add("BESTIARY marks: " + marks);
         lines.add("BESTIARY sounds: " + Census.liveSounds.size() + " live, " + Census.playSounds.size() + " in play and landings, " + Census.skippedSounds.size() + " from skipped time");
         String summary = "BESTIARY SUMMARY: " + items.size() + " items, " + fine + " OK, " + (items.size() - fine) + " not; " + total + " ticks recorded, " + played + " compared in play, "

@@ -79,6 +79,7 @@ final class BestiaryStages {
         stage("mobs with states", BestiaryStages::mobs);
         stage("the recorder", BestiaryStages::recorder);
         stage("blocks", BestiaryStages::blocks);
+        stage("light", BestiaryStages::light);
         stage("sky", BestiaryStages::sky);
     }
 
@@ -101,8 +102,8 @@ final class BestiaryStages {
                 waitTicks(20);
             }
             c("gamemode creative");
-            c("effect clear @s");
-            c("clear @s");
+            quietly("effect clear @s");
+            quietly("clear @s");
             clearField();
             home();
             waitTicks(10);
@@ -124,13 +125,13 @@ final class BestiaryStages {
     }
 
     private static void clearField() throws Exception {
-        c("kill @e[type=!minecraft:player]");
-        c("fill -40 -60 -40 40 -46 40 minecraft:air");
-        c("fill -40 -61 -40 40 -61 40 minecraft:grass_block");
-        c("fill -40 -63 -40 40 -62 40 minecraft:dirt");
-        c("fill -40 -64 -40 40 -64 40 minecraft:bedrock");
+        quietly("kill @e[type=!minecraft:player]");
+        quietly("fill -40 -60 -40 40 -46 40 minecraft:air");
+        quietly("fill -40 -61 -40 40 -61 40 minecraft:grass_block");
+        quietly("fill -40 -63 -40 40 -62 40 minecraft:dirt");
+        quietly("fill -40 -64 -40 40 -64 40 minecraft:bedrock");
         waitTicks(3);
-        c("kill @e[type=!minecraft:player]");
+        quietly("kill @e[type=!minecraft:player]");
     }
 
     private static Entity find(ServerLevel level, Predicate<Entity> which) {
@@ -176,10 +177,19 @@ final class BestiaryStages {
     private static void wither() throws Exception {
         item("Wither: summoned, charging, its explosion").owns("Test Wither").need(present("Test Wither", 1)).need(state("Test Wither", "d19=")).need(changed(-12, 14, 12, 34, 30, 100000));
         item("Wither: boss bar (name, progress, colour, darkened sky)").owns("boss bar").need(seen("a bar named Test Wither that darkens the sky", census -> census.bars.contains("Test Wither") && census.bars.contains("darken=true")))
-            .need(seen("the bar below four tenths", census -> census.bars.contains("Test Wither|0.0") || census.bars.contains("Test Wither|0.1") || census.bars.contains("Test Wither|0.2") || census.bars.contains("Test Wither|0.3")))
+            .need(item -> {
+                java.util.TreeSet<String> shown = new java.util.TreeSet<>();
+                Census.live.subMap(item.from, item.to).values().forEach(census -> {
+                    if (census.bars.contains("Test Wither|")) {
+                        shown.add(census.bars.substring(census.bars.indexOf('|') + 1, census.bars.indexOf('|') + 6));
+                    }
+                });
+                return shown.size() >= 8 ? "the bar at " + shown.size() + " different lengths, " + shown.first() + " to " + shown.last() : null;
+            })
             .need(seen("no bar", census -> census.bars.isEmpty()));
         item("Wither: skulls, black and blue").owns("minecraft:wither_skull", "skull target").need(present("minecraft:wither_skull", 2)).need(state("minecraft:wither_skull", "d8=true"));
         item("Wither: blocks broken").owns("blocks").need(changed(-40, -40, 40, 40, 60, 1000000));
+        lit("around the Wither's destroyed blocks");
         item("Wither: death, nether star and XP").owns("minecraft:item", "minecraft:experience_orb").need(state("Test Wither", "deathTime=")).need(state("minecraft:item", "nether_star"))
             .need(present("minecraft:experience_orb", 1));
 
@@ -239,13 +249,26 @@ final class BestiaryStages {
         item("Creeper: charged").owns("creeper charged").need(state("creeper charged", "charged=true")).need(changed(-18, 21, 2, 40, 60, 100000));
         item("Creeper: a chain of three").owns("creeper chain 1", "creeper chain 2", "creeper chain 3").need(present("creeper chain 1", 1)).need(present("creeper chain 3", 1))
             .need(changed(1, 4, 24, 17, 30, 100000));
-        item("Creeper: into water (no blocks broken)").owns("creeper wet").need(present("creeper wet", 1)).need(changed(-30, 30, -20, 40, 0, 0));
+        item("Creeper: into water (no blocks broken)").owns("creeper wet").need(present("creeper wet", 1)).need(item -> {
+            // From after the pool was dug to the end: nothing but the pool's own water may have changed there
+            int blown = 0;
+            for (Census census : Census.live.subMap(item.from + 12, item.to).values()) {
+                for (String change : census.changes == null ? java.util.List.<String>of() : census.changes) {
+                    String[] at = change.substring(0, change.indexOf(':')).split(" ");
+                    int x = Integer.parseInt(at[0]), z = Integer.parseInt(at[2]);
+                    blown += x >= -30 && x <= -20 && z >= 30 && z <= 40 && change.endsWith("-> air") ? 1 : 0;
+                }
+            }
+            return blown == 0 ? "nothing round the pool was blown away" : null;
+        });
+        lit("the creepers' craters");
         item("Creeper: explosion with drops").owns("creeper drops", "minecraft:item").need(present("creeper drops", 1)).need(state("minecraft:item", "diamond"));
 
         c("fill -27 -61 33 -23 -61 37 minecraft:water");
         c("setblock 31 -60 31 minecraft:chest{Items:[{Slot:0b,id:\"minecraft:diamond\",count:7},{Slot:1b,id:\"minecraft:gold_ingot\",count:3}]}");
         waitTicks(10);
-        mark("before the creepers");
+        int before = mark("before the creepers");
+        Census.liveGrabs.put(before, minecraft.gameDirectory.toPath().resolve("dailies/bestiary/light-backwards-to-before-the-explosions-live.png"));
         waitTicks(4);
         c("summon minecraft:creeper -20.5 -60 10.5 {NoAI:1b,ignited:1b,Fuse:40," + named("creeper plain") + "}");
         c("summon minecraft:creeper -8.5 -60 30.5 {NoAI:1b,ignited:1b,Fuse:55,powered:1b," + named("creeper charged") + "}");
@@ -273,7 +296,12 @@ final class BestiaryStages {
         waitTicks(10);
         mark("chain, all gone");
         waitTicks(30);
-        still("creepers-after", mark("after the creepers"), 0.5, -45, -6.5, 0.5, -61, 20.5, false);
+        int after = mark("after the creepers");
+        still("creepers-after", after, 0.5, -45, -6.5, 0.5, -61, 20.5, false);
+        // The screen itself, for the light: a jump forwards over the explosions, and one backwards to before them
+        Census.liveGrabs.put(after, minecraft.gameDirectory.toPath().resolve("dailies/bestiary/light-forwards-over-the-explosions-live.png"));
+        comparisons.add(new Object[]{"forwards-over-the-explosions", before, after});
+        comparisons.add(new Object[]{"backwards-to-before-the-explosions", after, before});
         waitTicks(10);
     }
 
@@ -285,6 +313,7 @@ final class BestiaryStages {
         item("Ghast fireball: deflected by a hit").owns("minecraft:fireball").need(present("minecraft:fireball", 2));
         item("Fireball in flight across a stored world (slowed down so a jump lands on it)").owns("minecraft:fireball").need(present("minecraft:fireball", 3));
         item("Blaze: burning state").owns("blaze").need(state("blaze", "d16=1"));
+        lit("the fire the fireballs leave");
         item("Blaze fireballs: a burst of three and the fire they light").owns("minecraft:small_fireball", "blocks").need(present("minecraft:small_fireball", 3)).need(blockChange("-> fire"));
 
         c("fill -16 -60 34 -8 -54 34 minecraft:oak_planks");
@@ -315,7 +344,9 @@ final class BestiaryStages {
         });
         waitTicks(4);
         mark("fireball before the hit");
-        c("damage @e[type=minecraft:fireball,limit=1,sort=nearest] 1 minecraft:player_attack by @s");
+        // What a player's punch does to a fireball: it is turned along the way they are looking
+        server("deflecting the fireball", (level, player) -> ((net.minecraft.world.entity.projectile.Projectile) find(level, entity -> entity.getType() == EntityType.FIREBALL))
+            .deflect(net.minecraft.world.entity.projectile.ProjectileDeflection.AIM_DEFLECT, player, player, true));
         waitTicks(5);
         mark("fireball deflected");
         waitTicks(30);
@@ -358,8 +389,20 @@ final class BestiaryStages {
         item("XP: a bottle o' enchanting breaking").owns("minecraft:experience_bottle").need(present("minecraft:experience_bottle", 1));
         item("XP: orbs in quantity, merging").owns("minecraft:experience_orb").need(present("minecraft:experience_orb", 100))
             .need(item -> {
-                long before = orbs(item.from + 30, 1), after = orbs(item.from + 110, 1);
-                return after < before ? "orbs worth 1: " + before + " then " + after + " after merging" : null;
+                java.util.Set<Integer> ever = new java.util.HashSet<>();
+                long most = 0;
+                for (Census census : Census.live.subMap(item.from, item.to).values()) {
+                    long here = 0;
+                    for (java.util.Map.Entry<Integer, Census.Thing> thing : census.things.entrySet()) {
+                        if (thing.getValue().type().equals("minecraft:experience_orb") && thing.getValue().state().contains("value=1;")) {
+                            ever.add(thing.getKey());
+                            here++;
+                        }
+                    }
+                    most = Math.max(most, here);
+                }
+                long left = orbs(item.to - 4, 1);
+                return most - left >= 15 ? "orbs worth 1: " + most + " at once, " + left + " at the end, the rest merged away (" + ever.size() + " seen in all)" : null;
             });
         item("XP: orbs homing on the recorder and collected, the XP bar in the recorded HUD").owns("recorded HUD")
             .need(seen("an experience level in the HUD", census -> !census.hud.contains("level=0 ") && census.hud.contains("level=")));
@@ -375,11 +418,19 @@ final class BestiaryStages {
                 level.addFreshEntity(new ExperienceOrb(level, 4.5, -60.0, 12.5, 1));
             }
             for (int i = 0; i < 40; i++) {
-                level.addFreshEntity(new ExperienceOrb(level, 12.5 + (i % 7) * 0.9, -59.0, 20.5 + (i % 5) * 0.9, 1 + i % 9));
+                level.addFreshEntity(new ExperienceOrb(level, 12.5 + (i % 7) * 0.9, -59.0, 20.5 + (i % 5) * 0.9, 2 + i % 8));
             }
         });
         c("summon minecraft:experience_bottle 12.5 -55 12.5");
         waitTicks(10);
+        // More on the same spot. Orbs of one worth merge when their numbers are forty apart, each looking about once a second:
+        // what is left of the first lot takes in what is left of the second
+        server("orbs to merge with the first", (level, player) -> {
+            for (int i = 0; i < 80; i++) {
+                level.addFreshEntity(new ExperienceOrb(level, 4.5, -60.0, 12.5, 1));
+            }
+        });
+        waitTicks(1);
         still("orbs", mark("orbs spawned"), 6.5, -56, 6.5, 8.5, -60, 16.5, false);
         waitTicks(30);
         mark("orbs settling");
@@ -430,6 +481,7 @@ final class BestiaryStages {
             .need(state("minecraft:ender_dragon", "phase=Dying")).need(present("minecraft:experience_orb", 10));
         item("Dragon: exit portal and egg appearing").owns("blocks").need(blockChange("-> end_portal")).need(blockChange("-> dragon_egg"));
         item("End pillar: half removed").owns("blocks").need(blockChange("obsidian -> air"));
+        lit("The End's portal and the pillar taken down and rebuilt");
         item("Dragon respawn: the four crystals, beams to each pillar, crystals reappearing, the explosion").owns("minecraft:end_crystal", "blocks", "sounds")
             .need(where("minecraft:end_crystal", "with a beam to the sky", thing -> thing.state().contains("d8=some(BlockPos{x=0, y=128, z=0})")))
             .need(where("minecraft:end_crystal", "with a beam to a pillar", thing -> thing.state().contains("d8=some(") && !thing.state().contains("y=128")));
@@ -697,11 +749,12 @@ final class BestiaryStages {
         item("Lightning bolt, and the pig it turns to a zombified piglin").owns("minecraft:lightning_bolt", "pork", "minecraft:zombified_piglin").need(present("minecraft:lightning_bolt", 1))
             .need(seen("a zombified piglin", census -> census.things.values().stream().anyMatch(thing -> thing.type().equals("minecraft:zombified_piglin"))));
         item("Llama spit").owns("minecraft:llama_spit").need(present("minecraft:llama_spit", 1));
+        lit("lightning's fire and the TNT's crater");
 
         c("setblock -4 -60 8 minecraft:target");
         c("setblock -4 -59 8 minecraft:target");
         c("summon minecraft:pig 4.5 -60 8.5 {NoAI:1b,Health:100f,attributes:[{id:\"minecraft:generic.max_health\",base:100.0}]," + named("arrow target") + "}");
-        c("summon minecraft:pig 4.5 -60 20.5 {NoAI:1b," + named("bullet target") + "}");
+        c("summon minecraft:pig 4.5 -60 20.5 {attributes:[{id:\"minecraft:generic.movement_speed\",base:0.0}]," + named("bullet target") + "}");
         c("summon minecraft:shulker 4.5 -60 12.5 {NoAI:1b," + named("bullet shulker") + "}");
         c("summon minecraft:guardian -12.5 -60 20.5 {NoAI:1b," + named("guardian") + "}");
         c("summon minecraft:pig -12.5 -60 26.5 {NoAI:1b," + named("beam target") + "}");
@@ -854,7 +907,7 @@ final class BestiaryStages {
 
     private static void mobs() throws Exception {
         item("Warden rising from the ground").owns("minecraft:warden").need(state("minecraft:warden", "pose=EMERGING")).need(state("minecraft:warden", "emerge="));
-        item("Slime that splits").owns("big slime", "minecraft:slime").need(present("big slime", 1)).need(present("minecraft:slime", 2));
+        item("Slime that splits").owns("big slime").need(present("big slime", 3));
         item("Phantom").owns("phantom").need(present("phantom", 1));
         item("Bat").owns("bat").need(present("bat", 1));
         item("Sheep being dyed and sheared").owns("sheep").need(state("sheep", "d17=14")).need(state("sheep", "d17=30"));
@@ -914,6 +967,7 @@ final class BestiaryStages {
         c("setblock 2 -60 -9 minecraft:red_bed[part=foot,facing=south]");
         c("setblock 2 -60 -8 minecraft:red_bed[part=head,facing=south]");
         c("summon minecraft:pig 5.5 -60 -8.5 {Saddle:1b,NoAI:1b," + named("steed") + "}");
+        c("tp @s 1.5 -60 -6.5 0 20");
         waitTicks(8);
         mark("before bed");
         server("going to bed", (level, player) -> player.startSleepInBed(new BlockPos(2, -60, -8)).ifLeft(problem -> {
@@ -1023,9 +1077,10 @@ final class BestiaryStages {
         item("Conduit").owns("block entity minecraft:conduit").need(blockEntity("minecraft:conduit", "active=true"));
         item("Spawner's spinning mob").owns("block entity minecraft:mob_spawner").need(blockEntity("minecraft:mob_spawner", "minecraft:zombie"));
         item("Brewing stand").owns("block entity minecraft:brewing_stand", "blocks").need(blockChange("has_bottle_0=true"));
-        item("Lectern").owns("block entity minecraft:lectern").need(blockEntity("minecraft:lectern", "written_book"));
+        item("Lectern").owns("block entity minecraft:lectern", "blocks").need(blockChange("has_book=true")).note("a game is told only that a lectern has a book, not which");
         item("Redstone lamp and repeater changing state").owns("blocks").need(blockChange("redstone_lamp[lit=true]")).need(blockChange("powered=true"));
-        item("Door and trapdoor").owns("blocks").need(blockChange("oak_door")).need(blockChange("oak_trapdoor")).need(heard("minecraft:block.wooden_door.open"));
+        item("Door and trapdoor").owns("blocks").need(blockChange("oak_door[facing=north,half=lower,hinge=left,open=true")).need(blockChange("oak_trapdoor[facing=north,half=bottom,open=true"));
+        lit("the beacon, the lamps and the campfire");
 
         c("setblock -20 -60 12 minecraft:sticky_piston[facing=east]");
         c("setblock -19 -60 12 minecraft:stone");
@@ -1049,7 +1104,8 @@ final class BestiaryStages {
         c("setblock 20 -60 23 minecraft:sculk_shrieker[can_summon=false]");
         c("fill -22 -60 26 -18 -56 30 minecraft:glass hollow");
         c("fill -21 -59 27 -19 -57 29 minecraft:water");
-        c("fill -22 -58 26 -18 -58 30 minecraft:prismarine outline");
+        c("fill -22 -58 26 -18 -58 30 minecraft:prismarine");
+        c("fill -21 -58 27 -19 -58 29 minecraft:water");
         c("setblock -20 -58 28 minecraft:conduit[waterlogged=true]");
         c("setblock -12 -60 28 minecraft:spawner{SpawnData:{entity:{id:\"minecraft:zombie\"}},Delay:600s,RequiredPlayerRange:1s}");
         c("setblock -4 -60 28 minecraft:brewing_stand{Items:[{Slot:0b,id:\"minecraft:potion\",count:1,components:{\"minecraft:potion_contents\":{potion:\"minecraft:water\"}}},{Slot:3b,id:\"minecraft:nether_wart\",count:1},"
@@ -1109,6 +1165,55 @@ final class BestiaryStages {
         mark("lids closing, piston pulling back");
         waitTicks(40);
         mark("blocks at rest");
+        waitTicks(6);
+    }
+
+    // --- Light ---
+
+    private static void lit(String where) {
+        item("Light: " + where).owns("light").need(seen("light written down", census -> census.light != null));
+    }
+
+    private static void light() throws Exception {
+        item("Light: a torch and glowstone placed and broken, lava poured and taken away").owns("light", "blocks").need(blockChange("-> torch")).need(blockChange("-> glowstone")).need(blockChange("-> lava"));
+        item("Light: a lamp high in empty air, lit after a stored world (a jump back keeps the world, and must not keep its glow)").owns("light", "blocks")
+            .need(blockChange("air -> glowstone")).need(blockChange("glowstone -> air"));
+
+        // Two lamps in sections of the world that hold nothing but air, well above the ground
+        Census.watch(OVERWORLD, tick() + 2, -5, -47, 15, 5, -33, 25);
+        Census.watch(OVERWORLD, tick() + 2, 1, -15, 15, 11, -1, 25);
+        waitTicks(10);
+        mark("before the lights");
+        c("setblock -10 -60 10 minecraft:torch");
+        c("setblock 0 -60 14 minecraft:glowstone");
+        c("setblock 10 -60 10 minecraft:lava");
+        waitTicks(2);
+        mark("lights just placed");
+        waitTicks(28);
+        still("lights", mark("torch, glowstone and lava"), 0.5, -54, 0.5, 0.5, -60, 12.5, false);
+        waitTicks(6);
+        c("setblock -10 -60 10 minecraft:air");
+        c("setblock 0 -60 14 minecraft:air");
+        c("fill 6 -60 6 14 -60 14 minecraft:air");
+        waitTicks(2);
+        mark("lights just broken");
+        waitTicks(20);
+        mark("lights gone");
+        // Just after a stored world is written, so that it knows nothing of them
+        untilPhase(8);
+        mark("before the high lamps");
+        waitTicks(6);
+        c("setblock 0 -40 20 minecraft:glowstone");
+        c("setblock 6 -8 20 minecraft:glowstone");
+        waitTicks(40);
+        mark("high lamps lit");
+        waitTicks(75);
+        still("high-lamps", mark("high lamps, well after another stored world"), 0.5, -36, 4.5, 3.5, -24, 20.5, false);
+        waitTicks(6);
+        c("setblock 0 -40 20 minecraft:air");
+        c("setblock 6 -8 20 minecraft:air");
+        waitTicks(20);
+        mark("high lamps out");
         waitTicks(6);
     }
 

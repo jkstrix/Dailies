@@ -170,6 +170,17 @@ public final class Snapshots {
         taking = true;
         try {
             ClientLevel level = minecraft.level;
+            // Chunks are described with the light the game holds for them, and it holds light it has been sent in a queue
+            // that it takes a little from each frame. Straight after a change of dimension most of it is still waiting
+            // there: the chunks went into the snapshot dark, and stayed dark in playback for the rest of the recording
+            try {
+                for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
+                    level.pollLightUpdates();
+                }
+                level.getChunkSource().getLightEngine().runLightUpdates();
+            } catch (RuntimeException e) {
+                warnOnce("light", e);
+            }
             writeWorld(out, minecraft, listener, level, playback);
             int chunks = playback == null ? writeChunks(out, minecraft, listener, level, codec) : writePlaybackChunks(out, level, codec, playback);
             int entities = writeEntities(out, level, codec, playback);

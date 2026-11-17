@@ -37,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * each led by a byte, and a 0 byte to end the entity: 1, an int, ticks into dying; 2, an int, ticks into a dragon's
  * death; 3, a name and an int, the entity's animation of that name and how many ticks of it have run; 4, an int and
  * fourteen floats, how many ticks ago a display entity began to change and the shape it began from (translation,
- * left rotation, scale, right rotation).
+ * left rotation, scale, right rotation); 5, an int, how many ticks a guardian's beam has been charging.
  */
 public final class EntityClocks {
 
@@ -117,6 +117,10 @@ public final class EntityClocks {
                 vector(out, from.getScale());
                 rotation(out, from.getRightRotation());
             }
+            if (entity instanceof net.minecraft.world.entity.monster.Guardian guardian && guardian.hasActiveAttackTarget()) {
+                out.writeByte(5);
+                out.writeInt(guardian.clientSideAttackTime);
+            }
             out.writeByte(0);
         }
         return bytes.toByteArray();
@@ -191,6 +195,12 @@ public final class EntityClocks {
                                     now.brightnessOverride(), now.shadowRadius(), now.shadowStrength(), now.glowColorOverride());
                                 display.interpolationStartClientTick = (long) display.tickCount - ago;
                             }
+                        }
+                    }
+                    case 5 -> {
+                        int charging = in.readInt();
+                        if (entity instanceof net.minecraft.world.entity.monster.Guardian guardian) {
+                            guardian.clientSideAttackTime = charging;
                         }
                     }
                     default -> {

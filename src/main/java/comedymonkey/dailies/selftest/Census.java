@@ -90,6 +90,10 @@ final class Census {
     short[] blocks;
     /** The blocks that changed since the tick before; null when there is no tick before to compare with */
     List<String> changes;
+    /** Block light and sky light at every watched block, sixteen times the one plus the other, where the blocks are kept */
+    byte[] light;
+    /** The same three ticks on in the live game, which takes light in a little at a time: either is right for playback */
+    byte[] lightLater;
     int recorderId = Integer.MIN_VALUE;
 
     private Census(int tick) {
@@ -142,6 +146,7 @@ final class Census {
             // Before the recorder counts the tick, so the tick read here is the one this state belongs to
             NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, (ClientTickEvent.Post event) -> endOfTick());
             NeoForge.EVENT_BUS.addListener((PlaySoundEvent event) -> heard(event));
+            NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderFrameEvent.Post event) -> drawn());
         }
         previous = null;
         lastPlayed = -1;
@@ -151,6 +156,33 @@ final class Census {
 
     static void stop() {
         mode = Mode.OFF;
+    }
+
+    /** Frames drawn so far, for waiting a number of them */
+    static volatile long frames = 0;
+    /** Pictures of the screen to take once so many more frames have been drawn: the file, and the frames still to go */
+    private static final List<Object[]> GRABS = new CopyOnWriteArrayList<>();
+    /** Recording ticks at which the live game's screen is to be kept, with the file for each */
+    static final Map<Integer, java.nio.file.Path> liveGrabs = new ConcurrentHashMap<>();
+
+    /** Keeps the screen as it is drawn so many frames from now (0 is the frame being put together) */
+    static void grab(java.nio.file.Path file, int framesOn) {
+        GRABS.add(new Object[]{file, new int[]{framesOn}});
+    }
+
+    private static void drawn() {
+        frames++;
+        for (Object[] grab : GRABS) {
+            int[] left = (int[]) grab[1];
+            if (left[0]-- <= 0) {
+                GRABS.remove(grab);
+                try (com.mojang.blaze3d.platform.NativeImage image = net.minecraft.client.Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+                    image.writeToFile((java.nio.file.Path) grab[0]);
+                } catch (Throwable t) {
+                    comedymonkey.dailies.Host.LOGGER.warn("Dailies self test: a picture of the screen could not be kept", t);
+                }
+            }
+        }
     }
 
     private static void heard(PlaySoundEvent event) {
@@ -177,6 +209,15 @@ final class Census {
                 Census census = take(minecraft, tick, true, previous, TRACKER, keyTicks.contains(tick) || tick % BestiarySteps.EVERY == 0);
                 live.put(tick, census);
                 previous = census;
+                Census earlier = live.get(tick - 3);
+                if (earlier != null && earlier.light != null && earlier.dimension.equals(census.dimension)) {
+                    byte[] later = scanLight(minecraft.level, boxesAt(earlier.dimension, earlier.tick));
+                    earlier.lightLater = later.length == earlier.light.length ? later : null;
+                }
+                java.nio.file.Path picture = liveGrabs.remove(tick);
+                if (picture != null) {
+                    grab(picture, 0);
+                }
             } else if (mode == Mode.PLAY) {
                 if (!Playback.loaded() || Playback.jumping() || Playback.skipping() || minecraft.level == null) {
                     return;
@@ -275,6 +316,7 @@ final class Census {
         tracker.key = key;
         if (keepBlocks) {
             census.blocks = now;
+            census.light = scanLight(level, boxes);
         }
         blockEntities(level, boxes, census, before);
 
@@ -510,6 +552,62 @@ final class Census {
         return blocks;
     }
 
+    static byte[] scanLight(ClientLevel level, List<int[]> boxes) {
+        int size = 0;
+        for (int[] box : boxes) {
+            size += (box[3] - box[0] + 1) * (box[4] - box[1] + 1) * (box[5] - box[2] + 1);
+        }
+        byte[] light = new byte[size];
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int at = 0;
+        for (int[] box : boxes) {
+            for (int y = box[1]; y <= box[4]; y++) {
+                for (int z = box[2]; z <= box[5]; z++) {
+                    for (int x = box[0]; x <= box[3]; x++) {
+                        pos.set(x, y, z);
+                        light[at++] = (byte) (level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, pos) << 4 | level.getBrightness(net.minecraft.world.level.LightLayer.SKY, pos));
+                    }
+                }
+            }
+        }
+        return light;
+    }
+
+    /** The light of the watched boxes as playback has it this instant */
+    static byte[] lightNow(Minecraft minecraft, int tick) {
+        return scanLight(minecraft.level, boxesAt(minecraft.level.dimension().location().toString(), tick));
+    }
+
+    /** Where light differs from the live game's at a tick, each as "x y z: block/sky live -> block/sky"; null when it cannot be compared */
+    static List<String> lightDifferences(Census then, byte[] now) {
+        if (then.light == null || now == null || then.light.length != now.length) {
+            return null;
+        }
+        List<String> differ = new ArrayList<>();
+        int offset = 0;
+        for (int[] box : boxesAt(then.dimension, then.tick)) {
+            int wide = box[3] - box[0] + 1, high = box[4] - box[1] + 1, deep = box[5] - box[2] + 1;
+            for (int i = 0; i < wide * high * deep; i++) {
+                byte was = then.light[offset + i], is = now[offset + i];
+                if (was != is && (then.lightLater == null || then.lightLater[offset + i] != is)) {
+                    differ.add((box[0] + i % wide) + " " + (box[1] + i / (wide * deep)) + " " + (box[2] + (i / wide) % deep) + ": " + ((was >> 4) & 15) + "/" + (was & 15) + " -> " + ((is >> 4) & 15) + "/" + (is & 15));
+                }
+            }
+            offset += wide * high * deep;
+        }
+        return differ;
+    }
+
+    /** Compares light alone, for the frame a jump arrives on */
+    static int compareLight(Census then, byte[] now, String mode, Tally tally, boolean warning) {
+        List<String> differ = lightDifferences(then, now);
+        if (differ != null && !differ.isEmpty()) {
+            tally.add(mode, "light", "differs", then.tick, differ.size() + " places, block/sky live -> playback: " + few(differ), warning);
+            tally.lightPlaces.merge(mode, differ.size(), Integer::sum);
+        }
+        return differ == null ? -1 : differ.size();
+    }
+
     /** The blocks that differ between two scans of the same boxes, each as "x y z: block -> block" */
     static List<String> changes(short[] before, short[] now, List<int[]> boxes) {
         List<String> changes = new ArrayList<>();
@@ -618,6 +716,8 @@ final class Census {
         final Map<String, Double> furthest = new TreeMap<>();
         int compared = 0;
         int thingsCompared = 0;
+        /** How many places had the wrong light, summed over the ticks looked at, by mode */
+        final Map<String, Integer> lightPlaces = new TreeMap<>();
 
         synchronized void add(String mode, String label, String what, int tick, String detail, boolean warning) {
             Entry entry = this.entries.computeIfAbsent(mode + "|" + label + "|" + what, key -> new Entry(mode, label, what, warning));
@@ -639,7 +739,9 @@ final class Census {
         int tick = then.tick;
         tally.compared++;
         if (!then.dimension.equals(now.dimension)) {
-            tally.add(mode, "dimension", "differs", tick, "live " + then.dimension + ", playback " + now.dimension, false);
+            // On the tick a change of dimension is recorded, play shows the old world for that one tick and builds the new
+            // one before the next: the live game was already there. Noted, not counted
+            tally.add(mode, "dimension", "differs", tick, "live " + then.dimension + ", playback " + now.dimension, mode.equals("play") && then.changes == null);
             return;
         }
         for (Map.Entry<Integer, Thing> entry : then.things.entrySet()) {
@@ -647,7 +749,10 @@ final class Census {
             Thing is = now.things.get(entry.getKey());
             boolean own = entry.getKey() == then.recorderId;
             if (is == null) {
-                tally.add(mode, was.label, "is missing in playback", tick, "entity " + entry.getKey() + " " + was.type, false);
+                // A lightning bolt lasts as long as its own dice say, on each game: it must be there on its first tick, no more
+                if (!was.type.equals("minecraft:lightning_bolt") || live.get(tick - 1) == null || !live.get(tick - 1).things.containsKey(entry.getKey())) {
+                    tally.add(mode, was.label, "is missing in playback", tick, "entity " + entry.getKey() + " " + was.type, false);
+                }
                 continue;
             }
             tally.thingsCompared++;
@@ -666,7 +771,8 @@ final class Census {
                     was.x, was.y, was.z, is.x, is.y, is.z), false);
             }
             float turned = Math.abs(net.minecraft.util.Mth.wrapDegrees(was.yaw - is.yaw));
-            if (turned > 25.0F && !own) {
+            // An orb is turned at random by each game that is told of it
+            if (turned > 25.0F && !own && !was.type.equals("minecraft:experience_orb")) {
                 tally.add(mode, was.label, "faces another way", tick, String.format("%.0f degrees: live %.0f, playback %.0f", turned, was.yaw, is.yaw), true);
             }
             if (!was.state.equals(is.state)) {
@@ -694,7 +800,7 @@ final class Census {
             }
         }
         for (Map.Entry<Integer, Thing> entry : now.things.entrySet()) {
-            if (!then.things.containsKey(entry.getKey())) {
+            if (!then.things.containsKey(entry.getKey()) && !(entry.getValue().type.equals("minecraft:lightning_bolt") && lately(entry.getKey(), tick))) {
                 tally.add(mode, entry.getValue().label, "is in playback and was not in the live game", tick, "entity " + entry.getKey() + " " + entry.getValue().type, false);
             }
         }
@@ -728,6 +834,9 @@ final class Census {
             }
         }
 
+        if (then.light != null && now.light != null) {
+            compareLight(then, now.light, mode, tally, false);
+        }
         if (!then.bars.equals(now.bars)) {
             tally.add(mode, "boss bar", "differs", tick, "live " + then.bars.replace('\n', '/') + ", playback " + now.bars.replace('\n', '/'), false);
         }
@@ -750,6 +859,17 @@ final class Census {
         if (!mode.equals("play") && inPlay != null && now.particles > inPlay + 20) {
             tally.add(mode, "particles", "piled up over a jump", tick, now.particles + " in the air after the jump, " + inPlay + " at the same tick in play", false);
         }
+    }
+
+    /** Whether the live game had an entity within the last ten ticks */
+    private static boolean lately(int id, int tick) {
+        for (int back = 1; back <= 10; back++) {
+            Census earlier = live.get(tick - back);
+            if (earlier != null && earlier.things.containsKey(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String few(List<String> lines) {
@@ -781,11 +901,12 @@ final class Census {
     }
 
     /**
-     * Whether the recorder had this state within the last few ticks of the live game. A game changes its own player at once
-     * and hears the same from the server a tick or two later; playback shows the recorder from what the server said
+     * Whether the recorder had this state within five ticks of the live game, either way. A game changes its own player at
+     * once and hears the same from the server a tick or two later, and it restarts its own hurt flash when its health is
+     * sent, which is not recorded; playback shows the recorder from what the server said about them to everyone
      */
     private static boolean recently(Census then, String key, String value) {
-        for (int back = -1; back <= 5; back++) {
+        for (int back = -5; back <= 5; back++) {
             Census earlier = live.get(then.tick - back);
             Thing recorder = earlier == null ? null : earlier.things.get(earlier.recorderId);
             if (recorder != null && java.util.Objects.equals(split(recorder.state).get(key), value)) {
@@ -796,7 +917,7 @@ final class Census {
     }
 
     private static boolean recentClock(Census then, String key, double value) {
-        for (int back = -1; back <= 5; back++) {
+        for (int back = -5; back <= 5; back++) {
             Census earlier = live.get(then.tick - back);
             Thing recorder = earlier == null ? null : earlier.things.get(earlier.recorderId);
             if (recorder != null) {
