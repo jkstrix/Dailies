@@ -242,8 +242,10 @@ public final class ExportQueue {
         }
     }
 
-    /** A worker that has said nothing for this long is taken to have died, whatever its process says */
+    /** A worker at work that has said nothing for this long is taken to have died, whatever its process says */
     public static final long WORKER_SILENT_MILLIS = 60_000;
+    /** A game with many mods can take minutes to load before the worker says anything at all */
+    public static final long WORKER_LOADING_MILLIS = 15 * 60_000;
 
     private final List<Job> jobs = new ArrayList<>();
     private @Nullable Worker worker = null;
@@ -316,7 +318,8 @@ public final class ExportQueue {
      */
     public boolean workerAlive(long now, LongPredicate alive) {
         Worker known = this.worker;
-        return known != null && !known.finished() && now - Math.max(known.heartbeat, known.startedAt) < WORKER_SILENT_MILLIS && alive.test(known.pid);
+        long silence = known == null || known.state.equals("starting") ? WORKER_LOADING_MILLIS : WORKER_SILENT_MILLIS;
+        return known != null && !known.finished() && now - Math.max(known.heartbeat, known.startedAt) < silence && alive.test(known.pid);
     }
 
     // ------------------------------------------------------------------ Changing (inside update)

@@ -610,9 +610,10 @@ public final class QueueRunner {
                     }
                     queue.worker(worker -> {
                         worker.heartbeat = System.currentTimeMillis();
-                        if (!worker.finished()) {
-                            worker.state = "running";
-                        }
+                        // Only the worker says it has finished; one the game gave up on while it loaded is at work after all
+                        worker.state = "running";
+                        worker.note = null;
+                        worker.finishedAt = 0;
                     });
                     return queue.worker().stopRequested;
                 });

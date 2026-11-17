@@ -79,6 +79,8 @@ class ExportQueueTest {
         queue.startWorker(77, 2);
         assertTrue(queue.workerAlive(3, pid -> true));
         assertFalse(queue.workerAlive(3, pid -> false));
+        assertTrue(queue.workerAlive(2 + ExportQueue.WORKER_SILENT_MILLIS + 1, pid -> true), "a worker still loading the game is given time");
+        queue.worker(worker -> worker.state = "running");
         assertFalse(queue.workerAlive(2 + ExportQueue.WORKER_SILENT_MILLIS + 1, pid -> true), "a worker that has gone quiet is not alive");
         assertEquals(1, queue.recover(10, pid -> false, 1));
         assertEquals(ExportQueue.State.FAILED, a.state);
