@@ -19,7 +19,7 @@ import java.lang.reflect.Method;
 import java.util.function.Consumer;
 
 /**
- * Custom events sent by a server running the Moments Companion mod (the companion/ project). They are
+ * Custom events sent by a server running the Dailies Companion mod (the companion/ project). They are
  * recorded as moments of type "custom".
  *
  * The companion is a server mod and players don't need a copy: without it in this game, Dailies registers the
@@ -28,8 +28,8 @@ import java.util.function.Consumer;
  */
 public final class ServerMoments {
 
-    private static final String COMPANION = "moments_companion";
-    private static final String CLIENT_EVENT = "comedymonkey.momentscompanion.MomentClientEvent";
+    private static final String COMPANION = "dailies_companion";
+    private static final String CLIENT_EVENT = "comedymonkey.dailiescompanion.MomentClientEvent";
 
     private ServerMoments() {
     }
@@ -69,12 +69,12 @@ public final class ServerMoments {
                 try {
                     receive((String) type.invoke(event), (String) label.invoke(event), (String) json.invoke(event));
                 } catch (Throwable t) {
-                    Host.LOGGER.warn("Moments Companion: unable to read a server event", t);
+                    Host.LOGGER.warn("Dailies Companion: unable to read a server event", t);
                 }
             };
             NeoForge.EVENT_BUS.addListener(EventPriority.NORMAL, false, (Class) eventClass, (Consumer) listener);
         } catch (Throwable t) {
-            Host.LOGGER.error("Moments Companion: unable to listen for server events", t);
+            Host.LOGGER.error("Dailies Companion: unable to listen for server events", t);
         }
     }
 

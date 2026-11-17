@@ -3,20 +3,20 @@ loaderVersion = "[4,)"
 license = "MIT"
 
 [[mods]]
-modId = "moments_companion"
+modId = "dailies_companion"
 version = "${version}"
-displayName = "Moments Companion"
+displayName = "Dailies Companion"
 authors = "James Knight"
 description = '''Sends custom events from the server to players' games, where a recorder logs them as moments. Optional on both sides: players without a recorder are simply not sent anything.'''
 
-[[dependencies.moments_companion]]
+[[dependencies.dailies_companion]]
 modId = "neoforge"
 type = "required"
 versionRange = "[21.1,)"
 ordering = "NONE"
 side = "BOTH"
 
-[[dependencies.moments_companion]]
+[[dependencies.dailies_companion]]
 modId = "minecraft"
 type = "required"
 versionRange = "[1.21.1]"

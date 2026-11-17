@@ -1,4 +1,4 @@
-package comedymonkey.momentscompanion;
+package comedymonkey.dailiescompanion;
 
 import javax.annotation.Nullable;
 
@@ -15,7 +15,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * Moments Companion: the server tells a player's game that something worth remembering just happened to them, and a
+ * Dailies Companion: the server tells a player's game that something worth remembering just happened to them, and a
  * recorder on their side (a replay mod that keeps a log of moments) writes it down with the time and place.
  *
  * <p>
@@ -23,11 +23,11 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * blocks, functions, datapacks, other mods' scripting) and the static methods here (other server mods). Players need nothing installed to join: the channel is optional, and a player
  * whose game isn't listening is simply not sent anything.
  */
-@Mod(MomentsCompanion.MODID)
-public final class MomentsCompanion {
-	public static final String MODID = "moments_companion";
+@Mod(DailiesCompanion.MODID)
+public final class DailiesCompanion {
+	public static final String MODID = "dailies_companion";
 
-	public MomentsCompanion(IEventBus modBus, net.neoforged.fml.ModContainer container) {
+	public DailiesCompanion(IEventBus modBus, net.neoforged.fml.ModContainer container) {
 		container.registerConfig(net.neoforged.fml.config.ModConfig.Type.COMMON, CompanionConfig.SPEC);
 		modBus.addListener(MomentPayload::register);
 		NeoForge.EVENT_BUS.register(Detectors.class); // the events the server raises by itself

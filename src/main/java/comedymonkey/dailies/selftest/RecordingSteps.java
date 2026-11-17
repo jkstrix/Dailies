@@ -114,8 +114,8 @@ final class RecordingSteps {
         // A known piece of sound, as if from voice chat, close to the kill so that its clip takes it in (MOM-31)
         OwnerFeatureSteps.speak(test);
 
-        // Chapter XIV step 9: what only a server can tell the game, through the Moments Companion
-        if (comedymonkey.dailies.Host.get().isModLoaded("moments_companion")) {
+        // Chapter XIV step 9: what only a server can tell the game, through the Dailies Companion
+        if (comedymonkey.dailies.Host.get().isModLoaded("dailies_companion")) {
             test.command("moment data @s test_event {answer:42} Hello from the server");
             test.command("summon minecraft:iron_golem 0 -60 9 {NoAI:1b,CustomName:'\"Stand-in boss\"',attributes:[{id:\"minecraft:generic.max_health\",base:200.0}],Health:200.0f}");
             test.sleepTicks(10);
@@ -123,7 +123,7 @@ final class RecordingSteps {
             test.sleepTicks(20);
             OwnerFeatureSteps.companionUsed = true;
         } else {
-            test.skip("the Moments Companion is not installed: server-sent moments were not tried (SRV-1 to SRV-3)");
+            test.skip("the Dailies Companion is not installed: server-sent moments were not tried (SRV-1 to SRV-3)");
         }
         McpCraftSteps.run(test);
 

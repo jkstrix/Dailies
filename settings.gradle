@@ -9,5 +9,5 @@ pluginManagement {
     }
 }
 
-// The Moments Companion in companion/ is a separate build with its own settings file
+// The Dailies Companion in companion/ is a separate build with its own settings file
 rootProject.name = 'dailies'

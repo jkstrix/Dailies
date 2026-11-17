@@ -1,4 +1,4 @@
-package comedymonkey.momentscompanion;
+package comedymonkey.dailiescompanion;
 
 import net.neoforged.bus.api.Event;
 

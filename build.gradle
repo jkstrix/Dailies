@@ -144,7 +144,7 @@ tasks.register('installTestMods', Sync) {
         include moddedTestMods.collect { it.trim() + '.jar' }
     }
     from(file('companion/build/libs')) {
-        include 'moments-companion-*.jar'
+        include 'dailies-companion-*.jar'
     }
     into file('run-modded/mods')
 }

@@ -1,10 +1,10 @@
-package comedymonkey.momentscompanion;
+package comedymonkey.dailiescompanion;
 
 import java.util.List;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-/** config/moments_companion-common.toml: which built-in events the server raises, and their thresholds. */
+/** config/dailies_companion-common.toml: which built-in events the server raises, and their thresholds. */
 final class CompanionConfig {
 	private CompanionConfig() {}
 

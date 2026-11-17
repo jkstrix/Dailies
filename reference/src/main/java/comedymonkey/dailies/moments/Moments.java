@@ -361,7 +361,7 @@ public final class Moments {
         }
     }
 
-    /** A custom event sent by the server (Moments Companion), see ServerMoments */
+    /** A custom event sent by the server (Dailies Companion), see ServerMoments */
     public static void onServerMoment(String customType, String label, @Nullable com.google.gson.JsonObject data) {
         Active session = active;
         if (session != null) {

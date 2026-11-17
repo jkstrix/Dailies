@@ -558,7 +558,7 @@ public class GameplayTracker {
     }
 
     /**
-     * A custom event sent by the server (Moments Companion). Stored like one added over MCP, except that the first
+     * A custom event sent by the server (Dailies Companion). Stored like one added over MCP, except that the first
      * event of each server-chosen type in this world is flagged as a first.
      */
     public synchronized JsonObject addServerEvent(String customType, String label, @Nullable JsonObject data) {

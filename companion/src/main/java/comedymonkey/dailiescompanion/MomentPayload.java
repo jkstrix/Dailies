@@ -1,4 +1,4 @@
-package comedymonkey.momentscompanion;
+package comedymonkey.dailiescompanion;
 
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -15,7 +15,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 public record MomentPayload(String momentType, String label, String json) implements CustomPacketPayload {
 	public static final int MAX_TYPE = 64, MAX_LABEL = 256, MAX_JSON = 32767;
 
-	public static final Type<MomentPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(MomentsCompanion.MODID, "event"));
+	public static final Type<MomentPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(DailiesCompanion.MODID, "event"));
 	public static final StreamCodec<ByteBuf, MomentPayload> CODEC = StreamCodec.composite(ByteBufCodecs.stringUtf8(MAX_TYPE), MomentPayload::momentType,
 		ByteBufCodecs.stringUtf8(MAX_LABEL), MomentPayload::label, ByteBufCodecs.stringUtf8(MAX_JSON), MomentPayload::json, MomentPayload::new);
 

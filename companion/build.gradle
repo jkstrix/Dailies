@@ -1,4 +1,4 @@
-// Moments Companion: a small server-side mod that sends custom events to players' games, where a recorder
+// Dailies Companion: a small server-side mod that sends custom events to players' games, where a recorder
 // logs them as moments. Build it with  gradlew build
 plugins {
     id 'java-library'
@@ -6,10 +6,10 @@ plugins {
 }
 
 version = project.mod_version
-group = 'comedymonkey.momentscompanion'
+group = 'comedymonkey.dailiescompanion'
 
 base {
-    archivesName = 'moments-companion-1.21.1'
+    archivesName = 'dailies-companion-1.21.1'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -18,7 +18,7 @@ neoForge {
     version = project.neo_version
 
     mods {
-        moments_companion {
+        dailies_companion {
             sourceSet sourceSets.main
         }
     }

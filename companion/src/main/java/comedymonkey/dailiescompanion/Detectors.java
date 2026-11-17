@@ -1,4 +1,4 @@
-package comedymonkey.momentscompanion;
+package comedymonkey.dailiescompanion;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -129,7 +129,7 @@ public final class Detectors {
 		if (source != null && source.getEntity() instanceof ServerPlayer killer)
 			data.addProperty("killer", name(killer));
 		for (ServerPlayer p : to)
-			MomentsCompanion.send(p, "boss_fight", label, data);
+			DailiesCompanion.send(p, "boss_fight", label, data);
 	}
 
 	// ------------------------------------------------------------------ damage, death, falls
@@ -160,7 +160,7 @@ public final class Detectors {
 				data.addProperty("blocks", Math.round(fell));
 				data.addProperty("damage", round(e.getNewDamage()));
 				data.addProperty("health_left", round(p.getHealth()));
-				MomentsCompanion.send(p, "big_fall", name(p) + " survived a " + Math.round(fell) + " block fall", data);
+				DailiesCompanion.send(p, "big_fall", name(p) + " survived a " + Math.round(fell) + " block fall", data);
 			}
 			if (p.getHealth() <= CompanionConfig.closeCallHealth() && CompanionConfig.enabled("close_call") && cooled(p, "close_call", 30_000)) {
 				JsonObject data = new JsonObject();
@@ -173,7 +173,7 @@ public final class Detectors {
 					data.addProperty("attacker_name", source.getEntity().getName().getString());
 					by = " fighting " + source.getEntity().getName().getString();
 				}
-				MomentsCompanion.send(p, "close_call", name(p) + " survived with " + hearts(p.getHealth()) + " left" + by, data);
+				DailiesCompanion.send(p, "close_call", name(p) + " survived with " + hearts(p.getHealth()) + " left" + by, data);
 			}
 			return;
 		}
@@ -208,7 +208,7 @@ public final class Detectors {
 			by = " from " + e.getSource().getEntity().getName().getString();
 		}
 		for (ServerPlayer to : near(p.serverLevel(), p, CompanionConfig.nearbyRadius()))
-			MomentsCompanion.send(to, "totem_saved", "A totem of undying saved " + name(p) + by, data);
+			DailiesCompanion.send(to, "totem_saved", "A totem of undying saved " + name(p) + by, data);
 	}
 
 	// ------------------------------------------------------------------ the world
@@ -233,7 +233,7 @@ public final class Detectors {
 		var c = e.getExplosion().center();
 		for (ServerPlayer p : level.players())
 			if (real(p) && p.position().distanceToSqr(c) <= CompanionConfig.nearbyRadius() * CompanionConfig.nearbyRadius() && cooled(p, "explosion", 10_000))
-				MomentsCompanion.send(p, "explosion", what + " destroyed " + blocks + " blocks", data);
+				DailiesCompanion.send(p, "explosion", what + " destroyed " + blocks + " blocks", data);
 	}
 
 	@SubscribeEvent
@@ -243,7 +243,7 @@ public final class Detectors {
 		JsonObject data = new JsonObject();
 		data.addProperty("player", name(p));
 		for (ServerPlayer to : near(p.serverLevel(), p, CompanionConfig.nearbyRadius()))
-			MomentsCompanion.send(to, "lightning_strike", name(p) + " was struck by lightning", data);
+			DailiesCompanion.send(to, "lightning_strike", name(p) + " was struck by lightning", data);
 	}
 
 	@SubscribeEvent
@@ -263,7 +263,7 @@ public final class Detectors {
 		data.add("sleepers", sleepers);
 		data.addProperty("players_in_world", level.players().size());
 		for (ServerPlayer p : level.players())
-			MomentsCompanion.send(p, "night_skipped", list(names) + " slept through the night", data);
+			DailiesCompanion.send(p, "night_skipped", list(names) + " slept through the night", data);
 	}
 
 	// ------------------------------------------------------------------ animals and fishing
@@ -273,7 +273,7 @@ public final class Detectors {
 			return;
 		JsonObject data = new JsonObject();
 		data.addProperty("animal", id(e.getAnimal()));
-		MomentsCompanion.send(p, "animal_tamed", name(p) + " tamed " + article(e.getAnimal().getType().getDescription().getString()), data);
+		DailiesCompanion.send(p, "animal_tamed", name(p) + " tamed " + article(e.getAnimal().getType().getDescription().getString()), data);
 	}
 
 	@SubscribeEvent(priority = EventPriority.LOWEST)
@@ -285,7 +285,7 @@ public final class Detectors {
 			return; // a breeding session is one moment, not one per calf
 		JsonObject data = new JsonObject();
 		data.addProperty("animal", animal);
-		MomentsCompanion.send(p, "animal_bred", name(p) + " bred " + e.getChild().getType().getDescription().getString().toLowerCase() + "s", data);
+		DailiesCompanion.send(p, "animal_bred", name(p) + " bred " + e.getChild().getType().getDescription().getString().toLowerCase() + "s", data);
 	}
 
 	@SubscribeEvent(priority = EventPriority.LOWEST)
@@ -303,7 +303,7 @@ public final class Detectors {
 			return;
 		JsonObject data = new JsonObject();
 		data.add("items", items);
-		MomentsCompanion.send(p, "treasure_fished", name(p) + " fished up " + list(names), data);
+		DailiesCompanion.send(p, "treasure_fished", name(p) + " fished up " + list(names), data);
 	}
 
 	// ------------------------------------------------------------------ players
@@ -315,7 +315,7 @@ public final class Detectors {
 			return;
 		JsonObject data = new JsonObject();
 		data.addProperty("player", name(p));
-		MomentsCompanion.sendAll(p.server, "first_join", name(p) + " joined for the first time", data);
+		DailiesCompanion.sendAll(p.server, "first_join", name(p) + " joined for the first time", data);
 	}
 
 	@SubscribeEvent

@@ -50,7 +50,7 @@ public final class Dailies {
         comedymonkey.dailies.sound.Sound.init();
         comedymonkey.dailies.looks.LooksRenderer.init();
 
-        // Optional, so a server without the Moments Companion stays joinable
+        // Optional, so a server without the Dailies Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));
         modBus.addListener((ModConfigEvent.Loading event) -> settingsChanged(event));
         modBus.addListener((ModConfigEvent.Reloading event) -> settingsChanged(event));

@@ -821,17 +821,17 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ XII -->
 	<section id="server">
 		<div class="chapter"><span class="no">XII</span><h2>The server side</h2><span class="owner yours">yours</span></div>
-		<p class="lede">Some things a player's own game cannot know. Two server mods can tell it: the Moments Companion, which exists for this, and McpCraft, the owner's town mod. Both are optional, and a player never needs either installed to connect.</p>
+		<p class="lede">Some things a player's own game cannot know. Two server mods can tell it: the Dailies Companion, which exists for this, and McpCraft, the owner's town mod. Both are optional, and a player never needs either installed to connect.</p>
 
-		<h3>Moments Companion</h3>
-		<p>A small separate server mod, the owner's own code, MIT licensed. Its complete source is in <code>companion/</code> beside this document (package <code>comedymonkey.momentscompanion</code>) and builds with <code>gradlew build</code> once given a Gradle 9 wrapper. Dailies' side of it, and of McpCraft below, is provided in <code>reference/</code> under <code>compat</code>.</p>
+		<h3>Dailies Companion</h3>
+		<p>A small separate server mod, the owner's own code, MIT licensed. Its complete source is in <code>companion/</code> beside this document (package <code>comedymonkey.dailiescompanion</code>) and builds with <code>gradlew build</code> once given a Gradle 9 wrapper. Dailies' side of it, and of McpCraft below, is provided in <code>reference/</code> under <code>compat</code>.</p>
 		<div class="tablebox"><table class="req">
 			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
 			<tbody>
-				<tr><td>SRV-1</td><td>The companion sends a moment to a player's game on an optional NeoForge channel, <code>moments_companion:event</code>, version <code>1</code>, server to client. The message is three strings: type (up to 64 characters), label (up to 256) and a JSON object as text (up to 32,767).</td><td>The ids keep their current names so the copied source works unchanged.</td></tr>
-				<tr><td>SRV-2</td><td>Dailies registers that channel itself, as optional, when the companion is not installed in the player's game. When the companion is installed there too (singleplayer), the companion owns the channel and re-posts each message as a NeoForge event, <code>comedymonkey.momentscompanion.MomentClientEvent</code>, with <code>type()</code>, <code>label()</code> and <code>json()</code>; Dailies listens for that by reflection.</td><td>Two mods must never register the same channel in one game.</td></tr>
+				<tr><td>SRV-1</td><td>The companion sends a moment to a player's game on an optional NeoForge channel, <code>dailies_companion:event</code>, version <code>1</code>, server to client. The message is three strings: type (up to 64 characters), label (up to 256) and a JSON object as text (up to 32,767).</td><td>The ids keep their current names so the copied source works unchanged.</td></tr>
+				<tr><td>SRV-2</td><td>Dailies registers that channel itself, as optional, when the companion is not installed in the player's game. When the companion is installed there too (singleplayer), the companion owns the channel and re-posts each message as a NeoForge event, <code>comedymonkey.dailiescompanion.MomentClientEvent</code>, with <code>type()</code>, <code>label()</code> and <code>json()</code>; Dailies listens for that by reflection.</td><td>Two mods must never register the same channel in one game.</td></tr>
 				<tr><td>SRV-3</td><td>A received moment becomes an event of type <code>custom</code>: the subject is its type, the label its description, the JSON its metadata, with <code>source: server</code>. The first of each type in a world is a first.</td><td></td></tr>
-				<tr><td>SRV-4</td><td>Messages are ignored during playback, and the <code>moments_companion</code> namespace is on the default playback ignore list.</td><td>Otherwise watching a recording would log its moments again.</td></tr>
+				<tr><td>SRV-4</td><td>Messages are ignored during playback, and the <code>dailies_companion</code> namespace is on the default playback ignore list.</td><td>Otherwise watching a recording would log its moments again.</td></tr>
 				<tr><td>SRV-5</td><td>A player without Dailies is simply not sent anything. A server without the companion works as any other.</td><td></td></tr>
 			</tbody>
 		</table></div>
@@ -847,7 +847,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			</div>
 			<div class="card"><h3>Its settings</h3>
 				<ul>
-					<li><code>config/moments_companion-common.toml</code></li>
+					<li><code>config/dailies_companion-common.toml</code></li>
 					<li><code>disabledEvents</code>: built-in events to switch off for everyone.</li>
 					<li><code>closeCallHealth</code> 4 · <code>bigFallDistance</code> 15 · <code>bossHealth</code> 150 · <code>explosionMinBlocks</code> 10 · <code>nearbyRadius</code> 48.</li>
 				</ul>
@@ -973,7 +973,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>Who builds the core</td><td>Owner</td><td>Someone who has never read another replay mod's source.</td></tr>
 				<tr><td>Dailies' own licence</td><td>Owner</td><td>The companion is MIT. The encoder library's licence constrains the choice (EXP-8).</td></tr>
 				<tr><td>The name</td><td>Owner</td><td>Check that "Dailies" and <code>dailies</code> are free on the mod sites.</td></tr>
-				<tr><td>Companion ids</td><td>Owner</td><td>It keeps <code>moments_companion</code> for now. Renaming it to match is a small change on both sides.</td></tr>
+				<tr><td>Companion ids</td><td>Owner</td><td>Renamed to <code>dailies_companion</code> (mod id, channel and event class) on both sides together. Playback goes on ignoring the old <code>moments_companion</code> channel, for recordings made before the rename.</td></tr>
 				<tr><td>Old recordings</td><td>Decided: no</td><td>Dailies opens only its own recordings.</td></tr>
 			</tbody>
 		</table></div>
@@ -988,7 +988,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<thead><tr><th>Where</th><th>What</th></tr></thead>
 			<tbody>
 				<tr><td>design/dailies-spec.html</td><td>This document.</td></tr>
-				<tr><td>companion/</td><td>The Moments Companion server mod, complete: build files, six classes, mod metadata.</td></tr>
+				<tr><td>companion/</td><td>The Dailies Companion server mod, complete: build files, six classes, mod metadata.</td></tr>
 				<tr><td>reference/src/main/java/<br>comedymonkey/dailies/</td><td>38 classes, about 9,000 lines:
 					<br><code>Host</code>: the interface to the core (below).
 					<br><code>moments/</code>: sessions, storage, the event tracker, bosses, deaths, who-was-together, voice segments, transcription, scoring, clips, summaries, settings access.

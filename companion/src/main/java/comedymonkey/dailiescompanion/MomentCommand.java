@@ -1,4 +1,4 @@
-package comedymonkey.momentscompanion;
+package comedymonkey.dailiescompanion;
 
 import java.util.Collection;
 
@@ -50,7 +50,7 @@ final class MomentCommand {
 		}
 		int sent = 0;
 		for (ServerPlayer p : players)
-			if (MomentsCompanion.send(p, type, label, data))
+			if (DailiesCompanion.send(p, type, label, data))
 				sent++;
 		int n = sent, deaf = players.size() - sent;
 		c.getSource().sendSuccess(() -> Component.literal("Moment '" + type + "' sent to " + n + " player" + (n == 1 ? "" : "s")

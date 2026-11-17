@@ -9,4 +9,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'moments-companion'
+rootProject.name = 'dailies-companion'
