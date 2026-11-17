@@ -35,7 +35,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.ClientCommandHandler;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
-import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -74,9 +73,9 @@ final class WatchingSteps {
     private WatchingSteps() {
     }
 
-    /** The settings screen, or the page of it the game goes straight to when a mod has only one file of settings */
+    /** Dailies' own settings screen (CFG-4) */
     private static boolean settingsOpen(Minecraft minecraft) {
-        return minecraft.screen != null && minecraft.screen.getClass().getName().startsWith(ConfigurationScreen.class.getName());
+        return minecraft.screen instanceof comedymonkey.dailies.ui.SettingsScreen;
     }
 
     // ------------------------------------------------------------------ Recording, by command
@@ -133,17 +132,9 @@ final class WatchingSteps {
         expect(test, "start", "already_recording");
         test.sleepTicks(20);
         expect(test, "cancel", "cancel_asking");
-        test.waitFor(() -> minecraft.screen instanceof ConfirmScreen, 10, "the question before a recording is thrown away");
+        test.waitFor(comedymonkey.dailies.ui.Previews::asking, 10, "the question before a recording is thrown away");
         check(Recorder.get().state() != Recorder.State.IDLE, "'/dailies cancel' threw the recording away without asking");
-        test.onClientRun(() -> {
-            for (GuiEventListener child : minecraft.screen.children()) {
-                if (child instanceof Button yes) {
-                    yes.onPress();
-                    return;
-                }
-            }
-            throw new IllegalStateException("the question has no buttons");
-        });
+        test.onClientRun(() -> comedymonkey.dailies.ui.Previews.answerAsk(true));
         test.waitFor(() -> Recorder.get().state() == Recorder.State.IDLE, 10, "the cancelled recording to stop");
         test.sleepTicks(20);
         check(Recorder.unfinished().isEmpty(), "a recording cancelled by command left its file behind");

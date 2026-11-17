@@ -82,7 +82,12 @@ public final class SelfTest {
             WatchingSteps.record(this);
             MomentsExtrasSteps.run(this);
             RecordingSteps.run(this);
-            ResourcePackSteps.record(this);
+            // A switch for running everything else while a fault in the pack step is being looked into
+            if (!Boolean.getBoolean("dailies.test.skipPacks")) {
+                ResourcePackSteps.record(this);
+            } else {
+                this.skip("the resource pack steps were switched off for this run (dailies.test.skipPacks)");
+            }
             PlaybackSteps.run(this);
             ExportSteps.run(this);
             SettingsSteps.editorDropdown(this);
@@ -91,7 +96,9 @@ public final class SelfTest {
             OwnerFeatureSteps.run(this);
             TimelineSteps.original(this);
             LibrarySteps.run(this);
-            ResourcePackSteps.play(this);
+            if (!Boolean.getBoolean("dailies.test.skipPacks")) {
+                ResourcePackSteps.play(this);
+            }
             WatchingSteps.watch(this);
             result = "PASSED";
         } catch (Throwable t) {

@@ -40,6 +40,20 @@ public final class Previews {
     }
 
     /** Has a Dailies screen draw as though the mouse were at this place, explanation included; -1 gives the mouse back */
+    /** Whether the question with two answers is what is on screen */
+    public static boolean asking() {
+        return Minecraft.getInstance().screen instanceof AskScreen;
+    }
+
+    /** Answers the question on screen, as pressing one of its two buttons would */
+    public static void answerAsk(boolean yes) {
+        if (Minecraft.getInstance().screen instanceof AskScreen ask) {
+            ask.answer(yes);
+        } else {
+            throw new IllegalStateException("no question is on screen");
+        }
+    }
+
     public static void pointAt(Screen screen, int x, int y) {
         if (screen instanceof KitScreen kit) {
             kit.pointAt(x, y);
