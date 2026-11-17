@@ -30,7 +30,7 @@ import java.util.Locale;
 public final class ExportProgress extends Screen {
 
     private static final int PLATE_WIDTH = 300;
-    private static final int PLATE_HEIGHT = 56;
+    private static final int PLATE_HEIGHT = 82;
 
     private static boolean failureLogged = false;
     // Where Cancel was last painted, in pixels of the picture, and how the picture sits in the window
@@ -164,30 +164,39 @@ public final class ExportProgress extends Screen {
         int left = (wide - width) / 2;
         // The picture being exported is not shown: nobody should have to sit through the video to get the video
         graphics.fill(0, 0, wide + 1, high + 1, 0xFF17100A);
-        int top = Math.max(16, (high - PLATE_HEIGHT) / 2);
-        Kit.centred(graphics, font, Kit.t("progress.title").getString(), left, top - 13, width, Controls.BRASS_BRIGHT);
-        graphics.fill(left, top, left + width, top + PLATE_HEIGHT, 0xF02B1D0E);
-        graphics.renderOutline(left, top, width, PLATE_HEIGHT, Controls.BRASS_BRIGHT);
+        int top = Math.max(4, (high - PLATE_HEIGHT) / 2);
+        Kit.plate(graphics, left, top, left + width, top + PLATE_HEIGHT);
 
         long done = Export.frame();
         long total = Math.max(1, Export.totalFrames());
         double speed = Export.speed();
-        Kit.text(graphics, font, Kit.clip(font, Kit.t("progress.frames", done, total).getString(), width - 12), left + 6, top + 6, Controls.PARCHMENT);
+        int inner = width - 16;
+        int x = left + 8;
+
+        // The title with how far it has got, as every Dailies plate has its title: top left, a rule under it
+        Kit.text(graphics, font, Kit.clip(font, Kit.t("progress.title").getString(), inner - 40), x, top + 8, Controls.BRASS_BRIGHT);
+        String share = (int) Math.floor(100.0 * Math.min(total, done) / total) + "%";
+        Kit.text(graphics, font, share, x + inner - font.width(share), top + 8, Controls.BRASS_BRIGHT);
+        Kit.rule(graphics, x, top + 20, x + inner);
+
         String rate = speed > 0.0 ? Kit.t("progress.speed", String.format(Locale.ROOT, "%.1f", speed)).getString() : Kit.t("progress.starting").getString();
-        Kit.text(graphics, font, rate, left + width - 6 - font.width(rate), top + 6, Controls.PARCHMENT_DIM);
+        int rateWidth = font.width(rate);
+        Kit.text(graphics, font, Kit.clip(font, Kit.t("progress.frames", done, total).getString(), inner - rateWidth - 8), x, top + 27, Controls.PARCHMENT);
+        Kit.text(graphics, font, rate, x + inner - rateWidth, top + 27, Controls.PARCHMENT_DIM);
 
-        int barLeft = left + 6;
-        int barWidth = width - 12;
-        graphics.fill(barLeft - 1, top + 19, barLeft + barWidth + 1, top + 29, Controls.BRASS);
-        graphics.fill(barLeft, top + 20, barLeft + barWidth, top + 28, Controls.WALNUT);
-        graphics.fill(barLeft, top + 20, barLeft + (int) (barWidth * Math.min(total, done) / total), top + 28, Controls.BRASS_BRIGHT);
+        int barTop = top + 40;
+        Kit.field(graphics, x, barTop, inner, 10, Controls.BRASS);
+        int filled = (int) ((inner - 2) * Math.min(total, done) / total);
+        if (filled > 0) {
+            graphics.fill(x + 1, barTop + 1, x + 1 + filled, barTop + 9, Controls.BRASS);
+            graphics.fill(x + 1, barTop + 1, x + 1 + filled, barTop + 2, Controls.BRASS_BRIGHT);
+        }
 
+        int buttonWidth = Math.max(70, font.width(Kit.t("progress.cancel")) + 12);
+        int buttonLeft = left + width - 8 - buttonWidth;
+        int buttonTop = top + PLATE_HEIGHT - 8 - 16;
         String left1 = speed > 0.0 ? Kit.t("progress.left", Kit.seconds((total - done) / speed)).getString() : "";
-        Kit.text(graphics, font, Kit.clip(font, left1, width - 90), left + 6, top + 38, Controls.PARCHMENT);
-
-        int buttonWidth = 70;
-        int buttonLeft = left + width - 6 - buttonWidth;
-        int buttonTop = top + 34;
+        Kit.text(graphics, font, Kit.clip(font, left1, inner - buttonWidth - 8), x, buttonTop + 4, Controls.PARCHMENT);
         Kit.face(graphics, buttonLeft, buttonTop, buttonWidth, 16, cancelHovered, false, true);
         Kit.centred(graphics, font, Kit.t("progress.cancel").getString(), buttonLeft, buttonTop + 4, buttonWidth, Controls.PARCHMENT);
         cancelLeft = buttonLeft * (double) unit;

@@ -8,10 +8,8 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Recordings;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.ObjectSelectionList;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -31,12 +29,11 @@ import java.util.concurrent.CompletableFuture;
  * with its name, date, length, world and size, and buttons to watch, rename and delete one and to open the folder.
  * The folder is only ever read, and files only ever changed, away from the client thread.
  */
-public final class RecordingsScreen extends Screen {
+public final class RecordingsScreen extends KitScreen {
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT);
     private static final int ROW_HEIGHT = 26;
 
-    private final @Nullable Screen parent;
     private List<Recordings.Entry> found = List.of();
     private boolean looking = false;
     private boolean lookedOnce = false;
@@ -44,40 +41,67 @@ public final class RecordingsScreen extends Screen {
     private int look = 0;
     private @Nullable Path chosen = null;
 
-    private Rows rows;
-    private Button watch;
-    private Button rename;
-    private Button delete;
+    private final Form rows = new Form();
+    private Gadget.Push watch;
+    private Gadget.Push rename;
+    private Gadget.Push delete;
+    private Gadget.Push folder;
+    private Gadget.Push done;
 
     public RecordingsScreen(@Nullable Screen parent) {
-        super(Component.translatable("dailies.ui.list.title"));
-        this.parent = parent;
+        super(Component.translatable("dailies.ui.list.title"), parent);
     }
 
     @Override
-    protected void init() {
-        int listTop = 32;
-        int listHeight = Math.max(ROW_HEIGHT, this.height - 64 - listTop);
-        this.rows = new Rows(this.minecraft, this.width, listHeight, listTop);
-        this.addRenderableWidget(this.rows);
-
-        int gap = 4;
-        int buttonWidth = Math.min(100, (this.width - 16 - 2 * gap) / 3);
-        int rowWidth = 3 * buttonWidth + 2 * gap;
-        int left = (this.width - rowWidth) / 2;
-        int top = this.height - 54;
-        this.watch = this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.list.watch"), button -> this.watchChosen()).bounds(left, top, buttonWidth, 20).build());
-        this.rename = this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.list.rename"), button -> this.renameChosen()).bounds(left + buttonWidth + gap, top, buttonWidth, 20).build());
-        this.delete = this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.list.delete"), button -> this.deleteChosen()).bounds(left + 2 * (buttonWidth + gap), top, buttonWidth, 20).build());
-
-        int halfWidth = (rowWidth - gap) / 2;
-        this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.list.open_folder"), button -> this.openFolder()).bounds(left, top + 24, halfWidth, 20).build());
-        this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.list.done"), button -> this.onClose()).bounds(left + rowWidth - halfWidth, top + 24, halfWidth, 20).build());
-
-        this.rows.show(this.found);
+    void build() {
+        this.watch = new Gadget.Push(Component.translatable("dailies.ui.list.watch"), this::watchChosen);
+        this.rename = new Gadget.Push(Component.translatable("dailies.ui.list.rename"), this::renameChosen);
+        this.delete = new Gadget.Push(Component.translatable("dailies.ui.list.delete"), this::deleteChosen);
+        this.watch.when(() -> this.chosenEntry() != null).tip(Component.translatable("dailies.ui.list.watch.tip"));
+        this.rename.when(() -> this.chosenEntry() != null).tip(Component.translatable("dailies.ui.list.rename.tip"));
+        this.delete.when(() -> this.chosenEntry() != null).tip(Component.translatable("dailies.ui.list.delete.tip"));
+        this.folder = new Gadget.Push(Component.translatable("dailies.ui.list.open_folder"), this::openFolder);
+        this.folder.tip(Component.translatable("dailies.ui.list.open_folder.tip"));
+        this.done = new Gadget.Push(Component.translatable("dailies.ui.list.done"), this::onClose);
+        this.fixed.add(this.watch);
+        this.fixed.add(this.rename);
+        this.fixed.add(this.delete);
+        this.fixed.add(this.folder);
+        this.fixed.add(this.done);
+        this.forms.add(this.rows);
+        this.show(this.found);
         if (!this.lookedOnce) {
             this.lookedOnce = true;
             this.lookAgain();
+        }
+    }
+
+    private @Nullable Component count() {
+        if (this.found.isEmpty()) {
+            return null;
+        }
+        return Component.translatable(this.found.size() == 1 ? "dailies.ui.list.count_one" : "dailies.ui.list.count", this.found.size());
+    }
+
+    @Override
+    void arrange(Font font) {
+        this.centre(460, this.height - 24);
+        int head = this.headingHeight(font, this.count());
+        int foot = Kit.ROW + 2 + 8 + 6;
+        this.rows.place(font, this.left + 5, this.top + head, this.right - this.left - 10, this.bottom - foot - this.top - head);
+        this.footLeft(font, this.watch, this.rename, this.delete);
+        this.foot(font, this.folder, this.done);
+    }
+
+    private void show(List<Recordings.Entry> entries) {
+        this.rows.clear();
+        boolean still = false;
+        for (Recordings.Entry entry : entries) {
+            this.rows.add(new Row(entry));
+            still |= entry.file().equals(this.chosen);
+        }
+        if (!still) {
+            this.chosen = null;
         }
     }
 
@@ -96,22 +120,17 @@ public final class RecordingsScreen extends Screen {
                 Notices.show(Component.translatable("dailies.ui.list.unreadable"));
             }
             this.found = list == null ? List.of() : List.copyOf(list);
-            if (this.rows != null) {
-                this.rows.show(this.found);
-            }
+            this.show(this.found);
         }));
     }
 
     private @Nullable Recordings.Entry chosenEntry() {
-        Row row = this.rows == null ? null : this.rows.getSelected();
-        return row == null ? null : row.entry;
-    }
-
-    private void updateButtons() {
-        boolean any = this.chosenEntry() != null;
-        this.watch.active = any;
-        this.rename.active = any;
-        this.delete.active = any;
+        for (Recordings.Entry entry : this.found) {
+            if (entry.file().equals(this.chosen)) {
+                return entry;
+            }
+        }
+        return null;
     }
 
     /** Whether this is the recording being watched right now, which must not be changed underneath playback */
@@ -177,7 +196,7 @@ public final class RecordingsScreen extends Screen {
             Notices.show(Component.translatable("dailies.ui.list.close_first"));
             return;
         }
-        this.minecraft.setScreen(new ConfirmScreen(
+        this.minecraft.setScreen(new AskScreen(
                 yes -> {
                     this.minecraft.setScreen(this);
                     if (yes) {
@@ -203,22 +222,41 @@ public final class RecordingsScreen extends Screen {
     @Override
     public void onClose() {
         this.look++;
-        this.minecraft.setScreen(this.parent);
+        super.onClose();
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, 12, Controls.PARCHMENT);
+    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        this.heading(graphics, font, this.count());
         if (this.found.isEmpty()) {
-            int middle = this.rows.getY() + this.rows.getHeight() / 2;
+            int middle = this.rows.y + this.rows.height / 2;
+            int wide = this.right - this.left - 20;
             if (this.looking) {
-                graphics.drawCenteredString(this.font, Component.translatable("dailies.ui.list.looking"), this.width / 2, middle - 4, Controls.PARCHMENT_DIM);
+                Kit.centred(graphics, font, Component.translatable("dailies.ui.list.looking").getString(), this.left + 10, middle - 4, wide, Controls.PARCHMENT_DIM);
             } else {
-                graphics.drawCenteredString(this.font, Component.translatable("dailies.ui.list.none"), this.width / 2, middle - 10, Controls.PARCHMENT);
-                graphics.drawCenteredString(this.font, Component.translatable("dailies.ui.list.none_hint"), this.width / 2, middle + 2, Controls.PARCHMENT_DIM);
+                Kit.centred(graphics, font, Component.translatable("dailies.ui.list.none").getString(), this.left + 10, middle - 11, wide, Controls.PARCHMENT);
+                Kit.centred(graphics, font, Component.translatable("dailies.ui.list.none_hint").getString(), this.left + 10, middle + 2, wide, Controls.PARCHMENT_DIM);
             }
         }
+    }
+
+    @Override
+    boolean keyElsewhere(int keyCode, int modifiers) {
+        if ((keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_UP || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN) && !this.found.isEmpty()) {
+            // The arrows move the choice along the list
+            int at = this.chosenEntry() == null ? -1 : this.found.indexOf(this.chosenEntry());
+            int next = Math.max(0, Math.min(this.found.size() - 1, at + (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN ? 1 : -1)));
+            this.chosen = this.found.get(next).file();
+            if (next < this.rows.rows().size()) {
+                this.rows.reveal(this.rows.rows().get(next));
+            }
+            return true;
+        }
+        if ((keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) && this.chosenEntry() != null) {
+            this.watchChosen();
+            return true;
+        }
+        return false;
     }
 
     private static String nameOf(Recordings.Entry entry) {
@@ -230,50 +268,14 @@ public final class RecordingsScreen extends Screen {
         return file.endsWith(RecordingFile.EXTENSION) ? file.substring(0, file.length() - RecordingFile.EXTENSION.length()) : file;
     }
 
-    /** The scrolling list */
-    private final class Rows extends ObjectSelectionList<Row> {
-
-        Rows(Minecraft minecraft, int width, int height, int top) {
-            super(minecraft, width, height, top, ROW_HEIGHT);
-        }
-
-        void show(List<Recordings.Entry> entries) {
-            Path keep = RecordingsScreen.this.chosen;
-            this.clearEntries();
-            Row again = null;
-            for (Recordings.Entry entry : entries) {
-                Row row = new Row(entry);
-                this.addEntry(row);
-                if (entry.file().equals(keep)) {
-                    again = row;
-                }
-            }
-            this.setScrollAmount(this.getScrollAmount());
-            this.setSelected(again);
-        }
-
-        @Override
-        public void setSelected(@Nullable Row row) {
-            super.setSelected(row);
-            RecordingsScreen.this.chosen = row == null ? null : row.entry.file();
-            if (RecordingsScreen.this.watch != null) {
-                RecordingsScreen.this.updateButtons();
-            }
-        }
-
-        @Override
-        public int getRowWidth() {
-            return Math.max(120, Math.min(400, this.width - 40));
-        }
-    }
-
     /** One recording in the list: its name, and under it when it was made, how long it is, where, and how big */
-    private final class Row extends ObjectSelectionList.Entry<Row> {
+    private final class Row extends Gadget {
 
         private final Recordings.Entry entry;
         private final Component name;
         private final Component details;
         private long clickedAt = 0;
+        private boolean cut = false;
 
         Row(Recordings.Entry entry) {
             this.entry = entry;
@@ -289,29 +291,57 @@ public final class RecordingsScreen extends Screen {
         }
 
         @Override
-        public Component getNarration() {
-            return Component.translatable("narrator.select", this.name);
+        int heightFor(Font font, int forWidth) {
+            return ROW_HEIGHT;
         }
 
         @Override
-        public void render(GuiGraphics graphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
-            int room = Math.max(10, width - 8);
-            graphics.drawString(RecordingsScreen.this.font, RecordingsScreen.this.font.plainSubstrByWidth(this.name.getString(), room), left + 3, top + 2, Controls.PARCHMENT, false);
-            graphics.drawString(RecordingsScreen.this.font, RecordingsScreen.this.font.plainSubstrByWidth(this.details.getString(), room), left + 3, top + 13, Controls.PARCHMENT_DIM, false);
-        }
-
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            if (button != 0) {
-                return false;
+        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            boolean picked = this.entry.file().equals(RecordingsScreen.this.chosen);
+            boolean hovered = this.over(mouseX, mouseY);
+            if (picked) {
+                graphics.fill(this.x, this.y, this.x + this.width, this.y + this.height, Controls.HIGHLIGHT);
+                graphics.fill(this.x, this.y, this.x + 2, this.y + this.height, Controls.BRASS_BRIGHT);
+            } else if (hovered) {
+                graphics.fill(this.x, this.y, this.x + this.width, this.y + this.height, 0x28D4B25A);
             }
-            RecordingsScreen.this.rows.setSelected(this);
+            // A reel of film at the left, so that the list reads as recordings before a word of it is read
+            int reelX = this.x + 14;
+            int reelY = this.y + this.height / 2;
+            int brass = picked ? Controls.BRASS_BRIGHT : Controls.BRASS;
+            graphics.fill(reelX - 6, reelY - 5, reelX + 6, reelY + 5, Controls.FIELD);
+            graphics.renderOutline(reelX - 6, reelY - 5, 12, 10, brass);
+            Kit.icon(graphics, Kit.Icon.PLAY, reelX, reelY, picked || hovered ? Controls.PARCHMENT : Controls.PARCHMENT_DIM);
+            int textLeft = this.x + 28;
+            int room = Math.max(10, this.width - 34);
+            this.cut = font.width(this.name) > room || font.width(this.details) > room;
+            Kit.text(graphics, font, Kit.clip(font, this.name.getString(), room), textLeft, this.y + 4, Controls.PARCHMENT);
+            Kit.text(graphics, font, Kit.clip(font, this.details.getString(), room), textLeft, this.y + 15, Controls.PARCHMENT_DIM);
+            if (!picked) {
+                graphics.fill(this.x + 2, this.y + this.height, this.x + this.width - 2, this.y + this.height + 1, 0x30D4B25A);
+            }
+        }
+
+        @Override
+        @Nullable Component tipAt(double mouseX, double mouseY) {
+            if (!this.over(mouseX, mouseY) || !this.cut) {
+                return null;
+            }
+            return Component.empty().append(this.name).append("\n").append(this.details);
+        }
+
+        @Override
+        @Nullable Gadget press(double mouseX, double mouseY, int button) {
+            if (button != 0 || !this.over(mouseX, mouseY)) {
+                return null;
+            }
+            RecordingsScreen.this.chosen = this.entry.file();
             long now = Util.getMillis();
-            if (now - this.clickedAt < 250) {
+            if (now - this.clickedAt < 300) {
                 RecordingsScreen.this.watchChosen();
             }
             this.clickedAt = now;
-            return true;
+            return this;
         }
     }
 

@@ -2,10 +2,8 @@ package comedymonkey.dailies.ui;
 
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.MultiLineLabel;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -20,36 +18,43 @@ import java.util.concurrent.atomic.AtomicInteger;
  * while they were being made (specification REC-6). Offers to recover them all, discard them all, or leave them for
  * the next launch.
  */
-final class RecoveryScreen extends Screen {
+final class RecoveryScreen extends KitScreen {
 
     private final List<Path> unfinished;
-    private final @Nullable Screen parent;
-    private MultiLineLabel words = MultiLineLabel.EMPTY;
+    private final Component words;
+    private Gadget.Push recover;
+    private Gadget.Push discard;
+    private Gadget.Push later;
 
     RecoveryScreen(List<Path> unfinished, @Nullable Screen parent) {
-        super(Component.translatable("dailies.ui.recovery.title"));
+        super(Component.translatable("dailies.ui.recovery.title"), parent);
         this.unfinished = List.copyOf(unfinished);
-        this.parent = parent;
-    }
-
-    @Override
-    protected void init() {
         Component found = this.unfinished.size() == 1
                 ? Component.translatable("dailies.ui.recovery.found_one")
                 : Component.translatable("dailies.ui.recovery.found_many", this.unfinished.size());
-        this.words = MultiLineLabel.create(this.font, Math.max(100, this.width - 50), found, Component.translatable("dailies.ui.recovery.explanation"));
-
-        int gap = 4;
-        int buttonWidth = Math.min(110, (this.width - 16 - 2 * gap) / 3);
-        int left = (this.width - (3 * buttonWidth + 2 * gap)) / 2;
-        int top = Math.min(this.height - 28, this.textTop() + this.words.getLineCount() * 10 + 16);
-        this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.recovery.recover"), button -> this.recover()).bounds(left, top, buttonWidth, 20).build());
-        this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.recovery.discard"), button -> this.askToDiscard()).bounds(left + buttonWidth + gap, top, buttonWidth, 20).build());
-        this.addRenderableWidget(Button.builder(Component.translatable("dailies.ui.recovery.later"), button -> this.onClose()).bounds(left + 2 * (buttonWidth + gap), top, buttonWidth, 20).build());
+        this.words = Component.empty().append(found).append(" ").append(Component.translatable("dailies.ui.recovery.explanation"));
     }
 
-    private int textTop() {
-        return Math.max(30, this.height / 2 - 40);
+    @Override
+    void build() {
+        this.recover = new Gadget.Push(Component.translatable("dailies.ui.recovery.recover"), this::recover);
+        this.discard = new Gadget.Push(Component.translatable("dailies.ui.recovery.discard"), this::askToDiscard);
+        this.later = new Gadget.Push(Component.translatable("dailies.ui.recovery.later"), this::onClose);
+        this.fixed.add(this.recover);
+        this.fixed.add(this.discard);
+        this.fixed.add(this.later);
+    }
+
+    @Override
+    void arrange(Font font) {
+        this.centre(320, 0);
+        this.centre(320, this.headingHeight(font, this.words) + 6 + Kit.ROW + 2 + 8);
+        this.foot(font, this.recover, this.discard, this.later);
+    }
+
+    @Override
+    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        this.heading(graphics, font, this.words);
     }
 
     private void recover() {
@@ -78,7 +83,7 @@ final class RecoveryScreen extends Screen {
     }
 
     private void askToDiscard() {
-        this.minecraft.setScreen(new ConfirmScreen(
+        this.minecraft.setScreen(new AskScreen(
                 yes -> {
                     if (yes) {
                         this.discard();
@@ -106,18 +111,6 @@ final class RecoveryScreen extends Screen {
                 Notices.show(Component.translatable("dailies.ui.recovery.discarded"));
             }
         });
-    }
-
-    @Override
-    public void onClose() {
-        this.minecraft.setScreen(this.parent);
-    }
-
-    @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, this.textTop() - 18, Controls.PARCHMENT);
-        this.words.renderCentered(graphics, this.width / 2, this.textTop(), 10, Controls.PARCHMENT_DIM);
     }
 
 }

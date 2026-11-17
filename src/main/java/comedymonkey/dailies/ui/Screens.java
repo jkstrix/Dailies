@@ -32,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class Screens {
 
+    private static final int BRASS_EDGE = Controls.BRASS;
     private static boolean lookedForUnfinished = false;
     /** Unfinished recordings found and not yet offered. Client thread */
     private static @Nullable List<Path> unfinished = null;
@@ -41,6 +42,14 @@ public final class Screens {
 
     public static void init() {
         NeoForge.EVENT_BUS.addListener(Screens::screenBuilt);
+        // Explanations in the editor are drawn by the game; they are given the house colours here
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderTooltipEvent.Color event) -> {
+            if (Minecraft.getInstance().screen instanceof EditorScreen) {
+                event.setBackground(0xFA1C1308);
+                event.setBorderStart(BRASS_EDGE);
+                event.setBorderEnd(BRASS_EDGE);
+            }
+        });
     }
 
     private static void screenBuilt(ScreenEvent.Init.Post event) {
@@ -73,6 +82,8 @@ public final class Screens {
                 button.active = false;
                 Playback.close();
             })).bounds(x, y, width, 20).build());
+            y += 24;
+            event.addListener(Button.builder(Component.translatable("dailies.ui.pause.settings"), button -> SettingsScreen.open(pause)).bounds(x, y, width, 20).build());
             return;
         }
 
@@ -95,6 +106,8 @@ public final class Screens {
             y += 24;
         }
         event.addListener(Button.builder(Component.translatable("dailies.ui.pause.recordings"), button -> minecraft.setScreen(new RecordingsScreen(pause))).bounds(x, y, width, 20).build());
+        y += 24;
+        event.addListener(Button.builder(Component.translatable("dailies.ui.pause.settings"), button -> SettingsScreen.open(pause)).bounds(x, y, width, 20).build());
     }
 
     // --- The title screen ---
@@ -115,7 +128,9 @@ public final class Screens {
             x = language.getX();
             y = language.getY() - 24;
         }
-        event.addListener(new ReelButton(x, y, Component.translatable("dailies.ui.title.recordings"), button -> minecraft.setScreen(new RecordingsScreen(title))));
+        event.addListener(new ReelButton(x, y, false, Component.translatable("dailies.ui.title.recordings"), button -> minecraft.setScreen(new RecordingsScreen(title))));
+        // And above that one, the way to the settings
+        event.addListener(new ReelButton(x, y - 24, true, Component.translatable("dailies.ui.title.settings"), button -> SettingsScreen.open(title)));
 
         if (!lookedForUnfinished && !SelfTest.asked()) {
             lookedForUnfinished = true;
@@ -147,8 +162,11 @@ public final class Screens {
     /** A square button with a drawn picture in place of words: a brass frame with a play arrow in it */
     private static final class ReelButton extends Button {
 
-        ReelButton(int x, int y, Component label, OnPress onPress) {
+        private final boolean gear;
+
+        ReelButton(int x, int y, boolean gear, Component label, OnPress onPress) {
             super(x, y, 20, 20, label, onPress, DEFAULT_NARRATION);
+            this.gear = gear;
             this.setTooltip(Tooltip.create(label));
         }
 
@@ -157,6 +175,11 @@ public final class Screens {
             int centreX = this.getX() + this.getWidth() / 2;
             int centreY = this.getY() + this.getHeight() / 2;
             int brass = this.active ? Controls.BRASS_BRIGHT : Controls.BRASS;
+            if (this.gear) {
+                // A brass cog for the settings
+                Kit.icon(graphics, Kit.Icon.GEAR, centreX, centreY, brass);
+                return;
+            }
             graphics.fill(centreX - 6, centreY - 5, centreX + 6, centreY - 4, brass);
             graphics.fill(centreX - 6, centreY + 4, centreX + 6, centreY + 5, brass);
             graphics.fill(centreX - 6, centreY - 5, centreX - 5, centreY + 5, brass);

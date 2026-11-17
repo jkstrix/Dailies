@@ -58,6 +58,14 @@ neoForge {
             systemProperty 'dailies.test.script', 'manual'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
+        // Pictures of every Dailies screen from the plain game, at several window sizes and interface scales, into
+        // run-test/dailies/kit: quicker than manualShots, for judging the look of the interface
+        kitShots {
+            client()
+            gameDirectory = file('run-test')
+            systemProperty 'dailies.test.script', 'kit'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
         // The same scripted run with the built jar (not the dev classes) beside the other mods it has to work with:
         // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1)
         testModded {

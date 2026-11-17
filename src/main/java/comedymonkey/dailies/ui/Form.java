@@ -14,8 +14,10 @@ import java.util.List;
  */
 final class Form {
 
-    private static final int GAP = 2;
-    private static final int BAR = 4;
+    private static final int GAP = Kit.GAP;
+    /** The room kept at the right for the scroll bar, there or not, so that rows do not change width when one appears */
+    private static final int BAR = Kit.BAR + 2;
+    private static final int SIDE = 3;
 
     private final List<Gadget> rows = new ArrayList<>();
     /** What the rows were built for; the owner compares it with what they should show now */
@@ -26,6 +28,9 @@ final class Form {
     int height;
     private int scroll = 0;
     private int content = 0;
+    private boolean barHeld = false;
+    /** How far below the top of the thumb the mouse took hold of it */
+    private int barGrab = 0;
     private final Gadget bar = new Gadget() {
         @Override
         void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
@@ -34,9 +39,13 @@ final class Form {
         @Override
         void drag(double mouseX, double mouseY) {
             if (Form.this.height > 0 && Form.this.content > Form.this.height) {
-                double share = (mouseY - Form.this.y) / Form.this.height;
-                Form.this.scroll = (int) Math.round(share * Form.this.content - Form.this.height / 2.0);
+                Form.this.scroll = Kit.scrollFor((int) mouseY - Form.this.barGrab, Form.this.y, Form.this.height, Form.this.content);
             }
+        }
+
+        @Override
+        void release(double mouseX, double mouseY) {
+            Form.this.barHeld = false;
         }
     };
 
@@ -49,6 +58,9 @@ final class Form {
     void clear() {
         if (Entry.focused != null && this.holdsFocus()) {
             Entry.blur();
+        }
+        if (Gadget.focus != null && Gadget.focus.clipTop != Integer.MIN_VALUE) {
+            Gadget.focus = null;
         }
         this.rows.clear();
     }
@@ -63,6 +75,10 @@ final class Form {
         return this.rows.isEmpty();
     }
 
+    List<Gadget> rows() {
+        return this.rows;
+    }
+
     /** The height all the rows need */
     int contentHeight() {
         return this.content;
@@ -73,25 +89,44 @@ final class Form {
         this.rows.forEach(Gadget::forget);
     }
 
+    /** The controls the Tab key goes through, top to bottom */
+    void collect(List<Gadget> order) {
+        this.rows.forEach(row -> row.collect(order));
+    }
+
+    /** Scrolls so that a control is on show, for when the keys have moved on to it */
+    void reveal(Gadget control) {
+        if (control.y < this.y + GAP) {
+            this.scroll -= this.y + GAP - control.y;
+        } else if (control.y + control.height > this.y + this.height - GAP) {
+            this.scroll += control.y + control.height - (this.y + this.height - GAP);
+        }
+        this.scroll = Math.max(0, Math.min(this.scroll, Math.max(0, this.content - this.height)));
+    }
+
+    void scrollToTop() {
+        this.scroll = 0;
+    }
+
     void place(Font font, int newX, int newY, int newWidth, int newHeight) {
         this.x = newX;
         this.y = newY;
         this.width = Math.max(0, newWidth);
         this.height = Math.max(0, newHeight);
-        int inner = Math.max(10, this.width - BAR - 4);
+        int inner = Math.max(10, this.width - BAR - 2 * SIDE);
         int[] heights = new int[this.rows.size()];
         int total = GAP;
         for (int i = 0; i < heights.length; i++) {
             heights[i] = Math.max(0, this.rows.get(i).heightFor(font, inner));
             total += heights[i] + (heights[i] > 0 ? GAP : 0);
         }
-        this.content = total;
+        this.content = total + GAP;
         this.scroll = Math.max(0, Math.min(this.scroll, this.content - this.height));
         int at = this.y + GAP - this.scroll;
         for (int i = 0; i < heights.length; i++) {
             Gadget row = this.rows.get(i);
             row.clip(this.y, this.y + this.height);
-            row.place(font, this.x + 2, at, inner, heights[i]);
+            row.place(font, this.x + SIDE, at, inner, heights[i]);
             at += heights[i] + (heights[i] > 0 ? GAP : 0);
         }
     }
@@ -100,11 +135,19 @@ final class Form {
         return mouseX >= this.x && mouseX < this.x + this.width && mouseY >= this.y && mouseY < this.y + this.height;
     }
 
+    private boolean scrolls() {
+        return this.content > this.height;
+    }
+
+    private boolean overBar(double mouseX, double mouseY) {
+        return this.scrolls() && this.over(mouseX, mouseY) && mouseX >= this.x + this.width - BAR;
+    }
+
     void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         if (this.width <= 0 || this.height <= 0) {
             return;
         }
-        boolean inside = this.over(mouseX, mouseY);
+        boolean inside = this.over(mouseX, mouseY) && !this.barHeld;
         int pointerX = inside ? mouseX : Integer.MIN_VALUE / 2;
         int pointerY = inside ? mouseY : Integer.MIN_VALUE / 2;
         graphics.enableScissor(this.x, this.y, this.x + this.width, this.y + this.height);
@@ -117,13 +160,16 @@ final class Form {
         } finally {
             graphics.disableScissor();
         }
-        if (this.content > this.height) {
-            int left = this.x + this.width - BAR + 1;
-            graphics.fill(left, this.y, left + BAR - 2, this.y + this.height, 0x60000000);
-            int thumb = Math.max(8, this.height * this.height / this.content);
-            int travel = this.height - thumb;
-            int top = this.y + (int) ((long) travel * this.scroll / Math.max(1, this.content - this.height));
-            graphics.fill(left, top, left + BAR - 2, top + thumb, Controls.BRASS_BRIGHT);
+        if (this.scrolls()) {
+            Kit.scrollBar(graphics, this.x + this.width - Kit.BAR - 1, this.y, this.height, this.content, this.scroll,
+                    this.barHeld || this.overBar(mouseX, mouseY));
+            // A shade at an edge says there is more that way
+            if (this.scroll > 0) {
+                graphics.fillGradient(this.x, this.y, this.x + this.width - BAR, this.y + 4, 0x60000000, 0x00000000);
+            }
+            if (this.scroll < this.content - this.height) {
+                graphics.fillGradient(this.x, this.y + this.height - 4, this.x + this.width - BAR, this.y + this.height, 0x00000000, 0x60000000);
+            }
         }
     }
 
@@ -131,7 +177,12 @@ final class Form {
         if (!this.over(mouseX, mouseY)) {
             return null;
         }
-        if (this.content > this.height && mouseX >= this.x + this.width - BAR - 1 && button == 0) {
+        if (this.overBar(mouseX, mouseY) && button == 0) {
+            // Taking hold of the thumb drags it from where it was taken; a click beside it brings its middle there
+            int[] thumb = Kit.thumb(this.y, this.height, this.content, this.scroll);
+            boolean onThumb = mouseY >= thumb[0] && mouseY < thumb[0] + thumb[1];
+            this.barGrab = onThumb ? (int) mouseY - thumb[0] : thumb[1] / 2;
+            this.barHeld = true;
             this.bar.drag(mouseX, mouseY);
             return this.bar;
         }
@@ -150,12 +201,12 @@ final class Form {
         if (!this.over(mouseX, mouseY)) {
             return false;
         }
-        this.scroll = Math.max(0, Math.min(this.scroll - (int) Math.round(amount * 18.0), Math.max(0, this.content - this.height)));
+        this.scroll = Math.max(0, Math.min(this.scroll - (int) Math.round(amount * 24.0), Math.max(0, this.content - this.height)));
         return true;
     }
 
     @Nullable Component tipAt(double mouseX, double mouseY) {
-        if (!this.over(mouseX, mouseY)) {
+        if (!this.over(mouseX, mouseY) || this.barHeld) {
             return null;
         }
         for (Gadget row : this.rows) {

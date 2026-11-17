@@ -13,7 +13,6 @@ import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -937,7 +936,7 @@ final class TimelinePanel {
     private void removeTrack(int index) {
         Minecraft minecraft = Minecraft.getInstance();
         Track track = EditorState.scene().track(index);
-        minecraft.setScreen(new ConfirmScreen(
+        minecraft.setScreen(new AskScreen(
                 yes -> {
                     if (yes) {
                         EditorState.guard(() -> {
