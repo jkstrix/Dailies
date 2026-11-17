@@ -71,6 +71,7 @@ public final class SelfTest {
             }
             this.checkMcp();
             WorldSteps.createWorld(this);
+            MomentsExtrasSteps.run(this);
             RecordingSteps.run(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
@@ -278,6 +279,11 @@ public final class SelfTest {
     }
 
     // --- Helpers for the steps ---
+
+    /** The port the MCP server was found on when the run began */
+    int port() {
+        return this.port;
+    }
 
     /** Runs something on the client thread and waits for it */
     <T> T onClient(java.util.concurrent.Callable<T> action) throws Exception {
