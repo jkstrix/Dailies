@@ -232,6 +232,44 @@ class LibraryIndexTest {
         assertTrue(index.locateByTime(REAL - 60_000, null).isEmpty());
     }
 
+    @Test
+    void aClipThatRunsPastTheEndOfItsRecordingIsNotCalledCut() throws IOException {
+        this.library();
+        LibraryIndex index = new LibraryIndex(this.folder);
+        // B is 400 ticks long; the clip was worked out from the clock as running to tick 520
+        List<LibraryIndex.ClipHit> hits = index.locateClip("B", 300, 520);
+        assertEquals(2, hits.size());
+        assertTrue(hits.get(0).original());
+        assertFalse(hits.get(0).clip().cut(), "the overrun was counted as cut from the original");
+        assertEquals(0, hits.get(0).clip().removed());
+        assertEquals(List.of(new Spans.Stretch(300, 400, 300, 400)), hits.get(0).clip().stretches());
+        assertFalse(hits.get(1).clip().cut());
+        assertEquals(List.of(new Spans.Stretch(900, 1000, 300, 400)), hits.get(1).clip().stretches());
+        // A real cut is still a cut, and only what existed counts as removed: A's ticks 300 to 700 are gone from the episode
+        LibraryIndex.ClipHit inEpisode = index.locateClip("A", 600, 1200).stream().filter(hit -> hit.entry().id.equals("E")).findFirst().orElseThrow();
+        assertTrue(inEpisode.clip().cut());
+        assertEquals(100, inEpisode.clip().removed());
+        // A clip wholly past the end is held to the last tick
+        assertEquals(List.of(new Spans.Stretch(399, 400, 399, 400)), index.locateClip("B", 450, 520).get(0).clip().stretches());
+    }
+
+    @Test
+    void theModsOfEachSourceAreKeptAsDifferencesFromTheHeader() {
+        List<RecordingManifest.ModEntry> header = List.of(new RecordingManifest.ModEntry("minecraft", "1.21.1"), new RecordingManifest.ModEntry("create", "6.0.10"),
+            new RecordingManifest.ModEntry("sable", "2.0.6"));
+        List<RecordingManifest.ModEntry> second = List.of(new RecordingManifest.ModEntry("minecraft", "1.21.1"), new RecordingManifest.ModEntry("create", "6.0.11"),
+            new RecordingManifest.ModEntry("voicechat", "2.5.0"));
+        RecordingManifest.SourceEntry source = new RecordingManifest.SourceEntry();
+        source.modDifferences = RecordingManifest.differences(second, header);
+        assertEquals(3, source.modDifferences.size());
+        assertEquals(List.of("create:6.0.11<6.0.10", "sable:null<2.0.6", "voicechat:2.5.0<null"),
+            source.modDifferences.stream().map(difference -> difference.id + ":" + difference.version + "<" + difference.header).toList());
+        // The source's own list comes back out of the header and its differences
+        assertEquals(List.of("create=6.0.11", "minecraft=1.21.1", "voicechat=2.5.0"),
+            source.mods(header).stream().map(mod -> mod.id + "=" + mod.version).sorted().toList());
+        assertTrue(RecordingManifest.differences(header, header).isEmpty());
+    }
+
     // --- Scenes across an edit ---
 
     private static EditState edited() {

@@ -82,6 +82,67 @@ public final class RecordingManifest {
         public String worldName = "";
         public long created = 0;
         public int totalTicks = 0;
+        /**
+         * How the mods this original was recorded with differ from the list in this recording's header, which is the
+         * first source's with the others' added. Every span that points at this original was made with these, so
+         * the mods can be compared with those installed span by span (specification PLAY-5). Empty when there is no difference
+         */
+        public List<ModDifference> modDifferences = new ArrayList<>();
+
+        /** The mods this original was recorded with: the header's list with this source's differences applied */
+        public List<ModEntry> mods(List<ModEntry> header) {
+            java.util.Map<String, String> mods = new java.util.LinkedHashMap<>();
+            for (ModEntry mod : header) {
+                mods.put(mod.id, mod.version);
+            }
+            if (this.modDifferences != null) {
+                for (ModDifference difference : this.modDifferences) {
+                    if (difference.version == null) {
+                        mods.remove(difference.id);
+                    } else {
+                        mods.put(difference.id, difference.version);
+                    }
+                }
+            }
+            List<ModEntry> list = new ArrayList<>();
+            mods.forEach((id, version) -> list.add(new ModEntry(id, version)));
+            return list;
+        }
+    }
+
+    /** One mod that a source of an edited recording had in another version than the header says, or did not have, or had alone */
+    public static final class ModDifference {
+        public String id = "";
+        /** The version this source was recorded with, or null when it did not have the mod */
+        public String version = null;
+        /** The version in the recording's header, or null when the header does not list the mod */
+        public String header = null;
+
+        public ModDifference() {
+        }
+
+        public ModDifference(String id, String version, String header) {
+            this.id = id;
+            this.version = version;
+            this.header = header;
+        }
+    }
+
+    /** How a list of mods differs from the header's: for {@link SourceEntry#modDifferences} */
+    public static List<ModDifference> differences(List<ModEntry> source, List<ModEntry> header) {
+        java.util.Map<String, String> theirs = new java.util.TreeMap<>();
+        source.forEach(mod -> theirs.put(mod.id, mod.version));
+        java.util.Map<String, String> ours = new java.util.TreeMap<>();
+        header.forEach(mod -> ours.put(mod.id, mod.version));
+        List<ModDifference> list = new ArrayList<>();
+        java.util.Set<String> ids = new java.util.TreeSet<>(theirs.keySet());
+        ids.addAll(ours.keySet());
+        for (String id : ids) {
+            if (!java.util.Objects.equals(theirs.get(id), ours.get(id))) {
+                list.add(new ModDifference(id, theirs.get(id), ours.get(id)));
+            }
+        }
+        return list;
     }
 
     public static final class SegmentTime {

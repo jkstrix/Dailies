@@ -67,6 +67,8 @@ public final class LibraryIndex {
         public List<RecordingManifest.SpanEntry> spans = new ArrayList<>();
         public long realStart = 0;
         public long realEnd = 0;
+        /** For an edited recording: how long each original it is made of was, by id, so that is known once the original is gone */
+        public Map<String, Integer> sourceTicks = new HashMap<>();
 
         public boolean isEdited() {
             return this.spans != null && !this.spans.isEmpty();
@@ -148,6 +150,9 @@ public final class LibraryIndex {
                         if (entry.spans == null) {
                             entry.spans = new ArrayList<>();
                         }
+                        if (entry.sourceTicks == null) {
+                            entry.sourceTicks = new HashMap<>();
+                        }
                         this.entries.put(entry.file, entry);
                     }
                 }
@@ -195,6 +200,9 @@ public final class LibraryIndex {
             entry.gameVersion = manifest.gameVersion;
             entry.recovered = manifest.recovered;
             entry.spans = new ArrayList<>(manifest.spans);
+            for (RecordingManifest.SourceEntry source : manifest.sources) {
+                entry.sourceTicks.put(source.id, source.totalTicks);
+            }
             entry.realStart = manifest.realStart;
             entry.realEnd = manifest.realEnd;
             if (entry.realStart == 0 || entry.realEnd == 0) {
@@ -379,8 +387,30 @@ public final class LibraryIndex {
         return hits;
     }
 
+    /** How long the original with this id is, from its own file or from what a recording made from it remembers; -1 when nobody knows */
+    private int ticksOf(String id) {
+        int known = -1;
+        for (Entry entry : this.entries.values()) {
+            if (entry.id.equals(id) && !entry.isEdited()) {
+                return entry.totalTicks;
+            }
+            Integer remembered = entry.sourceTicks == null ? null : entry.sourceTicks.get(id);
+            if (remembered != null && remembered > 0) {
+                known = remembered;
+            }
+        }
+        return known;
+    }
+
     private List<ClipHit> locateClipNow(String id, int from, int to) {
         List<ClipHit> hits = new ArrayList<>();
+        // A clip's ends are worked out from the clock, and may run past the end of its recording. What was never
+        // recorded was not cut, so the clip is held to the recording's length before anything is counted as missing
+        int length = this.ticksOf(id);
+        if (length > 0) {
+            to = Math.min(to, length);
+            from = Math.min(from, length - 1);
+        }
         for (Entry entry : this.entries.values()) {
             Spans.Clip clip = Spans.clip(entry.sourceMap(), id, from, Math.max(from + 1, to));
             if (clip.present()) {

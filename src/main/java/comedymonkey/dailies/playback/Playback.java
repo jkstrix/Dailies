@@ -514,6 +514,10 @@ public final class Playback {
         Viewer.startNear(minecraft, manifest.recorderId);
         settle(minecraft);
         loaded = true;
+        // The game only takes up the pause at the end of a frame, and this frame still has its ticks to run: without this
+        // the freshly built world would be ticked on by itself before the recording moves, and whatever turns by its own
+        // clock (a bearing's contraption) would stand a tick or more ahead of the first tick of the recording
+        ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(true);
         Host.LOGGER.info("Dailies: opened recording {} ({} ticks)", path.getFileName(), total);
         tell(ON_OPENED);
     }

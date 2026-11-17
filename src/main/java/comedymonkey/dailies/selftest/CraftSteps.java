@@ -31,6 +31,48 @@ final class CraftSteps {
     static boolean builtContraption = false;
     static boolean builtPlatform = false;
     static boolean builtBalloon = false;
+    /** Where in the list of noted positions the first platform's fall begins, and the bearing's turning; -1 when not built */
+    static int platformNotesFrom = -1;
+    static int contraptionNotesFrom = -1;
+
+    /** Everything about the machines in the world at one moment that a trimmed recording has to get right. Client thread */
+    record Machines(Map<String, Vec3> positions, int entities, int crafts, int contraptions, Map<Integer, Float> angles) {
+        static Machines take(Minecraft minecraft, String recorderId) {
+            int entities = 0;
+            int contraptions = 0;
+            Map<Integer, Float> angles = new TreeMap<>();
+            for (Entity entity : minecraft.level.entitiesForRendering()) {
+                if (entity == minecraft.player || entity instanceof net.minecraft.world.entity.ExperienceOrb) {
+                    continue;
+                }
+                entities++;
+                if (isContraption(entity)) {
+                    contraptions++;
+                    Float angle = angleOf(entity);
+                    if (angle != null) {
+                        angles.put(entity.getId(), angle);
+                    }
+                }
+            }
+            return new Machines(CraftSteps.positions(minecraft, recorderId), entities, SableCompat.craftPositions(minecraft.level, 1.0F).size(), contraptions, angles);
+        }
+    }
+
+    /** The angle a turning contraption has reached, read without compiling against Create. Null when it has none */
+    private static Float angleOf(Entity contraptionEntity) {
+        for (Class<?> type = contraptionEntity.getClass(); type != null && type != Entity.class; type = type.getSuperclass()) {
+            try {
+                java.lang.reflect.Field angle = type.getDeclaredField("angle");
+                if (angle.getType() == float.class) {
+                    angle.setAccessible(true);
+                    return angle.getFloat(contraptionEntity);
+                }
+            } catch (ReflectiveOperationException | RuntimeException notHere) {
+                // Look in the class above
+            }
+        }
+        return null;
+    }
 
     private CraftSteps() {
     }
@@ -82,6 +124,7 @@ final class CraftSteps {
             if (!recorderSeated) {
                 test.skip("the recorder could not take the Create seat on the contraption: a seated player on a contraption was not tried");
             }
+            contraptionNotesFrom = RecordingSteps.notes.size();
             // Seated first, as the arm turns
             for (int i = 0; i < 4; i++) {
                 test.sleepTicks(6);
@@ -118,6 +161,7 @@ final class CraftSteps {
             test.waitFor(() -> crafts(minecraft) >= 1, 15, "the platform to become a physics object");
             builtPlatform = true;
             test.log("physics platform assembled, carrying the recorder standing, a standing mob and a mob in a Create seat");
+            platformNotesFrom = RecordingSteps.notes.size();
             // Note where everything is while it falls: these checks prove recorded motion, not just a resting place
             for (int i = 0; i < 5; i++) {
                 test.sleepTicks(4);

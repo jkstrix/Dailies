@@ -220,6 +220,8 @@ final class LibrarySteps {
         waitOpen(test, originalId, outsideTick);
         test.log("a moment at tick " + outsideTick + " reports: " + cutMessage);
 
+        machines(test, minecraft, original, originalId, total);
+
         // --- Test 3: a cut through the middle of a clip, made from the title screen ---
         PlaybackSteps.close(test);
         JsonObject through = finish(test, test.tool("replay_trim", args("source", "Self test", "cut", ranges(cutFrom, cutTo), "name", "Cut through the clip")));
@@ -300,19 +302,52 @@ final class LibrarySteps {
         foreignManifest.name = "Another version";
         foreignManifest.gameVersion = "1.20.4";
         foreignManifest.dataVersion = 3700;
-        RecordingWriter foreignWriter = RecordingWriter.create(foreign, foreignManifest);
-        Records.Writer few = new Records.Writer();
-        few.number(Records.SNAPSHOT_BEGIN, 0);
-        few.record(Records.SNAPSHOT_END);
-        few.number(Records.TICK, 10);
-        byte[] fewBytes = few.take();
-        foreignWriter.beginSegment(0);
-        foreignWriter.appendToSegment(fewBytes, 0, fewBytes.length, 10);
-        foreignWriter.finish();
+        tenTicks(foreign, foreignManifest);
         String versions = test.toolError("replay_combine", args("sources", array(aroundId, "Another version"), "name", "Mixed versions", "wait_seconds", 60));
         check(versions.contains("different game versions") && versions.contains("1.20.4"), "recordings from different game versions were not refused: " + versions);
         Library.delete(foreign);
         check(test.toolError("replay_combine", args("sources", array(aroundId), "name", "One")).contains("at least two"), "combining one recording was not refused");
+
+        // Different mods are allowed. The differences are told to whoever asked, and stored with the spans they apply to (PLAY-5)
+        Path modded = Library.index().folder().resolve("Other mods" + RecordingFile.EXTENSION);
+        RecordingManifest moddedManifest = RecordingFile.readManifest(secondFile);
+        moddedManifest.id = UUID.randomUUID().toString();
+        moddedManifest.name = "Other mods";
+        moddedManifest.mods.removeIf(mod -> mod.id.equals("dailies"));
+        moddedManifest.mods.add(new RecordingManifest.ModEntry("dailies", "0.0.0-other"));
+        moddedManifest.mods.add(new RecordingManifest.ModEntry("phantom_mod", "1.0"));
+        tenTicks(modded, moddedManifest);
+        JsonObject mixed = finish(test, test.tool("replay_combine", args("sources", array(aroundId, "Other mods"), "name", "Mixed mods")));
+        check(mixed.getAsJsonArray("notes").size() == 2 && mixed.get("notes").toString().contains("phantom_mod") && mixed.get("notes").toString().contains("0.0.0-other"),
+            "the mods that differ between the sources were not listed: " + mixed.get("notes"));
+        Path mixedFile = Path.of(mixed.get("path").getAsString());
+        RecordingManifest mixedManifest = RecordingFile.readManifest(mixedFile);
+        check(mixedManifest.sources.size() == 2, "the recording combined from different mods does not name its two originals");
+        for (RecordingManifest.SourceEntry source : mixedManifest.sources) {
+            String modsDiffer = source.modDifferences.stream().map(difference -> difference.id + " " + difference.version + " (header " + difference.header + ")").toList().toString();
+            if (source.id.equals(originalId)) {
+                check(source.modDifferences.size() == 1 && source.modDifferences.get(0).id.equals("phantom_mod") && source.modDifferences.get(0).version == null
+                    && "1.0".equals(source.modDifferences.get(0).header), "the first source should differ from the header only by lacking phantom_mod: " + modsDiffer);
+            } else {
+                check(source.id.equals(moddedManifest.id) && source.modDifferences.size() == 1 && source.modDifferences.get(0).id.equals("dailies")
+                    && "0.0.0-other".equals(source.modDifferences.get(0).version), "the second source should differ from the header only in its version of dailies: " + modsDiffer);
+            }
+        }
+        JsonObject inList = null;
+        for (JsonElement element : test.tool("replay_list", none).getAsJsonArray("recordings")) {
+            if (element.getAsJsonObject().get("name").getAsString().equals("Mixed mods")) {
+                inList = element.getAsJsonObject();
+            }
+        }
+        check(inList != null && inList.getAsJsonArray("spans").size() == 2, "replay_list does not show the combined recording with its two spans: " + inList);
+        String firstSpan = inList.getAsJsonArray("spans").get(0).getAsJsonObject().get("mods_that_differ").toString();
+        String secondSpan = inList.getAsJsonArray("spans").get(1).getAsJsonObject().get("mods_that_differ").toString();
+        check(firstSpan.contains("phantom_mod") && !firstSpan.contains("0.0.0-other") && secondSpan.contains("0.0.0-other") && !secondSpan.contains("phantom_mod"),
+            "replay_list does not show each span's own mod differences: " + firstSpan + " and " + secondSpan);
+        test.log("combined from different mods: " + mixed.get("notes") + "; stored per span as " + firstSpan + " and " + secondSpan);
+        // The steps that follow count the recordings a moment is in, so these go again
+        Library.delete(mixedFile);
+        Library.delete(modded);
 
         JsonObject combined = finish(test, test.tool("replay_combine", args("sources", array(aroundId, secondId), "name", "Episode")));
         check(!combined.get("through_game").getAsBoolean(), "a combine should never need the game");
@@ -418,6 +453,131 @@ final class LibrarySteps {
         PlaybackSteps.close(test);
     }
 
+    /**
+     * A snapshot written from playback while machines are in the world and moving (FILE-10 with chapter VII): the
+     * recording is trimmed with one cut while the first physics platform falls and the bearing turns, and another later,
+     * with every craft built. In the trimmed recording everything must be there once, where the original has it at the
+     * same moment and where the live game had it. Comes in with the original open and leaves it open.
+     */
+    private static void machines(SelfTest test, Minecraft minecraft, Path original, String originalId, int total) throws Exception {
+        if (!CraftSteps.builtContraption && !CraftSteps.builtPlatform) {
+            test.skip("no machines were built: a trim that cuts inside a segment with craft and contraptions in the world was not tried (FILE-10 with MOD-1 to MOD-5)");
+            return;
+        }
+        java.util.List<RecordingSteps.Note> notes = RecordingSteps.notes;
+        int early = CraftSteps.platformNotesFrom >= 0 ? CraftSteps.platformNotesFrom + 1 : CraftSteps.contraptionNotesFrom + 5;
+        int later = RecordingSteps.laterNotesFrom;
+        check(early >= 0 && early < notes.size() && later > early && later < notes.size(), "the notes do not say when the machines were moving");
+        int firstCut = notes.get(early).tick() - 3;
+        int secondCut = notes.get(later).tick() - 7;
+        try (RecordingFile file = RecordingFile.open(original)) {
+            while (!Assembler.needsSnapshot(file, firstCut)) {
+                firstCut--;
+            }
+            while (!Assembler.needsSnapshot(file, secondCut)) {
+                secondCut--;
+            }
+        }
+        int cutA = firstCut;
+        int cutB = secondCut;
+        int endA = Math.min(cutA + 90, cutB - 5);
+        int endB = Math.min(total - 3, cutB + 170);
+        check(endA > cutA + 20 && endB > cutB + 40, "the stretches to keep are too short: " + cutA + " to " + endA + " and " + cutB + " to " + endB);
+
+        // The ticks to look at: each cut itself, the tick after it, and every tick the live game was noted on in what is kept
+        java.util.TreeMap<Integer, RecordingSteps.Note> ticks = new java.util.TreeMap<>();
+        for (int tick : new int[]{cutA, cutA + 1, cutB, cutB + 1}) {
+            ticks.put(tick, null);
+        }
+        for (RecordingSteps.Note note : notes) {
+            if (note.tick() > cutA && note.tick() < endA - 1 || note.tick() > cutB && note.tick() < endB - 1) {
+                ticks.put(note.tick(), note);
+            }
+        }
+        String recorderId = Playback.manifest().recorderId;
+        java.util.Map<Integer, CraftSteps.Machines> wanted = new java.util.TreeMap<>();
+        for (int tick : ticks.keySet()) {
+            PlaybackSteps.jump(test, tick);
+            wanted.put(tick, test.onClient(() -> CraftSteps.Machines.take(minecraft, recorderId)));
+        }
+        CraftSteps.Machines atFirstCut = wanted.get(cutA);
+        CraftSteps.Machines atSecondCut = wanted.get(cutB);
+        check(!CraftSteps.builtContraption || atFirstCut.contraptions() >= 1, "no contraption is in the world at the first cut, tick " + cutA);
+        check(!CraftSteps.builtPlatform || atFirstCut.crafts() >= 1, "no physics craft is in the world at the first cut, tick " + cutA);
+        check(!CraftSteps.builtBalloon || atSecondCut.crafts() >= 3, "the balloon and both platforms are not all in the world at the second cut, tick " + cutB + ": " + atSecondCut.crafts() + " craft");
+
+        JsonArray keep = ranges(cutA, endA);
+        keep.addAll(ranges(cutB, endB));
+        JsonObject trimmed = finish(test, test.tool("replay_trim", args("source", originalId, "keep", keep, "name", "Machines")));
+        check(trimmed.get("through_game").getAsBoolean(), "the trim with machines in it should have gone through the game");
+        Path file = Path.of(trimmed.get("path").getAsString());
+        String id = trimmed.get("recording_id").getAsString();
+        test.waitFor(() -> Playback.loaded() && !Playback.jumping(), 60, "playback to settle after the trim");
+        test.tool("replay_open", args("path", file.toString()));
+        waitOpen(test, id, 0);
+
+        double worstCraft = 0, worstContraption = 0, worstOther = 0, worstAngle = 0, worstAtCut = 0;
+        int compared = 0;
+        int live = 0;
+        for (java.util.Map.Entry<Integer, RecordingSteps.Note> entry : ticks.entrySet()) {
+            int tick = entry.getKey();
+            int here = tick < endA ? tick - cutA : (endA - cutA) + (tick - cutB);
+            PlaybackSteps.jump(test, here);
+            CraftSteps.Machines now = test.onClient(() -> CraftSteps.Machines.take(minecraft, recorderId));
+            CraftSteps.Machines then = wanted.get(tick);
+            String where = "at tick " + here + " of the trimmed recording (tick " + tick + " of the original)";
+            // Everything there once: nothing missing, nothing twice
+            check(now.entities() == then.entities(), "there are " + now.entities() + " entities " + where + ", the original has " + then.entities());
+            check(now.crafts() == then.crafts(), "there are " + now.crafts() + " physics craft " + where + ", the original has " + then.crafts());
+            check(now.contraptions() == then.contraptions(), "there are " + now.contraptions() + " contraptions " + where + ", the original has " + then.contraptions());
+            check(now.positions().keySet().equals(then.positions().keySet()), "what is in the world " + where + " is not what the original has:\n  " + now.positions().keySet() + "\n  "
+                + then.positions().keySet());
+            for (java.util.Map.Entry<String, net.minecraft.world.phys.Vec3> one : then.positions().entrySet()) {
+                net.minecraft.world.phys.Vec3 at = now.positions().get(one.getKey());
+                if (one.getKey().endsWith(CraftSteps.SEATED)) {
+                    check(at.x == one.getValue().x, one.getKey().replace(CraftSteps.SEATED, "") + " is " + (at.x > 0 ? "riding" : "loose") + " " + where + " and was "
+                        + (one.getValue().x > 0 ? "riding" : "loose") + " in the original");
+                    continue;
+                }
+                double off = at.distanceTo(one.getValue());
+                if (tick == cutA || tick == cutB) {
+                    worstAtCut = Math.max(worstAtCut, off);
+                }
+                if (one.getKey().startsWith("craft ")) {
+                    worstCraft = Math.max(worstCraft, off);
+                } else if (one.getKey().startsWith("contraption ")) {
+                    worstContraption = Math.max(worstContraption, off);
+                } else {
+                    worstOther = Math.max(worstOther, off);
+                }
+                // A third of a block, as for a jump (MOD-2); the person on a craft's deck is held to a quarter (MOD-4)
+                double allowed = one.getKey().equals(CraftSteps.RECORDER_ON_CRAFT) ? 0.25 : 0.34;
+                check(off <= allowed, one.getKey() + " is " + String.format("%.3f", off) + " blocks from where the original has it " + where + " (original " + one.getValue() + ", trimmed " + at + ")");
+            }
+            check(now.angles().keySet().equals(then.angles().keySet()), "the turning contraptions " + where + " are not the original's: " + now.angles().keySet() + " against " + then.angles().keySet());
+            for (java.util.Map.Entry<Integer, Float> angle : then.angles().entrySet()) {
+                double apart = Math.abs(net.minecraft.util.Mth.wrapDegrees(now.angles().get(angle.getKey()) - angle.getValue()));
+                worstAngle = Math.max(worstAngle, apart);
+                check(apart <= 1.0, "contraption " + angle.getKey() + " is at " + now.angles().get(angle.getKey()) + " degrees " + where + ", the original has it at " + angle.getValue());
+            }
+            compared++;
+            if (entry.getValue() != null) {
+                // And where the live game had it, by the same measure as a jump in an untrimmed recording
+                PlaybackSteps.comparePositions(test, minecraft, entry.getValue(), "in the recording trimmed with machines in it, at its tick " + here);
+                live++;
+            }
+        }
+        test.log(String.format(java.util.Locale.ROOT, "machines across a trim: cuts at ticks %d and %d of the original, with %d contraption(s) and %d craft at the first and %d and %d at the second; "
+                + "%d ticks compared with the original (%d of them with the live game too); furthest from the original: craft %.3f blocks, contraptions %.3f, mobs and the recorder %.3f, "
+                + "on the ticks of the cuts themselves %.3f; contraption angle at most %.3f degrees out",
+            cutA, cutB, atFirstCut.contraptions(), atFirstCut.crafts(), atSecondCut.contraptions(), atSecondCut.crafts(), compared, live, worstCraft, worstContraption, worstOther, worstAtCut, worstAngle));
+
+        // The steps that follow count the recordings a moment is in, so this one goes again
+        test.tool("replay_open", args("path", original.toString()));
+        waitOpen(test, originalId, 0);
+        Library.delete(file);
+    }
+
     // --- Helpers ---
 
     private static boolean has(JsonObject json, String field) {
@@ -458,6 +618,20 @@ final class LibrarySteps {
             array.add(value);
         }
         return array;
+    }
+
+    /** A recording of ten ticks with nothing in it, under the description given: for what combining says about descriptions */
+    private static void tenTicks(Path file, RecordingManifest manifest) throws Exception {
+        RecordingWriter writer = RecordingWriter.create(file, manifest);
+        Records.Writer few = new Records.Writer();
+        few.number(Records.SNAPSHOT_BEGIN, 0);
+        few.record(Records.DISCONTINUITY);
+        few.record(Records.SNAPSHOT_END);
+        few.number(Records.TICK, 10);
+        byte[] bytes = few.take();
+        writer.beginSegment(0);
+        writer.appendToSegment(bytes, 0, bytes.length, 10);
+        writer.finish();
     }
 
     /** Polls a combine or trim until it is over, as a caller of the tools would, and returns what it says once done */

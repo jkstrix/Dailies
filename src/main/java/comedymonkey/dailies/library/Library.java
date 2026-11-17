@@ -295,6 +295,7 @@ public final class Library {
             List<String> names = new ArrayList<>();
             List<EditState> states = new ArrayList<>();
             List<Assembler.Piece> pieces = new ArrayList<>();
+            Map<String, List<RecordingManifest.ModEntry>> modsOfSource = new java.util.HashMap<>();
             int offset = 0;
             for (int i = 0; i < open.size(); i++) {
                 RecordingManifest source = manifests.get(i);
@@ -308,7 +309,7 @@ public final class Library {
                     manifest.realStart = manifest.realStart == 0 ? source.realStart : Math.min(manifest.realStart, source.realStart);
                     manifest.realEnd = Math.max(manifest.realEnd, source.realEnd);
                 }
-                addSources(manifest, source);
+                addSources(manifest, source, modsOfSource);
                 if (offset > 0) {
                     // Where one source ends and the next begins: a point on the timeline, not a stretch of it
                     RecordingManifest.Marker boundary = new RecordingManifest.Marker();
@@ -332,6 +333,7 @@ public final class Library {
             }
             manifest.worldName = String.join(" + ", worlds);
             mods.forEach((id, version) -> manifest.mods.add(new RecordingManifest.ModEntry(id, version)));
+            noteModsPerSource(manifest, modsOfSource);
             manifest.players = new ArrayList<>(players);
             for (Spans.Span span : Spans.join(maps, lengths)) {
                 manifest.spans.add(new RecordingManifest.SpanEntry(span));
@@ -359,11 +361,15 @@ public final class Library {
     }
 
     /** The originals a recording is made of are the originals of whatever is made from it */
-    private static void addSources(RecordingManifest target, RecordingManifest source) {
+    private static void addSources(RecordingManifest target, RecordingManifest source, Map<String, List<RecordingManifest.ModEntry>> modsOfSource) {
         List<RecordingManifest.SourceEntry> entries = new ArrayList<>();
         if (source.isEdited()) {
             entries.addAll(source.sources);
+            for (RecordingManifest.SourceEntry entry : source.sources) {
+                modsOfSource.putIfAbsent(entry.id, entry.mods(source.mods));
+            }
         } else {
+            modsOfSource.putIfAbsent(source.id, new ArrayList<>(source.mods));
             RecordingManifest.SourceEntry self = new RecordingManifest.SourceEntry();
             self.id = source.id;
             self.name = source.name;
@@ -377,6 +383,26 @@ public final class Library {
                 target.sources.add(entry);
             }
         }
+    }
+
+    /**
+     * Writes into each source of a new recording how the mods it was recorded with differ from the new header's list,
+     * so that the difference is stored with the spans it applies to and not only told once to whoever made the edit
+     */
+    static void noteModsPerSource(RecordingManifest manifest, Map<String, List<RecordingManifest.ModEntry>> modsOfSource) {
+        List<RecordingManifest.SourceEntry> entries = new ArrayList<>();
+        for (RecordingManifest.SourceEntry known : manifest.sources) {
+            RecordingManifest.SourceEntry entry = new RecordingManifest.SourceEntry();
+            entry.id = known.id;
+            entry.name = known.name;
+            entry.worldName = known.worldName;
+            entry.created = known.created;
+            entry.totalTicks = known.totalTicks;
+            List<RecordingManifest.ModEntry> mods = modsOfSource.get(known.id);
+            entry.modDifferences = mods == null ? new ArrayList<>() : RecordingManifest.differences(mods, manifest.mods);
+            entries.add(entry);
+        }
+        manifest.sources = entries;
     }
 
     /** How the mods of the later recordings differ from those of the first, one line a difference */
@@ -473,7 +499,9 @@ public final class Library {
                 manifest.spans.add(new RecordingManifest.SpanEntry(span));
             }
             manifest.sources = new ArrayList<>();
-            addSources(manifest, original);
+            Map<String, List<RecordingManifest.ModEntry>> modsOfSource = new java.util.HashMap<>();
+            addSources(manifest, original, modsOfSource);
+            noteModsPerSource(manifest, modsOfSource);
             manifest.markers = new ArrayList<>();
             for (RecordingManifest.Marker marker : original.markers) {
                 int tick = Spans.remap(keep, marker.tick);

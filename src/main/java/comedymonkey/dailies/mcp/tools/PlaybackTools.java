@@ -213,6 +213,23 @@ final class PlaybackTools {
                     one.addProperty("source_start", span.sourceStart);
                     one.addProperty("source_end", span.sourceEnd);
                     one.addProperty("here", span.here);
+                    // The mods this stretch was recorded with, where they are not the ones the header lists (PLAY-5 by span)
+                    JsonArray differ = new JsonArray();
+                    for (comedymonkey.dailies.file.RecordingManifest.SourceEntry source : entry.manifest().sources) {
+                        if (source.id.equals(span.source)) {
+                            one.addProperty("source_name", source.name);
+                            if (source.modDifferences != null) {
+                                for (comedymonkey.dailies.file.RecordingManifest.ModDifference difference : source.modDifferences) {
+                                    JsonObject mod = new JsonObject();
+                                    mod.addProperty("id", difference.id);
+                                    mod.addProperty("version", difference.version);
+                                    mod.addProperty("header_version", difference.header);
+                                    differ.add(mod);
+                                }
+                            }
+                        }
+                    }
+                    one.add("mods_that_differ", differ);
                     spans.add(one);
                 }
                 json.add("spans", spans);

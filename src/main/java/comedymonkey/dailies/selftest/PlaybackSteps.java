@@ -230,7 +230,7 @@ final class PlaybackSteps {
         return fastest;
     }
 
-    private static void comparePositions(SelfTest test, Minecraft minecraft, RecordingSteps.Note note, String how) throws Exception {
+    static void comparePositions(SelfTest test, Minecraft minecraft, RecordingSteps.Note note, String how) throws Exception {
         test.onClientRun(() -> {
             Map<String, Vec3> now = CraftSteps.positions(minecraft, Playback.manifest().recorderId);
             for (Map.Entry<String, Vec3> live : note.positions().entrySet()) {

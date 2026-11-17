@@ -30,6 +30,8 @@ final class RecordingSteps {
     static Path recording;
     /** Where things were in the live game at known ticks of that recording */
     static final List<Note> notes = new java.util.ArrayList<>();
+    /** Where in the notes the long stretch after the pause begins: everything built is in the world from here on */
+    static int laterNotesFrom = -1;
 
     record Note(int tick, java.util.Map<String, net.minecraft.world.phys.Vec3> positions) {
         /** Call on the client thread, so the tick and the positions belong together */
@@ -147,6 +149,7 @@ final class RecordingSteps {
         // Long enough to cross at least two more segment boundaries with the short test segments (REC-20, REC-24)
         int segmentTicks = Integer.getInteger("dailies.test.segmentTicks", 6000);
         FrameTimes.begin();
+        laterNotesFrom = notes.size();
         check(segmentTicks <= 200, "the scripted run needs short segments: set dailies.test.segmentTicks");
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
             test.command("tp @s " + (4.5 + (i % 5)) + " -60 0.5 " + (i * 20 % 360) + " 0");
