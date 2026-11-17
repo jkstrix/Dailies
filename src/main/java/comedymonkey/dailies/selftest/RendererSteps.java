@@ -294,11 +294,18 @@ final class RendererSteps {
             test.skip("Iris is not installed: no shader pack was tried (REN-6)");
             return;
         }
+        Minecraft minecraft = Minecraft.getInstance();
         if (pack.isEmpty()) {
-            test.skip("no shader pack was set (testShaderPack is empty): playback and export with a shader pack (REN-6) were not tried");
+            // The pack the owner supplies for this, Complementary Shaders - Reimagined, is found by itself when it is the only one there
+            pack = onlyComplementary(minecraft.gameDirectory.toPath().resolve("shaderpacks"));
+            if (pack != null) {
+                test.log("testShaderPack is empty; using the one Complementary pack in the shaderpacks folder, " + pack);
+            }
+        }
+        if (pack == null || pack.isEmpty()) {
+            test.skip("no shader pack was set (testShaderPack is empty, and there is no single Complementary pack in run-modded/shaderpacks): playback and export with a shader pack (REN-6) were not tried");
             return;
         }
-        Minecraft minecraft = Minecraft.getInstance();
         Path file = minecraft.gameDirectory.toPath().resolve("shaderpacks").resolve(pack);
         if (!Files.exists(file)) {
             test.skip("the shader pack " + pack + " named by testShaderPack is not in " + file.getParent() + ": REN-6 was not tried");
@@ -338,6 +345,20 @@ final class RendererSteps {
             test.waitFor(() -> !Export.active(), 120, "the still with the shader pack");
             BufferedImage with = ImageIO.read(packed.toFile());
             check(with != null && spread(with) > 12.0, "a still with the shader pack is blank");
+            check(!dark(with), String.format(Locale.ROOT, "a still with the shader pack is black or nearly so (mean brightness %.1f of 255, %.0f%% of it near black)", brightness(with), 100.0 * nearBlack(with)));
+
+            // Played, not only jumped to: forty ticks at the usual speed with the pack drawing every frame
+            String packName = pack;
+            test.onClientRun(() -> Playback.playTo(from + 40));
+            test.waitFor(() -> (Playback.paused() && Playback.position() >= from + 40) || Playback.lastError() != null, 60, "playback to play forty ticks with the shader pack");
+            check(Playback.lastError() == null, "playback failed while playing with the shader pack " + packName + ": " + Playback.lastError());
+            Path played = exports().resolve("renderers-with-pack-played.png");
+            Files.deleteIfExists(played);
+            test.tool("export_screenshot", args("output_path", played.toString(), "width", 640, "height", 360, "overwrite", true));
+            test.waitFor(() -> !Export.active(), 120, "the still with the shader pack after play");
+            BufferedImage afterPlay = ImageIO.read(played.toFile());
+            check(afterPlay != null && spread(afterPlay) > 12.0 && !dark(afterPlay), "a still with the shader pack after forty ticks of play is blank or black");
+            PlaybackSteps.jump(test, from);
             check(difference(with, ImageIO.read(plain.toFile())) > 2.0, "a still with the shader pack is the same as one without: the pack was not in the picture");
 
             // Pictures that build up over frames: thrown-away frames first, then the same frame twice comes out the same
@@ -346,7 +367,8 @@ final class RendererSteps {
                 List<Path> first = pictures(test, "renderers-pack", from, from + 20, 30);
                 check(first.size() == 30, "a second at thirty frames a second with the shader pack wrote " + first.size() + " pictures");
                 for (Path frame : List.of(first.get(0), first.get(first.size() / 2), first.get(first.size() - 1))) {
-                    check(spread(ImageIO.read(frame.toFile())) > 12.0, "an exported frame with the shader pack is blank: " + frame.getFileName());
+                    BufferedImage picture = ImageIO.read(frame.toFile());
+                    check(spread(picture) > 12.0 && !dark(picture), "an exported frame with the shader pack is blank or black: " + frame.getFileName());
                 }
                 List<Path> again = pictures(test, "renderers-pack-again", from, from + 8, 30);
                 double drift = difference(ImageIO.read(first.get(5).toFile()), ImageIO.read(again.get(5).toFile()));
@@ -357,8 +379,61 @@ final class RendererSteps {
                 test.tool("config_set", args("key", "throwawayFrames", "value", 0));
             }
         } finally {
-            choosePackBack(test, irisClass, config, oldPack, oldEnabled);
+            // Off again afterwards, whatever it was before: the rest of the run, and the owner's next game, draw without it
+            choosePackBack(test, irisClass, config, oldPack == null ? pack : oldPack, false);
         }
+        boolean stillInUse = test.onClient(() -> {
+            Object api = Class.forName(IRIS + "api.v0.IrisApi").getMethod("getInstance").invoke(null);
+            return (boolean) api.getClass().getMethod("isShaderPackInUse").invoke(api);
+        });
+        check(!stillInUse, "Iris still reports a shader pack in use after the shader pack steps switched it off");
+    }
+
+    /** The one shader pack in the folder whose name starts with Complementary, or null when there is none or more than one */
+    private static String onlyComplementary(Path folder) {
+        if (!Files.isDirectory(folder)) {
+            return null;
+        }
+        try (Stream<Path> files = Files.list(folder)) {
+            List<String> found = files.map(file -> file.getFileName().toString())
+                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith("complementary") && !name.toLowerCase(Locale.ROOT).endsWith(".txt"))
+                .toList();
+            return found.size() == 1 ? found.get(0) : null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /** Black, or so nearly black that a person would call it broken */
+    private static boolean dark(BufferedImage image) {
+        return brightness(image) < 12.0 || nearBlack(image) > 0.92;
+    }
+
+    private static double brightness(BufferedImage image) {
+        double sum = 0;
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y += 4) {
+            for (int x = 0; x < image.getWidth(); x += 4) {
+                int rgb = image.getRGB(x, y);
+                sum += ((rgb >> 16 & 0xFF) + (rgb >> 8 & 0xFF) + (rgb & 0xFF)) / 3.0;
+                count++;
+            }
+        }
+        return sum / count;
+    }
+
+    private static double nearBlack(BufferedImage image) {
+        int dark = 0, count = 0;
+        for (int y = 0; y < image.getHeight(); y += 4) {
+            for (int x = 0; x < image.getWidth(); x += 4) {
+                int rgb = image.getRGB(x, y);
+                if ((rgb >> 16 & 0xFF) < 10 && (rgb >> 8 & 0xFF) < 10 && (rgb & 0xFF) < 10) {
+                    dark++;
+                }
+                count++;
+            }
+        }
+        return (double) dark / count;
     }
 
     /** Chooses a shader pack the way Iris's own screen does. Only ever in the test game's own folder */

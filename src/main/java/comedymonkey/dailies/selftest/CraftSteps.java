@@ -222,7 +222,7 @@ final class CraftSteps {
     }
 
     /** Right-clicks a seat the way the game does when a player clicks it, and says whether the player is now sitting */
-    private static boolean sit(SelfTest test, Minecraft minecraft, BlockPos seat) throws Exception {
+    static boolean sit(SelfTest test, Minecraft minecraft, BlockPos seat) throws Exception {
         for (int attempt = 0; attempt < 3; attempt++) {
             test.onClientRun(() -> minecraft.gameMode.useItemOn(minecraft.player, net.minecraft.world.InteractionHand.OFF_HAND,
                 new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(seat), net.minecraft.core.Direction.UP, seat, false)));
@@ -526,7 +526,7 @@ final class CraftSteps {
         }
     }
 
-    private static int contraptions(Minecraft minecraft) {
+    static int contraptions(Minecraft minecraft) {
         try {
             return minecraft.submit(() -> {
                 int count = 0;
@@ -544,7 +544,7 @@ final class CraftSteps {
         }
     }
 
-    private static int crafts(Minecraft minecraft) {
+    static int crafts(Minecraft minecraft) {
         try {
             return minecraft.submit(() -> minecraft.level == null ? 0 : SableCompat.craftPositions(minecraft.level, 1.0F).size()).get();
         } catch (Exception e) {

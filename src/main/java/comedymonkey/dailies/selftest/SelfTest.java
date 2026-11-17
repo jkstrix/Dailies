@@ -75,6 +75,13 @@ public final class SelfTest {
                 }
                 return;
             }
+            // Some parts by themselves, together, for a short targeted run, e.g. the owner's addon, trains and the renderers:
+            // -PdailiesFlags=dailies.test.addonOnly,dailies.test.trainsOnly,dailies.test.rendererOnly
+            List<String> only = onlyParts();
+            if (only.contains("addon") || only.contains("trains") || only.contains("renderer") || only.size() > 1) {
+                this.runOnly(only);
+                return;
+            }
             if (Boolean.getBoolean("dailies.test.realWorldOnly")) {
                 // Only the tour of generated terrain, for working on it: gradlew runTestClient -PdailiesFlags=dailies.test.realWorldOnly
                 RealWorldSteps.run(this);
@@ -136,6 +143,10 @@ public final class SelfTest {
             // The library's screens, the bin and storage, with small recordings of their own (REC-5, REC-8, REC-9)
             this.step("LibraryScreenSteps.run", () -> LibraryScreenSteps.run(this));
             this.step("PointOfViewSteps.run", () -> PointOfViewSteps.run(this));
+            // The owner's own addon and Create's trains, each in a world and a recording of its own; skipped with a line when
+            // their mods are not installed (the plain game)
+            this.step("AddonSteps.run", () -> AddonSteps.run(this));
+            this.step("TrainSteps.run", () -> TrainSteps.run(this));
             if (Boolean.getBoolean("dailies.test.bestiary")) {
                 // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
                 // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
@@ -174,6 +185,48 @@ public final class SelfTest {
             result = "FAILED: " + (t instanceof Failure ? t.getMessage() : t.toString());
         }
         this.finish(result);
+    }
+
+    /** The parts asked for by themselves, one flag each: dailies.test.addonOnly, trainsOnly, rendererOnly, bestiaryOnly, realWorldOnly, cameraFilmsOnly */
+    private static List<String> onlyParts() {
+        List<String> parts = new ArrayList<>();
+        for (String part : List.of("addon", "trains", "renderer", "bestiary", "realWorld", "cameraFilms")) {
+            if (Boolean.getBoolean("dailies.test." + part + "Only")) {
+                parts.add(part);
+            }
+        }
+        return parts;
+    }
+
+    /** Just the parts asked for, each as a step of its own, and the verdict on them */
+    private void runOnly(List<String> parts) {
+        this.log("running only " + parts);
+        if (parts.contains("renderer")) {
+            // The renderer steps need the scripted recording, with its machines, open
+            this.step("RendererSteps (with the scripted recording)", () -> {
+                WorldSteps.createWorld(this);
+                RecordingSteps.run(this);
+                PlaybackSteps.run(this);
+                RendererSteps.run(this);
+                PlaybackSteps.close(this);
+            });
+        }
+        if (parts.contains("addon")) {
+            this.step("AddonSteps.run", () -> AddonSteps.run(this));
+        }
+        if (parts.contains("trains")) {
+            this.step("TrainSteps.run", () -> TrainSteps.run(this));
+        }
+        if (parts.contains("bestiary")) {
+            this.step("BestiarySteps.run", () -> BestiarySteps.run(this));
+        }
+        if (parts.contains("realWorld")) {
+            this.step("RealWorldSteps.run", () -> RealWorldSteps.run(this));
+        }
+        if (parts.contains("cameraFilms")) {
+            this.step("CameraFilms.run", () -> CameraFilms.run(this, Boolean.getBoolean("dailies.test.cameraFilmsQuick")));
+        }
+        this.finish(this.failures.isEmpty() ? "PASSED" : "FAILED: " + this.failures.size() + " step(s): " + String.join(" || ", this.failures));
     }
 
     /** Steps that failed in this run, each with its reason; the run carries on past them so that one run finds them all */

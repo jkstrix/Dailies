@@ -178,11 +178,44 @@ public final class CreateAddonsCompat {
             if (seen.isPresent()) {
                 try {
                     seen.get().setInt(entity, -1);
+                    // And what he was last seen playing is forgotten too: kept, a jump back would make him cross-fade from a
+                    // time still to come and play every sound cue between, as if his animation had gone round again
+                    Optional<Field[]> shown = PLAYBACKS.computeIfAbsent(entity.getClass(), CreateAddonsCompat::playbackOf);
+                    if (shown.isPresent()) {
+                        Object playback = shown.get()[0].get(entity);
+                        if (playback != null) {
+                            shown.get()[1].set(playback, null);
+                            shown.get()[2].set(playback, null);
+                        }
+                    }
                 } catch (IllegalAccessException e) {
                     // He finds his place when his animation next changes
                 }
             }
         }
+    }
+
+    private static final Map<Class<?>, Optional<Field[]>> PLAYBACKS = new ConcurrentHashMap<>();
+
+    /** His animation player, and the fields in it that say which animation it last saw start and which it fades from */
+    private static Optional<Field[]> playbackOf(Class<?> type) {
+        for (Class<?> at = type; at != null && at != Entity.class; at = at.getSuperclass()) {
+            try {
+                Field playback = at.getDeclaredField("playback");
+                if (!playback.getType().getName().endsWith("ClipPlayback")) {
+                    return Optional.empty();
+                }
+                playback.setAccessible(true);
+                Field clip = playback.getType().getDeclaredField("clip");
+                clip.setAccessible(true);
+                Field fadeFrom = playback.getType().getDeclaredField("fadeFrom");
+                fadeFrom.setAccessible(true);
+                return Optional.of(new Field[]{playback, clip, fadeFrom});
+            } catch (NoSuchFieldException notHere) {
+                // Look further up
+            }
+        }
+        return Optional.empty();
     }
 
     private static Optional<Field> seenClipOf(Class<?> type) {

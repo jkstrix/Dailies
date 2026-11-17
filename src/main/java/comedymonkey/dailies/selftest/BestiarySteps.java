@@ -541,7 +541,7 @@ final class BestiarySteps {
     }
 
     /** Back to nothing staged, after notes that could not be read all the way through */
-    private static void forget() {
+    static void forget() {
         problems.clear();
         items.clear();
         marks.clear();
@@ -640,7 +640,7 @@ final class BestiarySteps {
     }
 
     /** Jumps, and returns the light as it stood on the very frame the jump arrived, before anything was drawn */
-    private static byte[] arrive(int stop) throws Exception {
+    static byte[] arrive(int stop) throws Exception {
         byte[][] arrival = new byte[1][];
         boolean[] there = new boolean[1];
         long started = System.nanoTime();
@@ -730,7 +730,7 @@ final class BestiarySteps {
         return (double) sum / count;
     }
 
-    private static void land(int stop, String mode, Census.Tally tally) throws Exception {
+    static void land(int stop, String mode, Census.Tally tally) throws Exception {
         try {
             byte[] arrival = arrive(stop);
             Census then = Census.live.get(stop);
@@ -752,6 +752,11 @@ final class BestiarySteps {
     }
 
     private static void report(Path folder, Census.Tally tally, int total, int played, int stops) throws Exception {
+        report("BESTIARY", "bestiary", folder, tally, total, played, stops);
+    }
+
+    /** The result, item by item, under a heading of the step's own (the addon and train steps report the same way) */
+    static void report(String heading, String step, Path folder, Census.Tally tally, int total, int played, int stops) throws Exception {
         List<String> lines = new ArrayList<>();
         List<String> failures = new ArrayList<>();
         java.util.Set<Census.Entry> claimed = new java.util.HashSet<>();
@@ -770,7 +775,7 @@ final class BestiarySteps {
                 (entry.warning ? noted : wrong).add(entry.toString());
             }
             String status = !missing.isEmpty() ? "NOT STAGED" : wrong.isEmpty() ? "OK" : "FAIL";
-            String line = "BESTIARY " + status + " | " + item.name + " | ticks " + item.from + "-" + item.to + " | live: " + (evidence.isEmpty() ? "-" : String.join("; ", evidence))
+            String line = heading + " " + status + " | " + item.name + " | ticks " + item.from + "-" + item.to + " | live: " + (evidence.isEmpty() ? "-" : String.join("; ", evidence))
                 + (missing.isEmpty() ? "" : " | the live game never showed: " + missing) + (item.note.isEmpty() ? "" : " | " + item.note);
             lines.add(line);
             wrong.forEach(one -> lines.add("    wrong: " + one));
@@ -790,9 +795,9 @@ final class BestiarySteps {
                 }
             }
         }
-        lines.add("BESTIARY differences that belong to no item: " + other.size());
+        lines.add(heading + " differences that belong to no item: " + other.size());
         other.forEach(one -> lines.add("    " + one));
-        lines.add("BESTIARY staging problems: " + problems.size());
+        lines.add(heading + " staging problems: " + problems.size());
         problems.forEach(one -> lines.add("    " + one));
         StringBuilder far = new StringBuilder();
         tally.furthest.forEach((label, off) -> {
@@ -800,18 +805,18 @@ final class BestiarySteps {
                 far.append(String.format(" %s %.2f;", label, off));
             }
         });
-        lines.add("BESTIARY furthest from the live place, in blocks (only those over 0.05):" + far);
-        lines.add("BESTIARY places with the wrong light, summed over the ticks looked at: " + tally.lightPlaces);
-        tally.lightTicks.forEach((mode, ticks) -> lines.add("BESTIARY wrong light, " + mode + ", places by tick: " + ticks));
-        pictureNotes.forEach(note -> lines.add("BESTIARY pictures: " + note));
-        lines.add("BESTIARY marks: " + marks);
-        lines.add("BESTIARY sounds: " + Census.liveSounds.size() + " live, " + Census.playSounds.size() + " in play and landings, " + Census.skippedSounds.size() + " from skipped time");
-        String summary = "BESTIARY SUMMARY: " + items.size() + " items, " + fine + " OK, " + (items.size() - fine) + " not; " + total + " ticks recorded, " + played + " compared in play, "
+        lines.add(heading + " furthest from the live place, in blocks (only those over 0.05):" + far);
+        lines.add(heading + " places with the wrong light, summed over the ticks looked at: " + tally.lightPlaces);
+        tally.lightTicks.forEach((mode, ticks) -> lines.add(heading + " wrong light, " + mode + ", places by tick: " + ticks));
+        pictureNotes.forEach(note -> lines.add(heading + " pictures: " + note));
+        lines.add(heading + " marks: " + marks);
+        lines.add(heading + " sounds: " + Census.liveSounds.size() + " live, " + Census.playSounds.size() + " in play and landings, " + Census.skippedSounds.size() + " from skipped time");
+        String summary = heading + " SUMMARY: " + items.size() + " items, " + fine + " OK, " + (items.size() - fine) + " not; " + total + " ticks recorded, " + played + " compared in play, "
             + stops + " ticks jumped to each way, " + tally.thingsCompared + " entity comparisons; " + tally.entries.size() + " kinds of difference; " + problems.size() + " staging problems";
         lines.add(summary);
         Files.write(folder.resolve("report.txt"), lines, StandardCharsets.UTF_8);
         lines.forEach(line -> Host.LOGGER.info("{}", line));
-        check(failures.isEmpty() && problems.isEmpty(), "bestiary: " + failures.size() + " items or differences are wrong and " + problems.size() + " things could not be staged (see the BESTIARY lines): "
+        check(failures.isEmpty() && problems.isEmpty(), step + ": " + failures.size() + " items or differences are wrong and " + problems.size() + " things could not be staged (see the " + heading + " lines): "
             + String.join("; ", failures.subList(0, Math.min(12, failures.size()))));
     }
 

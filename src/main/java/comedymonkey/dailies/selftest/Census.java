@@ -373,6 +373,16 @@ final class Census {
 
     private static final Set<Integer> OWN_DATA = Set.of(0, 8, 12, 14);
 
+    /** More that a step wants written down about some entities: state that must match, and clocks that may differ by a set amount */
+    interface Extra {
+        void describe(Entity entity, StringBuilder state, StringBuilder clocks);
+    }
+
+    /** Added by a step for its own run and taken away after it */
+    static final List<Extra> EXTRAS = new CopyOnWriteArrayList<>();
+    /** How far the clocks a step adds may differ, by name */
+    static final Map<String, Double> EXTRA_SLACK = new ConcurrentHashMap<>();
+
     private static void describe(Entity entity, boolean own, StringBuilder state, StringBuilder clocks, ClientLevel level) {
         if (entity.getVehicle() != null) {
             state.append("vehicle=").append(entity.getVehicle().getId()).append(';');
@@ -454,6 +464,9 @@ final class Census {
                 MapItemSavedData data = level.getMapData(map);
                 state.append("map=").append(data == null ? "not known" : String.valueOf(Arrays.hashCode(data.colors))).append(';');
             }
+        }
+        for (Extra extra : EXTRAS) {
+            extra.describe(entity, state, clocks);
         }
         List<SynchedEntityData.DataValue<?>> values = entity.getEntityData().getNonDefaultValues();
         if (values != null) {
@@ -698,6 +711,18 @@ final class Census {
         if (!(entity instanceof PistonMovingBlockEntity)) {
             text.append(' ').append(clean(String.valueOf(entity.saveWithoutMetadata(level.registryAccess()))));
         }
+        String namespace = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(entity.getType()) == null ? "" : BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(entity.getType()).getNamespace();
+        if (!namespace.equals("minecraft")) {
+            // A modded chest's lid, which is in no saved data
+            Boolean lid = Snapshots.lidOpen(entity);
+            if (lid != null) {
+                text.append(" lid=").append(lid);
+            }
+        }
+        if (namespace.equals("comedymonkeysaddons")) {
+            // What the owner's machines were told, which their saved data on a client leaves out: troughs, the cuckoo's show, the bot's station
+            text.append(" told=").append(clean(String.valueOf(Snapshots.updateTag(entity, level.registryAccess()))));
+        }
         return text.toString();
     }
 
@@ -814,7 +839,7 @@ final class Census {
                 keys.addAll(two.keySet());
                 for (String key : keys) {
                     double a = one.containsKey(key) ? Double.parseDouble(one.get(key)) : 0.0, b = two.containsKey(key) ? Double.parseDouble(two.get(key)) : 0.0;
-                    if (Math.abs(a - b) > CLOCK_SLACK.getOrDefault(key, 0.0) + 1e-9 && !(own && recentClock(then, key, b))) {
+                    if (Math.abs(a - b) > CLOCK_SLACK.getOrDefault(key, EXTRA_SLACK.getOrDefault(key, 0.0)) + 1e-9 && !(own && recentClock(then, key, b))) {
                         tally.add(mode, was.label, "animation " + key + " differs", tick, "live " + one.get(key) + ", playback " + two.get(key), false);
                     }
                 }
