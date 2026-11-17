@@ -7,7 +7,6 @@ import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -33,11 +32,26 @@ public final class Controls {
     static final int PARCHMENT = 0xFFEFE6D6;
     static final int PARCHMENT_DIM = 0xFFA89878;
     /** A panel of the editor: walnut, less see-through than the playback bar so that small print stays readable */
-    static final int PANEL = 0xE02B1D0E;
+    static final int PANEL = 0xEC2B1D0E;
     /** The inside of a box to type in */
     static final int FIELD = 0xFF1A1108;
     /** Something refused or wrong */
     static final int ALERT = 0xFFE8604A;
+    /** Something that went well: a server that answered */
+    static final int VERDIGRIS = 0xFF7FC4B0;
+    /** Brass seen in the shade: the edge of a control that cannot be used, a quiet rule */
+    static final int BRASS_DIM = 0xFF6B5526;
+    /** Words on a control that cannot be used */
+    static final int PARCHMENT_FAINT = 0xFF85765C;
+    /** A floating panel: nearly solid, so that it reads over a bright sky */
+    static final int PLATE = 0xF6261A0C;
+    /** The faces of a button: at rest, under the mouse, held down, switched on */
+    static final int FACE = 0xFF3B2A19;
+    static final int FACE_HOVER = 0xFF503B22;
+    static final int FACE_PRESSED = 0xFF251A0D;
+    static final int FACE_LIT = 0xFF74591F;
+    /** The line of a list the mouse or the keys are on */
+    static final int HIGHLIGHT = 0xFF5A4520;
 
     /** The playback speeds the slower and faster controls move between, in ticks per second. 20 is as recorded */
     private static final double[] SPEEDS = {2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 160.0};
@@ -138,7 +152,7 @@ public final class Controls {
             Notices.show(Component.translatable("dailies.ui.notice.nothing_recording"));
             return;
         }
-        minecraft.setScreen(new ConfirmScreen(
+        minecraft.setScreen(new AskScreen(
                 yes -> {
                     if (yes) {
                         guarded(() -> Recorder.get().cancel());

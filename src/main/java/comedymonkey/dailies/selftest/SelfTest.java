@@ -60,6 +60,12 @@ public final class SelfTest {
                 Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
                 return;
             }
+            if ("kit".equals(System.getProperty(PROPERTY))) {
+                KitShots.run(this);
+                Host.LOGGER.info("DAILIES KIT PICTURES DONE");
+                Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+                return;
+            }
             if ("hands-on".equals(System.getProperty(PROPERTY))) {
                 try {
                     this.handsOn();
@@ -70,11 +76,13 @@ public final class SelfTest {
                 return;
             }
             this.checkMcp();
+            SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
             RecordingSteps.run(this);
             ResourcePackSteps.record(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
+            SettingsSteps.editorDropdown(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
             LibrarySteps.run(this);
