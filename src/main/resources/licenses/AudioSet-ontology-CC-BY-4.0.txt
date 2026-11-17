@@ -1,0 +1,12 @@
+AudioSet ontology class names
+
+The file assets/dailies/models/yamnet_classes.txt in this jar holds the display names of the 521 AudioSet classes
+that YAMNet scores, taken unchanged from yamnet_class_map.csv in
+https://github.com/tensorflow/models/tree/master/research/audioset/yamnet
+
+The AudioSet ontology is by Google, from "Audio Set: An ontology and human-labeled dataset for audio events",
+Gemmeke et al., ICASSP 2017 (https://research.google.com/audioset/). It is made available under the Creative
+Commons Attribution 4.0 International licence (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
+The full legal code is at https://creativecommons.org/licenses/by/4.0/legalcode
+
+No changes were made to the class names. Google does not endorse Dailies.

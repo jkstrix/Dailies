@@ -105,6 +105,7 @@ public final class DailiesConfig {
             bool("momentsEnabled", true, "Keep a log of what happens while you play");
             bool("momentsLogRepeats", false, "Log every crafted item, placed block, mined block and tool use, not only the first of each");
             integer("momentsStatsPollSeconds", 5, 0, 600, "How often the game's statistics are asked for, to confirm kills. 0 turns it off");
+            bool("momentsBurstLabels", true, "Listen to each burst of noise in voice chat and name it laughter, cheering, screaming or shouting, so laughter can make the better clip. A small sound model bundled with the mod does this on this computer: no AI service is used and nothing is sent anywhere");
             bool("momentsAiEnabled", false, "The one switch for everything that talks to an AI service: transcription and model-written summaries. While off, nothing is sent anywhere. While on, the voice audio Moments captures, other players' included, is sent to the transcription server set below");
             text("momentsWhisperUrl", "http://192.168.188.50:8000", "Address of an OpenAI-compatible transcription server. With AI on, this is where voice audio is sent. Empty keeps transcription off");
             text("momentsWhisperModel", "Systran/faster-whisper-large-v3", "The transcription model to ask for");

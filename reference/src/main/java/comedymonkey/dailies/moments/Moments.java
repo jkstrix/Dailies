@@ -79,7 +79,25 @@ public final class Moments {
     private static volatile TimeRef current = TimeRef.EMPTY;
     private static final Map<UUID, String> PLAYER_NAMES = new ConcurrentHashMap<>();
     private static int ticksSinceLogin = Integer.MAX_VALUE / 2;
-    private static volatile BurstClassifier burstClassifier = BurstClassifier.NONE;
+    private static volatile BurstClassifier burstClassifier = new comedymonkey.dailies.moments.voice.yamnet.YamnetClassifier();
+    /** How much audio around a burst the classifier hears: a little before it began, and the few seconds it lasts */
+    private static final long CLASSIFY_BEFORE_MILLIS = 250;
+    private static final long CLASSIFY_MILLIS = 4000;
+    /**
+     * The classifier's own thread, at low priority, so it neither holds up the voice chat that hands audio over nor
+     * the game. A burst comes at most every 20 seconds and takes a tenth of a second, so a short queue is plenty
+     */
+    private static final java.util.concurrent.ThreadPoolExecutor CLASSIFIER = new java.util.concurrent.ThreadPoolExecutor(1, 1,
+        30, java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<>(8), runnable -> {
+            Thread thread = new Thread(runnable, "Dailies sound classifier");
+            thread.setDaemon(true);
+            thread.setPriority(Thread.MIN_PRIORITY);
+            return thread;
+        }, new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy());
+
+    static {
+        CLASSIFIER.allowCoreThreadTimeOut(true);
+    }
 
     private Moments() {
     }
@@ -187,8 +205,8 @@ public final class Moments {
     }
 
     /**
-     * Plug in something that can tell laughter from shouting (plan 2.9). Nothing does yet: see {@link BurstClassifier}.
-     * It is only asked while momentsAiEnabled is on
+     * Plug in something that can tell laughter from shouting (plan 2.9) in place of the bundled YAMNet, or null for
+     * none. It is only asked while momentsBurstLabels is on: see {@link BurstClassifier}
      */
     public static void setBurstClassifier(@Nullable BurstClassifier classifier) {
         burstClassifier = classifier == null ? BurstClassifier.NONE : classifier;
@@ -616,10 +634,28 @@ public final class Moments {
         });
     }
 
+    /** Whether the classifier may listen now: it is switched on, and nothing is being played back or exported */
+    private static boolean mayClassify() {
+        return burstClassifier != BurstClassifier.NONE && MomentsConfig.burstLabels() && !Host.get().inPlayback() && !Host.get().exportRunning();
+    }
+
+    /**
+     * What a stretch of audio sounds like, on the calling thread: laughter, cheering, screaming or shouting, or null
+     * when it is none of them or the classifier may not listen now. For threads that are already off the game's own
+     * (the transcription worker); never call it on the client thread
+     */
+    @Nullable
+    public static String classifySound(short[] pcm, int sampleRate) {
+        if (!mayClassify()) {
+            return null;
+        }
+        String label = burstClassifier.classify(pcm, sampleRate);
+        return label == null || label.isBlank() ? null : label.trim();
+    }
+
     /** Offers a voice segment to the classifier when a burst of its speaker fell inside it, and names the burst by the answer */
     private static void classifyBursts(Active session, VoiceSegmenter.Segment segment) {
-        BurstClassifier classifier = burstClassifier;
-        if (classifier == BurstClassifier.NONE || !MomentsConfig.aiEnabled()) {
+        if (!mayClassify()) {
             return;
         }
         List<VoiceBurstDetector.Burst> inside = new java.util.ArrayList<>();
@@ -630,18 +666,32 @@ public final class Moments {
                 }
             }
         }
-        if (inside.isEmpty()) {
-            return;
-        }
-        String label = classifier.classify(segment.pcm16k(), VoiceSegmenter.OUTPUT_SAMPLE_RATE);
-        if (label == null || label.isBlank()) {
-            return;
-        }
-        Minecraft.getInstance().execute(() -> {
-            if (active == session) {
-                guarded(() -> inside.forEach(burst -> session.gameplay.onVoiceBurstLabel(burst.id(), label.trim())));
+        for (VoiceBurstDetector.Burst burst : inside) {
+            // Only the burst's own few seconds, not the whole segment, which can run to half a minute of talk
+            short[] pcm = segment.pcm16k();
+            int rate = VoiceSegmenter.OUTPUT_SAMPLE_RATE;
+            int from = (int) Math.min(pcm.length, Math.max(0, burst.startMillis() - CLASSIFY_BEFORE_MILLIS - segment.startMillis()) * rate / 1000);
+            int to = (int) Math.min(pcm.length, from + CLASSIFY_MILLIS * rate / 1000);
+            if (to <= from) {
+                continue;
             }
-        });
+            short[] heard = java.util.Arrays.copyOfRange(pcm, from, to);
+            CLASSIFIER.execute(() -> {
+                try {
+                    String label = classifySound(heard, rate);
+                    if (label == null) {
+                        return;
+                    }
+                    Minecraft.getInstance().execute(() -> {
+                        if (active == session) {
+                            guarded(() -> session.gameplay.onVoiceBurstLabel(burst.id(), label));
+                        }
+                    });
+                } catch (Throwable t) {
+                    Host.LOGGER.error("Moments: the burst classifier failed", t);
+                }
+            });
+        }
     }
 
     private static void storeSegments(Active session, List<VoiceSegmenter.Segment> segments) {

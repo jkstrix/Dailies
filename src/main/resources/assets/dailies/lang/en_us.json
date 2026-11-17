@@ -133,6 +133,7 @@
   "dailies.configuration.momentsEnabled": "Log Moments",
   "dailies.configuration.momentsLogRepeats": "Log Repeats",
   "dailies.configuration.momentsStatsPollSeconds": "Statistics Check (Seconds)",
+  "dailies.configuration.momentsBurstLabels": "Name Laughter and Shouting",
   "dailies.configuration.momentsAiEnabled": "Use AI Services",
   "dailies.configuration.momentsWhisperUrl": "Transcription Server",
   "dailies.configuration.momentsWhisperModel": "Transcription Model",

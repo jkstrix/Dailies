@@ -80,6 +80,15 @@ public class MomentAnalysis {
     private static final double DIALOGUE_BONUS_MAX = 25.0;
     /** Added to a voice_burst per speaker beyond the first. It takes the place of the bonus for players involved */
     private static final double VOICE_BURST_PER_SPEAKER = comedymonkey.dailies.moments.voice.VoiceBurstDetector.WEIGHT_PER_EXTRA_SPEAKER;
+    /**
+     * Added to a voice_burst by what the sound classifier named it (plan 2.9). Laughter is most often the moment worth
+     * a clip, so it scores a little above shouting, which is as often a lost mob as a good one
+     */
+    private static final Map<String, Double> VOICE_BURST_LABEL_BONUS = Map.of(
+        "laughter", 8.0,
+        "cheering", 6.0,
+        "screaming", 4.0,
+        "shouting", 0.0);
     public static final double MAX_SCORE = 100.0;
     /** The most that who was around and what was being said can add to what an event scores by itself */
     public static final double MAX_CONTEXT_BONUS = PLAYERS_BONUS_MAX + DIALOGUE_BONUS_MAX;
@@ -243,6 +252,7 @@ public class MomentAnalysis {
         }
         if (type.equals("voice_burst")) {
             score += Math.max(0, MJson.arr(metadata, "speakers").size() - 1) * VOICE_BURST_PER_SPEAKER;
+            score += VOICE_BURST_LABEL_BONUS.getOrDefault(MJson.str(event, "subject", ""), 0.0);
         }
         return score;
     }

@@ -107,6 +107,18 @@ final class MomentsExtrasSteps {
     // --- voice_burst ---
 
     private static void bursts(SelfTest test) throws Exception {
+        JsonObject labels = test.tool("config_get", args("key", "momentsBurstLabels"));
+        check(labels.get("value").getAsBoolean(), "momentsBurstLabels is not on by default: " + labels);
+        // The test tones are no one's laughter; with the classifier off the burst keeps the loudness-only subject and weight checked below
+        test.tool("config_set", args("key", "momentsBurstLabels", "value", false));
+        try {
+            loudBursts(test);
+        } finally {
+            test.tool("config_set", args("key", "momentsBurstLabels", "value", true));
+        }
+    }
+
+    private static void loudBursts(SelfTest test) throws Exception {
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
         // Ordinary talk first, so each voice has a baseline, then both about 23 dB louder for two seconds
