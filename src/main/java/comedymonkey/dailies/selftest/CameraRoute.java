@@ -46,8 +46,9 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  * recorded once and kept as a fixture outside the recordings folder, so that every camera can be filmed against the
  * same play, run after run. Each place's stretch starts and ends with a marker named after it.
  * <p>
- * Recorded again only when asked for (dailies.test.recordRoute), when the fixture is missing, or when it no longer
- * opens (the format changed).
+ * Recorded again only when asked for (dailies.test.recordRoute), when the fixture is missing, when it no longer opens
+ * (the format changed), when it was played by another version of the route, or when the code that writes recordings has
+ * changed since (see {@link FixtureRules}: its fingerprint is kept beside it in camera-route.json).
  */
 final class CameraRoute {
 
@@ -89,17 +90,17 @@ final class CameraRoute {
         return Host.get().dataDirectory().resolve("fixtures").resolve("camera-route" + RecordingFile.EXTENSION);
     }
 
+    /** Beside the route: the version that played it and the fingerprint of the code that recorded it */
+    static Path notes() {
+        return fixture().resolveSibling("camera-route.json");
+    }
+
     /** The route, recorded now only if it has to be */
     static Route obtain(SelfTest test) throws Exception {
         Path file = fixture();
-        if (Boolean.getBoolean("dailies.test.recordRoute")) {
-            test.log("camera route: recording it again, as asked (dailies.test.recordRoute)");
-        } else if (!Files.exists(file)) {
-            test.log("camera route: there is no fixture at " + file + " yet; recording it");
-        } else {
+        if (TourFixtures.reuse(test, "the camera route", file, notes(), "dailies.test.recordRoute", VERSION)) {
             try {
                 Route route = read(file);
-                test.log("camera route: reusing the fixture at " + file);
                 describe(test, route);
                 return route;
             } catch (Exception e) {
@@ -108,6 +109,8 @@ final class CameraRoute {
         }
         record(test, file);
         Route route = read(file);
+        TourFixtures.write(notes(), VERSION, out -> {
+        });
         describe(test, route);
         return route;
     }

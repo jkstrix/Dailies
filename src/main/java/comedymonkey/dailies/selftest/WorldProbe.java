@@ -654,6 +654,217 @@ final class WorldProbe {
         return text.toString();
     }
 
+    // ------------------------------------------------------------------ Kept with a fixture (see TourFixtures), in the order read back
+
+    void write(TourFixtures.Out out) throws java.io.IOException {
+        com.google.gson.stream.JsonWriter json = out.json;
+        json.beginArray();
+        json.value(this.tick);
+        out.string(this.label);
+        out.string(this.dimension);
+        json.value(this.centreX).value(this.centreZ).value(this.sendDistance).value(this.dayTime).value((double) this.rain).value((double) this.thunder);
+        if (this.sky == null) {
+            json.nullValue();
+        } else {
+            json.beginArray().value(this.sky[0]).value(this.sky[1]).value(this.sky[2]).endArray();
+        }
+        out.string(this.screen);
+        if (this.hud == null) {
+            json.nullValue();
+        } else {
+            json.beginArray();
+            for (float number : this.hud) {
+                json.value((double) number);
+            }
+            json.endArray();
+        }
+        writeTracked(out, this.recorder);
+        json.beginArray();
+        for (Map.Entry<Long, long[]> entry : this.blocks.entrySet()) {
+            json.value(entry.getKey());
+            out.longs(entry.getValue());
+            json.value(this.biomes.get(entry.getKey()));
+            out.bytes(this.light.get(entry.getKey()));
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<Long, String> entry : this.lightSources.entrySet()) {
+            json.value(entry.getKey());
+            out.string(entry.getValue());
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<Long, String> entry : this.blockEntities.entrySet()) {
+            json.value(entry.getKey());
+            out.string(entry.getValue());
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<String, String> entry : this.blockEntityData.entrySet()) {
+            out.string(entry.getKey());
+            out.string(entry.getValue());
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<Integer, String> entry : this.entities.entrySet()) {
+            json.value(entry.getKey());
+            out.string(entry.getValue());
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<String, Tracked> entry : this.named.entrySet()) {
+            out.string(entry.getKey());
+            writeTracked(out, entry.getValue());
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<Region, int[]> entry : this.regionBlocks.entrySet()) {
+            Region region = entry.getKey();
+            out.string(region.name());
+            json.value(region.min().getX()).value(region.min().getY()).value(region.min().getZ());
+            json.value(region.max().getX()).value(region.max().getY()).value(region.max().getZ());
+            json.value(region.light());
+            out.ints(entry.getValue());
+            out.bytes(this.regionLight.get(region));
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<String, Function<Minecraft, String>> entry : this.askers.entrySet()) {
+            if (!(entry.getValue() instanceof RealWorldSteps.Asker asker)) {
+                throw new java.io.IOException("the question '" + entry.getKey() + "' cannot be kept: it is not a RealWorldSteps.Asker");
+            }
+            out.string(entry.getKey());
+            out.string(asker.kind());
+            json.value(asker.pos().asLong());
+        }
+        json.endArray();
+        json.beginArray();
+        for (Map.Entry<String, String> entry : this.facts.entrySet()) {
+            out.string(entry.getKey());
+            out.string(entry.getValue());
+        }
+        json.endArray();
+        json.value(this.nanos);
+        json.endArray();
+    }
+
+    static WorldProbe read(TourFixtures.In in) throws java.io.IOException {
+        com.google.gson.stream.JsonReader json = in.json;
+        WorldProbe probe = new WorldProbe();
+        json.beginArray();
+        probe.tick = in.integer();
+        probe.label = in.string();
+        probe.dimension = in.string();
+        probe.centreX = in.integer();
+        probe.centreZ = in.integer();
+        probe.sendDistance = in.integer();
+        probe.dayTime = in.number();
+        probe.rain = (float) in.decimal();
+        probe.thunder = (float) in.decimal();
+        if (json.peek() == com.google.gson.stream.JsonToken.NULL) {
+            json.nextNull();
+        } else {
+            json.beginArray();
+            probe.sky = new double[]{in.decimal(), in.decimal(), in.decimal()};
+            json.endArray();
+        }
+        probe.screen = in.string();
+        if (json.peek() == com.google.gson.stream.JsonToken.NULL) {
+            json.nextNull();
+        } else {
+            List<Float> numbers = new ArrayList<>();
+            json.beginArray();
+            while (in.more()) {
+                numbers.add((float) in.decimal());
+            }
+            json.endArray();
+            probe.hud = new float[numbers.size()];
+            for (int i = 0; i < numbers.size(); i++) {
+                probe.hud[i] = numbers.get(i);
+            }
+        }
+        probe.recorder = readTracked(in);
+        json.beginArray();
+        while (in.more()) {
+            long key = in.number();
+            probe.blocks.put(key, in.longs());
+            probe.biomes.put(key, in.number());
+            probe.light.put(key, in.bytes());
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.lightSources.put(in.number(), in.string());
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.blockEntities.put(in.number(), in.string());
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.blockEntityData.put(in.string(), in.string());
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.entities.put(in.integer(), in.string());
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.named.put(in.string(), readTracked(in));
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            Region region = new Region(in.string(), new BlockPos(in.integer(), in.integer(), in.integer()), new BlockPos(in.integer(), in.integer(), in.integer()), in.truth());
+            probe.regionBlocks.put(region, in.ints());
+            byte[] lit = in.bytes();
+            if (lit != null) {
+                probe.regionLight.put(region, lit);
+            }
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.askers.put(in.string(), new RealWorldSteps.Asker(in.string(), BlockPos.of(in.number())));
+        }
+        json.endArray();
+        json.beginArray();
+        while (in.more()) {
+            probe.facts.put(in.string(), in.string());
+        }
+        json.endArray();
+        probe.nanos = in.number();
+        json.endArray();
+        return probe;
+    }
+
+    private static void writeTracked(TourFixtures.Out out, Tracked tracked) throws java.io.IOException {
+        if (tracked == null) {
+            out.json.nullValue();
+            return;
+        }
+        out.json.beginArray();
+        out.string(tracked.type());
+        out.json.value(tracked.at().x).value(tracked.at().y).value(tracked.at().z).value(tracked.speed());
+        out.string(tracked.state());
+        out.json.endArray();
+    }
+
+    private static Tracked readTracked(TourFixtures.In in) throws java.io.IOException {
+        if (in.json.peek() == com.google.gson.stream.JsonToken.NULL) {
+            in.json.nextNull();
+            return null;
+        }
+        in.json.beginArray();
+        Tracked tracked = new Tracked(in.string(), new Vec3(in.decimal(), in.decimal(), in.decimal()), in.decimal(), in.string());
+        in.json.endArray();
+        return tracked;
+    }
+
     /** A line for the log: what this note took in */
     String summary() {
         return this.blocks.size() + " chunks, " + this.blockEntities.size() + " with block entities, " + this.entities.size() + " entities, " + this.named.size() + " named";

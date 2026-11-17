@@ -136,13 +136,15 @@ public final class SelfTest {
             this.step("LibraryScreenSteps.run", () -> LibraryScreenSteps.run(this));
             this.step("PointOfViewSteps.run", () -> PointOfViewSteps.run(this));
             if (Boolean.getBoolean("dailies.test.bestiary")) {
-                // About ten minutes by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiary
+                // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
+                // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
                 this.step("BestiarySteps.run", () -> BestiarySteps.run(this));
             } else {
                 this.skip("the bestiary was not asked for (dailies.test.bestiary)");
             }
             // In a world and with a recording of its own: everything above is in a flat world, this is in generated terrain. It
-            // takes about seventeen minutes, so it runs only when asked for: -PdailiesFlags=dailies.test.realWorld
+            // takes about twelve minutes when it records and three when its fixture is reused, so it runs only when asked for:
+            // -PdailiesFlags=dailies.test.realWorld
             if (tourFirst) {
                 RealWorldSteps.verdict();
             } else if (Boolean.getBoolean("dailies.test.realWorld")) {
