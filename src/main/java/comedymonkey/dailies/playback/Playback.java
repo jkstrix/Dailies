@@ -208,7 +208,7 @@ public final class Playback {
     public static void play() {
         requireLoaded();
         if (position >= total) {
-            jumpTo(0, false);
+            viewTo(0, false);
         }
         paused = false;
         pauseAfterJump = false;
@@ -233,7 +233,16 @@ public final class Playback {
      * @param pauseThere whether to stay paused on arrival; otherwise playback carries on as it was
      */
     public static void jumpTo(int tick, boolean pauseThere) {
-        jump(tick, pauseThere, false);
+        jump(tick, pauseThere, false, true);
+    }
+
+    /**
+     * A jump for someone watching: as exact in time as {@link #jumpTo}, but the world is kept even when it holds
+     * machines from mods, which is far quicker and has no blank moment. Things those machines carry loose have been seen
+     * to land half a block out afterwards, now and then; {@link #jumpTo}, which exports and the tools use, never does that.
+     */
+    public static void viewTo(int tick, boolean pauseThere) {
+        jump(tick, pauseThere, false, false);
     }
 
     /**
@@ -241,13 +250,13 @@ public final class Playback {
      * it lands sooner and things that ease into place may be a few ticks out. {@link #refine} puts that right.
      */
     public static void scrubTo(int tick) {
-        jump(tick, paused, true);
+        jump(tick, paused, true, false);
     }
 
     /** After dragging: if the world was last reached by a rough jump, reach the same tick again exactly */
     public static void refine() {
         if (loaded && rough) {
-            jump(shown(), paused, false);
+            jump(shown(), paused, false, false);
         }
     }
 
@@ -259,12 +268,17 @@ public final class Playback {
 
     /** Whether the world as it stands was reached by a jump that skipped the run-up */
     private static boolean rough = false;
+    /** Whether the world as it stands is one with mod machines in it that was kept across a jump */
+    private static boolean loose = false;
+    /** Whether the jump under way must build such a world from nothing */
+    private static boolean strict = true;
 
-    private static void jump(int tick, boolean pauseThere, boolean quick) {
+    private static void jump(int tick, boolean pauseThere, boolean quick, boolean exact) {
         requireLoaded();
         int target = Math.max(0, Math.min(total, tick));
         pauseAfterJump = pauseThere || paused;
-        boolean again = rough && !quick;
+        boolean again = (rough && !quick) || (loose && exact);
+        strict = exact;
         if (target == position && !jumping() && !again) {
             paused = pauseAfterJump;
             return;
@@ -301,7 +315,7 @@ public final class Playback {
     public static void step() {
         requireLoaded();
         if (position < total) {
-            jumpTo(position + 1, true);
+            viewTo(position + 1, true);
         }
     }
 
@@ -375,7 +389,8 @@ public final class Playback {
                 reloadIndex = -1;
                 skipping = true;
                 feed.skipping = true;
-                feed.load(index, minecraft);
+                feed.load(index, minecraft, strict);
+                loose = feed.keptModded();
                 position = feed.position();
                 if (minecraft.screen instanceof ReceivingLevelScreen || minecraft.screen instanceof GenericMessageScreen) {
                     minecraft.setScreen(null);
@@ -462,7 +477,9 @@ public final class Playback {
         Viewer.reset();
         skipping = true;
         feed.skipping = true;
-        feed.load(0, minecraft);
+        feed.load(0, minecraft, true);
+        loose = false;
+        strict = true;
         position = feed.position();
         skipping = false;
         feed.skipping = false;

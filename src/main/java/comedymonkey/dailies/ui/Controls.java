@@ -227,7 +227,7 @@ public final class Controls {
      * @param seconds of recording to jump by; negative goes back
      */
     public static void skip(int seconds) {
-        watching(() -> Playback.jumpTo(Playback.position() + seconds * TICKS_PER_SECOND, Playback.paused()));
+        watching(() -> Playback.viewTo(Playback.shown() + seconds * TICKS_PER_SECOND, Playback.paused()));
     }
 
     /** While the playhead is dragged */
@@ -241,7 +241,7 @@ public final class Controls {
     }
 
     public static void jumpTo(int tick) {
-        watching(() -> Playback.jumpTo(tick, Playback.paused()));
+        watching(() -> Playback.viewTo(tick, Playback.paused()));
     }
 
     public static void slower() {

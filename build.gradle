@@ -66,6 +66,10 @@ neoForge {
             loadedMods = []
             systemProperty 'dailies.test.script', 'auto'
             systemProperty 'dailies.test.segmentTicks', '100'
+            // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
+            if (project.hasProperty('dailiesFlags')) {
+                project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
+            }
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
     }

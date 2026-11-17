@@ -123,7 +123,7 @@ final class Feed {
      * Rebuilds the world from a segment's snapshot. Must not be called from inside a game tick: the game draws a
      * frame of its own while it changes worlds.
      */
-    void load(int index, Minecraft minecraft) throws IOException {
+    void load(int index, Minecraft minecraft, boolean strict) throws IOException {
         this.closeReader();
         this.reloadWanted = -1;
         this.bundle = null;
@@ -133,8 +133,10 @@ final class Feed {
         this.ticksOwed = 0;
         this.reader = new Records.Reader(this.file.openSegment(segment.number));
 
-        this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild")
-            && (Boolean.getBoolean("dailies.playback.keepModdedWorld") || (this.plainWorld(minecraft) && this.plainSnapshot(segment)));
+        boolean plain = minecraft.level != null && this.plainWorld(minecraft) && this.plainSnapshot(segment);
+        this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild") && (plain || !strict);
+        this.skipChunks = this.mayRewind && plain;
+        this.keptModded = false;
         PlaybackExtensions.resetAll();
         this.rewound = false;
         this.snapshotChunks = null;
@@ -166,10 +168,21 @@ final class Feed {
         }
     }
 
-    // Keeping the world is proven for what the game itself puts in it. Machines from mods (a turning contraption, a
-    // physics craft) keep state of their own on the world, and the things they carry have been seen to land up to a
-    // block out after a jump into a kept world. Until that is understood, a world or a snapshot with any of them in
-    // it is built from nothing, as before.
+    // Keeping the world is proven for what the game itself puts in it. With machines from mods about (a turning
+    // contraption, a physics craft), a mob they carry loose has been seen to land half a block out after a jump into a
+    // kept world, about one run in three, and never after the world was built from nothing. Why is not yet understood.
+    // So a jump that has to be exact (an export, a tool) builds such a world from nothing, and a jump made by someone
+    // watching keeps it, with every chunk applied again, because the wait and the blank screen are worse than the risk.
+
+    private boolean keptModded = false;
+
+    /** Whether the last snapshot was read into a kept world that has mod machines in it */
+    boolean keptModded() {
+        return this.keptModded;
+    }
+
+    /** Whether chunks that have not changed are left as they are by the snapshot being read */
+    private boolean skipChunks = false;
 
     private boolean plainWorld(Minecraft minecraft) {
         if (PlaybackExtensions.anyNeedsNewWorld()) {
@@ -232,6 +245,7 @@ final class Feed {
             try {
                 this.emptyWorld(minecraft);
                 this.rewound = true;
+                this.keptModded = !this.skipChunks;
                 this.snapshotChunks = new HashSet<>();
                 return true;
             } catch (Throwable t) {
@@ -309,7 +323,7 @@ final class Feed {
 
     /** Whether a stored chunk in a snapshot is what the kept world already has in that place, untouched */
     private boolean alreadyThere(String stored, Minecraft minecraft) {
-        if (!this.rewound || this.snapshotChunks == null) {
+        if (!this.rewound || this.snapshotChunks == null || !this.skipChunks) {
             return false;
         }
         Long key = this.chunkOfStored.get(stored);

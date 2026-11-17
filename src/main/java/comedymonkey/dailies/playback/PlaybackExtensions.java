@@ -19,7 +19,7 @@ public final class PlaybackExtensions {
         default void reset() {
         }
 
-        /** Whether the world as it stands holds something of this extension's that cannot be carried across a jump back */
+        /** Whether the world as it stands holds something of this extension's, so that a jump must apply every chunk again */
         default boolean needsNewWorld() {
             return false;
         }
