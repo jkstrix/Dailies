@@ -204,6 +204,19 @@ final class PlaybackTools {
             json.addProperty("world", entry.manifest().worldName);
             json.addProperty("recorder", entry.manifest().recorderName);
             json.addProperty("markers", entry.manifest().markers.size());
+            if (entry.manifest().isEdited()) {
+                // Made by combining or trimming: which ticks of which originals it holds (FILE-11)
+                JsonArray spans = new JsonArray();
+                for (comedymonkey.dailies.file.RecordingManifest.SpanEntry span : entry.manifest().spans) {
+                    JsonObject one = new JsonObject();
+                    one.addProperty("source", span.source);
+                    one.addProperty("source_start", span.sourceStart);
+                    one.addProperty("source_end", span.sourceEnd);
+                    one.addProperty("here", span.here);
+                    spans.add(one);
+                }
+                json.add("spans", spans);
+            }
             if (entry.manifest().recovered) {
                 json.addProperty("recovered", true);
             }

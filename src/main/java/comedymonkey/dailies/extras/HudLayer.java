@@ -94,6 +94,14 @@ final class HudLayer implements PlaybackExtensions.Extension {
         this.stale = this.record != null;
     }
 
+    /** The HUD as last recorded, so the part after a cut starts with it */
+    @Override
+    public void describe(java.util.function.Consumer<byte[]> out) {
+        if (this.record != null) {
+            out.accept(this.record);
+        }
+    }
+
     @Override
     public void reset() {
         this.record = null;

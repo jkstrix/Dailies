@@ -263,7 +263,7 @@ final class PlaybackSteps {
     }
 
     /** Every entity's place and facing, and the blocks around the origin, as text that can be compared */
-    private static String digest(Minecraft minecraft) {
+    static String digest(Minecraft minecraft) {
         TreeMap<Integer, String> lines = new TreeMap<>();
         for (Entity entity : minecraft.level.entitiesForRendering()) {
             // Experience orbs are left out: the game scatters each new orb at random on every client, live or not
@@ -296,7 +296,7 @@ final class PlaybackSteps {
      * and a few degrees apart: something riding a physics craft is put exactly where it was recorded by a jump, and shown
      * through the craft's own smoothing by plain play, as the live game shows it.
      */
-    private static String difference(String a, String b) {
+    static String difference(String a, String b) {
         List<String> first = a.lines().toList();
         List<String> second = b.lines().toList();
         StringBuilder text = new StringBuilder();

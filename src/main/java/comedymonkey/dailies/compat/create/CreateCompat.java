@@ -72,6 +72,17 @@ public final class CreateCompat {
             }
 
             @Override
+            public void describe(java.util.function.Consumer<byte[]> out) {
+                if (compat.recorded.isEmpty()) {
+                    return;
+                }
+                // Every angle known now, in one record of the kind a recorded tick writes
+                ByteBuffer all = ByteBuffer.allocate(compat.recorded.size() * ENTRY_BYTES);
+                compat.recorded.forEach((id, angle) -> all.putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).putFloat(angle));
+                out.accept(all.array());
+            }
+
+            @Override
             public void arrived() {
                 compat.place();
             }

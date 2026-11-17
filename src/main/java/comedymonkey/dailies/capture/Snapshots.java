@@ -128,15 +128,52 @@ public final class Snapshots {
         CHUNKS.remove(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
     }
 
+    /**
+     * What playback knows about the world it is showing that a live game finds out for itself. With this the same
+     * writer describes a playback world, for the snapshot a trimmed recording needs where a cut falls inside a segment
+     * (specification FILE-10).
+     */
+    public interface PlaybackWorld {
+        /** The name of the shared data the registries came from */
+        byte[] worldName();
+
+        /** The chunk the recorded game last said its chunks are centred on */
+        ChunkPos centre();
+
+        /** Every chunk the world holds, craft apart */
+        Iterable<Long> chunks();
+
+        /** The name of the stored chunk a chunk was built from, while nothing has changed it since; else null */
+        @org.jetbrains.annotations.Nullable byte[] storedChunk(long chunk);
+
+        /** The mod messages that came with an entity's spawn, each as a whole packet, or null */
+        @org.jetbrains.annotations.Nullable List<byte[]> spawnExtras(int entityId);
+
+        /** The viewer's own profile, which is in the tab list of a playback world and is not part of the recording */
+        java.util.UUID viewerProfile();
+    }
+
+    /**
+     * Describes a world that is being played back, exactly as {@link #write} describes a live one. The viewer is left
+     * out, in the world and in the tab list. Client thread, between ticks.
+     */
+    public static void writeFromPlayback(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, GameCodec codec, PlaybackWorld playback) {
+        write(out, minecraft, listener, codec, playback);
+    }
+
     static void write(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, GameCodec codec) {
+        write(out, minecraft, listener, codec, null);
+    }
+
+    private static void write(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, GameCodec codec, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
         long started = System.nanoTime();
         taking = true;
         try {
             ClientLevel level = minecraft.level;
-            writeWorld(out, minecraft, listener, level);
-            int chunks = writeChunks(out, minecraft, listener, level, codec);
-            int entities = writeEntities(out, level, codec);
-            SnapshotExtensions.all().forEach((id, extension) -> {
+            writeWorld(out, minecraft, listener, level, playback);
+            int chunks = playback == null ? writeChunks(out, minecraft, listener, level, codec) : writePlaybackChunks(out, level, codec, playback);
+            int entities = writeEntities(out, level, codec, playback);
+            (playback == null ? SnapshotExtensions.all() : SnapshotExtensions.inPlayback()).forEach((id, extension) -> {
                 try {
                     extension.write(out, codec);
                 } catch (Throwable t) {
@@ -144,7 +181,9 @@ public final class Snapshots {
                 }
             });
             Host.LOGGER.debug("Dailies: snapshot of {} chunks and {} entities took {} ms", chunks, entities, (System.nanoTime() - started) / 1_000_000);
-            lastMillis = (System.nanoTime() - started) / 1_000_000.0;
+            if (playback == null) {
+                lastMillis = (System.nanoTime() - started) / 1_000_000.0;
+            }
         } finally {
             taking = false;
         }
@@ -159,12 +198,17 @@ public final class Snapshots {
     /** How long the last snapshot held the game up, for the tests that watch what recording costs */
     public static volatile double lastMillis = 0;
 
-    private static void writeWorld(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, ClientLevel level) {
-        if (world == null || worldOf != listener) {
-            world = WorldData.capture(listener).toBytes();
-            worldOf = listener;
+    private static void writeWorld(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, ClientLevel level, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
+        if (playback != null) {
+            // The registries a playback world was built from are already in the recording, under this name
+            out.sharedRef(Records.WORLD, playback.worldName());
+        } else {
+            if (world == null || worldOf != listener) {
+                world = WorldData.capture(listener).toBytes();
+                worldOf = listener;
+            }
+            out.sharedRecord(Records.WORLD, world);
         }
-        out.sharedRecord(Records.WORLD, world);
 
         ClientPacketListenerAccess distances = (ClientPacketListenerAccess) listener;
         boolean flat = level.getLevelData().getHorizonHeight(level) == level.getMinBuildHeight();
@@ -173,7 +217,7 @@ public final class Snapshots {
             new CommonPlayerSpawnInfo(level.dimensionTypeRegistration(), level.dimension(), ((BiomeManagerAccess) level.getBiomeManager()).dailies$biomeZoomSeed(),
                 GameType.SPECTATOR, null, level.isDebug(), flat, Optional.empty(), 0), false));
 
-        ChunkPos centre = minecraft.player.chunkPosition();
+        ChunkPos centre = playback != null ? playback.centre() : minecraft.player.chunkPosition();
         out.packet(new ClientboundSetChunkCacheCenterPacket(centre.x, centre.z));
         out.packet(new ClientboundSetChunkCacheRadiusPacket(distances.dailies$serverChunkRadius()));
         out.packet(new ClientboundSetSimulationDistancePacket(distances.dailies$serverSimulationDistance()));
@@ -191,6 +235,9 @@ public final class Snapshots {
         List<ClientboundPlayerInfoUpdatePacket.Entry> players = new ArrayList<>();
         Set<PlayerInfo> listed = new HashSet<>(listener.getListedOnlinePlayers());
         for (PlayerInfo info : listener.getOnlinePlayers()) {
+            if (playback != null && info.getProfile().getId().equals(playback.viewerProfile())) {
+                continue;
+            }
             players.add(new ClientboundPlayerInfoUpdatePacket.Entry(info.getProfile().getId(), info.getProfile(), listed.contains(info), info.getLatency(),
                 info.getGameMode(), info.getTabListDisplayName(), null));
         }
@@ -250,15 +297,43 @@ public final class Snapshots {
         return count;
     }
 
-    private static int writeEntities(Recorder.Out out, ClientLevel level, GameCodec codec) {
+    /** The chunks of a playback world. One that nothing has touched since it was built is named again, not stored again */
+    private static int writePlaybackChunks(Recorder.Out out, ClientLevel level, GameCodec codec, PlaybackWorld playback) {
+        int count = 0;
+        for (long key : playback.chunks()) {
+            LevelChunk chunk = level.getChunkSource().getChunk(ChunkPos.getX(key), ChunkPos.getZ(key), ChunkStatus.FULL, false);
+            if (chunk == null) {
+                continue;
+            }
+            count++;
+            // As in a live snapshot, a chunk with block entities is described afresh: mods change those in ways no packet shows
+            byte[] stored = chunk.getBlockEntities().isEmpty() ? playback.storedChunk(key) : null;
+            if (stored != null) {
+                out.sharedRef(Records.SHARED_PACKET, stored);
+                continue;
+            }
+            try {
+                out.sharedPacket(codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null)));
+            } catch (Throwable t) {
+                warnOnce("chunk", t);
+            }
+        }
+        return count;
+    }
+
+    private static int writeEntities(Recorder.Out out, ClientLevel level, GameCodec codec, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
         List<Entity> vehicles = new ArrayList<>();
         int count = 0;
         for (Entity entity : level.entitiesForRendering()) {
             if (entity instanceof Marker || entity.isRemoved()) {
                 continue;
             }
+            if (playback != null && (entity.getId() == VIEWER_ENTITY_ID || entity == Minecraft.getInstance().player)) {
+                // The person watching is not in the recording
+                continue;
+            }
             try {
-                writeEntity(out, entity, codec);
+                writeEntity(out, entity, codec, playback);
                 count++;
                 if (!entity.getPassengers().isEmpty()) {
                     vehicles.add(entity);
@@ -274,9 +349,9 @@ public final class Snapshots {
         return count;
     }
 
-    private static void writeEntity(Recorder.Out out, Entity entity, GameCodec codec) {
+    private static void writeEntity(Recorder.Out out, Entity entity, GameCodec codec, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
         Packet<? super ClientGamePacketListener> spawn = spawnPacket(entity, codec);
-        List<byte[]> extras = Capture.spawnExtras(entity.getId());
+        List<byte[]> extras = playback != null ? playback.spawnExtras(entity.getId()) : Capture.spawnExtras(entity.getId());
         byte[] built = null;
         if (entity instanceof IEntityWithComplexSpawn) {
             // Ask the entity to describe itself as it is now: a contraption that has turned since it spawned must come back

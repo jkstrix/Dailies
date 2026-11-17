@@ -319,6 +319,31 @@ public final class Playback {
         }
     }
 
+    /**
+     * Describes the world as it stands at this tick as a snapshot, for a trimmed recording that starts here although no
+     * segment does (specification FILE-10). It is written by the same writer that describes a live world, and with it
+     * goes what the extensions have kept from the records before this tick (skins, the HUD, where craft are). The
+     * person watching is not in it. Client thread, with the recording loaded, standing still and not in a jump.
+     */
+    public static comedymonkey.dailies.file.Assembler.Snapshot describeWorld() {
+        requireLoaded();
+        if (jumping()) {
+            throw new IllegalStateException("The recording is in the middle of a jump");
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        Session session = feed.session();
+        if (session == null || minecraft.level == null) {
+            throw new IllegalStateException("The recording has no world at this tick");
+        }
+        PlaybackExtensions.beforeDescribeAll();
+        SnapshotOut out = new SnapshotOut(session.codec, file);
+        comedymonkey.dailies.capture.Snapshots.writeFromPlayback(out, minecraft, session.listener, session.codec, feed.world());
+        PlaybackExtensions.describeAll(out::extension);
+        // As at the end of a live snapshot: it lets the game stop showing its loading screen
+        out.packet(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(net.minecraft.network.protocol.game.ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
+        return out.finish();
+    }
+
     private static final List<Runnable> ON_OPENED = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final List<Runnable> ON_CLOSING = new java.util.concurrent.CopyOnWriteArrayList<>();
 

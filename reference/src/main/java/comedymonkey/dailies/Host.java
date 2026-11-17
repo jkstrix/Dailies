@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * The one place where Moments, the Smart Camera and the MCP server reach the rest of the mod. The core implements
@@ -47,6 +48,32 @@ public final class Host {
         return crafts;
     }
 
+    /**
+     * A recording that holds a moment, and the tick the moment is at there. A moment keeps the id and tick of the
+     * recording it was made in for good; recordings made by combining or trimming know which ticks of which originals
+     * they hold, so the same moment can be in several.
+     *
+     * @param recordingId the id of the recording that holds it, which is not the moment's own when it is an edited one
+     * @param open        whether this is the recording open in playback right now
+     * @param original    whether this is the recording the moment was made in
+     */
+    public record Located(Path file, String recordingId, String name, int tick, boolean open, boolean original) {
+    }
+
+    /** A piece of a clip that is still in a recording: ticks there, and the ticks of the original they hold */
+    public record Stretch(int tick, int endTick, int sourceTick, int sourceEndTick) {
+    }
+
+    /**
+     * A recording that holds some or all of a clip.
+     *
+     * @param stretches    the pieces that are there, in the order they play, back to back where a cut fell inside the clip
+     * @param cut          whether part of the clip was cut from this recording
+     * @param removedTicks how many ticks of the clip are missing here
+     */
+    public record ClipLocation(Path file, String recordingId, String name, List<Stretch> stretches, boolean cut, int removedTicks, boolean open, boolean original) {
+    }
+
     /** What the core provides */
     public interface Mod {
         /** The mod's own folder in the game directory, where "moments" lives */
@@ -75,8 +102,25 @@ public final class Host {
         int openRecordingTicks();
         /** Jump to a tick of the open recording; the jump may finish later. Client thread */
         void seek(int tick, boolean pause);
-        /** The file of the recording with this id, or null when it is not in the recordings folder */
-        @Nullable Path findRecording(String recordingId);
+        /**
+         * Every recording that holds a moment, best first: the recording that is open, then the original, then the
+         * others from the newest. Empty when the moment was cut from all of them, or its recording is gone.
+         */
+        List<Located> locate(String recordingId, int tick);
+        /**
+         * As {@link #locate(String, int)}, with a fallback for a moment whose recording is not known (no id, or an id
+         * no recording here has or is made from): a recording of the same world whose time index holds the real time.
+         *
+         * @param realTime milliseconds since 1970, or 0 when not known
+         * @param world    the world or server name, or null when not known
+         */
+        List<Located> locate(@Nullable String recordingId, int tick, long realTime, @Nullable String world);
+        /** Every recording that holds some of a clip (ticks startTick to endTick of an original), in the order of {@link #locate} */
+        List<ClipLocation> locateClip(String recordingId, int startTick, int endTick);
+        /** The tick at which the open recording holds a moment, or -1 when it does not (or none is open) */
+        int openRecordingContains(String recordingId, int tick);
+        /** Whether the open recording is, or holds footage of, the recording with this id */
+        boolean openRecordingMadeFrom(String recordingId);
         /** Leave whatever is open and open this recording. Client thread; loading continues afterwards */
         void openRecording(Path file) throws Exception;
         boolean exportRunning();

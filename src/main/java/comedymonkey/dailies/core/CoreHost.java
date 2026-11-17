@@ -132,9 +132,88 @@ public final class CoreHost implements Host.Mod {
         }
     }
 
+    // --- Where a moment is (FILE-13, FILE-14) ---
+
+    private static @Nullable comedymonkey.dailies.file.RecordingManifest openManifest() {
+        return Playback.loaded() ? Playback.manifest() : null;
+    }
+
     @Override
-    public @Nullable Path findRecording(String recordingId) {
-        return Recordings.findById(recordingId);
+    public int openRecordingContains(String recordingId, int tick) {
+        comedymonkey.dailies.file.RecordingManifest open = openManifest();
+        if (open == null || recordingId == null) {
+            return -1;
+        }
+        if (open.id.equals(recordingId) && !open.isEdited()) {
+            return tick >= 0 && tick <= open.totalTicks ? tick : -1;
+        }
+        return comedymonkey.dailies.file.Spans.toHere(open.sourceMap(), recordingId, tick);
+    }
+
+    @Override
+    public boolean openRecordingMadeFrom(String recordingId) {
+        comedymonkey.dailies.file.RecordingManifest open = openManifest();
+        return open != null && recordingId != null && open.sourceMap().stream().anyMatch(span -> span.source().equals(recordingId));
+    }
+
+    @Override
+    public java.util.List<Host.Located> locate(String recordingId, int tick) {
+        return this.locate(recordingId, tick, 0, null);
+    }
+
+    @Override
+    public java.util.List<Host.Located> locate(@Nullable String recordingId, int tick, long realTime, @Nullable String world) {
+        comedymonkey.dailies.library.LibraryIndex index = comedymonkey.dailies.library.Library.index();
+        comedymonkey.dailies.file.RecordingManifest open = openManifest();
+        java.nio.file.Path openFile = open == null || Playback.file() == null ? null : Playback.file().file();
+        java.util.List<comedymonkey.dailies.library.LibraryIndex.Hit> hits = recordingId == null || recordingId.isBlank() ? java.util.List.of() : index.locate(recordingId, tick);
+        if (hits.isEmpty() && realTime > 0 && (recordingId == null || recordingId.isBlank() || !index.knows(recordingId) && !this.openRecordingMadeFrom(recordingId))) {
+            // Nothing here is, or is made from, that recording. The time index is the fallback (FILE-16)
+            hits = index.locateByTime(realTime, world);
+        }
+        java.util.List<Host.Located> found = new java.util.ArrayList<>();
+        boolean openListed = false;
+        for (comedymonkey.dailies.library.LibraryIndex.Hit hit : hits) {
+            boolean isOpen = open != null && hit.entry().id.equals(open.id);
+            openListed |= isOpen;
+            Host.Located located = new Host.Located(hit.file(), hit.entry().id, hit.entry().name, hit.tick(), isOpen, hit.original());
+            if (isOpen) {
+                found.add(0, located);
+            } else {
+                found.add(located);
+            }
+        }
+        if (!openListed && open != null && recordingId != null) {
+            // The open recording may have been opened from outside the recordings folder, where the index does not look
+            int here = this.openRecordingContains(recordingId, tick);
+            if (here >= 0 && openFile != null) {
+                found.add(0, new Host.Located(openFile, open.id, open.name, here, true, open.id.equals(recordingId) && !open.isEdited()));
+            }
+        }
+        return found;
+    }
+
+    @Override
+    public java.util.List<Host.ClipLocation> locateClip(String recordingId, int startTick, int endTick) {
+        comedymonkey.dailies.file.RecordingManifest open = openManifest();
+        java.util.List<Host.ClipLocation> found = new java.util.ArrayList<>();
+        if (recordingId == null || recordingId.isBlank()) {
+            return found;
+        }
+        for (comedymonkey.dailies.library.LibraryIndex.ClipHit hit : comedymonkey.dailies.library.Library.index().locateClip(recordingId, startTick, endTick)) {
+            java.util.List<Host.Stretch> stretches = new java.util.ArrayList<>();
+            for (comedymonkey.dailies.file.Spans.Stretch stretch : hit.clip().stretches()) {
+                stretches.add(new Host.Stretch(stretch.here(), stretch.hereEnd(), stretch.sourceStart(), stretch.sourceEnd()));
+            }
+            boolean isOpen = open != null && hit.entry().id.equals(open.id);
+            Host.ClipLocation location = new Host.ClipLocation(hit.file(), hit.entry().id, hit.entry().name, stretches, hit.clip().cut(), hit.clip().removed(), isOpen, hit.original());
+            if (isOpen) {
+                found.add(0, location);
+            } else {
+                found.add(location);
+            }
+        }
+        return found;
     }
 
     @Override

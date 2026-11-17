@@ -29,19 +29,24 @@ final class WorldSteps {
     }
 
     static void createWorld(SelfTest test) throws Exception {
-        Minecraft minecraft = Minecraft.getInstance();
-        Path saved = minecraft.gameDirectory.toPath().resolve("saves").resolve(WORLD);
-        deleteTree(saved);
         // Every run starts with no recordings, so nothing from an earlier run can pass or fail a check
         deleteTree(comedymonkey.dailies.capture.Recorder.folder());
+        createWorld(test, WORLD);
+    }
+
+    /** Another fresh flat world, for the steps that need a recording from somewhere else. The recordings are left alone */
+    static void createWorld(SelfTest test, String name) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        Path saved = minecraft.gameDirectory.toPath().resolve("saves").resolve(name);
+        deleteTree(saved);
 
         test.onClientRun(() -> {
             GameRules rules = new GameRules();
             rules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, null);
             rules.getRule(GameRules.RULE_DAYLIGHT).set(false, null);
             rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, null);
-            LevelSettings settings = new LevelSettings(WORLD, GameType.CREATIVE, false, Difficulty.NORMAL, true, rules, WorldDataConfiguration.DEFAULT);
-            minecraft.createWorldOpenFlows().createFreshLevel(WORLD, settings, new WorldOptions(20261117L, false, false),
+            LevelSettings settings = new LevelSettings(name, GameType.CREATIVE, false, Difficulty.NORMAL, true, rules, WorldDataConfiguration.DEFAULT);
+            minecraft.createWorldOpenFlows().createFreshLevel(name, settings, new WorldOptions(20261117L, false, false),
                 registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).createWorldDimensions(), new TitleScreen());
         });
         test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,

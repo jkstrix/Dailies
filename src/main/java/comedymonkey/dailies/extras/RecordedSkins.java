@@ -34,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RecordedSkins implements PlaybackExtensions.Extension {
 
     /** A player's skin as the game wants it, the textures registered for it, and a mark of the record it came from */
-    private record Held(PlayerSkin skin, List<ResourceLocation> textures, int mark) {
+    private record Held(PlayerSkin skin, List<ResourceLocation> textures, int mark, byte[] record) {
     }
 
     private static final RecordedSkins INSTANCE = new RecordedSkins();
@@ -95,7 +95,7 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
             PlayerSkin shown = skin == null
                 ? new PlayerSkin(builtIn.texture(), null, cape, elytra, builtIn.model(), true)
                 : new PlayerSkin(skin, null, cape, elytra, slim ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE, true);
-            this.held.put(id, new Held(shown, textures, mark));
+            this.held.put(id, new Held(shown, textures, mark, Arrays.copyOfRange(data, from, from + length)));
             if (before != null) {
                 this.release(before);
             }
@@ -105,6 +105,12 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
                 Host.LOGGER.warn("Dailies: a player's skin in this recording could not be read, so the built-in skin is shown. Said once", t);
             }
         }
+    }
+
+    /** Every skin held now, as it was recorded: one that arrived part way through a segment that is being cut is not lost */
+    @Override
+    public void describe(java.util.function.Consumer<byte[]> out) {
+        this.held.values().forEach(held -> out.accept(held.record()));
     }
 
     /** Reads one picture and registers it as a texture. Null when the record holds none */
