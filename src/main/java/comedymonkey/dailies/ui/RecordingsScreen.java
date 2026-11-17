@@ -158,11 +158,7 @@ public final class RecordingsScreen extends Screen {
                         return;
                     }
                     this.looking = true;
-                    Controls.offThread(() -> {
-                        try (RecordingFile recording = RecordingFile.openForEditing(file)) {
-                            recording.rename(name);
-                        }
-                    }, Component.translatable("dailies.ui.rename.failed"), this::lookAgain);
+                    Controls.offThread(() -> comedymonkey.dailies.library.Library.rename(file, name), Component.translatable("dailies.ui.rename.failed"), this::lookAgain);
                 },
                 () -> this.minecraft.setScreen(this)));
     }
@@ -182,7 +178,7 @@ public final class RecordingsScreen extends Screen {
                     this.minecraft.setScreen(this);
                     if (yes) {
                         this.looking = true;
-                        Controls.offThread(() -> Files.delete(file), Component.translatable("dailies.ui.delete.failed"), this::lookAgain);
+                        Controls.offThread(() -> comedymonkey.dailies.library.Library.delete(file), Component.translatable("dailies.ui.delete.failed"), this::lookAgain);
                     }
                 },
                 Component.translatable("dailies.ui.delete.title"),

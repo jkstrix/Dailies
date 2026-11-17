@@ -189,6 +189,7 @@ async function cue(args, label) {
       result = await tool('moments_cue', Object.assign({ session: state.session, leave_world: true }, args));
     }
     const camera = result.camera_added && result.suggested_camera ? ' with a ' + result.suggested_camera.label.toLowerCase() + ' camera' : '';
+    if (result.cut_from_open) label += ' (cut from the recording that was open; ' + (result.opening ? 'opening' : 'showing') + ' "' + (result.recording_name || 'another') + '")';
     toast(result.opening ? 'Opening the replay, it will jump to "' + label + '" once loaded' + camera : 'Cued' + camera + ': ' + label);
   } catch (error) {
     toast(error.message, true);
@@ -295,6 +296,8 @@ function renderClips() {
     const hasReplay = clip.replay_uuid != null;
     const transcript = clip.transcript || [];
     const events = clip.events || [];
+    const locations = clip.locations || [];
+    const gone = hasReplay && clip.cut_everywhere;
     return el('div', { class: 'card', id: 'clip-' + clip.id },
       el('div', { class: 'row' },
         scoreBox(clip.importance),
@@ -305,11 +308,20 @@ function renderClips() {
             (clip.players || []).length ? el('span', {}, (clip.players || []).map(player => player.name || player).join(', ')) : null,
             clip.summary_pending ? el('span', { class: 'pill' }, 'summary being written') : null,
             clip.summary_source === 'ollama' ? el('span', { class: 'pill on' }, 'AI summary') : null,
-            hasReplay ? null : el('span', { class: 'pill' }, 'not recorded')),
+            hasReplay ? null : el('span', { class: 'pill' }, 'not recorded'),
+            gone ? el('span', { class: 'pill', title: 'No recording in the recordings folder holds this clip any more' }, 'cut from every recording') : null),
           el('p', { class: 'summary' }, clip.summary || ''),
           clip.suggested_camera ? el('div', { class: 'meta', title: clip.suggested_camera.reason }, el('span', { class: 'pill' }, 'camera'), el('span', {}, clip.suggested_camera.label + ': ' + clip.suggested_camera.reason)) : null,
           events.length ? el('details', {}, el('summary', {}, events.length + ' event' + (events.length === 1 ? '' : 's')),
             el('ul', { class: 'lines' }, events.map(event => el('li', {}, el('span', { class: 'when' }, event.real_time ? clock(event.real_time) : ''), event.description || pretty(event.type))))) : null,
+          locations.length ? el('details', { open: locations.length > 1 ? '' : null }, el('summary', {}, 'In ' + locations.length + ' recording' + (locations.length === 1 ? '' : 's')),
+            el('ul', { class: 'lines' }, locations.map(place => el('li', {},
+              el('button', { class: 'small', title: 'Open "' + place.name + '" at this clip, paused', onclick: () => cue({ clip_id: clip.id, recording_id: place.recording_id }, (clip.title || 'clip') + ' in ' + place.name) }, 'Cue'),
+              ' ', el('span', { class: 'who' }, place.name),
+              place.original ? el('span', { class: 'pill' }, 'original') : null,
+              place.open ? el('span', { class: 'pill on' }, 'open') : null,
+              place.cut ? el('span', { class: 'pill', title: 'Part of this clip was cut from this recording. What is left plays back to back' }, 'cut, ' + span(place.removed_seconds || 0) + ' removed') : null,
+              el('span', { class: 'when' }, ' ' + (place.stretches || []).map(piece => 'ticks ' + piece.tick + ' to ' + piece.end_tick).join(', ')))))) : null,
           transcript.length ? el('details', {}, el('summary', {}, 'What was said (' + transcript.length + ' line' + (transcript.length === 1 ? '' : 's') + ')'),
             el('ul', { class: 'lines' }, transcript.map(line => el('li', {}, el('span', { class: 'who' }, (line.speaker && line.speaker.name || line.speaker || 'Someone') + ': '), line.text || '(not transcribed)')))) : null),
         el('div', { class: 'actions' },

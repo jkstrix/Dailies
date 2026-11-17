@@ -66,6 +66,56 @@ final class Feed {
     /** The name of the stored packet being applied right now, or null */
     private String storedNow = null;
 
+    // --- What a snapshot taken from this world needs to know (a trim that cuts inside a segment) ---
+
+    /** The chunk the recording last said its chunks are centred on */
+    private int centreX = 0, centreZ = 0;
+    /** The mod messages that came bundled with each entity's spawn, by entity id: what the live game keeps in Capture */
+    private final java.util.Map<Integer, List<byte[]>> spawnExtras = new java.util.HashMap<>();
+    private int bundleSpawn = Integer.MIN_VALUE;
+    private List<byte[]> bundleExtras = null;
+
+    /** This world as the snapshot writer needs it described */
+    comedymonkey.dailies.capture.Snapshots.PlaybackWorld world() {
+        Feed feed = this;
+        return new comedymonkey.dailies.capture.Snapshots.PlaybackWorld() {
+            @Override
+            public byte[] worldName() {
+                return HexFormat.of().parseHex(feed.session.worldName);
+            }
+
+            @Override
+            public net.minecraft.world.level.ChunkPos centre() {
+                return new net.minecraft.world.level.ChunkPos(feed.centreX, feed.centreZ);
+            }
+
+            @Override
+            public Iterable<Long> chunks() {
+                return new java.util.TreeSet<>(feed.loadedChunks);
+            }
+
+            @Override
+            public byte[] storedChunk(long chunk) {
+                String stored = feed.cleanChunks.get(chunk);
+                return stored == null ? null : HexFormat.of().parseHex(stored);
+            }
+
+            @Override
+            public List<byte[]> spawnExtras(int entityId) {
+                return feed.spawnExtras.get(entityId);
+            }
+
+            @Override
+            public java.util.UUID viewerProfile() {
+                return Session.VIEWER.getId();
+            }
+        };
+    }
+
+    RecordingFile file() {
+        return this.file;
+    }
+
     Feed(RecordingFile file) {
         this.file = file;
         this.segments = file.segments();
@@ -228,6 +278,7 @@ final class Feed {
         this.snapshotChunks = null;
         this.cleanChunks.clear();
         this.loadedChunks.clear();
+        this.spawnExtras.clear();
     }
 
     /**
@@ -278,6 +329,7 @@ final class Feed {
         if (!ids.isEmpty()) {
             new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(ids).handle(listener);
         }
+        this.spawnExtras.clear();
         List<java.util.UUID> listed = new ArrayList<>();
         for (net.minecraft.client.multiplayer.PlayerInfo info : listener.getOnlinePlayers()) {
             if (!info.getProfile().getId().equals(Session.VIEWER.getId())) {
@@ -342,6 +394,14 @@ final class Feed {
 
     /** Keeps count of which chunks the world holds and which have changed since they were built */
     private void track(Packet<?> packet, Minecraft minecraft) {
+        if (packet instanceof net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket centre) {
+            this.centreX = centre.getX();
+            this.centreZ = centre.getZ();
+        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket removed) {
+            for (int id : removed.getEntityIds()) {
+                this.spawnExtras.remove(id);
+            }
+        }
         if (packet instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket chunk) {
             if (minecraft.level != null && comedymonkey.dailies.Host.crafts().isInPlot(minecraft.level, chunk.getX() * 16.0 + 8.0, chunk.getZ() * 16.0 + 8.0)) {
                 // Part of a physics craft, which is taken out and put back whole
@@ -484,6 +544,13 @@ final class Feed {
             }
             case Records.PAYLOAD -> {
                 String id = this.reader.name();
+                if (this.bundle != null && this.bundleSpawn != Integer.MIN_VALUE) {
+                    // Kept as it was recorded, whether or not this game can read it: a snapshot written from here hands it on
+                    if (this.bundleExtras == null) {
+                        this.bundleExtras = new ArrayList<>();
+                    }
+                    this.bundleExtras.add(java.util.Arrays.copyOfRange(this.reader.payload(), this.reader.bodyStart(), this.reader.length()));
+                }
                 if (PayloadRules.ignored(id) || this.session == null) {
                     return;
                 }
@@ -507,10 +574,19 @@ final class Feed {
                     this.session = Session.create(minecraft, name, WorldData.fromBytes(this.file.shared(name)));
                 }
             }
-            case Records.BUNDLE_BEGIN -> this.bundle = new ArrayList<>();
+            case Records.BUNDLE_BEGIN -> {
+                this.bundle = new ArrayList<>();
+                this.bundleSpawn = Integer.MIN_VALUE;
+                this.bundleExtras = null;
+            }
             case Records.BUNDLE_END -> {
                 List<Packet<? super ClientGamePacketListener>> parts = this.bundle;
                 this.bundle = null;
+                if (this.bundleSpawn != Integer.MIN_VALUE && this.bundleExtras != null) {
+                    this.spawnExtras.put(this.bundleSpawn, this.bundleExtras);
+                }
+                this.bundleSpawn = Integer.MIN_VALUE;
+                this.bundleExtras = null;
                 if (parts != null && !parts.isEmpty()) {
                     this.apply(new ClientboundBundlePacket(parts), minecraft);
                 }
@@ -546,6 +622,9 @@ final class Feed {
             return;
         }
         if (this.bundle != null) {
+            if (packet instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket spawn) {
+                this.bundleSpawn = spawn.getId();
+            }
             this.bundle.add(packet);
         } else {
             this.apply(packet, minecraft);

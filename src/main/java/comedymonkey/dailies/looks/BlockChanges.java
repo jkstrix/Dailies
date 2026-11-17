@@ -57,6 +57,18 @@ final class BlockChanges {
         level = null;
     }
 
+    /** Puts every block a keyframe is showing back to what the recording has there. They are shown again by the next frame that plays */
+    static void putAllBack(@Nullable ClientLevel now) {
+        if (now != null && now == level) {
+            for (Map.Entry<BlockPos, Shown> entry : SHOWN.entrySet()) {
+                if (now.getBlockState(entry.getKey()) == entry.getValue().state()) {
+                    putBack(now, entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        SHOWN.clear();
+    }
+
     /** Once per drawn frame while a recording is on screen */
     static void frame(Minecraft minecraft, Scene scene) {
         try {

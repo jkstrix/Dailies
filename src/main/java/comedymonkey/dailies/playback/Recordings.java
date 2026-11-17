@@ -48,12 +48,8 @@ public final class Recordings {
 
     /** The recording with this id, wherever in the folder it is and whatever it is called now (FILE-3) */
     public static @Nullable Path findById(String id) {
-        for (Entry entry : list()) {
-            if (entry.manifest().id.equals(id)) {
-                return entry.file();
-            }
-        }
-        return null;
+        // Through the index, which knows every recording's id without opening the files (FILE-12)
+        return comedymonkey.dailies.library.Library.index().findById(id);
     }
 
     /** A recording by path (absolute, or relative to the folder), by file name with or without its extension, or by its name */

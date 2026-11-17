@@ -90,7 +90,8 @@ public final class SableCompat implements Host.Crafts {
         }
         instance = compat;
         Host.installCrafts(compat);
-        SnapshotExtensions.register(EXTENSION, compat::writeSnapshot);
+        // A craft is described from the game's own state, so this works as well in a world that is being played back
+        SnapshotExtensions.register(EXTENSION, compat::writeSnapshot, true);
         PlaybackExtensions.register(EXTENSION, new PlaybackExtensions.Extension() {
             @Override
             public void play(byte[] data, int from, int length, boolean skipping) {
@@ -115,6 +116,21 @@ public final class SableCompat implements Host.Crafts {
                 compat.placeCraft();
                 compat.placeRiders();
             }
+
+            @Override
+            public void describe(java.util.function.Consumer<byte[]> out) {
+                if (compat.recordedPoses.isEmpty()) {
+                    return;
+                }
+                java.nio.ByteBuffer all = java.nio.ByteBuffer.allocate(compat.recordedPoses.size() * (16 + POSE_NUMBERS * 8));
+                compat.recordedPoses.forEach((id, pose) -> {
+                    all.putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits());
+                    for (double number : pose) {
+                        all.putDouble(number);
+                    }
+                });
+                out.accept(all.array());
+            }
         });
         PlaybackExtensions.register(RIDERS, new PlaybackExtensions.Extension() {
             @Override
@@ -125,6 +141,20 @@ public final class SableCompat implements Host.Crafts {
             @Override
             public void reset() {
                 compat.riders.clear();
+            }
+
+            @Override
+            public void describe(java.util.function.Consumer<byte[]> out) {
+                if (compat.riders.isEmpty()) {
+                    return;
+                }
+                java.nio.ByteBuffer all = java.nio.ByteBuffer.allocate(compat.riders.size() * (17 + RIDER_STANDING_BYTES));
+                compat.riders.forEach((player, rider) -> {
+                    all.putLong(player.getMostSignificantBits()).putLong(player.getLeastSignificantBits()).put((byte) RIDER_STANDING);
+                    all.putLong(rider.craft.getMostSignificantBits()).putLong(rider.craft.getLeastSignificantBits());
+                    all.putDouble(rider.local.x).putDouble(rider.local.y).putDouble(rider.local.z).putFloat(rider.yaw);
+                });
+                out.accept(all.array());
             }
         });
         Snapshots.entityFollowUp = compat::afterEntitySpawn;

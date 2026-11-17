@@ -187,6 +187,111 @@ public final class RecordingFile implements Closeable {
         };
     }
 
+    // --- The time index (FILE-16) ---
+
+    private TimeIndex.Table timesOf = null;
+    private int timesOfSegment = -1;
+    private List<RecordingManifest.SegmentTime> segmentTimes = null;
+
+    private synchronized TimeIndex.Table times(RecordingManifest.Segment segment) throws IOException {
+        if (this.timesOf == null || this.timesOfSegment != segment.number) {
+            this.timesOf = TimeIndex.Table.read(this.openSegment(segment.number), segment.startTick, segment.endTick);
+            this.timesOfSegment = segment.number;
+        }
+        return this.timesOf;
+    }
+
+    /**
+     * The real time and game time of each segment's first tick. Taken from the description where it has them all, and
+     * read from the segments themselves otherwise (a recording repaired after a crash). Empty for a recording made
+     * before times were kept.
+     */
+    public synchronized List<RecordingManifest.SegmentTime> segmentTimes() throws IOException {
+        if (this.segmentTimes == null) {
+            List<RecordingManifest.SegmentTime> found = new ArrayList<>();
+            java.util.Map<Integer, RecordingManifest.SegmentTime> stored = new java.util.HashMap<>();
+            for (RecordingManifest.SegmentTime time : this.manifest.times) {
+                stored.put(time.segment, time);
+            }
+            for (RecordingManifest.Segment segment : this.manifest.segments) {
+                RecordingManifest.SegmentTime time = stored.get(segment.number);
+                if (time == null) {
+                    TimeIndex.Table table = this.times(segment);
+                    TimeIndex.Sample first = table.any() ? table.at(segment.startTick) : null;
+                    time = first == null ? null : new RecordingManifest.SegmentTime(segment.number, first.realTime(), first.gameTime());
+                }
+                if (time != null) {
+                    found.add(time);
+                }
+            }
+            this.segmentTimes = found;
+        }
+        return this.segmentTimes;
+    }
+
+    /** Whether the recording holds a time index: false for one made before times were kept */
+    public boolean hasTimes() throws IOException {
+        return !this.segmentTimes().isEmpty();
+    }
+
+    /** The real time and game time at a tick, or null when the recording does not hold them. Reads one segment, never plays it */
+    public @Nullable TimeIndex.Sample timeAt(int tick) throws IOException {
+        RecordingManifest.Segment holder = null;
+        for (RecordingManifest.Segment segment : this.manifest.segments) {
+            if (segment.startTick <= tick || holder == null) {
+                holder = segment;
+            }
+        }
+        if (holder == null) {
+            return null;
+        }
+        TimeIndex.Table table = this.times(holder);
+        return table.any() ? table.at(tick) : null;
+    }
+
+    /**
+     * The tick whose real time is closest to the one given, or null when the recording holds no times. Real time stops
+     * and jumps where ticks do not (a pause, an edit), so the answer says how far off it is and the caller decides
+     * whether that counts as inside the recording.
+     */
+    public @Nullable TimeIndex.Nearest tickNearest(long realTime) throws IOException {
+        List<RecordingManifest.SegmentTime> starts = this.segmentTimes();
+        if (starts.isEmpty()) {
+            return null;
+        }
+        // The segment that holds the time starts at or before it; the few that start closest before it are read, and
+        // the one that starts first after it in case the time falls just ahead of everything
+        List<RecordingManifest.SegmentTime> order = new ArrayList<>(starts);
+        order.sort(java.util.Comparator.comparingLong((RecordingManifest.SegmentTime time) -> time.real <= realTime ? realTime - time.real : Long.MAX_VALUE / 2 + (time.real - realTime)));
+        TimeIndex.Nearest best = null;
+        for (RecordingManifest.SegmentTime start : order.subList(0, Math.min(3, order.size()))) {
+            for (RecordingManifest.Segment segment : this.manifest.segments) {
+                if (segment.number == start.segment) {
+                    TimeIndex.Nearest nearest = this.times(segment).nearest(realTime);
+                    if (nearest != null && (best == null || nearest.errorMillis() < best.errorMillis())) {
+                        best = nearest;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    /** The source map: the stretches of originals this recording is made of, or itself when it was never edited (FILE-11) */
+    public List<Spans.Span> sourceMap() {
+        return this.manifest.sourceMap();
+    }
+
+    Container container() {
+        return this.container;
+    }
+
+    public boolean hasShared(String name) {
+        synchronized (this.container) {
+            return this.container.shared.containsKey(name);
+        }
+    }
+
     /** Data stored with {@link RecordingWriter#putShared}, by the name that returned */
     public byte[] shared(String name) throws IOException {
         Container.Entry entry;

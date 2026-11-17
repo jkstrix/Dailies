@@ -38,6 +38,11 @@ public final class Records {
      * another dimension), so playing across the boundary has to rebuild the world from this snapshot
      */
     public static final int DISCONTINUITY = 13;
+    /**
+     * The real time and the game time of the tick the recording has reached (specification FILE-16). Payload: two
+     * numbers, each the change since the TIME record before it in the same segment; see {@link TimeIndex}
+     */
+    public static final int TIME = 14;
 
     private Records() {
     }

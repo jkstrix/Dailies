@@ -109,6 +109,12 @@ public final class LooksRenderer {
                 // The world is rebuilt from the recording, so whatever was changed in it is gone
                 BlockChanges.forget();
             }
+
+            @Override
+            public void beforeDescribe() {
+                // A block shown by a keyframe is not the recording's, and must not end up in a trimmed recording's snapshot
+                BlockChanges.putAllBack(Minecraft.getInstance().level);
+            }
         });
 
         IEventBus modBus = ModList.get().getModContainerById(Dailies.ID).map(ModContainer::getEventBus).orElse(null);

@@ -198,7 +198,9 @@ public final class MomentsTools {
             McpTool.ThreadMode.HTTP, 0, MomentsTools::clipsGenerate);
 
         registrar.add("moments_clips_list",
-            "List the stored clip candidates of a session (from the last moments_clips_generate), with the Ollama titles and summaries where they are ready.",
+            "List the stored clip candidates of a session (from the last moments_clips_generate), with the Ollama titles and summaries where they are ready. "
+                + "Each clip has 'locations': every recording that holds it (the original, and any made from it by combining or trimming), with the stretches of the clip there in that "
+                + "recording's own ticks and whether part of it was cut (cut, removed_ticks). Pass a location's recording_id to moments_cue to open that one.",
             withCommonFilters(schema())
                 .any("type", "Only clips containing an event of this type (or one of an array of types)")
                 .number("min_importance", "Only clips with at least this importance")
@@ -219,7 +221,9 @@ public final class MomentsTools {
             MomentsTools::eventAdd);
 
         registrar.add("moments_cue",
-            "Cue up a clip candidate or a single event for viewing: opens the replay it was recorded in if that is not the open one, jumps to it and pauses there, ready to play. "
+            "Cue up a clip candidate or a single event for viewing: jumps to it in the open replay when that holds it, otherwise opens the original recording, or failing that the newest "
+                + "combined or trimmed recording that holds it, and pauses there, ready to play. The reply lists every recording that holds it (locations) and says cut_from_open when the "
+                + "open recording had it cut out. A moment whose recording id is lost is found by its time. "
                 + "Give clip_id or event_id. Opening a replay takes a while: the reply says so (opening = true) and the jump follows by itself once the replay has loaded. "
                 + "Refuses to pull the player out of a live world unless leave_world is true. The moments web page (GET / on this server) uses this for its Cue buttons.",
             schema()
@@ -228,11 +232,13 @@ public final class MomentsTools {
                 .number("lead_seconds", "For an event: how long before it to start (default 5)")
                 .bool("pause", "Pause at the cue point (default true)")
                 .bool("camera", "Also add the suggested smart camera (suggested_camera in moments_clips_list) as a keyframe at the cue point, following the player who recorded. Undo with editor_undo (default false)")
-                .bool("leave_world", "Allow leaving the world that is being played right now to open the replay (default false)"),
+                .bool("leave_world", "Allow leaving the world that is being played right now to open the replay (default false)")
+                .string("recording_id", "Open this recording, one of the clip's locations, instead of the best one. Fails with CUT when it does not hold the moment"),
             McpTool.ThreadMode.HTTP, 0, MomentsTools::cue);
 
         registrar.add("moments_clip_goto",
-            "Jump to the start of a clip candidate in the open replay. Works when the open replay is the one the clip was recorded in; otherwise says which replay to open.",
+            "Jump to the start of a clip candidate in the open replay. Works when the open replay holds the clip (the recording it was made in, or one combined or trimmed from it); "
+                + "says CUT and lists the recordings that still hold it when it was cut from this one, and otherwise says which replay to open.",
             schema().string("clip_id", "Clip id from moments_clips_generate / moments_clips_list").required("clip_id"),
             MomentsTools::clipGoto);
     }
@@ -972,7 +978,9 @@ public final class MomentsTools {
 
         String replayUuid;
         long wantedTick;
+        long realTime;
         String title;
+        JsonObject clipCued = null;
         if (clipId != null) {
             JsonObject clip = null;
             for (JsonObject candidate : session.clips()) {
@@ -983,8 +991,10 @@ public final class MomentsTools {
             if (clip == null) {
                 throw new McpToolException("No clip '" + clipId + "' in session " + session.id + ". Use moments_clips_list (or moments_clips_generate first)");
             }
+            clipCued = clip;
             replayUuid = MJson.str(clip, "replay_uuid");
             wantedTick = MJson.lng(clip, "start_replay_tick", 0);
+            realTime = MJson.lng(clip, "start_real_time", 0);
             title = MJson.str(clip, "title");
             camera = suggestCamera(MJson.arr(clip, "events"));
         } else {
@@ -992,8 +1002,10 @@ public final class MomentsTools {
             if (event == null) {
                 throw new McpToolException("No event '" + eventId + "' in session " + session.id);
             }
+            long lead = Math.round(Math.max(0, args.optNumber("lead_seconds", 5)) * 20);
             replayUuid = MJson.str(event, "replay_uuid");
-            wantedTick = MJson.lng(event, "replay_tick", 0) - Math.round(Math.max(0, args.optNumber("lead_seconds", 5)) * 20);
+            wantedTick = MJson.lng(event, "replay_tick", 0) - lead;
+            realTime = MJson.lng(event, "real_time", 0) - lead * 50;
             title = MomentAnalysis.describe(event);
             JsonArray single = new JsonArray();
             single.add(event);
@@ -1010,7 +1022,7 @@ public final class MomentsTools {
             }
         }
         JsonObject finalCameraArgs = cameraArgs;
-        if (replayUuid == null) {
+        if (replayUuid == null && realTime <= 0) {
             throw new McpToolException("This has no replay position: no replay was being recorded when it happened");
         }
         if (Host.get().exportRunning()) {
@@ -1018,13 +1030,68 @@ public final class MomentsTools {
         }
         int tick = (int) Math.max(0, wantedTick);
 
+        // Every recording that holds it, best first: the open one, the original, then the newest (FILE-13). A moment keeps
+        // the id and tick it was recorded with; combined and trimmed recordings know which of those ticks they hold
+        String world = MJson.str(session.meta(), "world_name");
+        List<Host.Located> found = new ArrayList<>();
+        if (clipCued != null && replayUuid != null) {
+            // A clip is cued at the start of the first piece of it that is still there
+            int endTick = (int) Math.max(tick, MJson.lng(clipCued, "end_replay_tick", tick));
+            for (Host.ClipLocation location : Host.get().locateClip(replayUuid, tick, endTick)) {
+                found.add(new Host.Located(location.file(), location.recordingId(), location.name(), location.stretches().get(0).tick(), location.open(), location.original()));
+            }
+        }
+        boolean byTime = false;
+        if (found.isEmpty() && replayUuid != null) {
+            found.addAll(Host.get().locate(replayUuid, tick));
+        }
+        if (found.isEmpty() && replayUuid != null && eventId != null) {
+            // The run-up to the event was cut, but the event itself may not have been
+            long lead = Math.round(Math.max(0, args.optNumber("lead_seconds", 5)) * 20);
+            found.addAll(Host.get().locate(replayUuid, (int) Math.max(0, wantedTick + lead)));
+        }
+        if (found.isEmpty() && realTime > 0) {
+            // Only answers when nothing here is, or is made from, that recording: the time index is the fallback (FILE-16)
+            found.addAll(Host.get().locate(replayUuid, tick, realTime, world));
+            byTime = !found.isEmpty();
+        }
+        JsonArray locations = new JsonArray();
+        for (Host.Located located : found) {
+            locations.add(describe(located));
+        }
+        boolean cutFromOpen = replayUuid != null && Host.get().openRecordingMadeFrom(replayUuid) && found.stream().noneMatch(Host.Located::open);
+
+        String wantedRecording = args.optString("recording_id");
+        if (wantedRecording != null && !wantedRecording.isBlank()) {
+            List<Host.Located> chosen = new ArrayList<>();
+            for (Host.Located located : found) {
+                if (located.recordingId().equals(wantedRecording)) {
+                    chosen.add(located);
+                }
+            }
+            if (chosen.isEmpty()) {
+                throw new McpToolException("CUT: this was cut from this recording (id " + wantedRecording + "), or was never in it. " + stillHeldBy(found));
+            }
+            found = chosen;
+        }
+        if (found.isEmpty()) {
+            if (replayUuid == null) {
+                throw new McpToolException("This has no recording id, and no recording of '" + world + "' holds the time it happened at");
+            }
+            throw new McpToolException("CUT: no recording in the recordings folder holds this any more. It was recorded in the recording with id " + replayUuid
+                + ", which has been moved or deleted, or it was cut from every recording made from that one");
+        }
+        Host.Located best = found.get(0);
+        int target = best.tick();
+        String bestId = best.recordingId();
+
         Minecraft minecraft = Minecraft.getInstance();
         // Ask the client thread what is open right now
         Boolean isOpen = minecraft.submit(() -> {
-            if (!replayUuid.equals(Host.get().openRecordingId())) {
+            if (!bestId.equals(Host.get().openRecordingId())) {
                 return false;
             }
-            jump(tick, pause, finalCameraArgs);
+            jump(target, pause, finalCameraArgs);
             return true;
         }).get(10, java.util.concurrent.TimeUnit.SECONDS);
 
@@ -1033,7 +1100,15 @@ public final class MomentsTools {
         json.add("suggested_camera", camera);
         json.addProperty("camera_added", withCamera);
         json.addProperty("replay_uuid", replayUuid);
-        json.addProperty("target_tick", tick);
+        json.addProperty("recording_id", bestId);
+        json.addProperty("recording_name", best.name());
+        json.addProperty("target_tick", target);
+        json.addProperty("found_by", byTime ? "time" : "id");
+        json.add("locations", locations);
+        if (cutFromOpen) {
+            json.addProperty("cut_from_open", true);
+            json.addProperty("cut_note", "Cut from this recording. " + stillHeldBy(found));
+        }
         if (isOpen) {
             pendingCue = null;
             json.addProperty("cued", true);
@@ -1041,10 +1116,7 @@ public final class MomentsTools {
             return json;
         }
 
-        Path file = Host.get().findRecording(replayUuid);
-        if (file == null) {
-            throw new McpToolException("The recording this happened in (id " + replayUuid + ") is not in the recordings folder: not saved yet, moved or deleted");
-        }
+        Path file = best.file();
         boolean inLiveWorld = minecraft.level != null && !Host.get().inPlayback();
         if (inLiveWorld && !args.optBool("leave_world", false)) {
             throw new McpToolException("LEAVE_WORLD_NEEDED: cueing this means leaving the world you are playing to open the recording '" + file.getFileName() + "'. Call again with leave_world = true to do that");
@@ -1066,10 +1138,10 @@ public final class MomentsTools {
                 while (pendingCue == token && System.currentTimeMillis() < deadline) {
                     Thread.sleep(250);
                     boolean done = minecraft.submit(() -> {
-                        if (pendingCue != token || minecraft.player == null || minecraft.level == null || !replayUuid.equals(Host.get().openRecordingId())) {
+                        if (pendingCue != token || minecraft.player == null || minecraft.level == null || !bestId.equals(Host.get().openRecordingId())) {
                             return false;
                         }
-                        jump(tick, pause, finalCameraArgs);
+                        jump(target, pause, finalCameraArgs);
                         return true;
                     }).get(10, java.util.concurrent.TimeUnit.SECONDS);
                     if (done) {
@@ -1091,6 +1163,66 @@ public final class MomentsTools {
         json.addProperty("file", file.getFileName().toString());
         json.addProperty("note", "The recording is loading. The jump happens by itself once it is open");
         return json;
+    }
+
+    private static JsonObject describe(Host.Located located) {
+        JsonObject json = new JsonObject();
+        json.addProperty("recording_id", located.recordingId());
+        json.addProperty("name", located.name());
+        json.addProperty("file", located.file().getFileName().toString());
+        json.addProperty("tick", located.tick());
+        json.addProperty("open", located.open());
+        json.addProperty("original", located.original());
+        return json;
+    }
+
+    /** A sentence naming the recordings that hold a moment, for the message that says it was cut from another */
+    private static String stillHeldBy(List<Host.Located> found) {
+        if (found.isEmpty()) {
+            return "No recording in the recordings folder holds it any more";
+        }
+        List<String> names = new ArrayList<>();
+        for (Host.Located located : found) {
+            names.add("'" + located.name() + "' (" + (located.original() ? "the original, " : "") + "id " + located.recordingId() + ", tick " + located.tick() + ")");
+        }
+        return "Recordings that still hold it: " + String.join(", ", names);
+    }
+
+    /**
+     * Every recording that holds a clip, best first: the stretches of it there, and whether any of it was cut. The
+     * page lists these, each with its own cue button, so the edited episode can be opened over the raw footage.
+     */
+    private static JsonArray clipLocations(JsonObject clip) {
+        JsonArray array = new JsonArray();
+        String replayUuid = MJson.str(clip, "replay_uuid");
+        if (replayUuid == null) {
+            return array;
+        }
+        int start = (int) Math.max(0, MJson.lng(clip, "start_replay_tick", 0));
+        int end = (int) Math.max(start, MJson.lng(clip, "end_replay_tick", start));
+        for (Host.ClipLocation location : Host.get().locateClip(replayUuid, start, end)) {
+            JsonObject json = new JsonObject();
+            json.addProperty("recording_id", location.recordingId());
+            json.addProperty("name", location.name());
+            json.addProperty("file", location.file().getFileName().toString());
+            json.addProperty("open", location.open());
+            json.addProperty("original", location.original());
+            json.addProperty("cut", location.cut());
+            json.addProperty("removed_ticks", location.removedTicks());
+            json.addProperty("removed_seconds", MJson.round(location.removedTicks() / 20.0));
+            JsonArray stretches = new JsonArray();
+            for (Host.Stretch stretch : location.stretches()) {
+                JsonObject piece = new JsonObject();
+                piece.addProperty("tick", stretch.tick());
+                piece.addProperty("end_tick", stretch.endTick());
+                piece.addProperty("source_tick", stretch.sourceTick());
+                piece.addProperty("source_end_tick", stretch.sourceEndTick());
+                stretches.add(piece);
+            }
+            json.add("stretches", stretches);
+            array.add(json);
+        }
+        return array;
     }
 
     /** Client thread, with the right recording open */
@@ -1117,6 +1249,12 @@ public final class MomentsTools {
     private static JsonObject withSuggestedCamera(JsonObject clip) {
         JsonObject copy = clip.deepCopy();
         copy.add("suggested_camera", suggestCamera(MJson.arr(clip, "events")));
+        JsonArray locations = clipLocations(clip);
+        copy.add("locations", locations);
+        if (locations.isEmpty() && MJson.str(clip, "replay_uuid") != null) {
+            // Rule 3 of the source map: a clip that is nowhere any more says so
+            copy.addProperty("cut_everywhere", true);
+        }
         return copy;
     }
 
@@ -1192,8 +1330,30 @@ public final class MomentsTools {
         if (replayUuid == null) {
             throw new McpToolException("This clip has no recording position: nothing was being recorded when it happened");
         }
+        int clipStart = (int) Math.max(0, MJson.lng(clip, "start_replay_tick", 0));
+        int clipEnd = (int) Math.max(clipStart, MJson.lng(clip, "end_replay_tick", clipStart));
+        List<Host.ClipLocation> locations = Host.get().locateClip(replayUuid, clipStart, clipEnd);
+        Host.ClipLocation here = null;
+        List<Host.Located> elsewhere = new ArrayList<>();
+        for (Host.ClipLocation location : locations) {
+            if (location.open()) {
+                here = location;
+            } else {
+                elsewhere.add(new Host.Located(location.file(), location.recordingId(), location.name(), location.stretches().get(0).tick(), false, location.original()));
+            }
+        }
         String open = Host.get().openRecordingId();
-        if (!replayUuid.equals(open)) {
+        if (here == null) {
+            // Not through the index: the open recording answers for itself, through its own spans (FILE-14)
+            int tick = Host.get().openRecordingContains(replayUuid, clipStart);
+            if (tick >= 0) {
+                here = new Host.ClipLocation(Path.of(""), open, "", List.of(new Host.Stretch(tick, tick + Math.max(1, clipEnd - clipStart), clipStart, Math.max(clipStart + 1, clipEnd))), false, 0, true, false);
+            }
+        }
+        if (here == null) {
+            if (open != null && Host.get().openRecordingMadeFrom(replayUuid)) {
+                throw new McpToolException("CUT: this clip was cut from this recording. " + stillHeldBy(elsewhere) + ". Use moments_cue, which opens one for you");
+            }
             throw new McpToolException((open == null ? "No recording is open. " : "The open recording is a different one. ")
                 + "This clip is in the recording with id " + replayUuid + ". Use moments_cue, which opens it for you");
         }
@@ -1202,8 +1362,8 @@ public final class MomentsTools {
         }
 
         int total = Host.get().openRecordingTicks();
-        int startTick = (int) Math.max(0, Math.min(total, MJson.lng(clip, "start_replay_tick", 0)));
-        int endTick = (int) Math.max(startTick, Math.min(total, MJson.lng(clip, "end_replay_tick", startTick)));
+        int startTick = Math.max(0, Math.min(total, here.stretches().get(0).tick()));
+        int endTick = Math.max(startTick, Math.min(total, here.stretches().get(here.stretches().size() - 1).endTick()));
         Host.get().seek(startTick, false);
 
         JsonObject json = ok();
@@ -1212,7 +1372,18 @@ public final class MomentsTools {
         json.addProperty("target_tick", startTick);
         json.addProperty("end_tick", endTick);
         json.addProperty("total_ticks", total);
-        json.addProperty("note", "The jump happens asynchronously, dailies_status shows the tick once it has been reached");
+        json.addProperty("cut", here.cut());
+        json.addProperty("removed_ticks", here.removedTicks());
+        JsonArray stretches = new JsonArray();
+        for (Host.Stretch stretch : here.stretches()) {
+            JsonObject piece = new JsonObject();
+            piece.addProperty("tick", stretch.tick());
+            piece.addProperty("end_tick", stretch.endTick());
+            stretches.add(piece);
+        }
+        json.add("stretches", stretches);
+        json.addProperty("note", "The jump happens asynchronously, dailies_status shows the tick once it has been reached"
+            + (here.cut() ? ". Part of this clip was cut from this recording: what is left plays back to back" : ""));
         return json;
     }
 

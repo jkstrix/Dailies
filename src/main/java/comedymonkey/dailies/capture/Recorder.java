@@ -105,6 +105,12 @@ public final class Recorder {
     private final Set<String> warnedPayloads = new HashSet<>();
     private boolean startWhenInWorld = false;
     private int segmentTicks = DEFAULT_SEGMENT_TICKS;
+    private final comedymonkey.dailies.file.TimeIndex.Encoder timeEncoder = new comedymonkey.dailies.file.TimeIndex.Encoder();
+    private long segmentReal = 0;
+    private long segmentGame = 0;
+    private long firstReal = 0;
+    private long lastReal = 0;
+    private final Set<String> players = new java.util.TreeSet<>();
 
     private Recorder() {
     }
@@ -202,6 +208,9 @@ public final class Recorder {
         this.partBeginsSegment = false;
         this.sharedSent.clear();
         this.warnedPayloads.clear();
+        this.players.clear();
+        this.firstReal = 0;
+        this.lastReal = 0;
         this.segmentTicks = Math.max(20, Integer.getInteger("dailies.test.segmentTicks", Host.get().setting("snapshotSeconds", DEFAULT_SEGMENT_TICKS / 20) * 20));
         this.tick = 0;
         this.id = manifest.id;
@@ -248,6 +257,9 @@ public final class Recorder {
         String wanted = name == null || name.isBlank() ? this.manifest.name : name.trim();
         Path working = this.workingFile;
         Spool spool = this.spool;
+        List<String> everyone = new ArrayList<>(this.players);
+        long realStart = this.firstReal;
+        long realEnd = this.lastReal;
         this.state = State.IDLE;
         this.spool = null;
         this.id = null;
@@ -262,9 +274,13 @@ public final class Recorder {
                         throw new IOException("The recording could not be written", earlier);
                     }
                     writer.manifest().name = wanted;
+                    writer.manifest().players = everyone;
+                    writer.manifest().realStart = realStart;
+                    writer.manifest().realEnd = realEnd;
                     writer.finish();
                     Path target = freeFile(working.getParent(), wanted);
                     Files.move(working, target);
+                    comedymonkey.dailies.library.Library.changed(target);
                     saved.complete(target);
                 } catch (Throwable t) {
                     try {
@@ -418,6 +434,7 @@ public final class Recorder {
 
         this.tick++;
         this.pendingTicks++;
+        this.writeTime(System.currentTimeMillis(), minecraft.level.getGameTime());
         // What the world looks like now that this tick is over belongs to the tick count just reached
         for (Runnable hook : TICK_HOOKS) {
             hook.run();
@@ -439,11 +456,29 @@ public final class Recorder {
             this.own.forgetShown();
         }
         Snapshots.ownShown = this.own.shown();
-        Snapshots.write(new Out(), minecraft, listener, this.codec);
+        Snapshots.write(new LiveOut(), minecraft, listener, this.codec);
+        for (net.minecraft.client.multiplayer.PlayerInfo info : listener.getOnlinePlayers()) {
+            this.players.add(info.getProfile().getName());
+        }
         // What a server sends once the first chunks are on their way: it lets the game stop showing its loading screen
         this.write(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(net.minecraft.network.protocol.game.ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
         this.part.record(Records.SNAPSHOT_END);
+        // The times of the segment's first tick, in full: each segment's time index can be read without any other
+        this.timeEncoder.reset();
+        this.segmentReal = System.currentTimeMillis();
+        this.segmentGame = minecraft.level.getGameTime();
+        this.writeTime(this.segmentReal, this.segmentGame);
         this.waitingForSnapshot = false;
+    }
+
+    /** The real time and game time of the tick just reached (specification FILE-16) */
+    private void writeTime(long real, long game) {
+        this.flushTicks();
+        this.part.record(Records.TIME, this.timeEncoder.next(real, game));
+        if (this.firstReal == 0) {
+            this.firstReal = real;
+        }
+        this.lastReal = real;
     }
 
     /** Hands what has been gathered to the writer */
@@ -457,12 +492,15 @@ public final class Recorder {
         int endTick = this.tick;
         boolean begins = this.partBeginsSegment;
         int startTick = this.segmentStartTick;
+        long startReal = this.segmentReal;
+        long startGame = this.segmentGame;
         this.partBeginsSegment = false;
         this.spool.add(new Spool.Job() {
             @Override
             public void run(RecordingWriter writer) throws Exception {
                 if (begins) {
                     writer.beginSegment(startTick);
+                    writer.manifest().times.add(new RecordingManifest.SegmentTime(writer.segment(), startReal, startGame));
                 }
                 writer.appendToSegment(bytes, 0, bytes.length, endTick);
                 writer.sync();
@@ -484,8 +522,35 @@ public final class Recorder {
 
     // --- What is written ---
 
-    /** How a snapshot, or anything else on the client thread, adds to the recording */
-    public final class Out {
+    /**
+     * How a snapshot, or anything else on the client thread, adds to a recording. The recording being made is one
+     * place it can go; a snapshot taken from playback, for a trimmed recording, is another
+     */
+    public interface Out {
+        void packet(Packet<? super ClientGamePacketListener> packet);
+
+        /** A packet that is likely to recur unchanged, such as a chunk: it is stored once however often it is written */
+        void sharedRef(int kind, byte[] hash);
+
+        /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
+        byte[] sharedPacket(byte[] encoded);
+
+        /** Data stored once and referred to by a record of the given kind */
+        void sharedRecord(int kind, byte[] data);
+
+        /** A whole packet exactly as it arrived */
+        void frame(byte[] frame);
+
+        void payloadFrame(String id, byte[] frame);
+
+        void extension(String id, byte[] data);
+
+        void bundleBegin();
+
+        void bundleEnd();
+    }
+
+    private final class LiveOut implements Out {
         public void packet(Packet<? super ClientGamePacketListener> packet) {
             Recorder.this.write(packet);
         }
@@ -698,10 +763,12 @@ public final class Recorder {
         RecordingManifest manifest = RecordingFile.recover(working);
         Path target = freeFile(working.getParent(), manifest.name.isBlank() ? "Recovered" : manifest.name + " (recovered)");
         Files.move(working, target);
+        comedymonkey.dailies.library.Library.changed(target);
         return target;
     }
 
-    private static Path freeFile(Path folder, String name) {
+    /** A file in the folder for a recording of this name that is not taken yet */
+    public static Path freeFile(Path folder, String name) {
         String safe = name.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").strip();
         while (safe.endsWith(".")) {
             safe = safe.substring(0, safe.length() - 1);
