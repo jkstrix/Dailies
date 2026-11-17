@@ -49,7 +49,7 @@ final class AskScreen extends KitScreen {
         this.heading(graphics, font, this.question);
     }
 
-    private void answer(boolean said) {
+    void answer(boolean said) {
         if (this.answered) {
             return;
         }

@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Dailies' key bindings, under their own heading in the game's controls screen.
  *
- * The recording keys (start or finish, pause or resume, four markers) are unbound until the player chooses keys for
+ * The recording keys (start or finish, pause or resume, four markers, a moment) are unbound until the player chooses keys for
  * them. The playback keys have defaults, and belong to a context of their own that is only live while a recording is
  * being watched with no screen open, so in normal play they never see a key press.
  */
@@ -62,6 +62,7 @@ public final class Keys {
             int number = marker;
             RECORDING.add(new Bound(new KeyMapping("dailies.key.marker" + number, KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, unbound, CATEGORY), () -> Controls.dropMarker(number)));
         }
+        RECORDING.add(new Bound(new KeyMapping("dailies.key.moment", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, unbound, CATEGORY), Controls::logMoment));
 
         PLAYBACK.add(new Bound(watching("dailies.key.play", InputConstants.KEY_P), Controls::togglePlay));
         PLAYBACK.add(new Bound(watching("dailies.key.step", InputConstants.KEY_PERIOD), Controls::stepOneTick));
@@ -90,6 +91,7 @@ public final class Keys {
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> playbackKeys());
         // The editor, the key for which is one of these, has hooks of its own to set up
         EditorScreen.hook();
+        WorldLines.init();
     }
 
     private static void recordingKeys() {

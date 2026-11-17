@@ -11,4 +11,7 @@ public interface MinecraftAccess {
     @Accessor("pause")
     void dailies$setPause(boolean pause);
 
+    @Accessor("fontManager")
+    net.minecraft.client.gui.font.FontManager dailies$fontManager();
+
 }

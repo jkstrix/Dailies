@@ -2,6 +2,7 @@ package comedymonkey.dailies.ui;
 
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
+import comedymonkey.dailies.command.MarkWords;
 import comedymonkey.dailies.edit.EditHistory;
 import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.playback.Playback;
@@ -193,32 +194,33 @@ public final class Controls {
      * @return 0xRRGGBB; red when the setting cannot be read
      */
     static int colourOf(String setting) {
-        String wanted = setting == null ? "" : setting.trim().toLowerCase(Locale.ROOT);
-        switch (wanted) {
-            case "red":
-                return 0xE0483A;
-            case "orange":
-                return 0xE8902E;
-            case "yellow":
-                return 0xF2D03B;
-            case "green":
-                return 0x5DBB4A;
-            case "cyan":
-                return 0x3FC8C8;
-            case "blue":
-                return 0x4A7BE0;
-            case "purple":
-                return 0x9A5BD8;
-            case "white":
-                return 0xFFFFFF;
-            default:
-                break;
+        // The same names and the same reading as "/dailies mark"
+        Integer colour = MarkWords.colour(setting);
+        return colour == null ? MarkWords.DEFAULT_COLOUR : colour;
+    }
+
+    /**
+     * Logs a custom moment there and then, under the label of the "momentKeyLabel" setting: what "/dailies moment"
+     * does, without typing (REC-7).
+     */
+    public static void logMoment() {
+        if (Playback.active()) {
+            Notices.show(Component.translatable("dailies.ui.notice.moment_not_watching"));
+            return;
         }
-        String digits = wanted.startsWith("#") ? wanted.substring(1) : wanted;
-        if (digits.matches("[0-9a-f]{6}")) {
-            return Integer.parseInt(digits, 16);
+        String setting = Host.get().setting("momentKeyLabel", "Good moment");
+        String label = setting.isBlank() ? "Good moment" : setting.trim();
+        try {
+            com.google.gson.JsonObject metadata = new com.google.gson.JsonObject();
+            metadata.addProperty("via", "key");
+            comedymonkey.dailies.mcp.tools.MomentsTools.addEvent(null, label, metadata);
+            Notices.show(Component.translatable("dailies.ui.notice.moment", label));
+        } catch (comedymonkey.dailies.mcp.McpToolException noSession) {
+            Notices.show(Component.translatable("dailies.ui.notice.moment_no_session"));
+        } catch (RuntimeException | LinkageError e) {
+            Host.LOGGER.error("Dailies: the moment could not be logged", e);
+            Notices.show(Component.translatable("dailies.ui.notice.went_wrong"));
         }
-        return 0xE0483A;
     }
 
     // --- Playback ---
@@ -324,9 +326,8 @@ public final class Controls {
                 tell(Component.translatable("dailies.ui.notice.moments_page_off"));
                 return;
             }
-            // With remote access switched on the server speaks HTTPS only, under a certificate of its own making
-            String scheme = comedymonkey.dailies.mcp.McpHttpServer.isRemote() ? "https" : "http";
-            net.minecraft.Util.getPlatform().openUri(java.net.URI.create(scheme + "://127.0.0.1:" + port + "/"));
+            // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token
+            net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
             tell(Component.translatable("dailies.ui.notice.moments_page_opened"));
         });
     }

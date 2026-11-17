@@ -32,8 +32,10 @@ import java.util.List;
 /**
  * The editor (specification chapter V), opened with the timeline key while a recording is watched. Panels are docked
  * round the edges and the middle of the view is left clear: scenes and the export range along the top, the timeline
- * with its tracks along the bottom, the viewer's controls at the left, and at the right a panel with three tabs for
- * the selected keyframe, the scene's looks and the export. Every panel folds away.
+ * with its tracks along the bottom, the viewer's controls at the left with the players in the recording under them,
+ * and at the right a panel with three tabs for the selected keyframe, the scene's looks and the export. Every panel
+ * folds away. In the view itself a click on a keyframe's mark along the camera path selects it, and a click on a
+ * marker's ring jumps to the marker.
  * <p>
  * The recording keeps playing behind it: the screen neither pauses nor dims nor blurs the world. Holding the right
  * mouse button over the view turns the camera and lets the movement keys fly it, so a shot can be framed without
@@ -67,10 +69,12 @@ public final class EditorScreen extends Screen {
     private final Form exportForm = new Form();
     private final Form pickForm = new Form();
     private final Form viewerForm = new Form();
+    private final Form playersForm = new Form();
     private final List<Gadget> top = new ArrayList<>();
     private final List<Gadget> tabs = new ArrayList<>();
     private Gadget.Push sideFold;
     private Gadget.Push viewerFold;
+    private Gadget.Push playersFold;
     private @Nullable Gadget held;
     private int selectionSeen = 0;
 
@@ -80,6 +84,9 @@ public final class EditorScreen extends Screen {
     private int sideBottom;
     private int viewerRight;
     private int viewerBottom;
+    /** The players panel sits under the viewer's strip; top and bottom are the same when there is no room for it */
+    private int playersTop;
+    private int playersBottom;
 
     // Flying with the right mouse button held
     private boolean flying = false;
@@ -229,11 +236,14 @@ public final class EditorScreen extends Screen {
                 () -> EditorState.sideFolded = !EditorState.sideFolded);
         this.viewerFold = Gadget.Push.icon(() -> EditorState.viewerFolded ? Kit.Icon.FOLD_DOWN : Kit.Icon.FOLD_UP, Kit.t("viewer.fold"),
                 () -> EditorState.viewerFolded = !EditorState.viewerFolded);
+        this.playersFold = Gadget.Push.icon(() -> EditorState.playersFolded ? Kit.Icon.FOLD_DOWN : Kit.Icon.FOLD_UP, Kit.t("players.fold"),
+                () -> EditorState.playersFolded = !EditorState.playersFolded);
 
         this.keyframeForm.builtFor = "";
         this.looksForm.builtFor = "";
         this.exportForm.builtFor = "";
         this.pickForm.builtFor = "";
+        this.playersForm.builtFor = "";
         ViewerForms.build(this.viewerForm);
     }
 
@@ -408,7 +418,7 @@ public final class EditorScreen extends Screen {
     }
 
     private boolean hidden() {
-        return this.minecraft.options.hideGui;
+        return this.minecraft.options.hideGui || Notices.hidden();
     }
 
     private boolean usable() {
@@ -589,6 +599,31 @@ public final class EditorScreen extends Screen {
             this.viewerForm.place(font, 1, this.topBottom + HEADER, viewerWidth - 2, needed);
             this.viewerBottom = this.topBottom + HEADER + needed + 1;
         }
+
+        // The players, under it
+        this.playersTop = this.viewerBottom;
+        int left = this.timelineTop - this.playersTop;
+        if (left < HEADER) {
+            this.playersBottom = this.playersTop;
+            return;
+        }
+        this.playersFold.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+        this.playersFold.place(font, viewerWidth - 18, this.playersTop + 2, 16, TOP_ROW);
+        if (EditorState.playersFolded) {
+            this.playersBottom = this.playersTop + HEADER;
+        } else {
+            // Who is there changes as the recording plays and with every jump
+            String shape = PlayerList.shape();
+            if (!shape.equals(this.playersForm.builtFor)) {
+                this.playersForm.builtFor = shape;
+                PlayerList.build(this.playersForm);
+            }
+            int formRoom = Math.max(0, left - HEADER - 1);
+            this.playersForm.place(font, 1, this.playersTop + HEADER, viewerWidth - 2, formRoom);
+            int needed = Math.min(formRoom, this.playersForm.contentHeight());
+            this.playersForm.place(font, 1, this.playersTop + HEADER, viewerWidth - 2, needed);
+            this.playersBottom = this.playersTop + HEADER + needed + 1;
+        }
     }
 
     private void drawPanels(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -603,6 +638,15 @@ public final class EditorScreen extends Screen {
         this.viewerFold.draw(graphics, font, mouseX, mouseY);
         if (!EditorState.viewerFolded) {
             this.viewerForm.draw(graphics, font, mouseX, mouseY);
+        }
+
+        if (this.playersBottom > this.playersTop) {
+            Kit.panel(graphics, 0, this.playersTop, this.viewerRight, this.playersBottom);
+            Kit.text(graphics, font, Kit.clip(font, Kit.t("players.title").getString(), this.viewerRight - 26), 4, this.playersTop + 5, Controls.BRASS_BRIGHT);
+            this.playersFold.draw(graphics, font, mouseX, mouseY);
+            if (!EditorState.playersFolded) {
+                this.playersForm.draw(graphics, font, mouseX, mouseY);
+            }
         }
 
         Kit.panel(graphics, this.sideLeft, this.topBottom, this.width, this.sideBottom);
@@ -663,6 +707,12 @@ public final class EditorScreen extends Screen {
         if (words == null && !EditorState.viewerFolded) {
             words = this.viewerForm.tipAt(mouseX, mouseY);
         }
+        if (words == null && this.playersBottom > this.playersTop) {
+            words = this.playersFold.tipAt(mouseX, mouseY);
+            if (words == null && !EditorState.playersFolded) {
+                words = this.playersForm.tipAt(mouseX, mouseY);
+            }
+        }
         if (words == null) {
             words = this.timeline.tipAt(mouseX, mouseY);
         }
@@ -682,6 +732,13 @@ public final class EditorScreen extends Screen {
                 }
             }
         }
+        if (words == null && EditorState.pick == null && this.overView(mouseX, mouseY)) {
+            // What is drawn in the world itself: a keyframe of the camera path, a marker's ring
+            ViewPick.Ray ray = ViewPick.through(mouseX, mouseY, this.width, this.height);
+            PathPreview.Mark mark = PathPreview.at(ray);
+            MarkerRings.Ring ring = mark == null ? MarkerRings.at(ray) : null;
+            words = mark != null ? PathPreview.describe(mark) : ring != null ? MarkerRings.describe(ring) : null;
+        }
         return words;
     }
 
@@ -692,7 +749,7 @@ public final class EditorScreen extends Screen {
         if (mouseX >= this.sideLeft && mouseY < this.sideBottom) {
             return true;
         }
-        return mouseX < this.viewerRight && mouseY < this.viewerBottom;
+        return mouseX < this.viewerRight && mouseY < Math.max(this.viewerBottom, this.playersBottom);
     }
 
     private boolean overView(double mouseX, double mouseY) {
@@ -739,6 +796,28 @@ public final class EditorScreen extends Screen {
             this.startFlying();
         } else if (button == 0 && EditorState.pick != null) {
             this.pickAt(mouseX, mouseY);
+        } else if (button == 0) {
+            this.clickWorld(mouseX, mouseY);
+        }
+    }
+
+    /** A click in the view on something Dailies draws in the world: a keyframe's mark is selected, a marker's ring is jumped to */
+    private void clickWorld(double mouseX, double mouseY) {
+        ViewPick.Ray ray = ViewPick.through(mouseX, mouseY, this.width, this.height);
+        PathPreview.Mark mark = PathPreview.at(ray);
+        if (mark != null) {
+            if (Screen.hasShiftDown() || Screen.hasControlDown()) {
+                EditorState.selection.add(new KeyframeRef(mark.track(), mark.tick()));
+            } else {
+                EditorState.select(mark.track(), mark.tick());
+            }
+            Kit.click();
+            return;
+        }
+        MarkerRings.Ring ring = MarkerRings.at(ray);
+        if (ring != null) {
+            Kit.click();
+            Controls.jumpTo(ring.tick());
         }
     }
 
@@ -768,6 +847,10 @@ public final class EditorScreen extends Screen {
         }
         if (mouseX < this.viewerRight && mouseY < this.viewerBottom && mouseY >= this.topBottom) {
             return EditorState.viewerFolded ? null : this.viewerForm.press(mouseX, mouseY, button);
+        }
+        if (mouseX < this.viewerRight && mouseY >= this.playersTop && mouseY < this.playersBottom) {
+            hit = this.playersFold.press(mouseX, mouseY, button);
+            return hit != null || EditorState.playersFolded ? hit : this.playersForm.press(mouseX, mouseY, button);
         }
         if (this.timeline.over(mouseX, mouseY)) {
             return this.timeline.press(mouseX, mouseY, button);
@@ -860,6 +943,8 @@ public final class EditorScreen extends Screen {
                 this.sideForm().wheel(mouseX, mouseY, scrollY);
             } else if (!EditorState.viewerFolded && this.viewerForm.wheel(mouseX, mouseY, scrollY)) {
                 return;
+            } else if (!EditorState.playersFolded && this.playersBottom > this.playersTop && this.playersForm.wheel(mouseX, mouseY, scrollY)) {
+                return;
             } else {
                 this.timeline.wheel(mouseX, mouseY, scrollX, scrollY);
             }
@@ -896,6 +981,7 @@ public final class EditorScreen extends Screen {
                 EditorState.pick = null;
             } else if (this.hidden()) {
                 this.minecraft.options.hideGui = false;
+                Notices.setHidden(false);
             } else {
                 this.onClose();
             }

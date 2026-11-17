@@ -46,6 +46,7 @@ public final class DailiesConfig {
                 text("marker" + marker + "Description", "", "Text stored with marker key " + marker + "; may be empty");
                 bool("marker" + marker + "SavePosition", true, "Whether marker key " + marker + " stores where you were standing");
             }
+            text("momentKeyLabel", "Good moment", "What the moment key logs: the label of the custom moment it adds, as /dailies moment would with these words");
         });
         group("export", "Exporting video", () -> {
             text("defaultFileName", "{date}_{time}", "Default name of an exported file. {date} and {time} are filled in when the export starts");
@@ -55,6 +56,8 @@ public final class DailiesConfig {
             choice("defaultInterpolation", Blend.SMOOTH, "How a new keyframe blends towards the next one");
             bool("flightMomentum", true, "The viewer glides to a stop instead of stopping dead");
             bool("flightLookRelative", false, "Forward follows where the viewer looks, up and down included. When off, forward stays level");
+            bool("showCameraPath", true, "Draw the camera's path through the world while editing: a line along it, a mark at each keyframe and arrows for where it looks. Never in exports");
+            bool("showMarkersInWorld", true, "Show markers that stored a position as coloured rings on the ground while watching. Never in exports");
         });
         group("advanced", "Advanced", () -> {
             text("ignoredPayloads", "", "Mod messages that playback must not hand back to their mod, added to the built-in list. Ids or namespace:* separated by commas or new lines; a leading + allows one the built-in list ignores");
@@ -62,8 +65,8 @@ public final class DailiesConfig {
         group("mcp", "The MCP server", () -> {
             bool("mcpEnabled", true, "Run the MCP server, which also serves the moments page. It listens on this computer only, unless Listen On is changed");
             integer("mcpPort", 25595, 1024, 65535, "The port the MCP server listens on");
-            text("mcpBind", "127.0.0.1", "The address the MCP server listens on. 127.0.0.1 keeps it on this computer, as it always was. One of this computer's own network addresses, or 0.0.0.0 for all of them, lets other machines reach it: it then speaks HTTPS, wants the token on every request and only answers the allowed clients");
-            text("mcpToken", "", "The token another machine must send as 'Authorization: Bearer <token>'. Made by the mod the first time remote access is switched on; clear it to have a new one made. Anyone who has it can drive the game, so treat it as a password");
+            text("mcpBind", "127.0.0.1", "The address the MCP server listens on. 127.0.0.1 keeps it on this computer, as it always was. One of this computer's own network addresses, or 0.0.0.0 for all of them, lets other machines reach it: to them it speaks HTTPS, wants the token on every request and only answers the allowed clients. This computer goes on using http://127.0.0.1 with no token");
+            text("mcpToken", "", "The token another machine must send over HTTPS as 'Authorization: Bearer <token>'. Made by the mod the first time remote access is switched on; clear it to have a new one made. Anyone who has it can drive the game, so treat it as a password");
             text("mcpAllowedClients", comedymonkey.dailies.mcp.AddressRules.LOCAL_NETWORKS, "The machines that may reach the MCP server when it listens beyond this computer: addresses or ranges such as 192.168.1.20 or 192.168.1.0/24, separated by commas. The default is the private local-network ranges. This computer itself is always allowed");
             text("mcpCertificateFingerprint", "", "The SHA-256 fingerprint of the certificate the MCP server shows to other machines, for a client to pin. Filled in by the mod when remote access is switched on; changing it here has no effect");
         });

@@ -143,6 +143,8 @@ final class ResourcePackSteps {
             send(server, new ClientboundResourcePackPopPacket(Optional.empty()));
             test.waitFor(() -> GamePacks.inForce().isEmpty(), 120, "the pack to be taken off after recording");
             waitForReload(test, minecraft);
+
+            stress(test, minecraft, server, base);
         }
 
         // What the file holds (REC-19)
@@ -226,7 +228,9 @@ final class ResourcePackSteps {
         check(opening == 1, "opening the recording changed the packs " + opening + " times, not once");
         int changes = PackPlayback.changes();
 
-        // Jumps: the packs change only when the set in force differs where the jump lands
+        // Jumps: the packs change only when the set in force differs where the jump lands. Text is measured on another
+        // thread all the while, as other mods do, and after every jump the game's font must be a live one (see stress)
+        Thread measuring = measureText(minecraft);
         expect(test, minecraft, popTick - 1, true, changes, "just before the pop");
         expect(test, minecraft, 0, true, changes, "back at the start");
         expect(test, minecraft, popTick, false, ++changes, "at the pop");
@@ -235,6 +239,7 @@ final class ResourcePackSteps {
         expect(test, minecraft, pushTick, true, ++changes, "at the second push");
         expect(test, minecraft, total, true, changes, "at the end");
         expect(test, minecraft, pushTick + 5, true, changes, "back to just after the second push");
+        stopMeasuring(measuring);
         check(!test.onClient(() -> on(minecraft, DECLINED_MARKER)), "the declined pack was applied in playback");
         check(test.onClient(PackPlayback::failed).isEmpty(), "playback reports packs it could not apply: " + test.onClient(PackPlayback::failed));
 
@@ -318,6 +323,102 @@ final class ResourcePackSteps {
         boolean inForce = test.onClient(() -> on(minecraft, MARKER));
         check(inForce == wanted, where + " (tick " + tick + ") the pack is " + (inForce ? "in force" : "not in force"));
         check(PackPlayback.changes() == changes, where + " (tick " + tick + ") the packs have been changed " + PackPlayback.changes() + " times, expected " + changes);
+        fontIsLive(test, minecraft, where);
+    }
+
+    // ------------------------------------------------------------------ The game's font across reloads
+
+    /**
+     * Packs pushed and popped one after another while a recording runs, with text being measured on another thread
+     * throughout. The game keeps the font it last used in a field that it reads and writes without any lock; a thread
+     * that measures text while a reload swaps the fonts can put the old font back there after the reload has closed
+     * it, and the next new character drawn then crashes the game ("Image is not allocated"). The game's own download
+     * notice measures text on its download thread, and Create's Ponder does on the worker that rebuilds the creative
+     * search after every reload, so in the modded game this happened about one run in two until FontManagerMixin.
+     */
+    private static void stress(SelfTest test, Minecraft minecraft, IntegratedServer server, String base) throws Exception {
+        test.tool("recording_start", new JsonObject());
+        Thread measuring = measureText(minecraft);
+        int reloads = 0;
+        try {
+            for (int round = 0; round < 3; round++) {
+                UUID id = UUID.randomUUID();
+                send(server, new ClientboundResourcePackPushPacket(id, base + "/test-pack.zip", sha1(pack), false, Optional.empty()));
+                answer(test, minecraft, true);
+                test.waitFor(() -> GamePacks.inForce(id), 120, "the pack to be loaded in round " + round + " of pushing and popping");
+                waitForReload(test, minecraft);
+                fontIsLive(test, minecraft, "after push " + round);
+                send(server, new ClientboundResourcePackPopPacket(Optional.of(id)));
+                test.waitFor(() -> !GamePacks.inForce(id), 120, "the pack to be taken off in round " + round + " of pushing and popping");
+                waitForReload(test, minecraft);
+                fontIsLive(test, minecraft, "after pop " + round);
+                reloads += 2;
+            }
+            // And without waiting in between: a push, its pop and another push before the first has been loaded
+            UUID first = UUID.randomUUID();
+            UUID last = UUID.randomUUID();
+            send(server, new ClientboundResourcePackPushPacket(first, base + "/test-pack.zip", sha1(pack), false, Optional.empty()));
+            answer(test, minecraft, true);
+            send(server, new ClientboundResourcePackPopPacket(Optional.of(first)));
+            send(server, new ClientboundResourcePackPushPacket(last, base + "/test-pack.zip", sha1(pack), false, Optional.empty()));
+            answer(test, minecraft, true);
+            test.waitFor(() -> GamePacks.inForce(last) && !GamePacks.inForce(first), 120, "the packs pushed and popped at once to settle");
+            waitForReload(test, minecraft);
+            fontIsLive(test, minecraft, "after a push, a pop and a push at once");
+            send(server, new ClientboundResourcePackPopPacket(Optional.empty()));
+            test.waitFor(() -> GamePacks.inForce().isEmpty(), 120, "the last pack to be taken off");
+            waitForReload(test, minecraft);
+            fontIsLive(test, minecraft, "after the last pop");
+        } finally {
+            stopMeasuring(measuring);
+        }
+        test.tool("recording_cancel", new JsonObject());
+        test.sleepTicks(10);
+        test.log("the game's font was live after each of " + reloads + " pack reloads and a burst, with text measured on another thread throughout");
+    }
+
+    private static volatile boolean measuringText = false;
+    private static int freshText = 0;
+
+    /** What Ponder's tooltips and the game's download notice do: measure text away from the game's own thread */
+    private static Thread measureText(Minecraft minecraft) {
+        measuringText = true;
+        Thread thread = new Thread(() -> {
+            while (measuringText) {
+                try {
+                    minecraft.font.width("Dailies");
+                } catch (Throwable ignored) {
+                    // Only the font it leaves behind matters
+                }
+            }
+        }, "Dailies-Self-Test-Text");
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
+    }
+
+    private static void stopMeasuring(Thread thread) throws InterruptedException {
+        measuringText = false;
+        thread.join(5000);
+    }
+
+    /** The font the game draws with is the one its last reload made, and characters not drawn since then can be drawn */
+    private static void fontIsLive(SelfTest test, Minecraft minecraft, String when) throws Exception {
+        test.onClientRun(() -> {
+            comedymonkey.dailies.mixin.access.FontManagerAccess fonts =
+                (comedymonkey.dailies.mixin.access.FontManagerAccess) ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$fontManager();
+            minecraft.font.width("Dailies");
+            net.minecraft.client.gui.font.FontSet used = fonts.dailies$lastFontSet();
+            check(used != null && fonts.dailies$fontSets().get(used.name()) == used,
+                when + ", the game draws text with a font that a resource reload has closed: the next new character would crash it");
+            StringBuilder fresh = new StringBuilder();
+            for (int i = 0; i < 6; i++) {
+                fresh.append((char) (0x00C0 + (freshText++ % 0x180)));
+            }
+            net.minecraft.client.gui.GuiGraphics graphics = new net.minecraft.client.gui.GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
+            graphics.drawString(minecraft.font, fresh.toString(), 2, 2, 0xFFFFFFFF, false);
+            graphics.flush();
+        });
     }
 
     private static void settle(SelfTest test) throws Exception {

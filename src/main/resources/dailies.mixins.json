@@ -11,6 +11,8 @@
     "capture.BlockEntityInfoMixin",
     "packs.ServerPackManagerMixin",
     "packs.PackPushMixin",
+    "packs.FontManagerMixin",
+    "access.FontManagerAccess",
     "access.ClientPacketListenerAccess",
     "access.BiomeManagerAccess",
     "access.ConnectionAccess",
@@ -19,6 +21,7 @@
     "playback.MinecraftMixin",
     "playback.SoundEngineMixin",
     "playback.ParticleEngineMixin",
+    "playback.CommandMixin",
     "export.TimerMixin",
     "export.WindowMixin",
     "export.ExportPreviewMixin"

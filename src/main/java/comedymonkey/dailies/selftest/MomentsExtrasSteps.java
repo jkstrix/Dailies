@@ -343,14 +343,13 @@ final class MomentsExtrasSteps {
             check(https(pinned, bind, port, bind + ":" + port, "https://example.com", token).status == 403, "a foreign Origin was accepted in remote mode");
             check(https(pinned, bind, port, bind + ":" + port, "https://" + bind + ":" + port, token).status == 200, "the page's own Origin was refused in remote mode");
 
-            // The old plain-HTTP way in is gone while remote access is on
-            boolean plainRefused;
-            try {
-                plainRefused = http(port, "POST", "/mcp", PING, null, null).status != 200;
-            } catch (Exception e) {
-                plainRefused = true;
-            }
-            check(plainRefused, "plain HTTP on localhost was still answered with remote access on");
+            // This computer's own agents carry on as they were: plain HTTP at 127.0.0.1, no token, localhost names only
+            check(http(port, "POST", "/mcp", PING, null, null).status == 200, "with remote access on, a plain local request without a token was not answered");
+            check(test.tool("dailies_status", new JsonObject()).has("version"), "with remote access on, the local tools stopped answering");
+            check(http(port, "POST", "/mcp", PING, bind + ":" + port, null).status == 403, "a plain request was let in under the bound address's name");
+            check(http(port, "POST", "/mcp", PING, null, null, "http://example.com").status == 403, "a plain request from a foreign origin was answered with remote access on");
+            // The same plain request at the bound address is still this computer talking, so it is answered too
+            check(httpAt(bind, port, "POST", "/mcp", PING, "127.0.0.1:" + port).status == 200, "a plain request from this computer to the bound address was not answered");
 
             // Five wrong tokens, and the address is shut out: even the right token is turned away
             for (int attempt = 1; attempt <= 5; attempt++) {
@@ -361,7 +360,9 @@ final class MomentsExtrasSteps {
             check(locked.statusCode() == 429, "after five wrong tokens the right one was answered " + locked.statusCode() + ", not 429");
             int retry = Integer.parseInt(locked.headers().firstValue("Retry-After").orElse("0"));
             check(retry >= 50 && retry <= 60, "the lockout is said to last " + retry + " seconds, not a minute");
-            test.log("remote access: HTTPS with certificate " + fingerprint.substring(0, 23) + "..., 401 without the token, 200 with it, locked out after five wrong ones");
+            // The lockout is HTTPS's business; plain local requests never had a token to get wrong
+            check(http(port, "POST", "/mcp", PING, null, null).status == 200, "the lockout shut out plain local requests as well");
+            test.log("remote access: HTTPS with certificate " + fingerprint.substring(0, 23) + "..., 401 without the token, 200 with it, locked out after five wrong ones; plain local HTTP answered throughout");
         } finally {
             // Back to how it was; the restart also forgets the lockout this test earned itself
             Host.get().saveSetting("mcpBind", oldBind);
@@ -415,8 +416,19 @@ final class MomentsExtrasSteps {
     }
 
     private static Reply http(int port, String method, String path, String body, String host, String authorization) throws Exception {
+        return http(port, method, path, body, host, authorization, null);
+    }
+
+    private static Reply http(int port, String method, String path, String body, String host, String authorization, String origin) throws Exception {
         try (Socket socket = new Socket(InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), port)) {
-            RawReply raw = exchange(socket, method, path, body, host == null ? "127.0.0.1:" + port : host, null, authorization);
+            RawReply raw = exchange(socket, method, path, body, host == null ? "127.0.0.1:" + port : host, origin, authorization);
+            return new Reply(raw.status, new String(raw.body, StandardCharsets.UTF_8));
+        }
+    }
+
+    private static Reply httpAt(String address, int port, String method, String path, String body, String host) throws Exception {
+        try (Socket socket = new Socket(InetAddress.getByName(address), port)) {
+            RawReply raw = exchange(socket, method, path, body, host, null, null);
             return new Reply(raw.status, new String(raw.body, StandardCharsets.UTF_8));
         }
     }
