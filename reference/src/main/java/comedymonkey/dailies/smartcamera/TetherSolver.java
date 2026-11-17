@@ -12,8 +12,9 @@ public final class TetherSolver {
     /**
      * @param eye     where the camera's eye is
      * @param blocked whether blocks pulled the camera in from where it wanted to be
+     * @param cut     whether the camera jumped this step (out from behind a wall it was stuck behind, or after a teleport)
      */
-    public record Result(Vec eye, double yaw, double pitch, boolean blocked) {
+    public record Result(Vec eye, double yaw, double pitch, boolean blocked, boolean cut) {
     }
 
     private final Spring.Point pivot = new Spring.Point();
@@ -60,13 +61,13 @@ public final class TetherSolver {
         }
         Vec wanted = followed.add(offset);
         Vec eye = avoid ? this.clearance.solve(world, point, wanted, 0.0, this.velocity, this.velocity, dt) : wanted;
-        return this.aim(eye, look, aimTime, fov, aspect, dt, avoid && this.clearance.blocked());
+        return this.aim(eye, look, aimTime, fov, aspect, dt, avoid && this.clearance.blocked(), dt <= 0.0 || avoid && this.clearance.jumped());
     }
 
     /** Stays where it is and turns to watch a moving point */
     public Result watch(Vec eye, Vec point, Vec look, double aimTime, double fov, double aspect, double dt) {
         dt = this.follow(point, dt);
-        return this.aim(eye, look, aimTime, fov, aspect, dt, false);
+        return this.aim(eye, look, aimTime, fov, aspect, dt, false, dt <= 0.0);
     }
 
     /** Takes in where the point is; a jump (backwards in time, a long gap or a teleport) starts afresh */
@@ -92,7 +93,7 @@ public final class TetherSolver {
         return dt;
     }
 
-    private Result aim(Vec eye, Vec look, double aimTime, double fov, double aspect, double dt, boolean blocked) {
+    private Result aim(Vec eye, Vec look, double aimTime, double fov, double aspect, double dt, boolean blocked, boolean cut) {
         SmartCameraMath.Aim goal = SmartCameraMath.aimAt(eye.x(), eye.y(), eye.z(), look.x(), look.y(), look.z(), 0.0, 0.0, fov, aspect);
         if (eye.distanceTo(look) < 1.0e-3) {
             goal = new SmartCameraMath.Aim(this.aimer.yaw(), this.aimer.pitch(), false);
@@ -103,7 +104,7 @@ public final class TetherSolver {
         } else {
             this.aimer.step(goal.yaw(), goal.pitch(), aimTime, fov, aspect, dt);
         }
-        return new Result(eye, SmartCameraMath.wrapDegrees(this.aimer.yaw()), this.aimer.pitch(), blocked);
+        return new Result(eye, SmartCameraMath.wrapDegrees(this.aimer.yaw()), this.aimer.pitch(), blocked, cut);
     }
 
 }

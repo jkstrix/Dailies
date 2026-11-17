@@ -64,7 +64,10 @@ final class KeyframeForms {
         DIALS.put("degrees_per_second", new Dial(-360, 360, 20));
         DIALS.put("start_angle", new Dial(-100000, 100000, 0));
         DIALS.put("min_shot_seconds", new Dial(0.5, 60, 3));
-        DIALS.put("max_shot_seconds", new Dial(0.5, 120, 8));
+        DIALS.put("max_shot_seconds", new Dial(0.5, 120, 10));
+        DIALS.put("heading_dead_band", new Dial(0, 90, 15));
+        DIALS.put("flight_widen", new Dial(0, 2, 0.6));
+        DIALS.put("dead_zone", new Dial(0, 0.8, 0.12));
         DIALS.put("screen_x", new Dial(-1, 1, 0));
         DIALS.put("screen_y", new Dial(-1, 1, 0));
         DIALS.put("lead_room", new Dial(0, 1, 0.25));
@@ -76,6 +79,9 @@ final class KeyframeForms {
         SWITCHES.put("allow_chase", true);
         SWITCHES.put("allow_tripod", true);
         SWITCHES.put("allow_orbit", true);
+        SWITCHES.put("allow_over_shoulder", true);
+        SWITCHES.put("allow_side_tracking", true);
+        SWITCHES.put("establishing_shots", true);
         SWITCHES.put("auto_zoom", false);
         SWITCHES.put("frame_vehicle", true);
         SWITCHES.put("avoid_obstructions", true);
@@ -372,7 +378,30 @@ final class KeyframeForms {
                         new Gadget.Push(Kit.t("camera.take"), KeyframeForms::takeView).tip(Kit.t("camera.take.tip")),
                         new Gadget.Push(Kit.t("camera.go"), KeyframeForms::goToCamera).tip(Kit.t("camera.go.tip"))));
             }
-            case ORBIT -> numbers(form, "centre_x", "centre_y", "centre_z", "distance", "height", "angle");
+            case ORBIT -> {
+                boolean onEntity = !text("entity_uuid").isEmpty();
+                form.add(new Gadget.Note(() -> text("entity_uuid").isEmpty() ? Kit.t("orbit.round_point") : Kit.t("orbit.round", entityName(text("entity_uuid"))),
+                        Controls.PARCHMENT));
+                form.add(new Gadget.Line(
+                        new Gadget.Push(Kit.t("orbit.pick"), () -> {
+                            EditorState.pick = new EditorState.Pick(Kit.t("pick.orbit"), false, false, entity -> {
+                                // Round the middle of the entity, wherever it goes
+                                JsonObject values = new JsonObject();
+                                values.addProperty("entity_uuid", entity.getUUID().toString());
+                                values.addProperty("entity_id", entity.getId());
+                                values.addProperty("centre_x", 0.0);
+                                values.addProperty("centre_y", 0.0);
+                                values.addProperty("centre_z", 0.0);
+                                refuse(changeAll(values));
+                            }, null, List.of());
+                            EditorState.sideFolded = false;
+                        }).tip(Kit.t("orbit.pick.tip")),
+                        new Gadget.Push(Kit.t("orbit.point"), KeyframeForms::orbitRoundPoint).tip(Kit.t("orbit.point.tip"))));
+                numbers(form, "centre_x", "centre_y", "centre_z", "distance", "height", "angle");
+                if (onEntity) {
+                    form.add(new Gadget.Note(Kit.t("orbit.offset_note")));
+                }
+            }
             case FOLLOW_ENTITY -> {
                 form.add(new Gadget.Note(() -> Kit.t("follow.who", entityName(text("entity_uuid"))), Controls.PARCHMENT));
                 form.add(new Gadget.Push(Kit.t("follow.pick"), () -> {
@@ -473,13 +502,14 @@ final class KeyframeForms {
             values.addProperty("mode", id);
             JsonObject now = json();
             if (id.equals("tripod") && !now.has("position")) {
-                // A tripod stands where the viewer is when it is first asked for
+                // A tripod picks its own places; the viewer's place is kept for when it is set to stay fixed
                 Vec3 feet = Viewer.position();
                 JsonObject position = new JsonObject();
                 position.addProperty("x", round(feet.x));
                 position.addProperty("y", round(feet.y + EYE_HEIGHT));
                 position.addProperty("z", round(feet.z));
                 values.add("position", position);
+                values.addProperty("tripod_placement", "auto");
             }
             if (id.equals("orbit") && !now.has("start_angle")) {
                 values.addProperty("start_angle", round(Viewer.yaw()));
@@ -490,10 +520,12 @@ final class KeyframeForms {
         form.add(new Gadget.Heading(Kit.t("smart.mode." + mode)));
         switch (mode) {
             case "chase" -> {
-                dials(form, "distance", "height", "side_angle", "position_smoothing");
+                dials(form, "distance", "height", "side_angle", "position_smoothing", "heading_dead_band", "flight_widen");
                 choice(form, "heading_source", "heading_source", List.of("movement", "body"));
             }
             case "tripod" -> {
+                form.add(new Gadget.Pair(label("tripod_placement"), new Gadget.Cycle<>(List.of("auto", "fixed"), id -> Kit.t("choice.placement_" + id),
+                        KeyframeForms::placement, id -> refuse(change("tripod_placement", new JsonPrimitive(id))))).tip(tip("tripod_placement")));
                 for (int axis = 0; axis < 3; axis++) {
                     int which = axis;
                     String name = "position_" + "xyz".charAt(axis);
@@ -506,14 +538,17 @@ final class KeyframeForms {
                     position.addProperty("x", round(feet.x));
                     position.addProperty("y", round(feet.y + EYE_HEIGHT));
                     position.addProperty("z", round(feet.z));
-                    refuse(change("position", position));
+                    JsonObject values = new JsonObject();
+                    values.add("position", position);
+                    values.addProperty("tripod_placement", "fixed");
+                    refuse(changeAll(values));
                 }).tip(Kit.t("smart.stand_here.tip")));
-                dials(form, "aim_smoothing");
+                dials(form, "aim_smoothing", "dead_zone");
             }
             case "orbit" -> dials(form, "radius", "height", "degrees_per_second", "start_angle");
             default -> {
                 dials(form, "min_shot_seconds", "max_shot_seconds");
-                switches(form, "allow_chase", "allow_tripod", "allow_orbit");
+                switches(form, "allow_chase", "allow_over_shoulder", "allow_side_tracking", "allow_tripod", "allow_orbit", "establishing_shots");
                 form.add(new Gadget.Pair(label("seed"), Entry.number(() -> {
                     JsonObject json = json();
                     return json.has("seed") ? number(json.get("seed")) : Double.valueOf(0.0);
@@ -693,6 +728,41 @@ final class KeyframeForms {
             // Falls through to what the Smart Camera would take
         }
         return SWITCHES.getOrDefault(field, false);
+    }
+
+    /** An orbit round an entity goes back to circling a fixed point: where the entity's middle is now */
+    private static void orbitRoundPoint() {
+        JsonObject now = json();
+        if (!now.has("entity_uuid")) {
+            return;
+        }
+        double x = now.has("centre_x") ? now.get("centre_x").getAsDouble() : 0.0;
+        double y = now.has("centre_y") ? now.get("centre_y").getAsDouble() : 0.0;
+        double z = now.has("centre_z") ? now.get("centre_z").getAsDouble() : 0.0;
+        net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+        net.minecraft.world.entity.Entity entity = null;
+        try {
+            entity = minecraft.level == null ? null : minecraft.level.getEntities().get(java.util.UUID.fromString(now.get("entity_uuid").getAsString()));
+        } catch (IllegalArgumentException ignored) {
+            // Gone from the world: the circle stays round where the camera is
+        }
+        Vec3 middle = entity != null ? entity.position().add(0.0, entity.getBbHeight() / 2.0, 0.0) : Viewer.position();
+        JsonObject values = new JsonObject();
+        values.add("entity_uuid", com.google.gson.JsonNull.INSTANCE);
+        values.add("entity_id", com.google.gson.JsonNull.INSTANCE);
+        values.addProperty("centre_x", round(middle.x + x));
+        values.addProperty("centre_y", round(middle.y + y));
+        values.addProperty("centre_z", round(middle.z + z));
+        refuse(changeAll(values));
+    }
+
+    /** Whether a tripod picks its own places: as stored, or as the Smart Camera reads a keyframe that does not say */
+    private static String placement() {
+        String stored = text("tripod_placement");
+        if (!stored.isEmpty()) {
+            return stored;
+        }
+        return json().has("position") ? "fixed" : "auto";
     }
 
     /** One coordinate of a tripod's position, which is stored as a list or as an object */

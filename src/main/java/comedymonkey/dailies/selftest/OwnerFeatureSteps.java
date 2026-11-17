@@ -146,8 +146,8 @@ final class OwnerFeatureSteps {
         double chaseDistance = distance(chase);
         check(chaseDistance > 3.5 && chaseDistance < 9.5, "the chase camera is " + chaseDistance + " blocks from its subject, not about 6");
 
-        // A tripod stays put
-        test.tool("smart_camera_add", args("tick", start + 30, "mode", "tripod", "transition_seconds", 0));
+        // A fixed tripod stays put
+        test.tool("smart_camera_add", args("tick", start + 30, "mode", "tripod", "tripod_placement", "fixed", "transition_seconds", 0));
         test.onClientRun(() -> Playback.playTo(start + 45));
         test.waitFor(() -> Playback.paused() && Playback.position() == start + 45, 30, "play under the tripod");
         JsonObject tripodA = test.tool("smart_camera_status", none).getAsJsonObject("camera");
@@ -159,19 +159,29 @@ final class OwnerFeatureSteps {
         check(Math.abs(tripodA.get("x").getAsDouble() - tripodB.get("x").getAsDouble()) < 0.01 && Math.abs(tripodA.get("z").getAsDouble() - tripodB.get("z").getAsDouble()) < 0.01,
             "the tripod moved");
 
+        // A tripod left to place itself stands where it sees the player
+        test.tool("smart_camera_add", args("tick", start + 45, "mode", "tripod", "transition_seconds", 0));
+        test.onClientRun(() -> Playback.playTo(start + 60));
+        test.waitFor(() -> Playback.paused() && Playback.position() == start + 60, 30, "play under the tripod that places itself");
+        JsonObject placed = test.tool("smart_camera_status", none);
+        check(placed.get("mode").getAsString().equals("tripod") && placed.get("visibility").getAsDouble() >= 0.5,
+            "the tripod that places itself does not see the player: " + shorten(placed.toString()));
+        test.tool("smart_camera_add", args("tick", start + 45, "mode", "tripod", "tripod_placement", "fixed", "transition_seconds", 0));
+
         // The director cuts, says why, and makes the same edit twice
         test.tool("smart_camera_add", args("tick", start + 60, "mode", "director", "min_shot_seconds", 1, "max_shot_seconds", 2, "seed", 7));
         List<String> first = directorRun(test, start + 60, start + 160);
         List<String> second = directorRun(test, start + 60, start + 160);
+        // Shots are never shorter than a second and a half, whatever the settings ask
+        for (int i = 0; i + 1 < first.size(); i++) {
+            check(seconds(first.get(i)) >= 1.45, "the director held a shot for only " + seconds(first.get(i)) + " s: " + first);
+        }
         // The test's recorder is teleported about once a second, which restarts the director each time (the reason it gives
         // is subject_jumped), so how often it cuts by itself on a smoothly moving player is left to the eye test
         check(first.size() >= 1, "the director reported no shot");
-        // The reason given for the opening shot says how the stretch was reached (start, or seek after a jump); the edit is the shots
-        // Played live, frames fall at slightly different moments each time, so a later cut can land a tick apart and pick another
-        // shot. Only the opening shot is held to be the same here; an export, whose frame times are fixed, is where the whole
-        // edit repeats exactly
-        check(first.get(0).substring(0, first.get(0).indexOf('@')).equals(second.get(0).substring(0, second.get(0).indexOf('@'))),
-            "the director made a different edit the second time:\n  " + first + "\n  " + second);
+        // The camera is worked out once per tick of the recording, never per frame, so the whole edit repeats: the same
+        // kinds of shot cut at the same ticks
+        check(edit(first).equals(edit(second)), "the director made a different edit the second time:\n  " + first + "\n  " + second);
         test.log("smart camera: chase at " + String.format("%.1f", chaseDistance) + " blocks, tripod held, director shots " + first);
 
         PlaybackSteps.close(test);
@@ -187,9 +197,23 @@ final class OwnerFeatureSteps {
         for (JsonElement element : status.getAsJsonArray("shots")) {
             JsonObject shot = element.getAsJsonObject();
             check(shot.has("start_reason") && !shot.get("start_reason").getAsString().isBlank(), "a director shot has no reason");
-            shots.add(shot.get("mode").getAsString() + "@" + Math.round(shot.get("start_tick").getAsDouble()) + ":" + shot.get("start_reason").getAsString());
+            shots.add(shot.get("mode").getAsString() + "@" + Math.round(shot.get("start_tick").getAsDouble()) + ":" + shot.get("start_reason").getAsString()
+                + "/" + String.format(java.util.Locale.ROOT, "%.2f", shot.get("seconds").getAsDouble()));
         }
         return shots;
+    }
+
+    /** The kinds of shot and the ticks they start on, without the reason the first gives for how the stretch was reached */
+    private static List<String> edit(List<String> shots) {
+        List<String> edit = new ArrayList<>();
+        for (String shot : shots) {
+            edit.add(shot.substring(0, shot.indexOf(':')));
+        }
+        return edit;
+    }
+
+    private static double seconds(String shot) {
+        return Double.parseDouble(shot.substring(shot.lastIndexOf('/') + 1));
     }
 
     private static double distance(JsonObject status) {

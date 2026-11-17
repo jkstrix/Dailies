@@ -158,7 +158,7 @@ public final class CameraSteps {
 
     private static void push(Tether tether, double tick, TetherSolver.Result result) {
         Vec eye = result.eye();
-        tether.blend.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), 0.0, false, false));
+        tether.blend.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), 0.0, false, result.cut()));
     }
 
     /**
