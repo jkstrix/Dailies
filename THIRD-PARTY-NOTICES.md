@@ -1,7 +1,7 @@
 # Third-party notices
 
 Dailies itself is under the MIT licence (see `LICENSE`). Its jar also carries the video encoder below, unchanged, as
-a separate program. This file and the licence texts it names are inside the jar too: this file at the top, the texts
+a separate program, and the weights of a small sound classifier (see "YAMNet" at the end). This file and the licence texts it names are inside the jar too: this file at the top, the texts
 in the `licenses` folder.
 
 ## Platforms
@@ -85,3 +85,25 @@ machine before it is listed. Nothing is offered that the build does not contain 
 The LGPL asks that anyone can rebuild the encoder. Today the natives are the JavaCPP Presets' own, and their build
 script is at the address above. A build script of our own, for every platform, is planned and will be kept with
 this source.
+
+
+## YAMNet
+
+- **What:** the trained weights of YAMNet, Google's sound event classifier, which Moments uses to name a burst of
+  noise in voice chat as laughter, cheering, screaming or shouting (setting `momentsBurstLabels`). It runs inside
+  Dailies, in Java, on the player's own computer; no audio leaves it.
+- **Source:** `yamnet.h5` from https://storage.googleapis.com/audioset/yamnet.h5, as linked from
+  https://github.com/tensorflow/models/tree/master/research/audioset/yamnet
+- **Changed:** yes. The weights were converted to Dailies' own file, `assets/dailies/models/yamnet.bin`, with batch
+  normalisation folded into the convolution weights and the kernels stored as 16-bit floats. The network and its
+  sound front end were written afresh in Java from Google's published description (`yamnet.py`, `features.py`,
+  `params.py`).
+- **Licence:** Apache License 2.0, Copyright Google LLC and the TensorFlow Authors. The text is
+  `licenses/YAMNet-LICENSE`, as the `tensorflow/models` repository publishes it.
+
+## AudioSet ontology
+
+- **What:** the display names of the 521 AudioSet classes YAMNet scores, `assets/dailies/models/yamnet_classes.txt`,
+  unchanged from `yamnet_class_map.csv` in the repository above.
+- **Credit:** AudioSet ontology by Google (https://research.google.com/audioset/), licensed under
+  CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). The notice is `licenses/AudioSet-ontology-CC-BY-4.0.txt`.

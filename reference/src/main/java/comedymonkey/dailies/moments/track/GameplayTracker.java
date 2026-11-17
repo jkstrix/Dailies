@@ -245,6 +245,11 @@ public class GameplayTracker {
         String known = this.burstEvents.get(burstId);
         if (known != null) {
             this.update(known, event -> event.addProperty("subject", label));
+            JsonObject updated = this.session.get(MomentsSession.Kind.EVENTS, known);
+            if (updated != null) {
+                // Laughter scores above shouting, so the picture is decided again
+                comedymonkey.dailies.moments.EventPictures.consider(this.session, updated);
+            }
         }
     }
 

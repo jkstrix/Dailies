@@ -3,12 +3,13 @@ package comedymonkey.dailies.moments.voice;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * The place for the sound classifier of plan 2.9: something that listens to a burst and says what it was. Nothing is
- * plugged in yet, because the classifier needs a bundled model whose licence the owner has to approve first; until
- * then every burst keeps the subject {@link #UNCLASSIFIED}.
+ * The sound classifier of plan 2.9: something that listens to a burst and says what it was. The one plugged in is
+ * {@link comedymonkey.dailies.moments.voice.yamnet.YamnetClassifier}; a burst it cannot name keeps the subject
+ * {@link #UNCLASSIFIED}.
  * <p>
- * An implementation runs on the player's own computer, with no server, and must be quick: it is called on the voice
- * thread with the voice segment a burst fell in, and only while momentsAiEnabled is on. Install one with
+ * An implementation runs on the player's own computer, with no server. It is called on a worker thread of its own,
+ * with a few seconds of audio around a burst or a stretch the transcription filter found to be no words, only while
+ * momentsBurstLabels is on, and never during playback or an export. Install one with
  * {@code Moments.setBurstClassifier}.
  */
 @FunctionalInterface

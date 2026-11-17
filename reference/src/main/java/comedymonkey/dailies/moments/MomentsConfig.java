@@ -36,6 +36,11 @@ public final class MomentsConfig {
         return Host.get().setting("momentsAiEnabled", false);
     }
 
+    /** Name each burst of noise (laughter, cheering, screaming, shouting) with the bundled classifier. It runs on this computer and sends nothing anywhere */
+    public static boolean burstLabels() {
+        return Host.get().setting("momentsBurstLabels", true);
+    }
+
     /** Transcription is optional and off until momentsAiEnabled is set: nothing is sent anywhere and voice segments stay untranscribed */
     public static boolean whisperConfigured() {
         return aiEnabled() && !whisperUrl().isEmpty();

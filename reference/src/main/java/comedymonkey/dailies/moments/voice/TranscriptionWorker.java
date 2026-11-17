@@ -193,7 +193,58 @@ public class TranscriptionWorker {
 
         this.lastError = null;
         session.update(MomentsSession.Kind.DIALOGUE, job.dialogueId(), json -> applyResponse(json, response, model));
+        try {
+            labelNonSpeech(session, job.dialogueId(), path);
+        } catch (Exception e) {
+            Host.LOGGER.warn("Moments: could not listen to the non-speech of {}: {}", audioFile, e.toString());
+        }
         return true;
+    }
+
+    /** The longest stretch of a non-speech segment the sound classifier hears; a burst is over well within it */
+    private static final double MAX_LISTEN_SECONDS = 10.0;
+
+    /**
+     * Plan 2.9: the segments Whisper heard as no words are offered to the sound classifier as well, and keep what it
+     * made of them as "sound" (laughter, cheering, screaming or shouting). Runs on this worker's own thread
+     */
+    private static void labelNonSpeech(MomentsSession session, String dialogueId, Path audio) throws java.io.IOException {
+        JsonObject record = session.get(MomentsSession.Kind.DIALOGUE, dialogueId);
+        JsonArray segments = MJson.arr(record, "segments");
+        Map<Integer, String> labels = new java.util.HashMap<>();
+        WavFiles.Pcm pcm = null;
+        for (int i = 0; i < segments.size(); i++) {
+            if (!segments.get(i).isJsonObject() || !MJson.bool(segments.get(i).getAsJsonObject(), "non_speech")) {
+                continue;
+            }
+            JsonObject segment = segments.get(i).getAsJsonObject();
+            if (pcm == null) {
+                pcm = WavFiles.read(audio);
+            }
+            int rate = pcm.sampleRate();
+            double start = MJson.dbl(segment, "start", 0);
+            double end = Math.min(MJson.dbl(segment, "end", 0), start + MAX_LISTEN_SECONDS);
+            int from = (int) Math.max(0, Math.min(pcm.samples().length, Math.round(start * rate)));
+            int to = (int) Math.max(from, Math.min(pcm.samples().length, Math.round(end * rate)));
+            if (to - from < rate / 4) {
+                continue;
+            }
+            String label = comedymonkey.dailies.moments.Moments.classifySound(java.util.Arrays.copyOfRange(pcm.samples(), from, to), rate);
+            if (label != null) {
+                labels.put(i, label);
+            }
+        }
+        if (labels.isEmpty()) {
+            return;
+        }
+        session.update(MomentsSession.Kind.DIALOGUE, dialogueId, json -> {
+            JsonArray stored = MJson.arr(json, "segments");
+            labels.forEach((index, label) -> {
+                if (index < stored.size() && stored.get(index).isJsonObject()) {
+                    stored.get(index).getAsJsonObject().addProperty("sound", label);
+                }
+            });
+        });
     }
 
     /** Filters the Whisper segments and fills in the text, language and confidence of a dialogue record */
