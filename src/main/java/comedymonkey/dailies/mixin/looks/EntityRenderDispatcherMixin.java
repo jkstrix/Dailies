@@ -1,6 +1,7 @@
 package comedymonkey.dailies.mixin.looks;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import comedymonkey.dailies.looks.Drawn;
 import comedymonkey.dailies.looks.LooksRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -25,6 +26,12 @@ public abstract class EntityRenderDispatcherMixin {
         if (LooksRenderer.hidesEntity(entity)) {
             cir.setReturnValue(false);
         }
+    }
+
+    @Inject(method = "render", at = @At("HEAD"))
+    private <E extends Entity> void dailies$counted(E entity, double x, double y, double z, float yaw, float partialTick, PoseStack poseStack, MultiBufferSource buffers,
+                                                    int light, CallbackInfo ci) {
+        Drawn.entity(entity);
     }
 
     @Inject(method = "renderShadow", at = @At("HEAD"), cancellable = true)

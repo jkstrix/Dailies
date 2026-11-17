@@ -229,6 +229,15 @@ public final class CoreHost implements Host.Mod {
         return comedymonkey.dailies.export.Export.active();
     }
 
+    @Override
+    public java.util.Map<String, String> exportPresets() {
+        java.util.Map<String, String> presets = new java.util.LinkedHashMap<>();
+        for (comedymonkey.dailies.export.ExportPreset preset : comedymonkey.dailies.export.Export.presets().all()) {
+            presets.put(preset.name(), preset.summary());
+        }
+        return presets;
+    }
+
     // --- Editor ---
 
     @Override
@@ -242,7 +251,13 @@ public final class CoreHost implements Host.Mod {
 
     @Override
     public @Nullable Double exportAspectRatio() {
-        return comedymonkey.dailies.export.Export.aspectRatio();
+        Double exporting = comedymonkey.dailies.export.Export.aspectRatio();
+        if (exporting != null) {
+            return exporting;
+        }
+        // A scene held to a frame shape is composed for that shape in the editor too, between its bars
+        double framed = comedymonkey.dailies.looks.LooksRenderer.framedRatio();
+        return framed > 0.0 ? framed : null;
     }
 
     @Override

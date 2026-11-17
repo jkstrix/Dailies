@@ -29,16 +29,18 @@ import java.util.function.Consumer;
 public class MomentsSession {
 
     public enum Kind {
-        EVENTS("events.jsonl", "e"),
-        INTERACTIONS("interactions.jsonl", "i"),
-        DIALOGUE("dialogue.jsonl", "d");
+        EVENTS("events.jsonl", "e", "event"),
+        INTERACTIONS("interactions.jsonl", "i", "interaction"),
+        DIALOGUE("dialogue.jsonl", "d", "dialogue");
 
         final String fileName;
         final String idPrefix;
+        final String liveName;
 
-        Kind(String fileName, String idPrefix) {
+        Kind(String fileName, String idPrefix, String liveName) {
             this.fileName = fileName;
             this.idPrefix = idPrefix;
+            this.liveName = liveName;
         }
     }
 
@@ -189,6 +191,7 @@ public class MomentsSession {
         }
         this.records.get(kind).put(recordId, stored);
         this.storage.append(this.dir.resolve(kind.fileName), MJson.GSON.toJson(stored));
+        this.announce(kind.liveName, recordId, "added");
         return stored;
     }
 
@@ -204,6 +207,7 @@ public class MomentsSession {
         copy.addProperty("id", recordId);
         this.records.get(kind).put(recordId, copy);
         this.storage.append(this.dir.resolve(kind.fileName), MJson.GSON.toJson(copy));
+        this.announce(kind.liveName, recordId, "changed");
         return copy;
     }
 
@@ -272,6 +276,21 @@ public class MomentsSession {
 
     private void saveClips() {
         this.storage.writeFile(this.dir.resolve("clips.json"), MJson.PRETTY.toJson(this.clips));
+        this.announce("clips", null, "changed");
+    }
+
+    /** Tells the open moments pages that something of this session is new or different (GET /live) */
+    private void announce(String what, @Nullable String recordId, String change) {
+        if (comedymonkey.dailies.mcp.LiveHub.listeners() == 0) {
+            return;
+        }
+        JsonObject json = new JsonObject();
+        json.addProperty("session", this.id);
+        if (recordId != null) {
+            json.addProperty("id", recordId);
+        }
+        json.addProperty("change", change);
+        comedymonkey.dailies.mcp.LiveHub.publish(what, MJson.GSON.toJson(json));
     }
 
     public Path audioDir() {

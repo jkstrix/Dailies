@@ -28,12 +28,13 @@ class LooksTest {
         List<String> names = Looks.fieldNames();
         for (String name : List.of(
                 "show_hud", "show_chat", "show_boss_bars", "show_titles", "show_name_tags", "show_particles", "show_held_items", "show_block_outline",
-                "show_own_shadow", "hidden_entity_types", "hidden_particle_types",
+                "show_own_shadow", "show_scoreboard", "show_action_bar", "show_hotbar", "show_blocks", "show_entities", "show_players", "show_beacon_beams",
+                "hidden_entity_types", "hidden_particle_types",
                 "weather", "fog_mode", "fog_start", "fog_end", "fog_colour", "sky", "background_colour", "night_vision",
-                "fov", "roll", "aspect_guide", "custom_aspect", "thirds_guide", "centre_guide")) {
+                "server_resource_packs", "fov", "roll", "aspect_guide", "custom_aspect", "letterbox", "thirds_guide", "centre_guide")) {
             assertTrue(names.contains(name), name);
         }
-        assertEquals(25, names.size());
+        assertEquals(34, names.size());
     }
 
     @Test
@@ -44,6 +45,7 @@ class LooksTest {
         assertEquals(Looks.Weather.AS_RECORDED, looks.weather);
         assertEquals(Looks.FogMode.AS_RECORDED, looks.fogMode);
         assertFalse(looks.nightVision);
+        assertTrue(looks.serverResourcePacks);
         assertEquals(0.0, looks.fov);
         assertEquals(0.0, looks.roll);
         assertEquals(Looks.AspectGuide.OFF, looks.aspectGuide);
@@ -204,6 +206,23 @@ class LooksTest {
         assertFalse(looks.sky);
         assertEquals(2, looks.hiddenParticleTypes.size());
         assertTrue(looks.entityOverride(FIRST).hide());
+    }
+
+    @Test
+    void theServersResourcePacksAreUsedUnlessTheSceneSaysNot() {
+        Looks looks = new Looks();
+        assertEquals("true", looks.getText("server_resource_packs"));
+        assertTrue(looks.describeText().contains("\"server_resource_packs\":{\"type\":\"boolean\",\"value\":true,\"description\":"), looks.describeText());
+        looks.setAllText("{\"server_resource_packs\": false}");
+        assertFalse(looks.serverResourcePacks);
+        // Saved with the scene, and a separate copy stays separate
+        assertFalse(Looks.fromJsonText(looks.toJsonText()).serverResourcePacks);
+        Looks copy = looks.copy();
+        copy.serverResourcePacks = true;
+        assertFalse(looks.serverResourcePacks);
+        // A scene saved before the setting existed uses the packs
+        assertTrue(Looks.fromJsonText("{\"night_vision\": true}").serverResourcePacks);
+        assertEquals("'server_resource_packs' must be true or false, got \"no\"", refused(looks, "{\"server_resource_packs\": \"no\"}"));
     }
 
 }

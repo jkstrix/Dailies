@@ -20,8 +20,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -65,7 +69,86 @@ public final class SmartCameraDriver {
         if (result.applyFov()) {
             Viewer.setFov(result.fov());
         }
-        return new Evaluator.CameraPose(result.cameraX(), result.cameraY() - VIEWER_EYE_HEIGHT, result.cameraZ(), result.yaw(), result.pitch(), 0.0);
+        Evaluator.CameraPose pose = new Evaluator.CameraPose(result.cameraX(), result.cameraY() - VIEWER_EYE_HEIGHT, result.cameraZ(), result.yaw(), result.pitch(), 0.0);
+        remember(track, keyframe, tick, pose);
+        return pose;
+    }
+
+    // ------------------------------------------------------------------ Where the camera went, for the path preview
+
+    /**
+     * Where a Smart Camera keyframe put the camera the last time its stretch was played (specification EDIT-8). The
+     * Smart Camera works its shots out from the recording as it plays, so its path is only known once it has been
+     * watched.
+     *
+     * @param ticks the moments of the recording the poses belong to, in order
+     * @param stale whether the keyframe's settings have changed since, so that the path would no longer come out so
+     */
+    public record Recorded(List<Double> ticks, List<Evaluator.CameraPose> poses, boolean stale) {
+    }
+
+    private record StretchKey(int scene, int track, int keyframeTick) {
+    }
+
+    private static final class Stretch {
+        final JsonObject settings;
+        /** By quarter ticks, so a stretch played many times over does not grow without end */
+        final TreeMap<Integer, Evaluator.CameraPose> poses = new TreeMap<>();
+
+        Stretch(JsonObject settings) {
+            this.settings = settings;
+        }
+    }
+
+    private static final int MOST_POSES = 40_000;
+    private static final Map<StretchKey, Stretch> STRETCHES = new HashMap<>();
+    private static volatile long remembered = 0;
+
+    private static void remember(Track track, Keyframe.SmartCamera keyframe, double tick, Evaluator.CameraPose pose) {
+        try {
+            if (!EditorSession.open()) {
+                return;
+            }
+            var history = EditorSession.history();
+            int index = history.scene().tracks().indexOf(track);
+            if (index < 0) {
+                return;
+            }
+            StretchKey key = new StretchKey(history.state().currentSceneIndex(), index, keyframe.tick());
+            Stretch stretch = STRETCHES.get(key);
+            if (stretch == null || !stretch.settings.equals(keyframe.settings())) {
+                // Played afresh with other settings: what the old ones gave is of no more use
+                stretch = new Stretch(keyframe.settings().deepCopy());
+                STRETCHES.put(key, stretch);
+            }
+            if (stretch.poses.size() < MOST_POSES) {
+                stretch.poses.put((int) Math.round(tick * 4.0), pose);
+                remembered++;
+            }
+        } catch (RuntimeException e) {
+            // Remembering the path is a help for the editor and never worth a frame of the camera
+        }
+    }
+
+    /**
+     * @param scene the index of the scene, {@code track} of the track in it
+     * @return where this keyframe last put the camera, or null when its stretch has not been played
+     */
+    public static @Nullable Recorded recorded(int scene, int track, Keyframe.SmartCamera keyframe) {
+        Stretch stretch = STRETCHES.get(new StretchKey(scene, track, keyframe.tick()));
+        if (stretch == null || stretch.poses.isEmpty()) {
+            return null;
+        }
+        List<Double> ticks = new ArrayList<>(stretch.poses.size());
+        for (Integer quarter : stretch.poses.keySet()) {
+            ticks.add(quarter / 4.0);
+        }
+        return new Recorded(ticks, new ArrayList<>(stretch.poses.values()), !stretch.settings.equals(keyframe.settings()));
+    }
+
+    /** Goes up whenever a pose is remembered, so that whoever draws the paths knows to look again */
+    public static long rememberedCount() {
+        return remembered;
     }
 
     /** What the Smart Camera last did, for the status tool. Null when none has run in this recording */
@@ -77,6 +160,8 @@ public final class SmartCameraDriver {
         lastSolver = null;
         lastTrack = null;
         PARSED.clear();
+        STRETCHES.clear();
+        remembered++;
     }
 
     /**

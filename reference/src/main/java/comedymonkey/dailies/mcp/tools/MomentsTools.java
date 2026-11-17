@@ -86,6 +86,56 @@ public final class MomentsTools {
         return json;
     }
 
+    /** Where voice goes, in one plain sentence, for the status tool and the page (specification MOM-37) */
+    public static String voiceDestination() {
+        if (MomentsConfig.whisperConfigured()) {
+            return "AI is on: the voice audio Moments captures is sent to the transcription server at " + MomentsConfig.whisperUrl()
+                + ", and clip details to the summary server when one is set. Players on the excluded list are never captured or sent.";
+        }
+        return "AI is off: nothing is sent anywhere. Voice audio stays in the moments folder on this computer.";
+    }
+
+    private static JsonObject voiceExcluded(McpArgs args) {
+        String action = args.optString("action");
+        action = action == null ? "list" : action.trim().toLowerCase(Locale.ROOT);
+        List<String> wanted = new ArrayList<>();
+        List<String> given = args.optStringList("players");
+        for (String entry : given == null ? List.<String>of() : given) {
+            // The setting is a comma-separated line, so a name cannot hold a comma
+            if (!entry.isBlank() && !entry.contains(",")) {
+                wanted.add(entry.trim());
+            }
+        }
+        java.util.LinkedHashSet<String> entries = new java.util.LinkedHashSet<>(MomentsConfig.voiceExcluded());
+        switch (action) {
+            case "list" -> {}
+            case "add" -> wanted.forEach(add -> {
+                if (entries.stream().noneMatch(entry -> entry.equalsIgnoreCase(add))) {
+                    entries.add(add);
+                }
+            });
+            case "remove" -> wanted.forEach(remove -> entries.removeIf(entry -> entry.equalsIgnoreCase(remove)));
+            case "set" -> {
+                entries.clear();
+                entries.addAll(wanted);
+            }
+            case "clear" -> entries.clear();
+            default -> throw new McpToolException("Unknown action '" + action + "'. Use list, add, remove, set or clear");
+        }
+        if (!action.equals("list")) {
+            if ((action.equals("add") || action.equals("remove") || action.equals("set")) && wanted.isEmpty()) {
+                throw new McpToolException("'" + action + "' needs players: names or uuids");
+            }
+            MomentsConfig.setVoiceExcluded(entries);
+        }
+        JsonObject json = new JsonObject();
+        JsonArray list = new JsonArray();
+        MomentsConfig.voiceExcluded().forEach(list::add);
+        json.add("excluded", list);
+        json.addProperty("voice_goes_to", voiceDestination());
+        return json;
+    }
+
     private static final String SESSION_DESCRIPTION = "Session id from moments_sessions_list, or 'current' / 'latest'. Default: the running session, else the latest one";
 
     private static McpSchema schema() {
@@ -117,13 +167,23 @@ public final class MomentsTools {
                 .stringArray("entries", "The entries to add, remove or set"),
             McpTool.ThreadMode.CLIENT, 10, MomentsTools::ignoredEvents);
 
+        registrar.add("moments_voice_excluded",
+            "Read or change the list of players whose voice is never captured for Moments or transcribed (momentsVoiceExcluded). "
+                + "An entry is a player's name or uuid; case is ignored. Their voice is still heard live, and still recorded for playback when recordVoiceChat is on; "
+                + "it never reaches the dialogue log, the loudness detector or the transcription server. Takes effect at once. Segments already captured stay, "
+                + "but are no longer sent for transcription. Always returns the list as it now is, and where voice audio currently goes.",
+            McpSchema.object()
+                .string("action", "list (default), add, remove, set (replace the whole list) or clear")
+                .stringArray("players", "The players to add, remove or set: names or uuids"),
+            McpTool.ThreadMode.CLIENT, 10, MomentsTools::voiceExcluded);
+
         registrar.add("moments_sessions_list",
             "List the recorded play sessions, newest first: id, start/end time, world or server, local player, the replays recorded during the session and record counts.",
             McpSchema.object().integer("limit", "Maximum number of sessions (default 20)"),
             McpTool.ThreadMode.HTTP, 0, MomentsTools::sessionsList);
 
         registrar.add("moments_events_query",
-            "Query the gameplay events of a session (mob_kill, player_kill, player_death, nearby_player_death, pet_death, biome_discovered, advancement, advancement_other, "
+            "Query the gameplay events of a session (voice_burst for laughter and shouting, with the speakers in metadata; mob_kill, player_kill, player_death, nearby_player_death, pet_death, biome_discovered, advancement, advancement_other, "
                 + "item_crafted, block_placed, block_mined, tool_first_use, dimension_entered, structure_interaction, boss_encounter, boss_defeated, milestone, marker, custom, and with McpCraft installed its job board: job_posted, job_help_asked, job_claimed, "
                 + "job_dropped, job_delivered, job_materials_complete, job_finished, job_removed, with the job in metadata). "
                 + "Every event has real time, game time, position, dimension, biome, an importance score and, when a replay was being recorded, replay_uuid and replay_tick. "
@@ -144,7 +204,8 @@ public final class MomentsTools {
             withCommonFilters(schema()), McpTool.ThreadMode.HTTP, 0, MomentsTools::milestones);
 
         registrar.add("moments_dialogue_query",
-            "Query the voice chat segments of a session: speaker, start/end time, replay ticks, audio file, transcription status (pending, done, failed, empty) and text.",
+            "Query the voice chat segments of a session: speaker, start/end time, replay ticks, audio file, transcription status (pending, done, failed, empty) and text. "
+                + "A segment that held sound but no words (laughter, a shout) is empty with non_speech = true.",
             withCommonFilters(schema())
                 .string("speaker", "Only segments of this speaker (name or uuid). Same as 'player'")
                 .string("status", "Only segments with this status: pending, done, failed or empty"),
@@ -485,6 +546,14 @@ public final class MomentsTools {
         summaries.addProperty("ollama_reachable", ollama.join());
         summaries.addProperty("last_error", Moments.summarizer().lastError());
         json.add("summaries", summaries);
+
+        JsonObject privacy = new JsonObject();
+        JsonArray excluded = new JsonArray();
+        MomentsConfig.voiceExcluded().forEach(excluded::add);
+        privacy.add("voice_excluded", excluded);
+        privacy.addProperty("voice_goes_to", voiceDestination());
+        json.add("privacy", privacy);
+        json.addProperty("event_pictures", MomentsConfig.eventPictures());
 
         GameplayTracker gameplay = Moments.gameplay();
         if (gameplay != null) {
@@ -944,21 +1013,30 @@ public final class MomentsTools {
     // --- Tools that need the game ---
 
     private static JsonObject eventAdd(McpArgs args) {
+        String type = args.optString("type");
+        return addEvent(type, args.string("label"), args.has("metadata") ? args.object("metadata") : null);
+    }
+
+    /**
+     * Logs a custom event at the current moment of the running session: what moments_event_add does, for the
+     * "/dailies moment" command and its key as well. Client thread.
+     *
+     * @throws McpToolException when no session is being tracked or the label is empty
+     */
+    public static JsonObject addEvent(@Nullable String type, String label, @Nullable JsonObject metadata) {
         GameplayTracker gameplay = Moments.gameplay();
         MomentsSession session = Moments.currentSession();
         if (gameplay == null || session == null) {
             throw new McpToolException("No session is being tracked right now. Events can only be added while the player is in a world (not a replay) with momentsEnabled on");
         }
-        String label = args.string("label").trim();
-        if (label.isEmpty()) {
+        String words = label == null ? "" : label.trim();
+        if (words.isEmpty()) {
             throw new McpToolException("label must not be empty");
         }
-        String type = args.optString("type");
-        JsonObject metadata = args.has("metadata") ? args.object("metadata") : null;
 
         JsonObject json = ok();
         json.addProperty("session", session.id);
-        json.add("event", gameplay.addCustom(type == null || type.isBlank() ? null : type.trim(), label, metadata));
+        json.add("event", gameplay.addCustom(type == null || type.isBlank() ? null : type.trim(), words, metadata));
         return json;
     }
 

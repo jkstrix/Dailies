@@ -20,7 +20,6 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
@@ -34,7 +33,8 @@ public final class Dailies {
 
     public Dailies(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.CLIENT, DailiesConfig.SPEC);
-        container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+        // The mods list opens Dailies' own settings screen (CFG-4); the file behind it is still NeoForge's
+        container.registerExtensionPoint(IConfigScreenFactory.class, (mod, parent) -> comedymonkey.dailies.ui.SettingsScreen.create(parent));
 
         // The provided features reach the core only through Host, so it goes in before any of them start
         Host.install(new CoreHost(container));
@@ -61,6 +61,7 @@ public final class Dailies {
         modBus.addListener(Keys::register);
         modBus.addListener(PlaybackBar::register);
         Keys.init();
+        comedymonkey.dailies.command.DailiesCommand.init();
         Screens.init();
 
         SelfTest.startIfAsked();

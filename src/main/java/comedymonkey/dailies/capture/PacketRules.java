@@ -23,7 +23,8 @@ import java.util.Set;
 final class PacketRules {
 
     private static final Set<Class<?>> DROPPED = Set.of(
-        // About the connection, not the world
+        // About the connection, not the world. The resource pack steps are not replayed either, but what became of
+        // each pack is recorded, with its bytes, by PackCapture (REC-19)
         ClientboundKeepAlivePacket.class, ClientboundPingPacket.class, ClientboundPongResponsePacket.class, ClientboundDisconnectPacket.class,
         ClientboundResourcePackPushPacket.class, ClientboundResourcePackPopPacket.class, ClientboundCookieRequestPacket.class,
         ClientboundStoreCookiePacket.class, ClientboundTransferPacket.class, ClientboundCustomReportDetailsPacket.class,

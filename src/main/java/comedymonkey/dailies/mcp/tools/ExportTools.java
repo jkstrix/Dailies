@@ -3,8 +3,12 @@ package comedymonkey.dailies.mcp.tools;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import comedymonkey.dailies.export.Codecs;
 import comedymonkey.dailies.export.Encoder;
 import comedymonkey.dailies.export.Export;
+import comedymonkey.dailies.export.ExportPreset;
+import comedymonkey.dailies.export.ExportPresets;
+import comedymonkey.dailies.mcp.McpTool;
 import comedymonkey.dailies.mcp.McpArgs;
 import comedymonkey.dailies.mcp.McpProtocol;
 import comedymonkey.dailies.mcp.McpSchema;
@@ -46,10 +50,15 @@ final class ExportTools {
                 .number("framerate", "Frames per second, 1 to 240, fractions allowed (default: last used, at first 60)")
                 .integer("start_tick", "First tick to export (default: the scene's export range, else its first keyframe, else 0)")
                 .integer("end_tick", "Last tick to export (default: the scene's export range, else its last keyframe, else the end of the recording)")
+                .string("preset", "The name of an export preset (export_presets_list). It gives the size, frame rate, kind of file, codec, quality and sound; "
+                    + "any of those given here as well wins over the preset. A preset whose codec this computer cannot make falls back, and the reply says so under 'note'")
                 .string("container", "mp4 (default), mkv, mov, webm or png_sequence")
-                .string("video_codec", "h264 (default), h265, av1 or vp9, where this build's encoder has it")
+                .string("video_codec", "h264, h265, av1, vp9, prores (ProRes 422 HQ) or dnxhr (DNxHR HQ), of those export_codecs_list shows. "
+                    + "Default: the fastest this computer has that the container holds. H.264 and H.265 are hardware only")
                 .string("encoder", "A particular encoder for the codec. Left out, hardware encoders are tried first, then software")
-                .any("bitrate", "Video bitrate in bits per second, or text like '20m' or '800k' (default 20m)")
+                .any("bitrate", "Video bitrate in bits per second, or text like '20m' or '800k' (default 20m). Editing masters take none")
+                .string("separate_audio", "Besides the mixed sound, keep the game, each speaker's voice and the audio keyframes apart: 'files' for WAV files beside the video, "
+                    + "'tracks' for named tracks inside an mkv or mov, 'both', or 'none' (default). Needs record_audio")
                 .bool("record_audio", "Put the game's sound in the file, with recorded voice chat and the scene's audio keyframes (default false). export_status says under 'sound' what became of it")
                 .bool("stereo_audio", "Stereo sound and not mono (default true)")
                 .string("audio_codec", "aac, opus or pcm (default: aac for mp4 and mov, opus for webm and mkv). pcm is uncompressed and fits mov and mkv")
@@ -78,6 +87,80 @@ final class ExportTools {
                 return status();
             });
 
+        registrar.add("export_codecs_list",
+            "The video codecs this computer can really export, fastest first: each with its encoder and whether it runs on a graphics card (and whose) or in software. "
+                + "Hardware encoders are tried once before they are listed. Also says which codecs are missing and why, and which platform has an encoder packed in.",
+            McpSchema.object(), McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args);
+                return codecs();
+            });
+
+        registrar.add("export_presets_list", "The export presets, in their order: name, a line saying what each makes, and what it would use on this computer.",
+            McpSchema.object(), McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args);
+                JsonArray list = new JsonArray();
+                for (ExportPreset preset : Export.presets().all()) {
+                    list.add(describe(preset, false));
+                }
+                JsonObject json = new JsonObject();
+                json.add("presets", list);
+                return json;
+            });
+
+        registrar.add("export_presets_get", "Every setting of one export preset.",
+            McpSchema.object().string("name", "The preset's name").required("name"), McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args, "name");
+                return describe(preset(args.string("name")), true);
+            });
+
+        registrar.add("export_presets_set",
+            "Add an export preset, or change the one of that name: only the settings given change. A new preset starts from 'YouTube 1080p60'. Saved with the mod's data.",
+            McpSchema.object()
+                .string("name", "The preset's name")
+                .string("new_name", "Rename it to this")
+                .integer("width", "Width in pixels")
+                .integer("height", "Height in pixels")
+                .number("framerate", "Frames per second, 1 to 240")
+                .string("container", "mp4, mkv, mov or webm")
+                .stringArray("video_codecs", "The codecs wanted, most wanted first: h264, h265, av1, vp9, prores, dnxhr")
+                .string("quality", "high, moderate, small, or custom for a bitrate")
+                .any("bitrate", "Bits per second, or text like '20m', used when quality is custom")
+                .bool("record_audio", "Whether the export has sound")
+                .bool("stereo_audio", "Stereo and not mono")
+                .string("audio_codec", "auto, aac, opus or pcm")
+                .string("separate_audio", "none, files, tracks or both")
+                .integer("max_seconds", "The longest video the preset is meant for; a longer range gets a warning. 0 for no limit")
+                .required("name"),
+            McpTool.ThreadMode.HTTP, 60, ExportTools::presetSet);
+
+        registrar.add("export_presets_remove", "Remove an export preset. A built-in one comes back with export_presets_reset.",
+            McpSchema.object().string("name", "The preset's name").required("name"), McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args, "name");
+                ExportPresets presets = Export.presets();
+                try {
+                    presets.remove(args.string("name"));
+                } catch (IllegalArgumentException e) {
+                    throw new McpToolException(e.getMessage() + ". Call export_presets_list for the names");
+                }
+                presets.write();
+                JsonObject json = new JsonObject();
+                json.addProperty("removed", args.string("name"));
+                return json;
+            });
+
+        registrar.add("export_presets_reset", "Bring the built-in export presets back as Dailies made them. Presets you added are kept.",
+            McpSchema.object(), McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args);
+                ExportPresets presets = Export.presets();
+                presets.reset();
+                presets.write();
+                JsonArray names = new JsonArray();
+                presets.all().forEach(preset -> names.add(preset.name()));
+                JsonObject json = new JsonObject();
+                json.add("presets", names);
+                return json;
+            });
+
         registrar.add("export_screenshot", "Write one PNG picture of the view as it is now, at any size. Returns at once: poll export_status for the file.",
             McpSchema.object()
                 .string("output_path", "PNG file to write, absolute or relative to the game directory")
@@ -97,42 +180,203 @@ final class ExportTools {
             });
     }
 
-    private static JsonElement start(McpArgs args) {
-        CoreTools.allowOnly(args, "output_path", "width", "height", "framerate", "start_tick", "end_tick", "container", "video_codec", "encoder", "bitrate",
-            "record_audio", "stereo_audio", "audio_codec", "no_gui", "ssaa", "transparent", "reset_rng", "overwrite");
-        String container = args.has("container") ? args.string("container").toLowerCase(Locale.ROOT) : "mp4";
+    private static JsonElement start(McpArgs args) throws Exception {
+        CoreTools.allowOnly(args, "output_path", "width", "height", "framerate", "start_tick", "end_tick", "preset", "container", "video_codec", "encoder", "bitrate",
+            "record_audio", "stereo_audio", "audio_codec", "separate_audio", "no_gui", "ssaa", "transparent", "reset_rng", "overwrite");
+        ExportPreset preset = args.has("preset") ? preset(args.string("preset")) : null;
+        String asked = args.has("container") ? args.string("container").toLowerCase(Locale.ROOT) : preset != null ? preset.container() : "mp4";
+        String container = asked;
         if (!CONTAINERS.contains(container)) {
             throw new McpToolException("'container' must be one of " + String.join(", ", CONTAINERS));
         }
-        Export.Settings settings = common(args, container.equals("png_sequence"));
-        settings.container = container;
-        settings.framesPerSecond = args.optNumber("framerate", lastRate);
+        boolean pictures = container.equals("png_sequence");
+        Export.Settings settings = common(args, pictures, preset);
+        settings.framesPerSecond = args.optNumber("framerate", preset != null ? preset.framesPerSecond() : lastRate);
         if (!(settings.framesPerSecond >= 1.0 && settings.framesPerSecond <= 240.0)) {
             throw new McpToolException("'framerate' must be between 1 and 240; the nearest allowed value is " + (settings.framesPerSecond < 1.0 ? "1" : "240"));
         }
         settings.startTick = args.optInteger("start_tick", -1);
         settings.endTick = args.optInteger("end_tick", -1);
-        settings.videoCodec = args.has("video_codec") ? args.string("video_codec").toLowerCase(Locale.ROOT) : "h264";
         settings.encoder = args.optString("encoder");
-        settings.bitrate = bitrate(args);
-        settings.audio = args.optBool("record_audio", false);
-        settings.stereo = args.optBool("stereo_audio", true);
-        settings.audioCodec = args.has("audio_codec") ? args.string("audio_codec").toLowerCase(Locale.ROOT) : "auto";
+        String warning = null;
+        if (!pictures) {
+            if (!Encoder.bundled()) {
+                throw new McpToolException(Encoder.noEncoderWords());
+            }
+            List<Codecs.Choice> working = Encoder.choices();
+            if (args.has("video_codec")) {
+                settings.videoCodec = args.string("video_codec").toLowerCase(Locale.ROOT);
+            } else {
+                // A preset names what it would like; without one, the fastest thing this computer has that fits the file
+                List<String> wanted = preset != null ? preset.codecs() : working.stream().map(Codecs.Choice::codec).filter(codec -> Codecs.holds(asked, codec)).limit(1).toList();
+                Codecs.Pick pick = Codecs.pick(wanted, container, working);
+                if (pick.codec() == null) {
+                    throw new McpToolException(pick.words(working));
+                }
+                settings.videoCodec = pick.codec();
+                if (preset != null || !args.has("container")) {
+                    container = pick.container();
+                    settings.note = pick.words(working);
+                } else if (pick.containerChanged()) {
+                    throw new McpToolException("This computer has no codec that a " + container + " file holds. It can encode: "
+                        + String.join(", ", working.stream().map(Codecs.Choice::codec).distinct().toList()));
+                }
+            }
+            settings.bitrate = args.has("bitrate") ? bitrate(args) : preset != null ? preset.bitrateFor(settings.videoCodec) : 20_000_000L;
+        }
+        settings.container = container;
+        settings.audio = args.optBool("record_audio", preset != null && preset.audio());
+        settings.stereo = args.optBool("stereo_audio", preset == null || preset.stereo());
+        settings.audioCodec = args.has("audio_codec") ? args.string("audio_codec").toLowerCase(Locale.ROOT) : preset != null ? preset.audioCodec() : "auto";
         if (!List.of("auto", "aac", "opus", "pcm").contains(settings.audioCodec)) {
             throw new McpToolException("'audio_codec' must be one of aac, opus, pcm");
         }
+        try {
+            boolean[] apart = args.has("separate_audio") ? ExportPreset.separate(args.string("separate_audio"))
+                : new boolean[]{preset != null && preset.stemFiles() && settings.audio, preset != null && preset.stemTracks() && settings.audio};
+            settings.stemFiles = apart[0];
+            settings.stemTracks = apart[1];
+        } catch (IllegalArgumentException e) {
+            throw new McpToolException(e.getMessage());
+        }
+        if (preset != null && preset.maxSeconds() > 0) {
+            double seconds = Export.rangeSeconds(settings.startTick, settings.endTick);
+            if (seconds > preset.maxSeconds() + 1.0e-6) {
+                warning = "The range makes " + Math.round(seconds * 10.0) / 10.0 + " seconds of video; the preset '" + preset.name() + "' is meant for at most " + preset.maxSeconds();
+            }
+        }
         begin(settings);
         lastRate = settings.framesPerSecond;
-        return status();
+        JsonObject json = status();
+        if (preset != null) {
+            json.addProperty("preset", preset.name());
+        }
+        json.addProperty("container", settings.container);
+        if (!pictures) {
+            json.addProperty("video_codec", settings.videoCodec);
+        }
+        if (warning != null) {
+            json.addProperty("warning", warning);
+        }
+        return json;
+    }
+
+    private static ExportPreset preset(String name) {
+        ExportPreset preset = Export.presets().find(name);
+        if (preset == null) {
+            throw new McpToolException("There is no export preset called '" + name + "'. There are: "
+                + String.join(", ", Export.presets().all().stream().map(ExportPreset::name).toList()));
+        }
+        return preset;
+    }
+
+    /** A preset as JSON: its name and summary, what it comes to on this computer, and with {@code whole} every setting */
+    private static JsonObject describe(ExportPreset preset, boolean whole) throws Exception {
+        JsonObject json = whole ? preset.toJson() : new JsonObject();
+        json.addProperty("name", preset.name());
+        json.addProperty("built_in", !preset.builtIn().isEmpty());
+        json.addProperty("summary", preset.summary());
+        if (Encoder.bundled()) {
+            List<Codecs.Choice> working = Encoder.choices();
+            Codecs.Pick pick = Codecs.pick(preset.codecs(), preset.container(), working);
+            if (pick.codec() != null) {
+                json.addProperty("uses_here", Codecs.forCodec(working, pick.codec()).get(0).label() + " in " + pick.container());
+            }
+            if (pick.words(working) != null) {
+                json.addProperty("note", pick.words(working));
+            }
+        } else {
+            json.addProperty("note", Encoder.noEncoderWords());
+        }
+        return json;
+    }
+
+    private static JsonElement presetSet(McpArgs args) throws Exception {
+        CoreTools.allowOnly(args, "name", "new_name", "width", "height", "framerate", "container", "video_codecs", "quality", "bitrate", "record_audio", "stereo_audio",
+            "audio_codec", "separate_audio", "max_seconds");
+        ExportPresets presets = Export.presets();
+        String name = args.string("name");
+        ExportPreset old = presets.find(name);
+        JsonObject changes = new JsonObject();
+        for (String key : args.names()) {
+            if (!key.equals("name") && !key.equals("new_name")) {
+                changes.add(key, args.element(key));
+            }
+        }
+        try {
+            ExportPreset base = old != null ? old : ExportPresets.builtIn().get(0).named(name);
+            ExportPreset made = ExportPreset.fromJson(changes, old != null ? base : ExportPreset.fromJson(blankOrigin(), base));
+            presets.save(made);
+            String newName = args.optString("new_name");
+            if (newName != null && !newName.equals(made.name())) {
+                presets.rename(made.name(), newName);
+                name = newName;
+            }
+        } catch (IllegalArgumentException e) {
+            throw new McpToolException(e.getMessage());
+        }
+        presets.write();
+        JsonObject json = describe(presets.find(name), true);
+        json.addProperty("added", old == null);
+        return json;
+    }
+
+    /** A preset made from a built-in one is the person's own */
+    private static JsonObject blankOrigin() {
+        JsonObject json = new JsonObject();
+        json.addProperty("built_in", "");
+        return json;
+    }
+
+    private static JsonObject codecs() throws Exception {
+        JsonObject json = new JsonObject();
+        json.addProperty("platform", Encoder.platform());
+        json.addProperty("platforms_with_an_encoder", Encoder.SUPPORTED);
+        json.addProperty("video_encoder_bundled", Encoder.bundled());
+        JsonArray list = new JsonArray();
+        JsonObject missing = new JsonObject();
+        if (Encoder.bundled()) {
+            List<Codecs.Choice> working = Encoder.choices();
+            for (Codecs.Choice choice : working) {
+                JsonObject one = new JsonObject();
+                one.addProperty("video_codec", choice.codec());
+                one.addProperty("name", Codecs.codecLabel(choice.codec()));
+                one.addProperty("encoder", choice.encoder());
+                one.addProperty("runs_on", choice.hardware() ? "hardware" : "software");
+                one.addProperty("what", choice.on());
+                JsonArray containers = new JsonArray();
+                Codecs.CONTAINERS.stream().filter(container -> Codecs.holds(container, choice.codec())).forEach(containers::add);
+                one.add("containers", containers);
+                list.add(one);
+            }
+            if (!working.isEmpty()) {
+                json.addProperty("default", working.get(0).codec());
+            }
+            for (String codec : Codecs.ORDER) {
+                String why = Codecs.whyMissing(working, codec);
+                if (why != null) {
+                    missing.addProperty(codec, why);
+                }
+            }
+        } else {
+            json.addProperty("note", Encoder.noEncoderWords());
+        }
+        json.add("codecs", list);
+        json.add("missing", missing);
+        return json;
     }
 
     private static Export.Settings common(McpArgs args, boolean pictures) {
+        return common(args, pictures, null);
+    }
+
+    private static Export.Settings common(McpArgs args, boolean pictures, ExportPreset preset) {
         if (!Playback.loaded()) {
             throw new McpToolException(Playback.active() ? "The recording is still loading. Poll dailies_status until playback.loaded is true" : "No recording is open. Open one with replay_open");
         }
         Export.Settings settings = new Export.Settings();
-        settings.width = args.optInteger("width", lastWidth);
-        settings.height = args.optInteger("height", lastHeight);
+        settings.width = args.optInteger("width", preset != null ? preset.width() : lastWidth);
+        settings.height = args.optInteger("height", preset != null ? preset.height() : lastHeight);
         if (settings.width < 16 || settings.height < 16 || settings.width > 16384 || settings.height > 16384) {
             throw new McpToolException("'width' and 'height' must be between 16 and 16384");
         }
@@ -212,8 +456,26 @@ final class ExportTools {
         if (Export.soundNote() != null) {
             json.addProperty("sound", Export.soundNote());
         }
+        if (Export.lastNote() != null) {
+            json.addProperty("note", Export.lastNote());
+        }
+        if (!Export.active()) {
+            List<String> tracks = comedymonkey.dailies.sound.ExportSound.tracks();
+            if (!tracks.isEmpty()) {
+                JsonArray names = new JsonArray();
+                tracks.forEach(names::add);
+                json.add("audio_tracks", names);
+            }
+            List<Path> files = comedymonkey.dailies.sound.ExportSound.files();
+            if (!files.isEmpty()) {
+                JsonArray names = new JsonArray();
+                files.forEach(file -> names.add(file.toAbsolutePath().toString()));
+                json.add("audio_files", names);
+            }
+        }
         json.addProperty("video_encoder_bundled", Encoder.bundled());
         if (!Encoder.bundled()) {
+            json.addProperty("video_encoder_note", Encoder.noEncoderWords());
             JsonArray containers = new JsonArray();
             containers.add("png_sequence");
             json.add("containers_available", containers);

@@ -60,6 +60,12 @@ public final class SelfTest {
                 Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
                 return;
             }
+            if ("kit".equals(System.getProperty(PROPERTY))) {
+                KitShots.run(this);
+                Host.LOGGER.info("DAILIES KIT PICTURES DONE");
+                Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+                return;
+            }
             if ("hands-on".equals(System.getProperty(PROPERTY))) {
                 try {
                     this.handsOn();
@@ -75,13 +81,22 @@ public final class SelfTest {
                 BestiarySteps.run(this);
                 throw new Failure("only the bestiary was run, and it passed");
             }
+            SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
+            // First, while nothing else has been recorded: it makes a recording of its own and puts it aside for later
+            WatchingSteps.record(this);
+            MomentsExtrasSteps.run(this);
             RecordingSteps.run(this);
+            ResourcePackSteps.record(this);
             PlaybackSteps.run(this);
             ExportSteps.run(this);
+            SettingsSteps.editorDropdown(this);
+            ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
             LibrarySteps.run(this);
+            ResourcePackSteps.play(this);
+            WatchingSteps.watch(this);
             BestiarySteps.run(this);
             result = "PASSED";
         } catch (Throwable t) {
@@ -285,6 +300,11 @@ public final class SelfTest {
     }
 
     // --- Helpers for the steps ---
+
+    /** The port the MCP server was found on when the run began */
+    int port() {
+        return this.port;
+    }
 
     /** Runs something on the client thread and waits for it */
     <T> T onClient(java.util.concurrent.Callable<T> action) throws Exception {

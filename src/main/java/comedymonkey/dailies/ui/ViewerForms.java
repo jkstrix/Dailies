@@ -39,6 +39,10 @@ final class ViewerForms {
                     EditorState.sideFolded = false;
                 }).tip(Kit.t("viewer.ride.tip")),
                 new Gadget.Push(Kit.t("viewer.leave"), () -> Viewer.ride(null)).when(() -> Viewer.riding() != null).tip(Kit.t("viewer.leave.tip"))));
+        form.add(new Gadget.Check(Kit.t("viewer.path"), () -> EditorState.setting("showCameraPath", true),
+                on -> EditorState.saveSetting("showCameraPath", on)).tip(Kit.t("viewer.path.tip")));
+        form.add(new Gadget.Check(Kit.t("viewer.markers"), () -> EditorState.setting("showMarkersInWorld", true),
+                on -> EditorState.saveSetting("showMarkersInWorld", on)).tip(Kit.t("viewer.markers.tip")));
         form.add(new Gadget.Check(Kit.t("viewer.momentum"), () -> EditorState.setting("flightMomentum", true),
                 on -> EditorState.saveSetting("flightMomentum", on)).tip(Kit.t("viewer.momentum.tip")));
         form.add(new Gadget.Check(Kit.t("viewer.look_relative"), () -> EditorState.setting("flightLookRelative", false),

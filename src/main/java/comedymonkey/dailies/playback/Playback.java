@@ -5,7 +5,6 @@ import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.mixin.access.TimerAccess;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -66,6 +65,7 @@ public final class Playback {
     }
 
     public static void init() {
+        PackPlayback.init();
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
         // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks
         PlaybackExtensions.register(comedymonkey.dailies.capture.Recorder.SNAP, (data, from, length, skipping) -> {
@@ -97,15 +97,19 @@ public final class Playback {
                 event.setCanceled(true);
             }
         });
-        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4)
+        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4). The chat itself
+        // opens, since that is where "/dailies" is typed: what is said in it goes nowhere, and commands other than
+        // that one are turned away where they would be sent (mixin.playback.CommandMixin)
         NeoForge.EVENT_BUS.addListener((ScreenEvent.Opening event) -> {
-            if (loaded && (event.getNewScreen() instanceof ChatScreen || event.getNewScreen() instanceof AbstractContainerScreen<?>)) {
+            if (loaded && event.getNewScreen() instanceof AbstractContainerScreen<?>) {
                 event.setCanceled(true);
             }
         });
         NeoForge.EVENT_BUS.addListener((ClientChatEvent event) -> {
             if (active) {
                 event.setCanceled(true);
+                Minecraft.getInstance().gui.getChat().addMessage(
+                    net.minecraft.network.chat.Component.translatable("dailies.command.no_chat").withStyle(net.minecraft.ChatFormatting.RED));
             }
         });
     }
@@ -142,9 +146,9 @@ public final class Playback {
         return recordingId;
     }
 
-    /** Whether a jump is under way */
+    /** Whether a jump is under way, or the game is still loading the recording's resource packs where one landed (PLAY-17) */
     public static boolean jumping() {
-        return jumpTarget >= 0 || reloadIndex >= 0;
+        return jumpTarget >= 0 || reloadIndex >= 0 || PackPlayback.covered();
     }
 
     /** Whether recorded time is being skipped over right now, so nothing from it should be heard or pile up */
@@ -428,6 +432,8 @@ public final class Playback {
                 feed.skipping = false;
                 settle(minecraft);
             }
+            // The recording's own resource packs, changed only here, between frames, and only once a jump has landed
+            PackPlayback.frame(minecraft, jumpTarget < 0 && reloadIndex < 0);
             if (comedymonkey.dailies.export.Export.active()) {
                 comedymonkey.dailies.export.Export.frameStart(minecraft);
             }
@@ -594,7 +600,30 @@ public final class Playback {
         TimerAccess timer = (TimerAccess) minecraft.getTimer();
         timer.dailies$setPausedPartialTick(1.0F);
         timer.dailies$setPartialTick(0.0F);
+        settleLight(minecraft);
         PlaybackExtensions.arrivedAll();
+    }
+
+    /**
+     * Brings the light up to date at once. The game takes the light the server sends a little at a time, a tenth of
+     * what is waiting each frame, which in live play nobody sees. A jump hands it several seconds of the recording in
+     * one go, or a whole world: left to itself the light would then arrive over many frames, with chunks drawn in
+     * the old light, or none, until it did.
+     */
+    private static void settleLight(Minecraft minecraft) {
+        net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
+        if (level == null) {
+            return;
+        }
+        try {
+            // Each call takes a share of what is waiting, so it is asked until nothing is
+            for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
+                level.pollLightUpdates();
+            }
+            level.getChunkSource().getLightEngine().runLightUpdates();
+        } catch (RuntimeException e) {
+            Host.LOGGER.warn("Dailies: the light could not be brought up to date after a jump; it will catch up over the next frames", e);
+        }
     }
 
     /** The start of every game tick */
@@ -602,7 +631,8 @@ public final class Playback {
         if (!loaded || feed == null) {
             return;
         }
-        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0 && !exporting;
+        // While resource packs load the picture is held: the recording does not run on under the loading screen
+        boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0 && !exporting && !PackPlayback.busy();
         if (!fastTick && !playing) {
             return;
         }
@@ -680,6 +710,7 @@ public final class Playback {
         pendingOpen = null;
         pendingClose = false;
         WHEN_LOADED.clear();
+        PackPlayback.closed(Minecraft.getInstance());
         Session.forgetRegistries();
         if (serverConfigsLoaded) {
             serverConfigsLoaded = false;

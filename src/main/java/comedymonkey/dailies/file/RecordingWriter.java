@@ -84,6 +84,36 @@ public final class RecordingWriter implements Closeable {
         return name;
     }
 
+    /** How much of a stored file is read, and written, at a time */
+    static final int PIECE_BYTES = 1024 * 1024;
+
+    /**
+     * Stores a whole file, such as a server's resource pack (REC-19), a piece at a time, so that it is never held in
+     * memory whole. Pieces are shared data, so a file stored twice costs nothing the second time.
+     *
+     * @return what to keep in the manifest to get the file back; its key is left for the caller to set
+     */
+    public RecordingManifest.Pack putFile(Path source) throws IOException {
+        RecordingManifest.Pack stored = new RecordingManifest.Pack();
+        java.security.MessageDigest whole;
+        try {
+            whole = java.security.MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        byte[] buffer = new byte[PIECE_BYTES];
+        try (java.io.InputStream in = Files.newInputStream(source)) {
+            int read;
+            while ((read = in.readNBytes(buffer, 0, buffer.length)) > 0) {
+                whole.update(buffer, 0, read);
+                stored.pieces.add(this.putShared(read == buffer.length ? buffer : java.util.Arrays.copyOf(buffer, read)));
+                stored.size += read;
+            }
+        }
+        stored.sha256 = HexFormat.of().formatHex(whole.digest());
+        return stored;
+    }
+
     public void setPreview(byte[] png) throws IOException {
         this.container.append(Container.PREVIEW, 0, 0, 0, png);
     }

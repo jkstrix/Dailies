@@ -24,8 +24,8 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class PlaybackBar {
 
-    private static final int HEIGHT = 22;
-    private static final int GAUGE_HEIGHT = 5;
+    private static final int HEIGHT = 26;
+    private static final int GAUGE_HEIGHT = 6;
     private static final int SEGMENT_LINE = 0x90EFE6D6;
 
     private static boolean failureLogged = false;
@@ -39,16 +39,16 @@ public final class PlaybackBar {
 
     private static void draw(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!Playback.loaded() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof EditorScreen || minecraft.screen instanceof ExportProgress) {
+        if (!Playback.loaded() || Notices.hidden() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof EditorScreen || minecraft.screen instanceof ExportProgress) {
             return;
         }
         try {
             int width = graphics.guiWidth();
             int top = graphics.guiHeight() - HEIGHT;
-            graphics.fill(0, top, width, top + HEIGHT, Controls.WALNUT_GLASS);
-            graphics.fill(0, top, width, top + 1, Controls.BRASS);
-            drawStatus(graphics, minecraft.font, 6, top + 3, width - 12, null);
-            drawGauge(graphics, 6, top + 14, width - 12, GAUGE_HEIGHT);
+            // A panel like the editor's, with its shadow on the world above it, so the words read over a bright floor
+            Kit.panel(graphics, -1, top, width + 1, top + HEIGHT + 1);
+            drawStatus(graphics, minecraft.font, 8, top + 5, width - 16, null);
+            drawGauge(graphics, 8, top + 17, width - 16, GAUGE_HEIGHT);
         } catch (RuntimeException e) {
             if (!failureLogged) {
                 failureLogged = true;
@@ -97,10 +97,10 @@ public final class PlaybackBar {
         int position = Math.max(0, Math.min(total, Playback.shown()));
         int bottom = top + height;
 
-        graphics.fill(left - 1, top - 1, left + width + 1, bottom + 1, Controls.BRASS);
-        graphics.fill(left, top, left + width, bottom, Controls.WALNUT);
+        Kit.field(graphics, left - 1, top - 1, width + 2, height + 2, Controls.BRASS);
         int played = across(position, total, width);
         graphics.fill(left, top, left + played, bottom, Controls.BRASS);
+        graphics.fill(left, top, left + played, top + 1, Controls.BRASS_BRIGHT);
 
         RecordingManifest manifest = Playback.manifest();
         if (manifest != null) {

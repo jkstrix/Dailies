@@ -8,7 +8,9 @@ import comedymonkey.dailies.moments.storage.MomentsSession;
 import comedymonkey.dailies.moments.storage.MomentsStorage;
 import comedymonkey.dailies.moments.track.GameplayTracker;
 import comedymonkey.dailies.moments.track.InteractionTracker;
+import comedymonkey.dailies.moments.voice.BurstClassifier;
 import comedymonkey.dailies.moments.voice.TranscriptionWorker;
+import comedymonkey.dailies.moments.voice.VoiceBurstDetector;
 import comedymonkey.dailies.moments.voice.VoiceSegmenter;
 import comedymonkey.dailies.moments.voice.WavFiles;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -61,6 +63,9 @@ public final class Moments {
         GameplayTracker gameplay;
         InteractionTracker interactions;
         final VoiceSegmenter segmenter = new VoiceSegmenter();
+        final VoiceBurstDetector bursts = new VoiceBurstDetector();
+        /** The bursts of the last minute or so, for the classifier: when each began, who was in it, and its event */
+        final java.util.ArrayDeque<VoiceBurstDetector.Burst> recentBursts = new java.util.ArrayDeque<>();
         String lastReplayUuid = null;
         String biome = null;
         int ticks = 0;
@@ -74,6 +79,7 @@ public final class Moments {
     private static volatile TimeRef current = TimeRef.EMPTY;
     private static final Map<UUID, String> PLAYER_NAMES = new ConcurrentHashMap<>();
     private static int ticksSinceLogin = Integer.MAX_VALUE / 2;
+    private static volatile BurstClassifier burstClassifier = BurstClassifier.NONE;
 
     private Moments() {
     }
@@ -81,6 +87,7 @@ public final class Moments {
     public static void init() {
         storage = new MomentsStorage(Host.get().dataDirectory().resolve("moments"));
         transcription = new TranscriptionWorker(storage);
+        EventPictures.init();
 
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
             try {
@@ -177,6 +184,20 @@ public final class Moments {
     /** Where and when "now" is. Usable from any thread; the game state in it is from the last client tick */
     public static TimeRef now() {
         return current.withRealTime(System.currentTimeMillis());
+    }
+
+    /**
+     * Plug in something that can tell laughter from shouting (plan 2.9). Nothing does yet: see {@link BurstClassifier}.
+     * It is only asked while momentsAiEnabled is on
+     */
+    public static void setBurstClassifier(@Nullable BurstClassifier classifier) {
+        burstClassifier = classifier == null ? BurstClassifier.NONE : classifier;
+    }
+
+    /** The name last seen for a player, or null */
+    @Nullable
+    public static String playerName(UUID player) {
+        return PLAYER_NAMES.get(player);
     }
 
     public static boolean voiceChatInstalled() {
@@ -417,16 +438,83 @@ public final class Moments {
         if (session == null || pcm48k == null || pcm48k.length == 0) {
             return;
         }
+        // Specification MOM-36: a player on the list is heard live and may be in the recording, but nothing of their
+        // voice comes any further than this line: no segment, no loudness, no transcription
+        if (MomentsConfig.isVoiceExcluded(speaker.toString(), PLAYER_NAMES.get(speaker))) {
+            return;
+        }
         try {
-            storeSegments(session, session.segmenter.feed(speaker, pcm48k, System.currentTimeMillis(), now(), MomentsConfig.voiceGapMillis()));
+            long time = System.currentTimeMillis();
+            TimeRef ref = now();
+            storeSegments(session, session.segmenter.feed(speaker, pcm48k, time, ref, MomentsConfig.voiceGapMillis()));
+            VoiceBurstDetector.Burst burst = session.bursts.feed(speaker, pcm48k, time, ref);
+            if (burst != null) {
+                logBurst(session, burst);
+            }
         } catch (Throwable t) {
             Host.LOGGER.error("Moments: error while handling voice audio", t);
         }
     }
 
+    /** A burst of laughter or shouting becomes a voice_burst event; the same burst growing by a speaker updates it */
+    private static void logBurst(Active session, VoiceBurstDetector.Burst burst) {
+        synchronized (session.recentBursts) {
+            session.recentBursts.removeIf(old -> old.id() == burst.id() || burst.startMillis() - old.startMillis() > 120_000);
+            session.recentBursts.addLast(burst);
+        }
+        com.google.gson.JsonArray speakers = new com.google.gson.JsonArray();
+        for (UUID speaker : burst.speakers()) {
+            speakers.add(MJson.player(speaker.toString(), PLAYER_NAMES.getOrDefault(speaker, "Unknown")));
+        }
+        TimeRef start = ((TimeRef) burst.startRef()).withRealTime(burst.startMillis());
+        // The event log belongs to the client thread
+        Minecraft.getInstance().execute(() -> {
+            if (active == session) {
+                guarded(() -> session.gameplay.onVoiceBurst(burst.id(), start, speakers, burst.peakDb()));
+            }
+        });
+    }
+
+    /** Offers a voice segment to the classifier when a burst of its speaker fell inside it, and names the burst by the answer */
+    private static void classifyBursts(Active session, VoiceSegmenter.Segment segment) {
+        BurstClassifier classifier = burstClassifier;
+        if (classifier == BurstClassifier.NONE || !MomentsConfig.aiEnabled()) {
+            return;
+        }
+        List<VoiceBurstDetector.Burst> inside = new java.util.ArrayList<>();
+        synchronized (session.recentBursts) {
+            for (VoiceBurstDetector.Burst burst : session.recentBursts) {
+                if (burst.speakers().contains(segment.speaker()) && burst.startMillis() >= segment.startMillis() - 500 && burst.startMillis() <= segment.endMillis()) {
+                    inside.add(burst);
+                }
+            }
+        }
+        if (inside.isEmpty()) {
+            return;
+        }
+        String label = classifier.classify(segment.pcm16k(), VoiceSegmenter.OUTPUT_SAMPLE_RATE);
+        if (label == null || label.isBlank()) {
+            return;
+        }
+        Minecraft.getInstance().execute(() -> {
+            if (active == session) {
+                guarded(() -> inside.forEach(burst -> session.gameplay.onVoiceBurstLabel(burst.id(), label.trim())));
+            }
+        });
+    }
+
     private static void storeSegments(Active session, List<VoiceSegmenter.Segment> segments) {
         for (VoiceSegmenter.Segment segment : segments) {
             String speaker = segment.speaker().toString();
+            // Someone put on the list while they were mid-sentence: the sentence goes too
+            if (MomentsConfig.isVoiceExcluded(speaker, PLAYER_NAMES.get(segment.speaker()))) {
+                continue;
+            }
+            try {
+                classifyBursts(session, segment);
+            } catch (Throwable t) {
+                Host.LOGGER.error("Moments: the burst classifier failed", t);
+            }
             String audioFile = "audio/" + speaker + "_" + segment.startMillis() + ".wav";
             storage.writeBytes(session.session.dir.resolve(audioFile), WavFiles.encode(segment.pcm16k(), VoiceSegmenter.OUTPUT_SAMPLE_RATE));
 

@@ -124,6 +124,12 @@ public class TranscriptionWorker {
             return true;
         }
 
+        // Specification MOM-36: someone put on the list after they spoke is not sent anywhere either
+        JsonObject speaker = MJson.obj(record, "speaker");
+        if (MomentsConfig.isVoiceExcluded(MJson.str(speaker, "uuid"), MJson.str(speaker, "name"))) {
+            return true;
+        }
+
         String audioFile = MJson.str(record, "audio_file");
         if (audioFile == null) {
             this.fail(session, job, "Record has no audio file", true);
@@ -188,10 +194,12 @@ public class TranscriptionWorker {
     /** Filters the Whisper segments and fills in the text, language and confidence of a dialogue record */
     static void applyResponse(JsonObject record, JsonObject response, String model) {
         JsonArray kept = new JsonArray();
+        JsonArray all = new JsonArray();
         StringBuilder text = new StringBuilder();
         double logprobSum = 0;
         double noSpeechSum = 0;
         int dropped = 0;
+        int nonSpeech = 0;
 
         JsonArray segments = MJson.arr(response, "segments");
         for (JsonElement element : segments) {
@@ -202,7 +210,8 @@ public class TranscriptionWorker {
             double avgLogprob = MJson.dbl(segment, "avg_logprob", 0);
             double noSpeechProb = MJson.dbl(segment, "no_speech_prob", 0);
             String segmentText = MJson.str(segment, "text", "").trim();
-            if (segmentText.isEmpty() || noSpeechProb >= MAX_NO_SPEECH_PROB || avgLogprob <= MIN_AVG_LOGPROB) {
+            boolean notSpeech = noSpeechProb >= MAX_NO_SPEECH_PROB;
+            if (!notSpeech && (segmentText.isEmpty() || avgLogprob <= MIN_AVG_LOGPROB)) {
                 dropped += 1;
                 continue;
             }
@@ -212,6 +221,14 @@ public class TranscriptionWorker {
             json.addProperty("text", segmentText);
             json.addProperty("avg_logprob", avgLogprob);
             json.addProperty("no_speech_prob", noSpeechProb);
+            if (notSpeech) {
+                // Laughter, a shout, a gasp: not words, so it stays out of the text, but when it happened is worth keeping
+                json.addProperty("non_speech", true);
+                all.add(json);
+                nonSpeech += 1;
+                continue;
+            }
+            all.add(json);
             kept.add(json);
             if (!text.isEmpty()) text.append(' ');
             text.append(segmentText);
@@ -231,13 +248,16 @@ public class TranscriptionWorker {
             record.addProperty("avg_logprob", MJson.round(logprobSum / kept.size()));
             record.addProperty("no_speech_prob", MJson.round(noSpeechSum / kept.size()));
         }
-        record.add("segments", kept);
+        record.add("segments", all);
+        // A segment that was all laughter is still "empty" of words, and says so
+        record.addProperty("non_speech", text.isEmpty() && nonSpeech > 0);
         record.addProperty("whisper_model", model);
         record.addProperty("word_count", MJson.countWords(text.toString()));
         record.remove("error");
         JsonObject metadata = MJson.meta(record);
         metadata.addProperty("whisper_segments", segments.size());
         metadata.addProperty("dropped_segments", dropped);
+        metadata.addProperty("non_speech_segments", nonSpeech);
         metadata.addProperty("raw_text", MJson.str(response, "text", "").trim());
         metadata.addProperty("transcribed_at", System.currentTimeMillis());
     }
