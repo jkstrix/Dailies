@@ -164,8 +164,14 @@ public final class TripodSolver implements ShotSolver {
     Vec place(Input input) {
         Motion motion = input.motion();
         boolean riding = input.rider().distanceTo(input.subject().aim()) > 0.5;
-        return placeFor(input.world(), input.subject(), motion.velocity(), motion.travelHeading(), motion.moving(), this.preferredDistance, this.keepSide,
+        Vec found = placeFor(input.world(), input.subject(), motion.velocity(), motion.travelHeading(), motion.moving(), this.preferredDistance, this.keepSide,
             this.sideAlong, riding ? input.seeing() : null, riding ? input.rider() : null);
+        if (found != null) {
+            return found;
+        }
+        // Nowhere has room at all: stay where it is, or begin just above the subject
+        Vec aim = input.subject().aim();
+        return this.eye != Vec.ZERO ? this.eye : CameraProbe.pushOut(input.world(), aim.add(0.0, 1.0, 0.0), aim);
     }
 
     public static Vec placeFor(CameraWorld world, SubjectSample subject, Vec velocity, double travelHeading, boolean moving, double preferredDistance,
@@ -181,6 +187,7 @@ public final class TripodSolver implements ShotSolver {
      * @param keepSide          the side of the line of travel to keep to (1, -1), or 0 for either
      * @param seeing            for someone aboard a framed craft: the world with the craft's blocks in, or null
      * @param rider             that someone, who must be seen past their craft from the place chosen, or null
+     * @return the place, always with room for the camera, or null when there is nowhere with room
      */
     public static Vec placeFor(CameraWorld world, SubjectSample subject, Vec velocity, double travelHeading, boolean moving, double preferredDistance,
                                int keepSide, Vec sideAlong, CameraWorld seeing, Vec rider) {
@@ -296,7 +303,9 @@ public final class TripodSolver implements ShotSolver {
         // Nowhere sees the subject: ahead on its way and a little above, as far as there is room, so it comes towards the camera
         Vec back = aim.add(Vec.heading(travelHeading).scale((moving ? 8.0 : -5.0) - subject.extra())).add(0.0, 1.0, 0.0);
         double share = Clearance.allowedShare(world, aim, back, subject.extra());
-        return CameraProbe.pushOut(world, aim.add(back.sub(aim).scale(share)), aim);
+        Vec last = CameraProbe.pushOut(world, aim.add(back.sub(aim).scale(share)), aim);
+        // Never a place without room for the camera: then there is none to give
+        return CameraProbe.roomFor(world, last) ? last : null;
     }
 
     private static double distanceToPath(Vec point, Vec[] path) {

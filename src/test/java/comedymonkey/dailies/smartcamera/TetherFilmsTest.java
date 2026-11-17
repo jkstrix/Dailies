@@ -25,12 +25,31 @@ class TetherFilmsTest {
         }
     }
 
-    /** Falling down a shaft, straight down past where a watching camera was put */
+    /** Rock with a tunnel a block wide and two high, with bends, that rails run along */
+    private static VoxelWorld minecartWorld() {
+        VoxelWorld world = new VoxelWorld(GROUND).box(-30, GROUND, -10, 40, GROUND + 6, 80);
+        world.empty(0, GROUND, -10, 0, GROUND + 1, 30);
+        world.empty(0, GROUND, 30, 25, GROUND + 1, 30);
+        return world.empty(25, GROUND, 30, 25, GROUND + 1, 70);
+    }
+
+    /** Riding a minecart along it, eyes low, at eight blocks a second */
+    private static IntFunction<SubjectSample> minecart() {
+        IntFunction<SubjectSample> route = Filming.route(8.0, new Vec(0.5, GROUND, -9.5), new Vec(0.5, GROUND, 30.5), new Vec(25.5, GROUND, 30.5),
+            new Vec(25.5, GROUND, 69.5));
+        return tick -> route.apply(tick).riding(0.9, "vehicle");
+    }
+
+    /** Walking across the ground to a shaft and dropping down it, straight past where a watching camera was put */
     private static IntFunction<SubjectSample> fall() {
         return tick -> {
-            double t = Math.max(0.0, tick - 20) / 20.0;
-            double drop = Math.min(30.0, 0.5 * 25.0 * t * t);
-            return SubjectSample.walking(new Vec(0.5, 96.0 - drop, 0.5), 0.0);
+            double walked = Math.min(11.0, tick * 0.2);
+            if (walked < 11.0) {
+                return SubjectSample.walking(new Vec(-10.5 + walked, 98.0, 0.5), -90.0);
+            }
+            double t = (tick - 55) / 20.0;
+            double drop = Math.min(32.0, 0.5 * 25.0 * t * t);
+            return SubjectSample.walking(new Vec(0.5, 98.0 - drop, 0.5), -90.0);
         };
     }
 
@@ -43,9 +62,10 @@ class TetherFilmsTest {
                 .empty(-1, GROUND, 28, 30, GROUND + 2, 30), CameraSolversTest.stopAndGo(), 400),
             new Place("house", CameraSolversTest.houseWorld(), CameraSolversTest.throughDoorway(), 480),
             new Place("gallop", new VoxelWorld(GROUND), CameraSolversTest.gallop(), 300),
-            new Place("shaft", new VoxelWorld(GROUND).box(-6, 64, -6, 6, 97, 6).empty(-1, 64, -1, 1, 97, 1).empty(-1, 97, -1, 1, 110, 1),
-                fall(), 200, new Vec(0.6, 8.0, 0.4)),
-            new Place("balloon", new CraftScene().seeing, null, 600));
+            new Place("shaft", new VoxelWorld(GROUND).box(-20, 64, -20, 20, 97, 20).empty(-1, 66, -1, 1, 97, 1).empty(-1, 66, -1, 20, 67, 1),
+                fall(), 260, new Vec(11.1, 10.0, -0.1)),
+            new Place("balloon", new CraftScene().seeing, null, 600),
+            new Place("minecart", minecartWorld(), minecart(), 500));
     }
 
     private static List<String> faults(String camera, Place place, Filming.Tethered tethered) {
@@ -85,6 +105,14 @@ class TetherFilmsTest {
                 Vec middle = subject.feet().add(0.0, 0.9, 0.0);
                 return solver.keep(world, middle, new Vec(6.0, 3.6, 0.0), middle, 0.4, 0.12, 70.0, 16.0 / 9.0, dt, true);
             }));
+            // The players panel's Follow itself (what the viewer steps), begun from where a person left the camera:
+            // on the surface beside a shaft, among the trees
+            Vec left = place.path().apply(0).feet().add(4.0, 4.1, -6.0);
+            PanelFollow panelFollow = new PanelFollow();
+            faults.addAll(faults("follow", place, (solver, subject, dt) -> {
+                Vec eyes = subject.feet().add(0.0, 1.62, 0.0);
+                return panelFollow.step(world, eyes, panelFollow.placed() == null ? left : null, subject.bodyYaw(), 1.62, 1.8, 0.6, 70.0, 16.0 / 9.0, dt);
+            }).stream().map(fault -> fault.replaceFirst("^follow", "panelFollow")).toList());
             // Staying to watch from where it was first put
             Vec start = place.path().apply(0).feet().add(place.watchFrom());
             faults.addAll(faults("watch", place, (solver, subject, dt) -> {

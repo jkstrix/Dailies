@@ -35,24 +35,20 @@ public final class Viewer {
     private static boolean driven = false;
     /** The player the camera keeps with and keeps in view, by id: a jump puts new entities in the world */
     private static @Nullable UUID followed = null;
-    /** From that player's eyes to the camera's eye: where the person has put the camera beside them */
-    private static @Nullable Vec3 followOffset = null;
-    /** Where following last put the camera, so that flying it by hand in between moves the offset */
-    private static @Nullable Vec3 followPlaced = null;
-    private static final comedymonkey.dailies.smartcamera.TetherSolver FOLLOW = new comedymonkey.dailies.smartcamera.TetherSolver();
-    private static double followTime = Double.NaN;
-    /** Seconds the following camera takes to settle after the player: bumps and hops are smoothed, the offset kept */
-    private static final double FOLLOW_SMOOTHING = 0.15;
-    /** Seconds the following camera's turn takes to settle: it turns on springs, never with a jolt */
-    private static final double FOLLOW_AIM = 0.12;
-    private static volatile int followCuts = 0;
+    /** The follow itself: the same whether someone watches or an export runs, stepped by the frame or by the tick */
+    private static final comedymonkey.dailies.smartcamera.PanelFollow PANEL = new comedymonkey.dailies.smartcamera.PanelFollow();
+
+    /** The players panel's Follow, for the export's per-tick steps. Client thread */
+    public static comedymonkey.dailies.smartcamera.PanelFollow panel() {
+        return PANEL;
+    }
 
     /**
      * How many times the players panel's Follow has cut (a teleport or a portal, or out from behind a wall it was stuck
      * behind): when it changes, the frame shows a new shot and is not to be judged as joined to the one before
      */
     public static int followCuts() {
-        return followCuts;
+        return PANEL.cuts();
     }
 
     private Viewer() {
@@ -83,10 +79,7 @@ public final class Viewer {
 
     private static void stopFollowing() {
         followed = null;
-        followOffset = null;
-        followPlaced = null;
-        followTime = Double.NaN;
-        FOLLOW.reset();
+        PANEL.reset();
     }
 
     private static boolean watchingThroughOwnEyes() {
@@ -238,6 +231,18 @@ public final class Viewer {
         if (wanted == null || minecraft.level == null || riding() != null) {
             return;
         }
+        if (exporting) {
+            // In an export the follow is stepped once per tick of the recording with the others, and drawn between
+            comedymonkey.dailies.smartcamera.PoseBlend.Pose pose = comedymonkey.dailies.editor.CameraSteps.panelPose(Playback.frameTime());
+            if (pose != null) {
+                x = pose.x();
+                y = pose.y() - EYE_HEIGHT;
+                z = pose.z();
+                yaw = (float) pose.yaw();
+                pitch = Mth.clamp((float) pose.pitch(), -90.0F, 90.0F);
+            }
+            return;
+        }
         Player target = minecraft.level.getPlayerByUUID(wanted);
         if (target == null) {
             // Out of the world for now (a jump, or too far away): the camera waits and catches up when they are back
@@ -245,42 +250,16 @@ public final class Viewer {
         }
         Vec3 feet = target.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
         Vec3 eyes = feet.add(0.0, target.getEyeHeight(), 0.0);
-        Vec3 camera = new Vec3(x, y + EYE_HEIGHT, z);
-        if (followOffset == null) {
-            double away = camera.distanceTo(eyes);
-            if (away > 24.0 || away < 1.0) {
-                // Begun from too far off to see them, or from inside them: a little behind and above, as playback opens
-                Vec3 back = Vec3.directionFromRotation(0.0F, target.getYRot()).scale(-5.0);
-                camera = new Vec3(feet.x + back.x, feet.y + 2.0 + EYE_HEIGHT, feet.z + back.z);
-            }
-            followOffset = camera.subtract(eyes);
-            FOLLOW.reset();
-        } else if (followPlaced != null) {
-            // Flown by hand since the last frame: the person moves the camera's place beside the player
-            followOffset = followOffset.add(x - followPlaced.x, y - followPlaced.y, z - followPlaced.z);
-        }
-        double now = Playback.frameTime();
-        double dt = exporting ? (Double.isNaN(followTime) ? -1.0 : (now - followTime) / 20.0) : seconds;
-        if (!Double.isNaN(followTime) && dt < 0.0 && dt > -0.5) {
-            // The recording's clock read a hair back between two frames: hold still rather than start again
-            dt = 0.0;
-        }
-        followTime = now;
         double fov = Viewer.fov > 0.0 ? Viewer.fov : minecraft.options.fov().get();
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
-        comedymonkey.dailies.smartcamera.Vec point = new comedymonkey.dailies.smartcamera.Vec(eyes.x, eyes.y, eyes.z);
-        FOLLOW.box(target.getEyeHeight(), target.getBbHeight(), target.getBbWidth());
-        comedymonkey.dailies.smartcamera.TetherSolver.Result result = FOLLOW.keep(new comedymonkey.dailies.smartcamera.LevelCameraWorld(minecraft.level, null),
-            point, new comedymonkey.dailies.smartcamera.Vec(followOffset.x, followOffset.y, followOffset.z), point, FOLLOW_SMOOTHING, FOLLOW_AIM, fov, aspect, dt, true);
-        if (result.cut()) {
-            followCuts++;
-        }
+        comedymonkey.dailies.smartcamera.TetherSolver.Result result = PANEL.step(new comedymonkey.dailies.smartcamera.LevelCameraWorld(minecraft.level, null),
+            new comedymonkey.dailies.smartcamera.Vec(eyes.x, eyes.y, eyes.z), new comedymonkey.dailies.smartcamera.Vec(x, y + EYE_HEIGHT, z), target.getYRot(),
+            target.getEyeHeight(), target.getBbHeight(), target.getBbWidth(), fov, aspect, seconds);
         x = result.eye().x();
         y = result.eye().y() - EYE_HEIGHT;
         z = result.eye().z();
         yaw = (float) result.yaw();
         pitch = Mth.clamp((float) result.pitch(), -90.0F, 90.0F);
-        followPlaced = new Vec3(x, y, z);
     }
 
     /** Once per drawn frame, after the game's ticks and before the picture */

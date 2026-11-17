@@ -43,7 +43,7 @@ public final class Clearance {
     private boolean jumped = false;
     private boolean mayJump = true;
     /** Seconds stuck behind a wall before the camera gives up and moves by a cut */
-    private static final double MOST_STUCK_SECONDS = 1.0;
+    private static final double MOST_STUCK_SECONDS = 0.7;
 
     public void reset() {
         this.started = false;

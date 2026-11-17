@@ -88,23 +88,25 @@ public final class TetherSolver {
         // Its place cannot see the subject (they went in through a door, round a corner): follow the way they went,
         // as far back along it as they can still be seen from, which leads in through the door after them
         boolean placeSees = Clearance.allowedShare(world, point, wanted, 0.0) >= 1.0;
-        // Only for someone going along: the way a climbing craft came is straight down through its floor
-        boolean along = this.velocity.horizontalLength() > 1.0 && Math.abs(this.velocity.y()) < this.velocity.horizontalLength();
-        this.trailWeight.step(placeSees || !along ? 0.0 : 1.0, 0.5, dt);
+        // How far back along the way the subject can still be seen from: the way is only worth following when that is
+        // a real distance (down an open shaft, back out through a door), not just under the subject's own feet (the
+        // way a climbing craft came, behind its floor)
+        double reach = offset.length();
+        Vec back = this.motion.trailPoint(point, reach);
+        while (reach > 1.5 && Clearance.allowedShare(world, point, back, 0.0) < 1.0) {
+            reach -= 0.5;
+            back = this.motion.trailPoint(point, reach);
+        }
+        boolean wayWorks = reach >= 2.5 && back.distanceTo(point) >= 2.0;
+        this.trailWeight.step(placeSees || !wayWorks ? 0.0 : 1.0, 0.5, dt);
         if (this.trailWeight.value > 1.0e-3) {
-            double reach = offset.length();
-            Vec back = this.motion.trailPoint(point, reach);
-            while (reach > 1.5 && Clearance.allowedShare(world, point, back, 0.0) < 1.0) {
-                reach -= 0.5;
-                back = this.motion.trailPoint(point, reach);
-            }
             this.trailReach.step(reach, 0.5, dt);
             back = this.motion.trailPoint(point, this.trailReach.value);
             double roof = CameraProbe.ceilingAbove(world, back, 1.2);
             Vec onTrail = back.add(0.0, Double.isNaN(roof) ? 0.6 : Math.max(0.0, Math.min(0.6, roof - 0.5 - back.y())), 0.0);
             wanted = wanted.lerp(onTrail, SmartCameraMath.clamp(this.trailWeight.value, 0.0, 1.0));
         } else {
-            this.trailReach.reset(offset.length());
+            this.trailReach.reset(reach);
         }
         Vec eye = this.clearance.solve(world, point, wanted, 0.0, this.velocity, this.velocity, dt);
         if (this.clearance.jumped()) {
@@ -195,25 +197,38 @@ public final class TetherSolver {
         dt = this.follow(point, dt);
         boolean jumped = wasStarted && this.jumpedNow;
         Vec eye = this.watchPlace != null ? this.watchPlace : given;
-        boolean seen = this.seenFrom(world, eye, point) >= 0.6;
+        // Checked every step: a place may have lost its room (a block put there) or never had it
+        boolean roomy = CameraProbe.roomFor(world, eye);
+        boolean seen = roomy && this.seenFrom(world, eye, point) >= 0.6;
         this.hiddenSeconds = seen ? 0.0 : this.hiddenSeconds + Math.max(dt, 0.0);
         this.sinceMoved += Math.max(dt, 0.0);
         boolean cut = false;
-        if ((jumped && !seen) || (this.hiddenSeconds > MOST_HIDDEN_SECONDS && this.sinceMoved > MOST_HIDDEN_SECONDS)) {
+        if (!roomy || (jumped && !seen) || (this.hiddenSeconds > MOST_HIDDEN_SECONDS && this.sinceMoved > MOST_HIDDEN_SECONDS)) {
             double heading = this.velocity.horizontalLength() > 0.5 ? SmartCameraMath.yawOf(this.velocity.x(), this.velocity.z()) : 0.0;
             SubjectSample subject = new SubjectSample(point.add(0.0, -height * 0.75, 0.0), point, height, height, 0.0, heading, false, false, false, false, false,
                 SubjectSample.FRAMED_NONE);
             // The place must see the whole of the subject, as the films judge it, not just the point watched
             Vec chest = point.add(0.0, 1.35 - this.feetBelow, 0.0);
-            eye = TripodSolver.placeFor(world, subject, this.velocity, heading, this.velocity.length() > 1.0, 0.0, 0, Vec.ZERO, world, chest);
-            this.watchPlace = eye;
+            Vec found = TripodSolver.placeFor(world, subject, this.velocity, heading, this.velocity.length() > 1.0, 0.0, 0, Vec.ZERO, world, chest);
+            if (found == null && !roomy) {
+                // Nowhere better and no room here: the nearest place with room on the way to the subject
+                Vec out = CameraProbe.pushOut(world, eye, point);
+                found = CameraProbe.roomFor(world, out) ? out : null;
+            }
             this.hiddenSeconds = 0.0;
             this.sinceMoved = 0.0;
-            this.aimed = false;
-            cut = true;
+            if (found != null) {
+                eye = found;
+                this.watchPlace = eye;
+                this.aimed = false;
+                cut = true;
+            }
         }
         return this.aim(eye, look, aimTime, fov, aspect, dt, false, cut || this.jumpedNow);
     }
+
+    /** How far the view may be off the subject before it is put back on it by a cut rather than a turn */
+    private static final double MOST_BEHIND_DEGREES = 50.0;
 
     /** Seconds the watched point may be out of sight before a watching camera moves */
     private static final double MOST_HIDDEN_SECONDS = 1.0;
@@ -252,9 +267,15 @@ public final class TetherSolver {
         if (eye.distanceTo(look) < 1.0e-3) {
             goal = new SmartCameraMath.Aim(this.aimer.yaw(), this.aimer.pitch(), false);
         }
+        double behind = Vec.angleBetween(Vec.look(this.aimer.yaw(), this.aimer.pitch()), Vec.look(goal.yaw(), goal.pitch()));
         if (aimTime <= 0.0 || !this.aimed) {
             this.aimer.reset(goal);
             this.aimed = true;
+        } else if (behind > MOST_BEHIND_DEGREES && dt > 0.0) {
+            // So far off the subject (it came out from hiding somewhere else, or passed right by) that turning to it
+            // would whip round: look at it by a cut instead, and say so
+            this.aimer.reset(goal);
+            cut = true;
         } else if (dt > 0.0) {
             this.aimer.step(goal.yaw(), goal.pitch(), aimTime, fov, aspect, dt);
         }

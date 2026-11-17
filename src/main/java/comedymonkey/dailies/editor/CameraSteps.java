@@ -63,6 +63,9 @@ public final class CameraSteps {
 
     static void forget() {
         TETHERS.clear();
+        PANEL_BLEND.clear();
+        panelPosition = Integer.MIN_VALUE;
+        panelTick = Double.NaN;
         steppedTrack = null;
         steppedPosition = Integer.MIN_VALUE;
     }
@@ -100,6 +103,10 @@ public final class CameraSteps {
             Track track = Evaluator.cameraDriver(scene, tick);
             if (track == null) {
                 steppedTrack = null;
+                if (Viewer.following() != null && comedymonkey.dailies.export.Export.holdsClock() && position != panelPosition) {
+                    panelPosition = position;
+                    panel(minecraft, tick);
+                }
                 return;
             }
             if (track == steppedTrack && position == steppedPosition && steppedWithPose) {
@@ -117,6 +124,37 @@ public final class CameraSteps {
         } catch (RuntimeException e) {
             Host.LOGGER.warn("Dailies: a following camera could not be worked out at tick {}", Playback.position(), e);
         }
+    }
+
+    // ------------------------------------------------------------------ The players panel's Follow, in an export
+
+    private static final PoseBlend PANEL_BLEND = new PoseBlend();
+    private static int panelPosition = Integer.MIN_VALUE;
+    private static double panelTick = Double.NaN;
+
+    private static void panel(Minecraft minecraft, double tick) {
+        Entity entity = minecraft.level.getPlayerByUUID(Viewer.following());
+        if (entity == null || entity == minecraft.player) {
+            return;
+        }
+        double dt = Double.isNaN(panelTick) ? -1.0 : (tick - panelTick) / 20.0;
+        panelTick = tick;
+        Vec3 feet = entity.position();
+        Vec eyes = new Vec(feet.x, feet.y + entity.getEyeHeight(), feet.z);
+        double fov = Viewer.fov() > 0.0 ? Viewer.fov() : minecraft.options.fov().get();
+        double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
+        // Where the person left the camera, the first time; after that only the follow moves it
+        Vec3 viewer = Viewer.position();
+        Vec camera = Viewer.panel().placed() == null ? new Vec(viewer.x, viewer.y + EYE_HEIGHT, viewer.z) : null;
+        TetherSolver.Result result = Viewer.panel().step(new LevelCameraWorld(minecraft.level, null), eyes, camera, entity.getYRot(), entity.getEyeHeight(),
+            entity.getBbHeight(), entity.getBbWidth(), fov, aspect, dt);
+        Vec eye = result.eye();
+        PANEL_BLEND.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), 0.0, false, result.cut()));
+    }
+
+    /** Where the players panel's Follow puts the view for an export frame at this tick, or null when not stepped near it */
+    public static @Nullable PoseBlend.Pose panelPose(double frameTick) {
+        return PANEL_BLEND.at(PointOfView.sceneTime(frameTick));
     }
 
     // ------------------------------------------------------------------ Follow entity
