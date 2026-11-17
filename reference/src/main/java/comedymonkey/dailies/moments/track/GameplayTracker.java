@@ -148,6 +148,7 @@ public class GameplayTracker {
     /** Whether the first statistics answer is known to contain every statistic (the session started right at login) */
     private final boolean statsBaselineComplete;
     private final BossTracker bosses = new BossTracker(this);
+    private final CraftTracker crafts = new CraftTracker(this);
 
     private int ticks = 0;
     private final long sessionStart = System.currentTimeMillis();
@@ -183,7 +184,7 @@ public class GameplayTracker {
 
     // --- Building and storing events ---
 
-    private String scope(String type) {
+    String scope(String type) {
         return this.localUuid + "|" + type;
     }
 
@@ -257,7 +258,7 @@ public class GameplayTracker {
         return stored;
     }
 
-    private void update(String eventId, Consumer<JsonObject> change) {
+    void update(String eventId, Consumer<JsonObject> change) {
         this.session.update(MomentsSession.Kind.EVENTS, eventId, change);
     }
 
@@ -266,7 +267,7 @@ public class GameplayTracker {
      * @param onlyFirsts drop the event when it is not a first (unless momentsLogRepeats is on)
      */
     @Nullable
-    private JsonObject emit(String type, String subject, boolean onlyFirsts, @Nullable Consumer<JsonObject> change) {
+    JsonObject emit(String type, String subject, boolean onlyFirsts, @Nullable Consumer<JsonObject> change) {
         boolean first = this.firsts.mark(this.scope(type), subject);
         if (!first && onlyFirsts && !MomentsConfig.logRepeats()) {
             return null;
@@ -293,6 +294,19 @@ public class GameplayTracker {
             }
         }
         return null;
+    }
+
+    /** The craft and contraption moments of this session */
+    public CraftTracker crafts() {
+        return this.crafts;
+    }
+
+    String localUuid() {
+        return this.localUuid;
+    }
+
+    FirstsStore firsts() {
+        return this.firsts;
     }
 
     static String id(EntityType<?> type) {
@@ -375,6 +389,7 @@ public class GameplayTracker {
         }
 
         this.bosses.tick();
+        this.crafts.tick(minecraft, player, level);
 
         // The player's own statistics. Not while dead: the answer would only arrive after respawning anyway
         int pollSeconds = MomentsConfig.statsPollSeconds();
@@ -522,6 +537,7 @@ public class GameplayTracker {
 
     public void onUseItemOn(ClientLevel level, ItemStack heldBefore, BlockState clickedState, BlockPos clickedPos, Direction face, InteractionResult result) {
         this.structureBlock(id(clickedState.getBlock()), clickedPos, "use");
+        this.crafts.onBlockUsed(id(clickedState.getBlock()));
 
         if (result.consumesAction() && heldBefore.getItem() instanceof BlockItem blockItem) {
             Block block = blockItem.getBlock();
@@ -610,6 +626,10 @@ public class GameplayTracker {
      * event of each server-chosen type in this world is flagged as a first.
      */
     public synchronized JsonObject addServerEvent(String customType, String label, @Nullable JsonObject data) {
+        if (customType != null && CraftRules.SERVER_TYPES.contains(customType)) {
+            // The companion's craft and train events are moments of their own type, merged with what the game saw (plan 2.1)
+            return this.crafts.onServerEvent(customType, label, data);
+        }
         String subject = customType == null || customType.isBlank() ? "server_event" : customType;
         return this.emit("custom", subject, false, event -> {
             JsonObject metadata = MJson.meta(event);
@@ -723,7 +743,7 @@ public class GameplayTracker {
         return party.uuid() != null ? party.uuid().toString() : "name:" + party.name();
     }
 
-    private static void addSource(JsonObject metadata, String source) {
+    static void addSource(JsonObject metadata, String source) {
         JsonArray sources = MJson.arr(metadata, "sources");
         for (JsonElement element : sources) {
             if (element.getAsString().equals(source)) {

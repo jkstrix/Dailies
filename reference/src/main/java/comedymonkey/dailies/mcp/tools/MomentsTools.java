@@ -185,7 +185,8 @@ public final class MomentsTools {
         registrar.add("moments_events_query",
             "Query the gameplay events of a session (voice_burst for laughter and shouting, with the speakers in metadata; mob_kill, player_kill, player_death, nearby_player_death, pet_death, biome_discovered, advancement, advancement_other, "
                 + "item_crafted, block_placed, block_mined, tool_first_use, dimension_entered, structure_interaction, boss_encounter, boss_defeated, milestone, marker, custom, and with McpCraft installed its job board: job_posted, job_help_asked, job_claimed, "
-                + "job_dropped, job_delivered, job_materials_complete, job_finished, job_removed, with the job in metadata). "
+                + "job_dropped, job_delivered, job_materials_complete, job_finished, job_removed, with the job in metadata; and for craft and contraptions: craft_assembled, craft_boarded, "
+                + "craft_first_flight, altitude_record, speed_record, craft_lost, contraption_assembled, train_departed, train_arrived, with craft_id and metadata.sources saying whether the game, the server or both saw it). "
                 + "Every event has real time, game time, position, dimension, biome, an importance score and, when a replay was being recorded, replay_uuid and replay_tick. "
                 + "Kill and death events say how they were attributed in metadata.attribution (death_message, stats, heuristic, heuristic_unconfirmed).",
             withCommonFilters(schema())

@@ -25,6 +25,8 @@ public class FirstsStore {
     private final MomentsStorage storage;
     private final Path file;
     private final Map<String, Set<String>> scopes = new LinkedHashMap<>();
+    /** Personal bests in this world, such as the highest altitude aboard a craft: a name and a number */
+    private final Map<String, Double> records = new LinkedHashMap<>();
     private boolean dirty = false;
 
     private FirstsStore(MomentsStorage storage, Path file) {
@@ -45,6 +47,14 @@ public class FirstsStore {
                             set.add(element.getAsString());
                         }
                         store.scopes.put(entry.getKey(), set);
+                    }
+                }
+                JsonObject records = MJson.obj(json, "records");
+                if (records != null) {
+                    for (Map.Entry<String, JsonElement> entry : records.entrySet()) {
+                        if (entry.getValue().isJsonPrimitive() && entry.getValue().getAsJsonPrimitive().isNumber()) {
+                            store.records.put(entry.getKey(), entry.getValue().getAsDouble());
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -75,6 +85,33 @@ public class FirstsStore {
         return set != null && set.contains(subject);
     }
 
+    /** A personal best kept for this world, or NaN when there is none yet */
+    public synchronized double record(String name) {
+        Double value = this.records.get(name);
+        return value == null ? Double.NaN : value;
+    }
+
+    /** Keeps a personal best for this world. Saved straight away */
+    public synchronized void setRecord(String name, double value) {
+        if (!Double.isFinite(value)) {
+            return;
+        }
+        Double before = this.records.put(name, value);
+        if (before == null || before != value) {
+            this.dirty = true;
+            this.save();
+        }
+    }
+
+    /** Forgets the personal bests, for the scripted test, which flies the same world on every run */
+    public synchronized void forgetRecords() {
+        if (!this.records.isEmpty()) {
+            this.records.clear();
+            this.dirty = true;
+            this.save();
+        }
+    }
+
     public synchronized void save() {
         if (!this.dirty) {
             return;
@@ -90,6 +127,11 @@ public class FirstsStore {
         }
         JsonObject json = new JsonObject();
         json.add("scopes", scopes);
+        if (!this.records.isEmpty()) {
+            JsonObject records = new JsonObject();
+            this.records.forEach(records::addProperty);
+            json.add("records", records);
+        }
         this.storage.writeFile(this.file, MJson.PRETTY.toJson(json));
     }
 
