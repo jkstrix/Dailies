@@ -84,6 +84,14 @@ neoForge {
             }
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
+        // A game to play in, with the built jar and the same mods as the modded test, and no script: gradlew runPlayModded.
+        // Its own folder, so test runs never touch what is recorded here
+        playModded {
+            client()
+            gameDirectory = file('run-play')
+            loadedMods = []
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
     }
 }
 
@@ -200,7 +208,17 @@ tasks.register('installTestMods', Sync) {
     into file('run-modded/mods')
 }
 
+tasks.register('installPlayMods', Sync) {
+    description = 'Puts the same mods as the modded test into run-play/mods'
+    dependsOn 'installTestMods'
+    from file('run-modded/mods')
+    into file('run-play/mods')
+}
+
 afterEvaluate {
+    tasks.named('runPlayModded') {
+        dependsOn 'installPlayMods'
+    }
     tasks.named('runTestModded') {
         dependsOn 'installTestMods'
     }
