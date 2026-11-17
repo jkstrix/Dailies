@@ -5,7 +5,6 @@ import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.mixin.access.TimerAccess;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -97,15 +96,19 @@ public final class Playback {
                 event.setCanceled(true);
             }
         });
-        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4)
+        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4). The chat itself
+        // opens, since that is where "/dailies" is typed: what is said in it goes nowhere, and commands other than
+        // that one are turned away where they would be sent (mixin.playback.CommandMixin)
         NeoForge.EVENT_BUS.addListener((ScreenEvent.Opening event) -> {
-            if (loaded && (event.getNewScreen() instanceof ChatScreen || event.getNewScreen() instanceof AbstractContainerScreen<?>)) {
+            if (loaded && event.getNewScreen() instanceof AbstractContainerScreen<?>) {
                 event.setCanceled(true);
             }
         });
         NeoForge.EVENT_BUS.addListener((ClientChatEvent event) -> {
             if (active) {
                 event.setCanceled(true);
+                Minecraft.getInstance().gui.getChat().addMessage(
+                    net.minecraft.network.chat.Component.translatable("dailies.command.no_chat").withStyle(net.minecraft.ChatFormatting.RED));
             }
         });
     }

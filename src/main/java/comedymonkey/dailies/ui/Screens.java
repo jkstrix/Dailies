@@ -55,6 +55,17 @@ public final class Screens {
         }
     }
 
+    /**
+     * Opens the settings of the mod. The one place that knows which screen that is.
+     *
+     * @param parent the screen to come back to, or null for the game
+     */
+    public static void openSettings(@Nullable Screen parent) {
+        Minecraft minecraft = Minecraft.getInstance();
+        net.neoforged.fml.ModList.get().getModContainerById(comedymonkey.dailies.Dailies.ID)
+                .ifPresent(container -> minecraft.setScreen(new net.neoforged.neoforge.client.gui.ConfigurationScreen(container, parent)));
+    }
+
     // --- The pause menu ---
 
     private static void addToPauseMenu(ScreenEvent.Init.Post event, PauseScreen pause) {

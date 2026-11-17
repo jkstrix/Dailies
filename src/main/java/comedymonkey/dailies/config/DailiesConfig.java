@@ -46,6 +46,7 @@ public final class DailiesConfig {
                 text("marker" + marker + "Description", "", "Text stored with marker key " + marker + "; may be empty");
                 bool("marker" + marker + "SavePosition", true, "Whether marker key " + marker + " stores where you were standing");
             }
+            text("momentKeyLabel", "Good moment", "What the moment key logs: the label of the custom moment it adds, as /dailies moment would with these words");
         });
         group("export", "Exporting video", () -> {
             text("defaultFileName", "{date}_{time}", "Default name of an exported file. {date} and {time} are filled in when the export starts");
@@ -55,6 +56,8 @@ public final class DailiesConfig {
             choice("defaultInterpolation", Blend.SMOOTH, "How a new keyframe blends towards the next one");
             bool("flightMomentum", true, "The viewer glides to a stop instead of stopping dead");
             bool("flightLookRelative", false, "Forward follows where the viewer looks, up and down included. When off, forward stays level");
+            bool("showCameraPath", true, "Draw the camera's path through the world while editing: a line along it, a mark at each keyframe and arrows for where it looks. Never in exports");
+            bool("showMarkersInWorld", true, "Show markers that stored a position as coloured rings on the ground while watching. Never in exports");
         });
         group("advanced", "Advanced", () -> {
             text("ignoredPayloads", "", "Mod messages that playback must not hand back to their mod, added to the built-in list. Ids or namespace:* separated by commas or new lines; a leading + allows one the built-in list ignores");

@@ -78,6 +78,18 @@ public final class Looks {
     public boolean showBlockOutline = true;
     /** The viewer's own shadow */
     public boolean showOwnShadow = true;
+    /** The scoreboard down the side of the screen */
+    public boolean showScoreboard = true;
+    /** The line of words above the hotbar */
+    public boolean showActionBar = true;
+    /** The hotbar, the game's own and the recorder's when riding along */
+    public boolean showHotbar = true;
+    /** The terrain and everything built in it, block entities included */
+    public boolean showBlocks = true;
+    /** Everything that is an entity and not a player */
+    public boolean showEntities = true;
+    public boolean showPlayers = true;
+    public boolean showBeaconBeams = true;
     /** Ids of entity types that are not drawn, for example "minecraft:bat" */
     public List<String> hiddenEntityTypes = new ArrayList<>();
     /** Ids of particle types that are not drawn, for example "minecraft:rain" */
@@ -106,6 +118,8 @@ public final class Looks {
     public AspectGuide aspectGuide = AspectGuide.OFF;
     /** Width divided by height, used by {@link AspectGuide#CUSTOM} */
     public double customAspect = 2.39;
+    /** The frame shape is the picture itself: black bars in the editor, the true size in an export */
+    public boolean letterbox = false;
     /** Rule-of-thirds lines, only ever shown in the editor */
     public boolean thirdsGuide = false;
     /** Centre cross, only ever shown in the editor */
@@ -116,6 +130,68 @@ public final class Looks {
     /** The width divided by the height of the aspect guide, or 0 when the guide is off */
     public double aspectRatio() {
         return this.aspectGuide == AspectGuide.CUSTOM ? this.customAspect : this.aspectGuide.ratio;
+    }
+
+    /** The width divided by the height the picture is held to, or 0 when the frame shape is only a guide */
+    public double frameRatio() {
+        return this.letterbox ? this.aspectRatio() : 0.0;
+    }
+
+    /**
+     * The size an export of the asked size comes out at: the largest picture of the frame's shape that fits inside
+     * it, with even sides, since most video encoders take no others. The asked size itself when the frame shape is
+     * only a guide.
+     *
+     * @return {width, height}
+     */
+    public int[] frameSize(int width, int height) {
+        double ratio = this.frameRatio();
+        if (ratio <= 0.0 || width <= 0 || height <= 0) {
+            return new int[]{width, height};
+        }
+        if (ratio > (double) width / height) {
+            return new int[]{width, Math.max(2, Math.min(height, even(width / ratio)))};
+        }
+        return new int[]{Math.max(2, Math.min(width, even(height * ratio))), height};
+    }
+
+    private static int even(double pixels) {
+        return (int) Math.round(pixels / 2.0) * 2;
+    }
+
+    /**
+     * The part of a view of the given shape that the frame leaves clear, as shares of the view from 0 to 1.
+     *
+     * @param ratio      width divided by height of the frame; 0 or less for none
+     * @param viewRatio  width divided by height of the view
+     * @return {left, top, right, bottom}
+     */
+    public static double[] clearPart(double ratio, double viewRatio) {
+        if (ratio <= 0.0 || viewRatio <= 0.0) {
+            return new double[]{0.0, 0.0, 1.0, 1.0};
+        }
+        if (ratio < viewRatio) {
+            // Narrower than the view: bars down the sides
+            double inner = ratio / viewRatio;
+            return new double[]{(1.0 - inner) / 2.0, 0.0, (1.0 + inner) / 2.0, 1.0};
+        }
+        double inner = viewRatio / ratio;
+        return new double[]{0.0, (1.0 - inner) / 2.0, 1.0, (1.0 + inner) / 2.0};
+    }
+
+    /**
+     * The field of view a view must be drawn with so that what shows between the bars of a frame wider than the view
+     * is what a picture of the frame's own shape would hold at the wanted field of view. A frame narrower than the
+     * view needs nothing: its bars only cut the sides off.
+     *
+     * @param fov degrees up and down that the framed picture is to have
+     */
+    public static double fovBehindBars(double fov, double ratio, double viewRatio) {
+        if (ratio <= 0.0 || viewRatio <= 0.0 || ratio <= viewRatio || !(fov > 0.0 && fov < 180.0)) {
+            return fov;
+        }
+        double widened = Math.toDegrees(2.0 * Math.atan(Math.tan(Math.toRadians(fov) / 2.0) * ratio / viewRatio));
+        return Math.min(widened, 179.0);
     }
 
     // ------------------------------------------------------------------ Per entity
@@ -433,6 +509,16 @@ public final class Looks {
         toggle("show_block_outline", "Draw the outline of the block looked at", looks -> looks.showBlockOutline,
                 (looks, value) -> looks.showBlockOutline = value);
         toggle("show_own_shadow", "Draw the viewer's own shadow", looks -> looks.showOwnShadow, (looks, value) -> looks.showOwnShadow = value);
+        toggle("show_scoreboard", "Draw the scoreboard at the side of the screen", looks -> looks.showScoreboard,
+                (looks, value) -> looks.showScoreboard = value);
+        toggle("show_action_bar", "Draw the line of words above the hotbar", looks -> looks.showActionBar, (looks, value) -> looks.showActionBar = value);
+        toggle("show_hotbar", "Draw the hotbar: the game's own, and the recorder's when riding along", looks -> looks.showHotbar,
+                (looks, value) -> looks.showHotbar = value);
+        toggle("show_blocks", "Draw the terrain and everything built in it. When off only the sky, entities and particles are left",
+                looks -> looks.showBlocks, (looks, value) -> looks.showBlocks = value);
+        toggle("show_entities", "Draw entities other than players", looks -> looks.showEntities, (looks, value) -> looks.showEntities = value);
+        toggle("show_players", "Draw players", looks -> looks.showPlayers, (looks, value) -> looks.showPlayers = value);
+        toggle("show_beacon_beams", "Draw the beams of beacons", looks -> looks.showBeaconBeams, (looks, value) -> looks.showBeaconBeams = value);
         list("hidden_entity_types", "Ids of entity types that are not drawn, for example [\"minecraft:bat\"]. An empty list draws them all",
                 looks -> looks.hiddenEntityTypes, (looks, value) -> looks.hiddenEntityTypes = value);
         list("hidden_particle_types", "Ids of particle types that are not drawn, for example [\"minecraft:rain\"]. An empty list draws them all",
@@ -474,10 +560,12 @@ public final class Looks {
             }
         });
         number("roll", -180, 180, "Camera roll in degrees when no camera keyframe sets it", looks -> looks.roll, (looks, value) -> looks.roll = value);
-        choice("aspect_guide", AspectGuide.values(), AspectGuide::id, "Frame shape drawn over the view as a guide; custom uses custom_aspect",
+        choice("aspect_guide", AspectGuide.values(), AspectGuide::id, "Frame shape drawn over the view as a guide, or the shape of the picture itself with letterbox; custom uses custom_aspect",
                 looks -> looks.aspectGuide, (looks, value) -> looks.aspectGuide = value);
         number("custom_aspect", 0.1, 10, "Width divided by height of the custom aspect guide, for example 2.39", looks -> looks.customAspect,
                 (looks, value) -> looks.customAspect = value);
+        toggle("letterbox", "Make the frame shape the picture itself: black bars in the editor, and exports come out in that shape",
+                looks -> looks.letterbox, (looks, value) -> looks.letterbox = value);
         toggle("thirds_guide", "Rule-of-thirds lines, shown only in the editor, never in exports", looks -> looks.thirdsGuide,
                 (looks, value) -> looks.thirdsGuide = value);
         toggle("centre_guide", "Centre cross, shown only in the editor, never in exports", looks -> looks.centreGuide,

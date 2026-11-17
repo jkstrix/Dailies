@@ -39,7 +39,7 @@ public final class PlaybackBar {
 
     private static void draw(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!Playback.loaded() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof EditorScreen || minecraft.screen instanceof ExportProgress) {
+        if (!Playback.loaded() || Notices.hidden() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof EditorScreen || minecraft.screen instanceof ExportProgress) {
             return;
         }
         try {

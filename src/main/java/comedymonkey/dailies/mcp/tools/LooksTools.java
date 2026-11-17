@@ -49,8 +49,9 @@ final class LooksTools {
 
     static void register(McpProtocol.Registrar registrar) {
         EditingTools.add(registrar, "visuals_get",
-            "The current scene's looks, the settings that are not on the timeline: what is drawn (HUD, chat, boss bars, titles, name tags, particles, held items, sky), "
-                + "weather, fog, night vision, field of view, roll and the framing guides. Each setting comes with its type, its value, what it allows and what it does.",
+            "The current scene's looks, the settings that are not on the timeline: what is drawn (HUD, hotbar, scoreboard, action bar, chat, boss bars, titles, name tags, "
+                + "particles, held items, sky, and blocks, entities, players and beacon beams as a whole), weather, fog, night vision, field of view, roll, the frame shape "
+                + "(a guide, or with 'letterbox' the shape of the picture itself, which exports then come out in) and the framing guides. Each setting comes with its type, its value, what it allows and what it does.",
             McpSchema.object(), (args, history) -> {
                 JsonObject json = new JsonObject();
                 json.addProperty("scene", history.state().currentSceneIndex());

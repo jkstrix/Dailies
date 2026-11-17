@@ -13,7 +13,9 @@
     "SkyMixin",
     "CloudsOptionMixin",
     "LightTextureMixin",
-    "ParticleDropMixin"
+    "ParticleDropMixin",
+    "TerrainMixin",
+    "BlockEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1

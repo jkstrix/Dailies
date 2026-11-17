@@ -8,13 +8,16 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
- * The guides drawn over the view while framing a shot (specification chapter V, "The frame"): dimmed bars that leave
- * a frame of the chosen shape clear, rule-of-thirds lines and a centre cross. They are an aid for the person editing
- * and are never drawn into an exported picture.
+ * What is drawn over the view while framing a shot (specification chapter V, "The frame"): bars that leave a frame of
+ * the chosen shape clear, rule-of-thirds lines and a centre cross. The bars are dimmed when the shape is only a guide,
+ * and solid black when the scene holds its picture to that shape, in which case what shows between them is the
+ * picture an export will hold. None of it is ever drawn into an exported picture: an export of a framed scene is
+ * that shape already.
  */
 final class FrameGuides {
 
     private static final int DIM = 0xB0000000;
+    private static final int SOLID = 0xFF000000;
     private static final int EDGE = 0x60FFFFFF;
     private static final int LINE = 0x80FFFFFF;
     private static final int CROSS_ARM = 6;
@@ -41,29 +44,31 @@ final class FrameGuides {
             if (ratio > 0.0) {
                 Window window = Minecraft.getInstance().getWindow();
                 double windowRatio = window.getHeight() > 0 ? (double) window.getWidth() / window.getHeight() : (double) width / Math.max(1, height);
-                if (ratio < windowRatio) {
+                double[] clear = Looks.clearPart(ratio, windowRatio);
+                left = (int) Math.round(width * clear[0]);
+                right = (int) Math.round(width * clear[2]);
+                top = (int) Math.round(height * clear[1]);
+                bottom = (int) Math.round(height * clear[3]);
+                boolean solid = looks.letterbox;
+                int bar = solid ? SOLID : DIM;
+                if (left > 0 || right < width) {
                     // Narrower than the window: bars down the sides
-                    int inner = (int) Math.round(width * ratio / windowRatio);
-                    left = (width - inner) / 2;
-                    right = left + inner;
-                    if (left > 0 || right < width) {
-                        graphics.fill(0, 0, left, height, DIM);
-                        graphics.fill(right, 0, width, height, DIM);
+                    graphics.fill(0, 0, left, height, bar);
+                    graphics.fill(right, 0, width, height, bar);
+                    if (!solid) {
                         graphics.fill(left - 1, 0, left, height, EDGE);
                         graphics.fill(right, 0, right + 1, height, EDGE);
                     }
-                } else if (ratio > windowRatio) {
+                } else if (top > 0 || bottom < height) {
                     // Wider than the window: bars above and below
-                    int inner = (int) Math.round(height * windowRatio / ratio);
-                    top = (height - inner) / 2;
-                    bottom = top + inner;
-                    if (top > 0 || bottom < height) {
-                        graphics.fill(0, 0, width, top, DIM);
-                        graphics.fill(0, bottom, width, height, DIM);
+                    graphics.fill(0, 0, width, top, bar);
+                    graphics.fill(0, bottom, width, height, bar);
+                    if (!solid) {
                         graphics.fill(0, top - 1, width, top, EDGE);
                         graphics.fill(0, bottom, width, bottom + 1, EDGE);
                     }
                 }
+                Drawn.bars(left, top, right, bottom, solid);
             }
             int frameWidth = right - left;
             int frameHeight = bottom - top;
