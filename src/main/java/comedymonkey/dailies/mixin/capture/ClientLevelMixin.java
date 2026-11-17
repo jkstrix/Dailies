@@ -1,6 +1,7 @@
 package comedymonkey.dailies.mixin.capture;
 
 import comedymonkey.dailies.capture.Capture;
+import comedymonkey.dailies.capture.LightPasses;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
@@ -48,6 +49,19 @@ public abstract class ClientLevelMixin {
         if (player != null) {
             Capture.ownSound(player, null, x, y, z, sound, source, volume, pitch, seed);
         }
+    }
+
+    /** How much of its waiting light the game takes, and when; held back in playback (capture.LightPasses) */
+    @Inject(method = "pollLightUpdates", at = @At("HEAD"), cancellable = true)
+    private void dailies$takingLight(CallbackInfo ci) {
+        if (LightPasses.beforePoll((ClientLevel) (Object) this)) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "pollLightUpdates", at = @At("RETURN"))
+    private void dailies$tookLight(CallbackInfo ci) {
+        LightPasses.afterPoll((ClientLevel) (Object) this);
     }
 
     @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",

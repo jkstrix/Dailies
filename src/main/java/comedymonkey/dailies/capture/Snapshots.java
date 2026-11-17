@@ -277,10 +277,7 @@ public final class Snapshots {
             // that it takes a little from each frame. Straight after a change of dimension most of it is still waiting
             // there: the chunks went into the snapshot dark, and stayed dark in playback for the rest of the recording
             try {
-                for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
-                    level.pollLightUpdates();
-                }
-                level.getChunkSource().getLightEngine().runLightUpdates();
+                LightPasses.settle(level);
             } catch (RuntimeException e) {
                 warnOnce("light", e);
             }
@@ -320,10 +317,7 @@ public final class Snapshots {
      * block that changes in a chunk whose light is still waiting is lit wrongly for good.
      */
     public static void settleLight(ClientLevel level) {
-        for (int i = 0; i < 100_000 && !level.isLightUpdateQueueEmpty(); i++) {
-            level.pollLightUpdates();
-        }
-        level.getChunkSource().getLightEngine().runLightUpdates();
+        LightPasses.settle(level);
     }
 
     /** Where a watching game would be drawing the recorder: set by the recorder just before each snapshot. Null when unknown */

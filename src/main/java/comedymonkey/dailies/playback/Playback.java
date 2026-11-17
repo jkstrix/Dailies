@@ -73,6 +73,7 @@ public final class Playback {
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> latchPause());
         // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks
+        PlaybackExtensions.register(comedymonkey.dailies.capture.LightPasses.ID, (data, from, length, skipping) -> comedymonkey.dailies.capture.LightPasses.play(data, from, length));
         PlaybackExtensions.register(comedymonkey.dailies.capture.Recorder.SNAP, (data, from, length, skipping) -> {
             Minecraft minecraft = Minecraft.getInstance();
             if (length < 36 || minecraft.level == null) {
@@ -722,11 +723,7 @@ public final class Playback {
             return;
         }
         try {
-            // Each call takes a share of what is waiting, so it is asked until nothing is
-            for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
-                level.pollLightUpdates();
-            }
-            level.getChunkSource().getLightEngine().runLightUpdates();
+            comedymonkey.dailies.capture.LightPasses.settle(level);
         } catch (RuntimeException e) {
             Host.LOGGER.warn("Dailies: the light could not be brought up to date after a jump; it will catch up over the next frames", e);
         }
@@ -756,9 +753,10 @@ public final class Playback {
             return;
         }
         try {
-            if (minecraft.level != null) {
+            if (minecraft.level != null && !comedymonkey.dailies.capture.LightPasses.paced()) {
                 // A game draws at least one frame between two ticks, and settles its light as it does. Here ticks can
-                // follow each other with no frame between (a jump, or play at speed), so the light is settled first
+                // follow each other with no frame between (a jump, or play at speed), so the light is settled first.
+                // A recording that says when the live game took its light in is followed in that instead
                 comedymonkey.dailies.capture.Snapshots.settleLight(minecraft.level);
             }
             if (position >= total || !feed.advance(minecraft)) {

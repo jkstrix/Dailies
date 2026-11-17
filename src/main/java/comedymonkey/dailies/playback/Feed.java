@@ -119,6 +119,7 @@ final class Feed {
     Feed(RecordingFile file) {
         this.file = file;
         this.segments = file.segments();
+        comedymonkey.dailies.capture.LightPasses.reset();
     }
 
     Session session() {
@@ -201,6 +202,8 @@ final class Feed {
         }
         // Everything up to the first tick record is the snapshot and whatever happened on its own tick
         this.loading = true;
+        boolean inOrder = !Boolean.getBoolean("dailies.playback.lightOutOfOrder");
+        boolean settled = false;
         try {
             while (this.reader.next()) {
                 if (this.reader.kind() == Records.TICK) {
@@ -209,15 +212,22 @@ final class Feed {
                 }
                 if (this.reader.kind() == Records.SNAPSHOT_END) {
                     this.dropChunksNotInSnapshot();
+                    // The light that came with the snapshot's chunks is taken in now, before anything that happened after
+                    // it, as the live game had taken in all of its own when it described its world. The game queues such
+                    // light and takes it a little each frame; left waiting, it would be applied after the block changes
+                    // of the ticks a jump then runs through, and put the old light back over them: the pit an explosion
+                    // dug stayed as dark as the earth that had filled it, and the shadow of a wall outlived the wall
+                    if (inOrder) {
+                        Playback.settleLight(minecraft);
+                        settled = true;
+                    }
                 }
                 this.handle(minecraft);
             }
             this.dropChunksNotInSnapshot();
-            // The light that came with the snapshot's chunks is taken in now, before anything that happened after it. The
-            // game queues such light and takes it a little each frame; left waiting, it would be applied after the block
-            // changes of the ticks a jump then runs through, and put the old light back over them: the pit an explosion
-            // dug stayed as dark as the earth that had filled it, and the shadow of a wall outlived the wall
-            if (!Boolean.getBoolean("dailies.playback.lightOutOfOrder")) {
+            // What arrived after the snapshot on its own tick waits, as it did live, when the recording says when the
+            // live game took its light in (capture.LightPasses)
+            if (inOrder && (!settled || !comedymonkey.dailies.capture.LightPasses.paced())) {
                 Playback.settleLight(minecraft);
             }
         } finally {
@@ -649,6 +659,10 @@ final class Feed {
             this.closeReader();
             this.segmentIndex++;
             this.reader = new Records.Reader(this.file.openSegment(this.segments.get(this.segmentIndex).number));
+            if (comedymonkey.dailies.capture.LightPasses.paced()) {
+                // The live game took in all of its light as it described its world for this segment
+                Playback.settleLight(Minecraft.getInstance());
+            }
             // The world is already as the next snapshot describes it, unless the recording says otherwise
             boolean inSnapshot = false;
             while (this.reader.next()) {
@@ -815,10 +829,7 @@ final class Feed {
         if (!this.lightSettled) {
             // What the game holds is only known once everything it has been sent has been taken in
             this.lightSettled = true;
-            for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
-                level.pollLightUpdates();
-            }
-            engine.runLightUpdates();
+            comedymonkey.dailies.capture.LightPasses.settle(level);
         }
         net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData light = packet.getLightData();
         for (int index = 0; index < engine.getLightSectionCount(); index++) {

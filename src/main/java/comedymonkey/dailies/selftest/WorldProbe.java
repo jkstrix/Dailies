@@ -109,6 +109,8 @@ final class WorldProbe {
     final Map<Long, long[]> blocks = new HashMap<>();
     final Map<Long, Long> biomes = new HashMap<>();
     final Map<Long, byte[]> light = new HashMap<>();
+    /** In playback, for a chunk whose light differs from the live game's: where the first such place is and what lights it */
+    final Map<Long, String> lightSources = new HashMap<>();
     final Map<Long, String> blockEntities = new HashMap<>();
     final Map<String, String> blockEntityData = new TreeMap<>();
     final TreeMap<Integer, String> entities = new TreeMap<>();
@@ -134,10 +136,7 @@ final class WorldProbe {
         probe.label = label;
         probe.dimension = level.dimension().location().toString();
         // What is waiting to be lit is lit first, as the next drawn frame would do: both games are read as they would be seen
-        for (int i = 0; i < 4000 && !level.isLightUpdateQueueEmpty(); i++) {
-            level.pollLightUpdates();
-        }
-        level.getChunkSource().getLightEngine().runLightUpdates();
+        Snapshots.settleLight(level);
 
         ChunkPos centre = recorder != null ? recorder.chunkPosition() : new ChunkPos(0, 0);
         probe.centreX = like != null ? like.centreX : centre.x;
@@ -184,12 +183,17 @@ final class WorldProbe {
                 int perColumn = (maxY - minY) / LIGHT_STEP + 1;
                 byte[] lit = new byte[LIGHT_COLUMNS.length / 2 * perColumn];
                 int index = 0;
+                byte[] litLive = like == null ? null : like.light.get(key);
                 for (int column = 0; column < LIGHT_COLUMNS.length; column += 2) {
                     int blockX = (x << 4) + LIGHT_COLUMNS[column];
                     int blockZ = (z << 4) + LIGHT_COLUMNS[column + 1];
-                    lit[index++] = lightAt(level, pos.set(blockX, lightY(chunk, blockX, blockZ, 0, minY, maxY), blockZ));
-                    for (int step = 1; step < perColumn; step++) {
-                        lit[index++] = lightAt(level, pos.set(blockX, lightY(chunk, blockX, blockZ, step, minY, maxY), blockZ));
+                    for (int step = 0; step < perColumn; step++) {
+                        pos.set(blockX, lightY(chunk, blockX, blockZ, step, minY, maxY), blockZ);
+                        lit[index] = lightAt(level, pos);
+                        if (litLive != null && litLive.length == lit.length && litLive[index] != lit[index] && !probe.lightSources.containsKey(key) && probe.lightSources.size() < 8) {
+                            probe.lightSources.put(key, lightSources(level, pos.immutable()));
+                        }
+                        index++;
                     }
                 }
                 probe.light.put(key, lit);
@@ -268,6 +272,55 @@ final class WorldProbe {
             return Math.min(maxY - 1, chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15) + 1);
         }
         return Math.min(maxY - 1, minY + 8 + (step - 1) * LIGHT_STEP);
+    }
+
+    /**
+     * For a place whose light differs: where it is, what is there, the block light round it in playback, and the
+     * brightest things that give off light within reach, with how far each is in steps and what it could give here.
+     * The blocks are the same in both games, so this says which light is missing or extra, and from which chunk
+     */
+    private static String lightSources(ClientLevel level, BlockPos at) {
+        StringBuilder said = new StringBuilder("at ").append(at.toShortString()).append(' ').append(shortState(level.getBlockState(at)));
+        said.append("; block light round it in playback:");
+        for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.values()) {
+            said.append(' ').append(direction.getName().charAt(0)).append(level.getBrightness(LightLayer.BLOCK, at.relative(direction)));
+        }
+        List<long[]> found = new ArrayList<>();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int dx = -14; dx <= 14; dx++) {
+            for (int dy = -14; dy <= 14; dy++) {
+                for (int dz = -14; dz <= 14; dz++) {
+                    int steps = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+                    if (steps > 14) {
+                        continue;
+                    }
+                    pos.set(at.getX() + dx, at.getY() + dy, at.getZ() + dz);
+                    if (!level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                        continue;
+                    }
+                    int gives = level.getBlockState(pos).getLightEmission(level, pos);
+                    if (gives - steps > 0) {
+                        found.add(new long[]{gives - steps, pos.asLong(), steps, gives});
+                    }
+                }
+            }
+        }
+        found.sort((a, b) -> Long.compare(b[0], a[0]));
+        said.append("; brightest near it:");
+        if (found.isEmpty()) {
+            said.append(" nothing");
+        }
+        for (int i = 0; i < Math.min(3, found.size()); i++) {
+            BlockPos source = BlockPos.of(found.get(i)[1]);
+            said.append(i == 0 ? " " : ", ").append(shortState(level.getBlockState(source))).append(" at ").append(source.toShortString())
+                .append(" in chunk ").append(source.getX() >> 4).append(',').append(source.getZ() >> 4)
+                .append(", ").append(found.get(i)[2]).append(" steps, gives ").append(found.get(i)[3]).append(", at most ").append(found.get(i)[0]).append(" here");
+        }
+        return said.toString();
+    }
+
+    private static String shortState(BlockState state) {
+        return BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
     }
 
     private static byte lightAt(ClientLevel level, BlockPos pos) {
@@ -408,7 +461,8 @@ final class WorldProbe {
             for (int i = 0; i < lit.length && live.sends(ChunkPos.getX(key), ChunkPos.getZ(key)); i++) {
                 if (lit[i] != litThere[i]) {
                     wrongLight.add(chunkName(key, live) + " column " + i / perColumn + (i % perColumn == 0 ? " above ground" : " rung " + i % perColumn)
-                        + " live sky " + (lit[i] >> 4 & 15) + " block " + (lit[i] & 15) + ", playback sky " + (litThere[i] >> 4 & 15) + " block " + (litThere[i] & 15));
+                        + " live sky " + (lit[i] >> 4 & 15) + " block " + (lit[i] & 15) + ", playback sky " + (litThere[i] >> 4 & 15) + " block " + (litThere[i] & 15)
+                        + (played.lightSources.containsKey(key) ? " (" + played.lightSources.get(key) + ")" : ""));
                     break;
                 }
             }
