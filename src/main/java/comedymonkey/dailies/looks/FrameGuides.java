@@ -44,28 +44,28 @@ final class FrameGuides {
             if (ratio > 0.0) {
                 Window window = Minecraft.getInstance().getWindow();
                 double windowRatio = window.getHeight() > 0 ? (double) window.getWidth() / window.getHeight() : (double) width / Math.max(1, height);
-                double[] clear = Looks.clearPart(ratio, windowRatio);
+                boolean solid = looks.letterbox;
+                // A picture held to its frame stands whole in what the editor's panels leave clear; a guide lies over the view as it is
+                double[] framed = solid ? LooksRenderer.frameRect() : null;
+                double[] clear = framed != null ? framed : Looks.clearPart(ratio, windowRatio);
                 left = (int) Math.round(width * clear[0]);
                 right = (int) Math.round(width * clear[2]);
                 top = (int) Math.round(height * clear[1]);
                 bottom = (int) Math.round(height * clear[3]);
-                boolean solid = looks.letterbox;
                 int bar = solid ? SOLID : DIM;
-                if (left > 0 || right < width) {
-                    // Narrower than the window: bars down the sides
-                    graphics.fill(0, 0, left, height, bar);
-                    graphics.fill(right, 0, width, height, bar);
-                    if (!solid) {
-                        graphics.fill(left - 1, 0, left, height, EDGE);
-                        graphics.fill(right, 0, right + 1, height, EDGE);
+                // Everything of the view that is not the frame
+                graphics.fill(0, 0, width, top, bar);
+                graphics.fill(0, bottom, width, height, bar);
+                graphics.fill(0, top, left, bottom, bar);
+                graphics.fill(right, top, width, bottom, bar);
+                if (!solid) {
+                    if (left > 0 || right < width) {
+                        graphics.fill(left - 1, top, left, bottom, EDGE);
+                        graphics.fill(right, top, right + 1, bottom, EDGE);
                     }
-                } else if (top > 0 || bottom < height) {
-                    // Wider than the window: bars above and below
-                    graphics.fill(0, 0, width, top, bar);
-                    graphics.fill(0, bottom, width, height, bar);
-                    if (!solid) {
-                        graphics.fill(0, top - 1, width, top, EDGE);
-                        graphics.fill(0, bottom, width, bottom + 1, EDGE);
+                    if (top > 0 || bottom < height) {
+                        graphics.fill(left, top - 1, right, top, EDGE);
+                        graphics.fill(left, bottom, right, bottom + 1, EDGE);
                     }
                 }
                 Drawn.bars(left, top, right, bottom, solid);

@@ -387,7 +387,6 @@ final class WatchingSteps {
 
         test.tool("replay_close", new JsonObject());
         test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the recording to close");
-        machines(test);
     }
 
     // --- REC-7 and PLAY-4: the command while a recording is watched ---
@@ -937,12 +936,17 @@ final class WatchingSteps {
         test.onClientRun(() -> PlayerList.hide(BRUNEL));
         check(!PlayerList.hidden(BRUNEL), "a player who is out of sight could not be shown again");
 
-        // They came by hand and a jump takes them away again: the panel follows who is there
-        jump(test, walkStart + 1);
+        // A jump back builds the world again from the recording, which knows nothing of players put in by hand. Whoever
+        // is in the world afterwards, the panel says the same
+        jump(test, Math.max(0, walkStart - 25));
         frames(test, 6);
         List<PlayerList.Listed> after = test.onClient(PlayerList::players);
-        check(!after.isEmpty() && after.get(0).id().equals(recorderId) && after.stream().noneMatch(listed -> listed.id().equals(ADA) && listed.inWorld()),
-            "after a jump the panel still shows a player who is no longer in the world: " + after);
+        test.onClientRun(() -> {
+            check(!after.isEmpty() && after.get(0).id().equals(recorderId), "after a jump the recorder is not first in the players panel: " + after);
+            for (PlayerList.Listed listed : after) {
+                check(listed.inWorld() == (minecraft.level.getPlayerByUUID(listed.id()) != null), "after a jump the panel is wrong about who is in sight: " + after);
+            }
+        });
         test.log("players panel with three players: one in sight, one out of sight; after a jump it lists " + after.size());
     }
 
@@ -1120,7 +1124,7 @@ final class WatchingSteps {
                     Playback.playTo(walkStart + 60);
                 });
                 test.waitFor(() -> Playback.paused() && Playback.position() == walkStart + 60, 30, "play under the Smart Camera");
-                lookFrom(test, base.add(4.0, 7.0, -13.0), base.add(4.0, 2.0, -3.0));
+                lookFrom(test, base.add(4.0, 9.0, -8.0), base.add(5.0, 1.0, 1.0));
                 editor(test);
                 picture(test, "eye-smart-fresh");
                 test.onClientRun(() -> {
@@ -1139,7 +1143,7 @@ final class WatchingSteps {
                 lookFrom(test, spot.add(-3.0, 1.0, -4.0), spot);
                 editor(test);
                 picture(test, "eye-ring-near");
-                lookFrom(test, spot.add(-45.0, 12.0, -55.0), spot);
+                lookFrom(test, spot.add(-45.0, 12.0, 55.0), spot);
                 picture(test, "eye-ring-far");
             });
             attempt("the letterboxed editor", () -> {

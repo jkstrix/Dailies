@@ -23,8 +23,11 @@ public final class MarkerRings {
 
     private static final double RADIUS = 0.6;
     /** A ring never looks smaller than this many pixels across its radius, however far away it is */
-    private static final double LEAST_PIXELS = 7.0;
+    private static final double LEAST_PIXELS = 9.0;
     private static final double POST = 1.6;
+    /** The post never looks shorter than this, and carries a diamond at its top: from far off that is what is seen */
+    private static final double LEAST_POST_PIXELS = 34.0;
+    private static final float HEAD_PIXELS = 5.0F;
     private static final int SIDES = 40;
     /** Just clear of the ground, so the ring does not flicker in and out of it */
     private static final double LIFT = 0.04;
@@ -36,7 +39,7 @@ public final class MarkerRings {
      * @param colour 0xRRGGBB
      * @param radius in blocks, as drawn
      */
-    public record Ring(int marker, int tick, double x, double y, double z, int colour, String description, double radius) {
+    public record Ring(int marker, int tick, double x, double y, double z, int colour, String description, double radius, double post) {
     }
 
     private static volatile List<Ring> drawn = List.of();
@@ -77,10 +80,16 @@ public final class MarkerRings {
                 circle.add(new Vec3(x + Math.cos(angle) * radius, y, z + Math.sin(angle) * radius));
             }
             batch.line(circle, 3.0F, colour, 1.0F, false);
-            batch.segment(new Vec3(x, y, z), new Vec3(x, y + Math.max(POST, radius * 2.0), z), 2.0F, colour, 0.9F);
-            rings.add(new Ring(index, marker.tick, x, y, z, colour, marker.description == null ? "" : marker.description, radius));
+            double post = post(batch, x, y, z);
+            batch.segment(new Vec3(x, y, z), new Vec3(x, y + post, z), 2.5F, colour, 1.0F);
+            batch.diamond(new Vec3(x, y + post, z), HEAD_PIXELS, colour, 1.0F);
+            rings.add(new Ring(index, marker.tick, x, y, z, colour, marker.description == null ? "" : marker.description, radius, post));
         }
         drawn = List.copyOf(rings);
+    }
+
+    private static double post(WorldLines.Batch batch, double x, double y, double z) {
+        return Math.max(POST, batch.blocksFor(LEAST_POST_PIXELS, x, y, z));
     }
 
     /** The rings drawn in the last frame; none when markers are switched off, hidden, or an export is drawing */
@@ -112,9 +121,9 @@ public final class MarkerRings {
             }
             if (distance < 0.0) {
                 // Seen from the side: the post, taken as the ball round its middle
-                Vec3 middle = new Vec3(ring.x(), ring.y() + Math.max(POST, ring.radius() * 2.0) / 2.0, ring.z());
+                Vec3 middle = new Vec3(ring.x(), ring.y() + ring.post() / 2.0, ring.z());
                 double along = middle.subtract(ray.from()).dot(ray.direction());
-                if (along > 0.0 && ray.at(along).distanceTo(middle) <= reach) {
+                if (along > 0.0 && ray.at(along).distanceTo(middle) <= Math.max(reach, ring.post() / 2.0)) {
                     distance = along;
                 }
             }

@@ -91,7 +91,8 @@ final class WorldLines {
     static double blocksPerPixel() {
         Minecraft minecraft = Minecraft.getInstance();
         double tangent = Math.tan(Math.toRadians(Math.max(1.0, Math.min(170.0, ViewPick.fieldOfView())) / 2.0));
-        return 2.0 * tangent / Math.max(1, minecraft.getWindow().getHeight());
+        double[] shift = comedymonkey.dailies.looks.LooksRenderer.viewShift();
+        return 2.0 * tangent / Math.max(1, minecraft.getWindow().getHeight()) / (shift == null ? 1.0 : shift[0]);
     }
 
     /** Lines are drawn a little heavier on a large window, so that they look the same on it */
@@ -125,6 +126,12 @@ final class WorldLines {
         double upwards = (from.x * above.x() + from.y * above.y() + from.z * above.z()) / ahead;
         double across = -sideways / (tangent * aspect);
         double up = upwards / tangent;
+        // A picture held to its frame is shown smaller and to one side, clear of the panels
+        double[] shift = comedymonkey.dailies.looks.LooksRenderer.viewShift();
+        if (shift != null) {
+            across = across * shift[0] + shift[1];
+            up = up * shift[0] + shift[2];
+        }
         return new double[]{(across + 1.0) / 2.0 * screenWidth, (1.0 - up) / 2.0 * screenHeight, ahead};
     }
 
