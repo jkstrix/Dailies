@@ -57,6 +57,7 @@ public final class DailiesConfig {
             bool("flightMomentum", true, "The viewer glides to a stop instead of stopping dead");
             bool("flightLookRelative", false, "Forward follows where the viewer looks, up and down included. When off, forward stays level");
             bool("showCameraPath", true, "Draw the camera's path through the world while editing: a line along it, a mark at each keyframe and arrows for where it looks. Never in exports");
+            bool("showMomentsOnTimeline", true, "Show the recording's moments on the editor's timeline: events as marks, clips as bands and a strip for each voice");
             bool("showMarkersInWorld", true, "Show markers that stored a position as coloured rings on the ground while watching. Never in exports");
         });
         group("advanced", "Advanced", () -> {

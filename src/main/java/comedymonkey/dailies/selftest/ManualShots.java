@@ -66,8 +66,14 @@ final class ManualShots {
             test.onClientRun(() -> minecraft.setScreen(null));
         });
 
-        // Something worth watching: the recorder walks a loop round the campfire, with a marker half way
+        // Something worth watching: the recorder walks a loop round the campfire, with a marker half way, while
+        // things happen and people talk as they would over an evening, so the timeline has a session's worth to show
+        Thread voices = chatter(minecraft);
         for (int step = 0; step < 160; step++) {
+            if (step % 4 == 1) {
+                int which = step / 4;
+                attempt(test, "a moment for the timeline", () -> moment(test, which));
+            }
             double angle = step / 160.0 * Math.PI * 2.0;
             double x = 6.5 + Math.sin(angle) * 5.0;
             double z = 10.5 - Math.cos(angle) * 5.0;
@@ -77,7 +83,9 @@ final class ManualShots {
             }
             Thread.sleep(45);
         }
-        test.sleepTicks(20);
+        voices.interrupt();
+        test.sleepTicks(30);
+        attempt(test, "clips for the timeline", () -> test.tool("moments_clips_generate", args("session", "current", "min_importance", 45, "summarize", false, "pre_roll", 0.6, "post_roll", 0.8)));
 
         attempt(test, "the name prompt", () -> {
             test.onClientRun(() -> Controls.finishRecording(null));
@@ -121,6 +129,11 @@ final class ManualShots {
             test.tool("camera_set", args("x", 6.5, "y", -52.0, "z", -2.0, "yaw", 0.0, "pitch", 32.0));
             editorTab(test, 0, false);
             shot(test, "07-editor-keyframes");
+            attempt(test, "the timeline's moments", () -> {
+                comedymonkey.dailies.ui.MomentsLane.reloadNow();
+                test.sleepTicks(10);
+                shot(test, "07f-editor-moments");
+            });
             editorTab(test, 0, true);
             shot(test, "07b-editor-keyframe-selected");
             editorTab(test, 1, false);
@@ -223,6 +236,94 @@ final class ManualShots {
 
     private interface Stop {
         void run() throws Exception;
+    }
+
+    /** What happened, in the mix a real evening has: mostly small things, now and then a big one */
+    private static final String[][] HAPPENINGS = {
+        {"biome_discovered", "minecraft:plains"}, {"block_mined", "minecraft:oak_log"}, {"item_crafted", "minecraft:crafting_table"}, {"advancement", "minecraft:story/mine_stone"},
+        {"mob_kill", "minecraft:zombie"}, {"block_placed", "minecraft:furnace"}, {"voice_burst", "unclassified"}, {"mob_kill", "minecraft:skeleton"},
+        {"custom", "close_call"}, {"item_crafted", "minecraft:iron_pickaxe"}, {"milestone", "first_diamond"}, {"mob_kill", "minecraft:creeper"},
+        {"structure_interaction", "minecraft:spawner"}, {"advancement", "minecraft:story/smelt_iron"}, {"player_death", "fall"}, {"job_finished", "custom"},
+    };
+
+    /** Logs one moment of a kind chosen by its turn, as the tracker would have, stamped with the recording's tick */
+    private static void moment(SelfTest test, int turn) throws Exception {
+        String[] what = HAPPENINGS[turn % HAPPENINGS.length];
+        test.onClientRun(() -> {
+            var session = comedymonkey.dailies.moments.Moments.currentSession();
+            String recording = Host.get().recordingId();
+            if (session == null || recording == null || Minecraft.getInstance().player == null) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            JsonObject event = new JsonObject();
+            event.addProperty("type", what[0]);
+            event.addProperty("subject", what[1]);
+            event.addProperty("first", turn % 5 == 0);
+            JsonObject player = new JsonObject();
+            player.addProperty("uuid", Minecraft.getInstance().player.getUUID().toString());
+            player.addProperty("name", Minecraft.getInstance().player.getGameProfile().getName());
+            event.add("player", player);
+            event.addProperty("real_time", now);
+            event.addProperty("replay_uuid", recording);
+            event.addProperty("replay_tick", Host.get().recordingTick());
+            JsonObject metadata = new JsonObject();
+            if (what[0].equals("advancement")) {
+                metadata.addProperty("title", what[1].endsWith("mine_stone") ? "Stone Age" : "Acquire Hardware");
+            } else if (what[0].equals("custom")) {
+                metadata.addProperty("label", "Half a heart left after the creeper");
+                metadata.addProperty("source", "server");
+            } else if (what[0].equals("milestone")) {
+                metadata.addProperty("label", "First diamond");
+            } else if (what[0].equals("player_death")) {
+                metadata.addProperty("message", player.get("name").getAsString() + " fell from a high place");
+            } else if (what[0].equals("job_finished")) {
+                metadata.addProperty("title", "Help dig the cutting");
+                metadata.addProperty("player", "Sam");
+            } else if (what[0].equals("voice_burst")) {
+                com.google.gson.JsonArray speakers = new com.google.gson.JsonArray();
+                for (String name : new String[]{"Dev", "Sam", "Alexandra"}) {
+                    JsonObject speaker = new JsonObject();
+                    speaker.addProperty("name", name);
+                    speakers.add(speaker);
+                }
+                metadata.add("speakers", speakers);
+            }
+            event.add("metadata", metadata);
+            session.add(comedymonkey.dailies.moments.storage.MomentsSession.Kind.EVENTS, event);
+        });
+    }
+
+    /** Three voices that come and go until told to stop, fed in as the voice chat capture hands them over */
+    private static Thread chatter(Minecraft minecraft) {
+        java.util.UUID[] speakers = {minecraft.player.getUUID(), java.util.UUID.nameUUIDFromBytes("Sam".getBytes()), java.util.UUID.nameUUIDFromBytes("Alexandra".getBytes())};
+        // When each talks, in tenths of a second from the start, as start and length
+        int[][][] turns = {{{4, 14}, {34, 9}, {62, 16}}, {{12, 8}, {40, 18}, {70, 6}}, {{22, 10}, {55, 7}}};
+        Thread thread = new Thread(() -> {
+            short[] frame = new short[960];
+            long started = System.currentTimeMillis();
+            try {
+                for (int sent = 0; !Thread.currentThread().isInterrupted(); sent++) {
+                    long tenths = (System.currentTimeMillis() - started) / 100;
+                    for (int i = 0; i < frame.length; i++) {
+                        frame[i] = (short) (Math.sin((sent * 960 + i) * 2.0 * Math.PI * 220.0 / 48000.0) * 2500.0);
+                    }
+                    for (int who = 0; who < speakers.length; who++) {
+                        for (int[] turn : turns[who]) {
+                            if (tenths >= turn[0] && tenths < turn[0] + turn[1]) {
+                                comedymonkey.dailies.moments.Moments.onVoiceChatAudio(speakers[who], frame.clone());
+                            }
+                        }
+                    }
+                    Thread.sleep(20);
+                }
+            } catch (InterruptedException ignored) {
+                // Told to stop
+            }
+        }, "Dailies-Manual-Voices");
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
     }
 
     private static void attempt(SelfTest test, String what, Stop stop) {

@@ -429,6 +429,47 @@ async function cue(args, label) {
   }
 }
 
+// "Make scene": a scene of the recording for this clip, with its export range and the suggested camera. The game can
+// only do that in the recording that holds the clip, so when another is open, or none, the clip is cued first and
+// the scene is made as soon as the recording has loaded.
+const NOT_OPEN = /^(No recording is open|The open recording is a different one|CUT:)/;
+async function makeScene(clip, button) {
+  const args = { session: state.session, clip_id: clip.id };
+  const label = clip.title || 'clip';
+  if (button) button.disabled = true;
+  try {
+    let result = null;
+    try {
+      result = await tool('moments_clip_to_scene', args);
+    } catch (error) {
+      if (!NOT_OPEN.test(String(error.message))) throw error;
+      try {
+        await tool('moments_cue', { session: state.session, clip_id: clip.id });
+      } catch (cueError) {
+        if (!String(cueError.message).startsWith('LEAVE_WORLD_NEEDED')) throw cueError;
+        if (!confirm('You are in a world right now.\n\nMaking this scene will leave it and open the replay. Carry on?')) return;
+        await tool('moments_cue', { session: state.session, clip_id: clip.id, leave_world: true });
+      }
+      toast('Opening the replay to make a scene of "' + label + '"');
+      const deadline = Date.now() + 180000;
+      while (!result) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          result = await tool('moments_clip_to_scene', args);
+        } catch (waiting) {
+          if (Date.now() > deadline || !/^(No recording is open|The open recording is a different one)/.test(String(waiting.message))) throw waiting;
+        }
+      }
+    }
+    toast('Made the scene "' + result.scene_name + '"' + (result.camera_added ? ', with a ' + result.suggested_camera.label.toLowerCase() + ' camera' : '')
+      + '. Undo in the editor takes it away');
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button) button.disabled = !(clip.replay_uuid != null) || !!clip.cut_everywhere;
+  }
+}
+
 // ---- Loading ----
 
 async function loadSessions() {
@@ -578,7 +619,8 @@ function renderClips() {
           null),
         el('div', { class: 'actions' },
           el('button', { class: 'primary', disabled: !hasReplay, title: hasReplay ? 'Open the replay at the start of this clip, paused, and add the suggested smart camera there' : 'No replay was being recorded', onclick: () => cue({ clip_id: clip.id, camera: true }, clip.title || 'clip') }, 'Cue + camera'),
-          el('button', { disabled: !hasReplay, title: 'Open the replay at the start of this clip, paused, without touching the cameras', onclick: () => cue({ clip_id: clip.id }, clip.title || 'clip') }, 'Cue only'))));
+          el('button', { disabled: !hasReplay, title: 'Open the replay at the start of this clip, paused, without touching the cameras', onclick: () => cue({ clip_id: clip.id }, clip.title || 'clip') }, 'Cue only'),
+          el('button', { disabled: !hasReplay || gone, title: hasReplay ? 'Make a scene of the replay for this clip: named after it, exporting exactly it, with the suggested smart camera. Opens the replay first if it is not open. One undo in the editor takes it away' : 'No replay was being recorded', onclick: event => makeScene(clip, event.currentTarget) }, 'Make scene'))));
   }));
 }
 

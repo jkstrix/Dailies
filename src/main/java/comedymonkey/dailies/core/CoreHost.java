@@ -265,6 +265,41 @@ public final class CoreHost implements Host.Mod {
         comedymonkey.dailies.editor.SmartCameraDriver.add(arguments);
     }
 
+    @Override
+    public int createScene(String name, int startTick, int endTick) {
+        var history = this.openHistory();
+        int total = Playback.total();
+        int start = Math.max(0, Math.min(total, startTick));
+        int end = Math.max(start, Math.min(total, endTick));
+        // The scene and its range are one thing to the person who asked, so one thing to undo
+        history.beginGroup("Add scene \"" + name + "\" for ticks " + start + " to " + end);
+        try {
+            int index = history.addScene(name);
+            history.setExportRange(start, end);
+            return index;
+        } finally {
+            history.endGroup();
+        }
+    }
+
+    @Override
+    public void asOneEdit(String description, Host.EditWork edits) throws Exception {
+        var history = this.openHistory();
+        history.beginGroup(description);
+        try {
+            edits.run();
+        } finally {
+            history.endGroup();
+        }
+    }
+
+    private comedymonkey.dailies.edit.EditHistory openHistory() {
+        if (!Playback.loaded() || !comedymonkey.dailies.editor.EditorSession.open()) {
+            throw new IllegalStateException("No recording is open");
+        }
+        return comedymonkey.dailies.editor.EditorSession.history();
+    }
+
     // --- MCP ---
 
     @Override

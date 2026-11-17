@@ -104,6 +104,10 @@ final class RecordingSteps {
         test.command("setblock 2 -60 0 minecraft:gold_block");
         test.sleepTicks(10);
         test.command("setblock 2 -60 0 minecraft:air destroy");
+        // A kill by command is only ever found through the statistics, which are asked for every five seconds from
+        // whenever the session began. Asked for every second, the kill is logged where it happened and not, as the
+        // run's timing once had it, in the middle of the pause below, on a tick whose time is the resume's
+        test.tool("config_set", args("key", "momentsStatsPollSeconds", "value", 1));
         test.command("summon minecraft:zombie 0 -60 4 {NoAI:1b,PersistenceRequired:1b}");
         test.sleepTicks(10);
         test.command("damage @e[type=minecraft:zombie,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
@@ -132,6 +136,7 @@ final class RecordingSteps {
         // Chapter XIV step 2: machines, built while the recording runs
         CraftSteps.build(test);
 
+        test.tool("config_set", args("key", "momentsStatsPollSeconds", "value", 5));
         JsonObject marker = test.tool("recording_add_marker", args("color", "#33AAFF", "description", "The pig"));
         check(marker.get("tick").getAsInt() > 0, "the marker has no tick");
 

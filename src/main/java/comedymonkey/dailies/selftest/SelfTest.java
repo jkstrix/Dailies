@@ -94,6 +94,7 @@ public final class SelfTest {
             ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
             OwnerFeatureSteps.run(this);
+            TimelineSteps.original(this);
             LibrarySteps.run(this);
             if (!Boolean.getBoolean("dailies.test.skipPacks")) {
                 ResourcePackSteps.play(this);

@@ -302,6 +302,17 @@ public final class MomentsTools {
                 + "says CUT and lists the recordings that still hold it when it was cut from this one, and otherwise says which replay to open.",
             schema().string("clip_id", "Clip id from moments_clips_generate / moments_clips_list").required("clip_id"),
             MomentsTools::clipGoto);
+
+        registrar.add("moments_clip_to_scene",
+            "Make a scene of the open replay from a clip candidate: a new scene named after the clip, with its export range set to the clip and the suggested smart camera "
+                + "at its start, following the player who recorded. The new scene becomes the current one and the replay jumps to the clip's start, paused. All of it is one step: "
+                + "editor_undo takes the whole scene away again. Works when the open replay holds the clip, as moments_clip_goto does; call moments_cue first to open the right one.",
+            schema()
+                .string("clip_id", "Clip id from moments_clips_generate / moments_clips_list")
+                .string("name", "Name of the scene (default: the clip's title)")
+                .bool("camera", "Add the suggested smart camera at the clip's start (default true)")
+                .required("clip_id"),
+            MomentsTools::clipToScene);
     }
 
     // --- Shared argument handling ---
@@ -1392,22 +1403,8 @@ public final class MomentsTools {
         return json;
     }
 
-    private static JsonObject clipGoto(McpArgs args) {
-        MomentsSession session = session(args);
-        String clipId = args.string("clip_id");
-        JsonObject clip = null;
-        for (JsonObject candidate : session.clips()) {
-            if (clipId.equals(MJson.str(candidate, "id"))) {
-                clip = candidate;
-            }
-        }
-        if (clip == null) {
-            throw new McpToolException("No clip '" + clipId + "' in session " + session.id + ". Use moments_clips_list (or moments_clips_generate first)");
-        }
-        String replayUuid = MJson.str(clip, "replay_uuid");
-        if (replayUuid == null) {
-            throw new McpToolException("This clip has no recording position: nothing was being recorded when it happened");
-        }
+    /** Where the open recording holds a clip, or the reason, as an error, that it does not */
+    private static Host.ClipLocation inOpenRecording(JsonObject clip, String replayUuid) {
         int clipStart = (int) Math.max(0, MJson.lng(clip, "start_replay_tick", 0));
         int clipEnd = (int) Math.max(clipStart, MJson.lng(clip, "end_replay_tick", clipStart));
         List<Host.ClipLocation> locations = Host.get().locateClip(replayUuid, clipStart, clipEnd);
@@ -1435,6 +1432,112 @@ public final class MomentsTools {
             throw new McpToolException((open == null ? "No recording is open. " : "The open recording is a different one. ")
                 + "This clip is in the recording with id " + replayUuid + ". Use moments_cue, which opens it for you");
         }
+        return here;
+    }
+
+    private static JsonObject clipToScene(McpArgs args) throws Exception {
+        MomentsSession session = session(args);
+        return makeScene(session, args.string("clip_id"), args.optString("name"), args.optBool("camera", true));
+    }
+
+    /** {@link #makeScene} for the editor, which knows a clip by its session and id. Client thread */
+    public static JsonObject makeScene(String sessionId, String clipId) throws Exception {
+        MomentsSession session = Moments.storage().getSession(sessionId);
+        if (session == null) {
+            throw new McpToolException("The play session this clip belongs to is gone");
+        }
+        return makeScene(session, clipId, null, true);
+    }
+
+    /**
+     * A scene of the open recording for a clip: named after it, exporting exactly it, with the suggested camera at its
+     * start. One step to undo. Client thread.
+     */
+    private static JsonObject makeScene(MomentsSession session, String clipId, @Nullable String wantedName, boolean withCamera) throws Exception {
+        JsonObject clip = null;
+        for (JsonObject candidate : session.clips()) {
+            if (clipId.equals(MJson.str(candidate, "id"))) {
+                clip = candidate;
+            }
+        }
+        if (clip == null) {
+            throw new McpToolException("No clip '" + clipId + "' in session " + session.id + ". Use moments_clips_list (or moments_clips_generate first)");
+        }
+        String replayUuid = MJson.str(clip, "replay_uuid");
+        if (replayUuid == null) {
+            throw new McpToolException("This clip has no recording position: nothing was being recorded when it happened");
+        }
+        Host.ClipLocation here = inOpenRecording(clip, replayUuid);
+        if (Host.get().exportRunning()) {
+            throw new McpToolException("An export is in progress and controls playback itself");
+        }
+        int total = Host.get().openRecordingTicks();
+        int startTick = Math.max(0, Math.min(total, here.stretches().get(0).tick()));
+        int endTick = Math.max(startTick, Math.min(total, here.stretches().get(here.stretches().size() - 1).endTick()));
+
+        String title = MJson.str(clip, "title", "Clip");
+        String name = wantedName == null || wantedName.isBlank() ? title : wantedName.trim();
+        if (name.length() > 60) {
+            name = name.substring(0, 60).trim();
+        }
+        JsonObject camera = suggestCamera(MJson.arr(clip, "events"));
+        JsonObject cameraArgs = camera.getAsJsonObject("settings").deepCopy();
+        cameraArgs.addProperty("mode", MJson.str(camera, "mode"));
+        cameraArgs.addProperty("tick", startTick);
+        // The camera follows whoever made the recording; by uuid, so it does not matter whether they are loaded yet
+        String recorder = MJson.str(MJson.obj(session.meta(), "local_player"), "uuid");
+        if (recorder != null) {
+            cameraArgs.addProperty("target", recorder);
+        }
+
+        String sceneName = name;
+        int[] index = {-1};
+        boolean[] cameraAdded = {false};
+        Host.get().asOneEdit("Make scene \"" + sceneName + "\" from a clip", () -> {
+            index[0] = Host.get().createScene(sceneName, startTick, endTick);
+            if (withCamera) {
+                try {
+                    Host.get().addSmartCamera(cameraArgs);
+                    cameraAdded[0] = true;
+                } catch (Exception e) {
+                    // The scene and its range are still worth having
+                    Host.LOGGER.warn("Moments: the suggested camera could not be added to the new scene: {}", e.getMessage());
+                }
+            }
+        });
+        Host.get().seek(startTick, true);
+
+        JsonObject json = ok();
+        json.addProperty("clip_id", clipId);
+        json.addProperty("scene", index[0]);
+        json.addProperty("scene_name", sceneName);
+        json.addProperty("start_tick", startTick);
+        json.addProperty("end_tick", endTick);
+        json.addProperty("camera_added", cameraAdded[0]);
+        json.add("suggested_camera", camera);
+        json.addProperty("cut", here.cut());
+        json.addProperty("note", "The scene is the current one and the replay is jumping to its start. editor_undo removes the scene, its range and its camera in one step"
+            + (here.cut() ? ". Part of this clip was cut from this recording: the range runs over what is left" : ""));
+        return json;
+    }
+
+    private static JsonObject clipGoto(McpArgs args) {
+        MomentsSession session = session(args);
+        String clipId = args.string("clip_id");
+        JsonObject clip = null;
+        for (JsonObject candidate : session.clips()) {
+            if (clipId.equals(MJson.str(candidate, "id"))) {
+                clip = candidate;
+            }
+        }
+        if (clip == null) {
+            throw new McpToolException("No clip '" + clipId + "' in session " + session.id + ". Use moments_clips_list (or moments_clips_generate first)");
+        }
+        String replayUuid = MJson.str(clip, "replay_uuid");
+        if (replayUuid == null) {
+            throw new McpToolException("This clip has no recording position: nothing was being recorded when it happened");
+        }
+        Host.ClipLocation here = inOpenRecording(clip, replayUuid);
         if (Host.get().exportRunning()) {
             throw new McpToolException("An export is in progress and controls playback itself");
         }
