@@ -8,6 +8,7 @@
     "moments.MixinMultiPlayerGameModeMoments",
     "capture.ConnectionMixin",
     "capture.LocalPlayerMixin",
+    "capture.ClientLevelMixin",
     "capture.BlockEntityInfoMixin",
     "packs.ServerPackManagerMixin",
     "packs.PackPushMixin",

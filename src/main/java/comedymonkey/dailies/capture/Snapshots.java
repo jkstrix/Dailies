@@ -18,6 +18,7 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Marker;
 import net.minecraft.world.entity.Pose;
@@ -64,8 +65,15 @@ public final class Snapshots {
     private static boolean taking = false;
     private static final Set<String> WARNED = new HashSet<>();
 
-    /** The stored form of each chunk that has not changed since it was last described, by chunk position */
-    private static final Map<Long, byte[]> CHUNKS = new HashMap<>();
+    /**
+     * What is remembered of a chunk whose stored form is still good: the name of the stored bytes, and what its block
+     * entities said of themselves when it was stored. A chunk kept exactly as the server sent it has not been asked yet
+     */
+    private record Stored(byte[] name, boolean asked, long said) {
+    }
+
+    /** The stored form of each chunk that no packet has changed since it was stored, by chunk position */
+    private static final Map<Long, Stored> CHUNKS = new HashMap<>();
     private static ClientPacketListener worldOf = null;
     private static byte[] world = null;
 
@@ -118,27 +126,49 @@ public final class Snapshots {
         }
     }
 
-    /** Everything remembered about the world is out of date: a new world, a pause, a change of dimension */
+    /** Every chunk remembered is out of date: a new world, a change of dimension, a respawn */
     static void forget() {
+        CHUNKS.clear();
+    }
+
+    /**
+     * Nothing remembered can be trusted: a new recording. The registries are described again too. A change of dimension
+     * or a respawn does not change them, and describing them takes ten milliseconds, so those keep what is known; a new
+     * connection is noticed by itself, and new tags as they arrive.
+     */
+    static void forgetAll() {
         CHUNKS.clear();
         worldOf = null;
         world = null;
     }
 
+    /**
+     * A whole chunk has arrived and been stored in the recording exactly as the server sent it. Until a packet changes
+     * it, the snapshots that follow name those bytes instead of describing the chunk again: travelling brings hundreds
+     * of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
+     */
+    static void arrived(int x, int z, byte[] name) {
+        CHUNKS.put(ChunkPos.asLong(x, z), new Stored(name, false, 0));
+    }
+
     /** A packet is about to be applied. Any chunk it changes has to be described afresh in the next snapshot */
     static void applied(Packet<?> packet) {
+        if (packet instanceof ClientboundUpdateTagsPacket) {
+            world = null;
+            return;
+        }
         if (CHUNKS.isEmpty()) {
-            if (packet instanceof ClientboundUpdateTagsPacket) {
-                world = null;
-            }
             return;
         }
         if (packet instanceof ClientboundBlockUpdatePacket update) {
-            dirty(update.getPos());
+            changed(update.getPos(), update.getBlockState());
         } else if (packet instanceof ClientboundSectionBlocksUpdatePacket updates) {
-            updates.runUpdates((pos, state) -> dirty(pos));
+            updates.runUpdates(Snapshots::changed);
         } else if (packet instanceof ClientboundBlockEntityDataPacket data) {
             dirty(data.getPos());
+        } else if (packet instanceof ClientboundBlockEventPacket event) {
+            // A piston's push is done by each game for itself when it is told of the event: blocks move with no packet of their own
+            changed(event.getPos(), null);
         } else if (packet instanceof ClientboundLightUpdatePacket light) {
             CHUNKS.remove(ChunkPos.asLong(light.getX(), light.getZ()));
         } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
@@ -148,14 +178,47 @@ public final class Snapshots {
         } else if (packet instanceof ClientboundChunksBiomesPacket biomes) {
             biomes.chunkBiomeData().forEach(data -> CHUNKS.remove(data.pos().toLong()));
         } else if (packet instanceof ClientboundExplodePacket explosion) {
-            explosion.getToBlow().forEach(Snapshots::dirty);
-        } else if (packet instanceof ClientboundUpdateTagsPacket) {
-            world = null;
+            explosion.getToBlow().forEach(pos -> changed(pos, null));
         }
     }
 
     private static void dirty(BlockPos pos) {
         CHUNKS.remove(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
+    }
+
+    /**
+     * A block is about to become something else. Its own chunk has changed; so, when the change can alter the light, have
+     * the eight chunks round it, because light reaches up to fifteen blocks and a game works out for itself what a
+     * changed block does to the light of the chunks next door. No packet says so: a server sends light only for the
+     * chunks at the edge of what a player can see. Without this a lava flow or a torch near the edge of a chunk left
+     * the chunk next door stored with its old light, and a jump showed it so.
+     *
+     * @param to what the block becomes, or null when that is not known and the worst is assumed
+     */
+    private static void changed(BlockPos pos, @org.jetbrains.annotations.Nullable net.minecraft.world.level.block.state.BlockState to) {
+        int x = pos.getX() >> 4;
+        int z = pos.getZ() >> 4;
+        CHUNKS.remove(ChunkPos.asLong(x, z));
+        ClientLevel level = Minecraft.getInstance().level;
+        if (to != null && level != null && !lightMayChange(level, pos, level.getBlockState(pos), to)) {
+            return;
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                CHUNKS.remove(ChunkPos.asLong(x + dx, z + dz));
+            }
+        }
+    }
+
+    /** Whether one block in place of another gives off, stops or shapes light differently: the game's own test, less cautious about blocks that only shape it */
+    private static boolean lightMayChange(ClientLevel level, BlockPos pos, net.minecraft.world.level.block.state.BlockState from, net.minecraft.world.level.block.state.BlockState to) {
+        if (from == to) {
+            return false;
+        }
+        if (from.getLightBlock(level, pos) != to.getLightBlock(level, pos) || from.getLightEmission(level, pos) != to.getLightEmission(level, pos)) {
+            return true;
+        }
+        return (from.useShapeForLightOcclusion() || to.useShapeForLightOcclusion()) && from.getOcclusionShape(level, pos) != to.getOcclusionShape(level, pos);
     }
 
     /**
@@ -201,8 +264,16 @@ public final class Snapshots {
         try {
             ClientLevel level = minecraft.level;
             writeWorld(out, minecraft, listener, level, playback);
+            long worldDone = System.nanoTime();
+            encoded = 0;
+            // Light that has arrived, or that the game has yet to work out from a block that changed, is settled first. The
+            // game does that as it draws, a few chunks a frame, so there is nearly always some waiting; a chunk described
+            // meanwhile would be stored with its old light, or none, and named again that way by every later snapshot
+            settleLight(level);
             int chunks = playback == null ? writeChunks(out, minecraft, listener, level, codec) : writePlaybackChunks(out, level, codec, playback);
+            long chunksDone = System.nanoTime();
             int entities = writeEntities(out, level, codec, playback);
+            long entitiesDone = System.nanoTime();
             (playback == null ? SnapshotExtensions.all() : SnapshotExtensions.inPlayback()).forEach((id, extension) -> {
                 try {
                     extension.write(out, codec);
@@ -212,11 +283,26 @@ public final class Snapshots {
             });
             Host.LOGGER.debug("Dailies: snapshot of {} chunks and {} entities took {} ms", chunks, entities, (System.nanoTime() - started) / 1_000_000);
             if (playback == null) {
-                lastMillis = (System.nanoTime() - started) / 1_000_000.0;
+                long ended = System.nanoTime();
+                lastMillis = (ended - started) / 1_000_000.0;
+                last = new Cost(lastMillis, (worldDone - started) / 1_000_000.0, (chunksDone - worldDone) / 1_000_000.0, (entitiesDone - chunksDone) / 1_000_000.0,
+                    (ended - entitiesDone) / 1_000_000.0, chunks, encoded, entities);
             }
         } finally {
             taking = false;
         }
+    }
+
+    /**
+     * Brings a world's light up to date with everything it has been sent, as the next drawn frame would in a game that
+     * had nothing else to draw. Playback uses it too: it applies recorded ticks without drawing between them, and a
+     * block that changes in a chunk whose light is still waiting is lit wrongly for good.
+     */
+    public static void settleLight(ClientLevel level) {
+        for (int i = 0; i < 100_000 && !level.isLightUpdateQueueEmpty(); i++) {
+            level.pollLightUpdates();
+        }
+        level.getChunkSource().getLightEngine().runLightUpdates();
     }
 
     /** Where a watching game would be drawing the recorder: set by the recorder just before each snapshot. Null when unknown */
@@ -227,6 +313,17 @@ public final class Snapshots {
 
     /** How long the last snapshot held the game up, for the tests that watch what recording costs */
     public static volatile double lastMillis = 0;
+
+    /**
+     * Where the time of one snapshot of the live game went, in milliseconds, and how much it described: the chunks it
+     * named, how many of those had to be written out afresh, and the entities
+     */
+    public record Cost(double millis, double world, double chunkMillis, double entityMillis, double extensions, int chunks, int encoded, int entities) {
+    }
+
+    /** The cost of the last snapshot of the live game; a new object each time, so a watcher can tell one from the next */
+    public static volatile Cost last = null;
+    private static int encoded = 0;
 
     private static void writeWorld(Recorder.Out out, Minecraft minecraft, ClientPacketListener listener, ClientLevel level, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
         if (playback != null) {
@@ -309,15 +406,25 @@ public final class Snapshots {
                 long key = ChunkPos.asLong(x, z);
                 present.add(key);
                 count++;
-                // A chunk with block entities is described afresh every time: mods change those in ways no packet shows
-                byte[] stored = chunk.getBlockEntities().isEmpty() ? CHUNKS.get(key) : null;
+                Stored stored = CHUNKS.get(key);
+                long said = 0;
+                if (!chunk.getBlockEntities().isEmpty()) {
+                    // Mods change block entities in ways no packet shows. So a chunk that has any is named again only while
+                    // every one of them still says of itself exactly what it said when the chunk was stored; each is asked,
+                    // every time, which costs far less than describing the whole chunk every time did
+                    said = whatBlockEntitiesSay(chunk, level);
+                    if (stored != null && (!stored.asked() || stored.said() != said)) {
+                        stored = null;
+                    }
+                }
                 if (stored != null) {
-                    out.sharedRef(Records.SHARED_PACKET, stored);
+                    out.sharedRef(Records.SHARED_PACKET, stored.name());
                     continue;
                 }
                 try {
-                    byte[] encoded = codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
-                    CHUNKS.put(key, out.sharedPacket(encoded));
+                    byte[] bytes = codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+                    CHUNKS.put(key, new Stored(out.sharedPacket(bytes), true, said));
+                    encoded++;
                 } catch (Throwable t) {
                     warnOnce("chunk", t);
                 }
@@ -326,6 +433,60 @@ public final class Snapshots {
         CHUNKS.keySet().retainAll(present);
         return count;
     }
+
+    private static long cannotSay = 0;
+
+    /**
+     * Everything a chunk's block entities would say of themselves in a description of the chunk, as one number: the same
+     * number means the same block entities saying the same things. One that cannot answer makes the number new each time,
+     * so its chunk is described afresh, as every chunk with block entities used to be.
+     */
+    private static long whatBlockEntitiesSay(LevelChunk chunk, ClientLevel level) {
+        long sum = chunk.getBlockEntities().size();
+        for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+            long hash;
+            try {
+                HASHER.reset();
+                net.minecraft.nbt.NbtIo.write(blockEntity.getUpdateTag(level.registryAccess()), HASHER_OUT);
+                hash = HASHER.hash;
+            } catch (Throwable t) {
+                hash = ++cannotSay * 0x632BE59BD9B4E019L;
+            }
+            hash ^= blockEntity.getBlockPos().asLong() * 0x9E3779B97F4A7C15L;
+            hash ^= BuiltInRegistries.BLOCK_ENTITY_TYPE.getId(blockEntity.getType()) * 0xC2B2AE3D27D4EB4FL;
+            // Stirred before it is added, so that two block entities cannot cancel each other out
+            hash = (hash ^ hash >>> 30) * 0xBF58476D1CE4E5B9L;
+            hash = (hash ^ hash >>> 27) * 0x94D049BB133111EBL;
+            sum += hash ^ hash >>> 31;
+        }
+        return sum;
+    }
+
+    /** Sixty-four bits of everything written to it (FNV-1a): data goes in, nothing is kept */
+    private static final class Hasher extends java.io.OutputStream {
+        long hash;
+
+        void reset() {
+            this.hash = 0xCBF29CE484222325L;
+        }
+
+        @Override
+        public void write(int value) {
+            this.hash = (this.hash ^ (value & 0xFF)) * 0x100000001B3L;
+        }
+
+        @Override
+        public void write(byte[] bytes, int from, int length) {
+            long hash = this.hash;
+            for (int i = from; i < from + length; i++) {
+                hash = (hash ^ (bytes[i] & 0xFF)) * 0x100000001B3L;
+            }
+            this.hash = hash;
+        }
+    }
+
+    private static final Hasher HASHER = new Hasher();
+    private static final java.io.DataOutputStream HASHER_OUT = new java.io.DataOutputStream(HASHER);
 
     /** The chunks of a playback world. One that nothing has touched since it was built is named again, not stored again */
     private static int writePlaybackChunks(Recorder.Out out, ClientLevel level, GameCodec codec, PlaybackWorld playback) {
@@ -336,7 +497,7 @@ public final class Snapshots {
                 continue;
             }
             count++;
-            // As in a live snapshot, a chunk with block entities is described afresh: mods change those in ways no packet shows
+            // A chunk with block entities is described afresh: mods change those in ways no packet shows
             byte[] stored = chunk.getBlockEntities().isEmpty() ? playback.storedChunk(key) : null;
             if (stored != null) {
                 out.sharedRef(Records.SHARED_PACKET, stored);
@@ -353,6 +514,7 @@ public final class Snapshots {
 
     private static int writeEntities(Recorder.Out out, ClientLevel level, GameCodec codec, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
         List<Entity> vehicles = new ArrayList<>();
+        List<Entity> leashed = new ArrayList<>();
         int count = 0;
         for (Entity entity : level.entitiesForRendering()) {
             if (entity instanceof Marker || entity.isRemoved()) {
@@ -368,6 +530,9 @@ public final class Snapshots {
                 if (!entity.getPassengers().isEmpty()) {
                     vehicles.add(entity);
                 }
+                if (entity instanceof Leashable held && held.getLeashHolder() != null) {
+                    leashed.add(entity);
+                }
             } catch (Throwable t) {
                 warnOnce("entity " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()), t);
             }
@@ -375,6 +540,10 @@ public final class Snapshots {
         // Riders are seated once everything that can be ridden exists
         for (Entity vehicle : vehicles) {
             out.packet(new ClientboundSetPassengersPacket(vehicle));
+        }
+        // And leads are tied once both ends exist: a server says who holds a lead only when it is taken up
+        for (Entity entity : leashed) {
+            out.packet(new ClientboundSetEntityLinkPacket(entity, ((Leashable) entity).getLeashHolder()));
         }
         return count;
     }

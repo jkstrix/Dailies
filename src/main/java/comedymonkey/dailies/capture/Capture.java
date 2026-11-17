@@ -64,8 +64,13 @@ public final class Capture {
         return SPAWN_EXTRAS.get(entityId);
     }
 
+    /**
+     * Whether the recorder wants to see this connection's packets as the game applies them. Asked on the network thread,
+     * where it cannot be known whether a packet will be applied before or after the next snapshot; so the answer is yes
+     * for as long as there is a recording at all, and what to do with each packet is decided when it is applied.
+     */
     static boolean wantsApplied() {
-        return Recorder.get().capturing();
+        return Recorder.get().state() != Recorder.State.IDLE;
     }
 
     /** The game is about to apply this packet. Client thread */
@@ -80,6 +85,24 @@ public final class Capture {
     public static void ownSwing(LocalPlayer player, InteractionHand hand) {
         try {
             Recorder.get().onOwnSwing(player, hand);
+        } catch (Throwable t) {
+            failed(t);
+        }
+    }
+
+    /** Something a player's own act set off in the world, which the server tells everyone but them */
+    public static void ownEvent(net.minecraft.world.entity.player.Player player, int type, net.minecraft.core.BlockPos pos, int data) {
+        try {
+            Recorder.get().onOwnEvent(player, type, pos, data);
+        } catch (Throwable t) {
+            failed(t);
+        }
+    }
+
+    /** Cracks on a block being mined, by whom. Only the recorder's own are written: the server sends everyone else's */
+    public static void cracks(int breaker, net.minecraft.core.BlockPos pos, int stage) {
+        try {
+            Recorder.get().onCracks(breaker, pos, stage);
         } catch (Throwable t) {
             failed(t);
         }

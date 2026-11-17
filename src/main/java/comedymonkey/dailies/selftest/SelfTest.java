@@ -75,6 +75,18 @@ public final class SelfTest {
                 }
                 return;
             }
+            if (Boolean.getBoolean("dailies.test.realWorldOnly")) {
+                // Only the tour of generated terrain, for working on it: gradlew runTestClient -PdailiesFlags=dailies.test.realWorldOnly
+                RealWorldSteps.run(this);
+                this.finish("PASSED");
+                return;
+            }
+            // The tour first and everything else after it, with the tour's verdict at the end: one long run that tells both
+            // what the tour found and whether the rest still passes. -PdailiesFlags=dailies.test.realWorldFirst
+            boolean tourFirst = Boolean.getBoolean("dailies.test.realWorldFirst");
+            if (tourFirst) {
+                RealWorldSteps.run(this, true);
+            }
             this.checkMcp();
             SettingsSteps.run(this, this.port);
             WorldSteps.createWorld(this);
@@ -103,11 +115,24 @@ public final class SelfTest {
                 ResourcePackSteps.play(this);
             }
             WatchingSteps.watch(this);
+            // In a world and with a recording of its own: everything above is in a flat world, this is in generated terrain. It
+            // takes about seventeen minutes, so it runs only when asked for: -PdailiesFlags=dailies.test.realWorld
+            if (tourFirst) {
+                RealWorldSteps.verdict();
+            } else if (Boolean.getBoolean("dailies.test.realWorld")) {
+                RealWorldSteps.run(this);
+            } else {
+                this.skip("the tour of generated terrain was not asked for (dailies.test.realWorld)");
+            }
             result = "PASSED";
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
             result = "FAILED: " + (t instanceof Failure ? t.getMessage() : t.toString());
         }
+        this.finish(result);
+    }
+
+    private void finish(String result) {
         for (String line : this.skipped) {
             Host.LOGGER.info("DAILIES TEST skipped: {}", line);
         }

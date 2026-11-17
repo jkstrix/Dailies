@@ -20,6 +20,7 @@ import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
@@ -88,6 +89,8 @@ public final class Recorder {
     private volatile State state = State.IDLE;
     /** True while nothing may be written: before the first snapshot, between worlds, after a change of dimension */
     private volatile boolean waitingForSnapshot = true;
+    /** True from the start of a recording until the game has applied everything that had arrived before it */
+    private volatile boolean settling = false;
     private volatile String id = null;
     private volatile int tick = 0;
 
@@ -216,7 +219,12 @@ public final class Recorder {
         this.tick = 0;
         this.id = manifest.id;
         this.waitingForSnapshot = true;
-        Snapshots.forget();
+        Snapshots.forgetAll();
+        // Packets that reached the game before this moment and have not been applied yet are not seen by the recorder. They
+        // are waiting in the game's queue; the first snapshot is taken once the queue has got as far as this, so that
+        // every one of them is in it
+        this.settling = true;
+        minecraft.tell(() -> this.settling = false);
         this.state = State.RECORDING;
         Host.LOGGER.info("Dailies: recording {} started", manifest.id);
         Notices.show(Component.translatable("dailies.notice.started"));
@@ -235,9 +243,9 @@ public final class Recorder {
         if (this.state != State.PAUSED) {
             throw new IllegalStateException(this.state == State.RECORDING ? "The recording is not paused" : "No recording is being made");
         }
-        // The world has moved on while nothing was captured, so what follows starts from a fresh snapshot (REC-3)
+        // The world has moved on while nothing was captured, so what follows starts from a fresh snapshot (REC-3). Which
+        // chunks changed meanwhile was still noted (see onPacket), so only those are described afresh
         this.waitingForSnapshot = true;
-        Snapshots.forget();
         this.state = State.RECORDING;
         Notices.show(Component.translatable("dailies.notice.resumed"));
     }
@@ -413,7 +421,7 @@ public final class Recorder {
             Snapshots.forget();
             return;
         }
-        if (minecraft.isPaused()) {
+        if (minecraft.isPaused() || this.settling) {
             return;
         }
         if (!this.spool.hasRoom()) {
@@ -457,7 +465,7 @@ public final class Recorder {
             this.own.forgetShown();
         }
         Snapshots.ownShown = this.own.shown();
-        Snapshots.write(new LiveOut(), minecraft, listener, this.codec);
+        Snapshots.write(this.live, minecraft, listener, this.codec);
         for (net.minecraft.client.multiplayer.PlayerInfo info : listener.getOnlinePlayers()) {
             this.players.add(info.getProfile().getName());
         }
@@ -551,6 +559,8 @@ public final class Recorder {
         void bundleEnd();
     }
 
+    private final LiveOut live = new LiveOut();
+
     private final class LiveOut implements Out {
         public void packet(Packet<? super ClientGamePacketListener> packet) {
             Recorder.this.write(packet);
@@ -560,6 +570,25 @@ public final class Recorder {
         public void sharedRef(int kind, byte[] hash) {
             Recorder.this.flushTicks();
             Recorder.this.part.record(kind, hash);
+        }
+
+        /** Keeps a packet's bytes in the recording without writing it into the ticks: for a snapshot to name. @return its name */
+        byte[] stored(byte[] encoded) {
+            byte[] hash = sha256(encoded);
+            if (Recorder.this.sharedSent.add(HexFormat.of().formatHex(hash))) {
+                Recorder.this.spool.add(new Spool.Job() {
+                    @Override
+                    public void run(RecordingWriter writer) throws Exception {
+                        writer.putShared(encoded);
+                    }
+
+                    @Override
+                    public long bytes() {
+                        return encoded.length;
+                    }
+                });
+            }
+            return hash;
         }
 
         /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
@@ -682,10 +711,43 @@ public final class Recorder {
         }
     }
 
+    /** What the recorder's own act set off in the world (a block breaking up, say), in the form the server sends it to everyone else. Client thread */
+    void onOwnEvent(net.minecraft.world.entity.player.Player player, int type, net.minecraft.core.BlockPos pos, int data) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (this.capturing() && minecraft.isSameThread() && player == minecraft.player) {
+            this.write(new net.minecraft.network.protocol.game.ClientboundLevelEventPacket(type, pos, data, false));
+        }
+    }
+
+    /**
+     * The cracks on a block someone is mining have spread or gone. A server tells every player but the miner, so the
+     * recorder's own mining is written here in the form the server gives everyone else. Client thread
+     */
+    void onCracks(int breaker, net.minecraft.core.BlockPos pos, int stage) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (this.capturing() && minecraft.isSameThread() && minecraft.player != null && breaker == minecraft.player.getId() && this.own.cracked(pos, stage)) {
+            this.write(new net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket(breaker, pos, stage));
+        }
+    }
+
     /** The game is about to apply a packet. Client thread */
     @SuppressWarnings({"unchecked", "rawtypes"})
     void onPacket(Packet<?> packet, List<byte[]> frames) {
+        if (this.state == State.IDLE) {
+            return;
+        }
         if (!this.capturing()) {
+            // Paused, or waiting for the snapshot of a new world: nothing is written, but what changes is still noted, so
+            // that the snapshot to come describes afresh only the chunks that are no longer as they were stored
+            if (packet instanceof ClientboundBundlePacket bundle) {
+                int index = 1;
+                for (Packet<?> part : bundle.subPackets()) {
+                    this.noted(part, index < frames.size() - 1 ? frames.get(index) : null);
+                    index++;
+                }
+            } else {
+                this.noted(packet, frames.get(frames.size() - 1));
+            }
             return;
         }
         if (packet instanceof ClientboundBundlePacket bundle) {
@@ -703,6 +765,20 @@ public final class Recorder {
             this.part.record(Records.BUNDLE_END);
         } else {
             this.onSinglePacket(packet, frames.get(frames.size() - 1));
+        }
+    }
+
+    private void noted(Packet<?> packet, @Nullable byte[] frame) {
+        if (packet instanceof ClientboundLoginPacket || packet instanceof ClientboundRespawnPacket || packet instanceof ClientboundStartConfigurationPacket) {
+            Snapshots.forget();
+            return;
+        }
+        Snapshots.applied(packet);
+        if (frame != null && this.state == State.RECORDING && packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
+            // After a respawn or a change of dimension a whole new world of chunks arrives before the snapshot of it is taken.
+            // Each is kept exactly as it came, so the snapshot names it; describing all of them afresh in that one tick held
+            // the game for forty milliseconds. Not while paused: a long pause can pass any number of chunks that are never wanted
+            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.stored(frame));
         }
     }
 
@@ -744,6 +820,10 @@ public final class Recorder {
             }
         } else if (packet instanceof ClientboundGameEventPacket event && PacketRules.privateEvent(event)) {
             return;
+        } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
+            // A chunk is stored once however often it is sent, and the snapshots that follow name it for as long as nothing
+            // changes it. Before, a chunk met while travelling was stored here and then again, described afresh, by the next snapshot
+            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.sharedPacket(frame));
         } else if (packet instanceof ClientboundSetEntityMotionPacket motion && minecraft.player != null && motion.getId() == minecraft.player.getId()) {
             // A push on the recorder's own body. Where they actually went is recorded from the player itself
             return;

@@ -183,6 +183,10 @@ final class Feed {
         this.ticksOwed = 0;
         this.reader = new Records.Reader(this.file.openSegment(segment.number));
 
+        long started = System.nanoTime();
+        this.chunksKept = 0;
+        this.chunksBuilt = 0;
+        this.chunksLetGo = 0;
         boolean plain = minecraft.level != null && this.plainWorld(minecraft) && this.plainSnapshot(segment);
         this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild") && (plain || !strict);
         this.skipChunks = this.mayRewind && plain;
@@ -207,6 +211,11 @@ final class Feed {
                 this.handle(minecraft);
             }
             this.dropChunksNotInSnapshot();
+            if (minecraft.level != null) {
+                // The light of the chunks just built is put in now. The ticks that follow are applied with no frame drawn
+                // between them, and a block that changes in a chunk whose light is still waiting would be lit wrongly
+                comedymonkey.dailies.capture.Snapshots.settleLight(minecraft.level);
+            }
         } finally {
             this.loading = false;
             this.mayRewind = false;
@@ -216,6 +225,29 @@ final class Feed {
         if (this.session == null) {
             throw new IOException("Segment " + segment.number + " of the recording does not start with a description of its world");
         }
+        this.lastLoad = new Load((System.nanoTime() - started) / 1_000_000.0, this.chunksKept, this.chunksBuilt, this.chunksLetGo, segment.startTick);
+    }
+
+    /**
+     * What reading one snapshot into the world cost: how long it took, how many chunks were left as they were, how many
+     * built, and how many the world held that the snapshot does not and were let go; and the tick the snapshot is of
+     */
+    record Load(double millis, int chunksKept, int chunksBuilt, int chunksLetGo, int tick) {
+    }
+
+    private int chunksLetGo = 0;
+
+    /** Whether a chunk is on the list of those the world holds, for the tests that look for chunks left behind */
+    boolean lists(int x, int z) {
+        return this.loadedChunks.contains(net.minecraft.world.level.ChunkPos.asLong(x, z));
+    }
+
+    private Load lastLoad = null;
+    private int chunksKept = 0;
+    private int chunksBuilt = 0;
+
+    Load lastLoad() {
+        return this.lastLoad;
     }
 
     // Keeping the world is proven for what the game itself puts in it. With machines from mods about (a turning
@@ -360,16 +392,30 @@ final class Feed {
         }
         Set<Long> kept = this.snapshotChunks;
         this.snapshotChunks = null;
+        net.minecraft.client.multiplayer.ClientLevel level = this.session.listener.getLevel();
+        boolean moved = false;
         for (long key : new ArrayList<>(this.loadedChunks)) {
             if (!kept.contains(key)) {
+                this.chunksLetGo++;
                 try {
-                    new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(new net.minecraft.world.level.ChunkPos(key)).handle(this.session.listener);
+                    net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(key);
+                    if (level != null) {
+                        // A game lets go of a chunk only within reach of the place its chunks are centred on, and the
+                        // snapshot has just moved that place. A chunk left behind by a long journey would otherwise stay,
+                        // unseen, and show itself as it was at the later time when the recorder next came that way
+                        level.getChunkSource().updateViewCenter(pos.x, pos.z);
+                        moved = true;
+                    }
+                    new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(pos).handle(this.session.listener);
                 } catch (Throwable t) {
                     this.warnOnce("dropping a chunk when going back", t);
                 }
                 this.loadedChunks.remove(key);
                 this.cleanChunks.remove(key);
             }
+        }
+        if (moved) {
+            level.getChunkSource().updateViewCenter(this.centreX, this.centreZ);
         }
     }
 
@@ -389,6 +435,7 @@ final class Feed {
             return false;
         }
         this.snapshotChunks.add(key);
+        this.chunksKept++;
         return true;
     }
 
@@ -409,6 +456,9 @@ final class Feed {
             }
             long key = net.minecraft.world.level.ChunkPos.asLong(chunk.getX(), chunk.getZ());
             this.loadedChunks.add(key);
+            if (this.loading) {
+                this.chunksBuilt++;
+            }
             if (this.storedNow != null) {
                 this.cleanChunks.put(key, this.storedNow);
                 this.chunkOfStored.put(this.storedNow, key);
@@ -419,7 +469,7 @@ final class Feed {
                 this.snapshotChunks.add(key);
             }
         } else if (this.cleanChunks.isEmpty()) {
-            if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
+            if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten && this.letsGoOf(forgotten.pos())) {
                 this.loadedChunks.remove(forgotten.pos().toLong());
             }
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket update) {
@@ -433,7 +483,9 @@ final class Feed {
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
             this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
-            this.loadedChunks.remove(forgotten.pos().toLong());
+            if (this.letsGoOf(forgotten.pos())) {
+                this.loadedChunks.remove(forgotten.pos().toLong());
+            }
             this.cleanChunks.remove(forgotten.pos().toLong());
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket biomes) {
             biomes.chunkBiomeData().forEach(data -> this.cleanChunks.remove(data.pos().toLong()));
@@ -442,6 +494,20 @@ final class Feed {
         } else if (packet instanceof ClientboundBundlePacket bundle) {
             bundle.subPackets().forEach(part -> this.track(part, minecraft));
         }
+    }
+
+    /**
+     * Whether the game will act on being told to forget a chunk. It only does within reach of the place its chunks are
+     * centred on. After a teleport the server moves that place first and then lists the chunks left behind, which are by
+     * then out of reach: the game keeps every one of them, unseen. They must stay on the list here, or the next jump back
+     * would not know to take them out, and they would show themselves again when the recorder came back that way.
+     */
+    private boolean letsGoOf(net.minecraft.world.level.ChunkPos pos) {
+        if (this.session == null) {
+            return true;
+        }
+        int reach = Math.max(2, ((comedymonkey.dailies.mixin.access.ClientPacketListenerAccess) this.session.listener).dailies$serverChunkRadius()) + 3;
+        return Math.abs(pos.x - this.centreX) <= reach && Math.abs(pos.z - this.centreZ) <= reach;
     }
 
     /**

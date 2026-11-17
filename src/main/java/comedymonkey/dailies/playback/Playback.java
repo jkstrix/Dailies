@@ -169,6 +169,20 @@ public final class Playback {
         return file;
     }
 
+    /**
+     * What the last rebuild of the world from a stored snapshot cost, as milliseconds, chunks left as they were, chunks
+     * built, chunks let go, and the tick of the snapshot; null when none has been done. For the tests that time jumps
+     */
+    public static double[] lastRebuild() {
+        Feed.Load load = feed == null ? null : feed.lastLoad();
+        return load == null ? null : new double[]{load.millis(), load.chunksKept(), load.chunksBuilt(), load.chunksLetGo(), load.tick()};
+    }
+
+    /** Whether playback has a chunk on its list of those the world holds. For the tests that look for chunks left behind */
+    public static boolean listsChunk(int x, int z) {
+        return feed != null && feed.lists(x, z);
+    }
+
     // --- For the clock hooks ---
 
     public static boolean ownsClock() {
@@ -648,14 +662,35 @@ public final class Playback {
         }
         // While resource packs load the picture is held: the recording does not run on under the loading screen
         boolean playing = !paused && jumpTarget < 0 && reloadIndex < 0 && !exporting && !PackPlayback.busy();
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!fastTick) {
+            // The game decides whether it is paused once a frame, after the picture is drawn, and a frame can hold several
+            // ticks. Left to that, the ticks of the frame in which play begins would move the recording on while the world
+            // stood still, and the ticks left in a frame after play stops or a jump lands would move the world on with
+            // nothing recorded behind them: at speed, half a second of time and of everything that eases into place.
+            // So every tick is told here whether it is one of the recording's
+            if (playing) {
+                ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(false);
+            } else if (paused) {
+                ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(true);
+            }
+        }
         if (!fastTick && !playing) {
             return;
         }
         try {
-            if (position >= total || !feed.advance(Minecraft.getInstance())) {
+            if (minecraft.level != null) {
+                // A game draws at least one frame between two ticks, and settles its light as it does. Here ticks can
+                // follow each other with no frame between (a jump, or play at speed), so the light is settled first
+                comedymonkey.dailies.capture.Snapshots.settleLight(minecraft.level);
+            }
+            if (position >= total || !feed.advance(minecraft)) {
                 if (feed.reloadWanted() < 0 && !exporting) {
                     paused = true;
                     pauseAfterJump = true;
+                    if (!fastTick) {
+                        ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(true);
+                    }
                 }
                 return;
             }
