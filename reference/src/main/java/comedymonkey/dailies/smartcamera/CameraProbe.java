@@ -80,6 +80,40 @@ public final class CameraProbe {
         return seen / (double) points.length;
     }
 
+    /**
+     * How much of a standing figure a camera there sees, 0 to 1, judged as the camera films judge it: rays to the
+     * eight corners of its box (a tenth of a block inside) and its middle.
+     *
+     * @param feet   the middle of the bottom of the box
+     * @param width  the box's width
+     */
+    public static double boxSeen(CameraWorld world, Vec eye, Vec feet, double height, double width) {
+        double half = Math.max(0.0, width / 2.0 - 0.1);
+        double low = feet.y() + Math.min(0.1, height / 2.0);
+        double high = feet.y() + Math.max(height - 0.1, height / 2.0);
+        int seen = 0;
+        int count = 0;
+        for (double dx : new double[]{-half, half}) {
+            for (double y : new double[]{low, high}) {
+                for (double dz : new double[]{-half, half}) {
+                    count++;
+                    Vec point = new Vec(feet.x() + dx, y, feet.z() + dz);
+                    double length = eye.distanceTo(point);
+                    if (world.clip(eye, point) * length >= length - 0.05) {
+                        seen++;
+                    }
+                }
+            }
+        }
+        Vec middle = feet.add(0.0, height / 2.0, 0.0);
+        double length = eye.distanceTo(middle);
+        count++;
+        if (world.clip(eye, middle) * length >= length - 0.05) {
+            seen++;
+        }
+        return seen / (double) count;
+    }
+
     /** The height of the first solid surface below the point within {@code depth}, or NaN */
     public static double groundBelow(CameraWorld world, Vec point, double depth) {
         double fraction = world.clip(point, point.add(0.0, -depth, 0.0));

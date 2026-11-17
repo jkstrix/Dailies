@@ -134,6 +134,7 @@ public final class CameraSteps {
         double dt = Double.isNaN(tether.lastTick) ? -1.0 : (tick - tether.lastTick) / 20.0;
         tether.lastTick = tick;
         Vec target = part(entity, follow.part());
+        tether.solver.box(target.y() - entity.position().y, entity.getBbHeight(), entity.getBbWidth());
         Vec offset = new Vec(follow.offsetX(), follow.offsetY(), follow.offsetZ());
         double fov = Viewer.fov() > 0.0 ? Viewer.fov() : minecraft.options.fov().get();
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
@@ -170,6 +171,7 @@ public final class CameraSteps {
         double dt = Double.isNaN(tether.lastTick) ? -1.0 : (tick - tether.lastTick) / 20.0;
         tether.lastTick = tick;
         Vec centre = part(entity, Keyframe.BodyPart.BODY).add(orbit.centreX(), orbit.centreY(), orbit.centreZ());
+        tether.solver.box(centre.y() - entity.position().y, entity.getBbHeight(), entity.getBbWidth());
         double radians = Math.toRadians(orbit.angle());
         // As for an orbit round a point, the height is that of the viewer's feet above the centre
         Vec offset = new Vec(Math.sin(radians) * orbit.distance(), orbit.height() + EYE_HEIGHT, -Math.cos(radians) * orbit.distance());

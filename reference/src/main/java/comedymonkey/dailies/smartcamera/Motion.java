@@ -55,6 +55,9 @@ public final class Motion {
     /** Where the aim point has been, newest last: the way the subject came, which a camera can follow through doors */
     private static final int TRAIL = 120;
     private final Vec[] trail = new Vec[TRAIL];
+    /** The aim point at each of the last half second's steps, for the line of action */
+    private final Vec[] recent = new Vec[11];
+    private int recentCount = 0;
     private int trailCount = 0;
     private int trailNext = 0;
 
@@ -85,6 +88,47 @@ public final class Motion {
         this.trailCount = 0;
         this.trailNext = 0;
         this.remember(subject.aim());
+        this.recentCount = 0;
+        this.recent[0] = subject.aim();
+        this.recentCount = 1;
+    }
+
+    /**
+     * Whether the line of action holds still: the subject has gone the same way over the first and the second half of
+     * the last half second (within 12 degrees), or is not going anywhere. Cutting while it swings round could put the
+     * camera on either side of it
+     */
+    public boolean lineSteady() {
+        int count = Math.min(this.recentCount, this.recent.length);
+        if (count < this.recent.length) {
+            return true;
+        }
+        Vec oldest = this.recent[this.recentCount % this.recent.length];
+        Vec middle = this.recent[(this.recentCount + this.recent.length / 2) % this.recent.length];
+        Vec newest = this.recent[(this.recentCount - 1) % this.recent.length];
+        Vec first = middle.sub(oldest).withY(0.0);
+        Vec second = newest.sub(middle).withY(0.0);
+        if (first.length() < 0.1 || second.length() < 0.1) {
+            return true;
+        }
+        return Vec.angleBetween(first, second) < 12.0;
+    }
+
+    /**
+     * The line of action: the way the subject went over the last half second, when it went faster than a block a
+     * second, otherwise the way it faces. One long and level.
+     */
+    public Vec lineOfAction(double bodyYaw) {
+        if (this.recentCount > 1) {
+            Vec newest = this.recent[(this.recentCount - 1) % this.recent.length];
+            Vec oldest = this.recent[this.recentCount >= this.recent.length ? this.recentCount % this.recent.length : 0];
+            int span = Math.min(this.recentCount, this.recent.length) - 1;
+            Vec moved = newest.sub(oldest).withY(0.0);
+            if (span > 0 && moved.length() / (span * 0.05) > 1.0) {
+                return moved.normalize();
+            }
+        }
+        return Vec.heading(bodyYaw);
     }
 
     private void remember(Vec aim) {
@@ -126,6 +170,8 @@ public final class Motion {
             return;
         }
         this.remember(subject.aim());
+        this.recent[this.recentCount % this.recent.length] = subject.aim();
+        this.recentCount++;
         Vec feet = subject.feet();
         Vec measured = feet.sub(this.lastFeet).scale(1.0 / dt);
         this.lastFeet = feet;

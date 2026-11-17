@@ -16,12 +16,21 @@ public interface ShotSolver {
      * @param aspect   the frame's width over its height
      * @param tick     the recording's tick
      * @param elapsed  seconds since the keyframe (or the director's shot) began
+     * @param rider    the person filmed, when what is framed is more than them (a craft they ride): the camera must
+     *                 see them, not just the craft
+     * @param seeing   the world as it hides the rider: with the framed craft's own blocks (envelope, frame) in it,
+     *                 which {@code world} leaves out so that the camera may stand close
      */
     record Input(SubjectSample subject, Motion motion, CameraWorld world, SmartCameraSettings settings, double dt, double fov, double aspect, double tick,
-                 double elapsed) {
+                 double elapsed, Vec rider, CameraWorld seeing) {
 
         public Input with(SmartCameraSettings other, double otherElapsed) {
-            return new Input(this.subject, this.motion, this.world, other, this.dt, this.fov, this.aspect, this.tick, otherElapsed);
+            return new Input(this.subject, this.motion, this.world, other, this.dt, this.fov, this.aspect, this.tick, otherElapsed, this.rider, this.seeing);
+        }
+
+        /** How much of the rider a camera there sees, with the craft in the way */
+        public double riderSeen(Vec eye) {
+            return CameraProbe.boxSeen(this.seeing, eye, this.rider.add(0.0, -1.35, 0.0), 1.8, 0.6);
         }
     }
 

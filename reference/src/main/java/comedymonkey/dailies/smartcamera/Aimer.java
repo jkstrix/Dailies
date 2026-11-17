@@ -21,9 +21,14 @@ public final class Aimer {
     private double turnYaw;
     private double turnPitch;
     /** Degrees a second by which the speed of turning may change in a second */
-    private double mostTurnChange = 300;
+    private double mostTurnChange = 40.0;
+    /** How much more the speed of turning may grow for each degree a second it already turns: growth in proportion */
+    private static final double TURN_GROWTH = 1.6;
 
-    /** A gentler or brisker limit on how fast the speed of turning changes, degrees a second each second */
+    /**
+     * A gentler or brisker limit on how fast the speed of turning grows from rest, degrees a second each second; on top
+     * of it the speed may grow in proportion to itself, so a turn never jumps to five times its speed within a moment
+     */
     public Aimer turnChange(double degreesPerSecondSquared) {
         this.mostTurnChange = degreesPerSecondSquared;
         return this;
@@ -89,7 +94,7 @@ public final class Aimer {
         // However the aim moves, the camera never bursts into a turn: how fast it turns grows by no more than a set
         // amount a second (more as the subject nears the edge of the frame). Slowing down and changing direction are
         // free, they never jolt. The springs carry on from the turn actually made
-        double most = this.mostTurnChange * SmartCameraMath.clamp(drift - 1.0, 1.0, 2.0) * dt;
+        double most = (this.mostTurnChange + TURN_GROWTH * Math.hypot(yawSpeedBefore, pitchSpeedBefore)) * SmartCameraMath.clamp(drift - 1.0, 1.0, 1.5) * dt;
         double yawSpeed = (this.yaw.value - yawBefore) / dt;
         double pitchSpeed = (this.pitch.value - pitchBefore) / dt;
         double speed = Math.hypot(yawSpeed, pitchSpeed);

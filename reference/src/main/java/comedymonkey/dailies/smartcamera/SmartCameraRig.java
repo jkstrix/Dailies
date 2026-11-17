@@ -110,6 +110,15 @@ public final class SmartCameraRig {
      */
     public Step step(SmartCameraSettings settings, int keyframeTick, double tick, SubjectSample subject, Vec velocityHint, CameraWorld world, double baseFov,
                      double aspect) {
+        return this.step(settings, keyframeTick, tick, subject, velocityHint, world, baseFov, aspect, null, world);
+    }
+
+    /**
+     * @param rider  the person filmed when a craft they ride is framed with them, or null when they are all that is framed
+     * @param seeing the world with the framed craft's own blocks in it, which hide the rider
+     */
+    public Step step(SmartCameraSettings settings, int keyframeTick, double tick, SubjectSample subject, Vec velocityHint, CameraWorld world, double baseFov,
+                     double aspect, Vec rider, CameraWorld seeing) {
         double dt = (tick - this.lastTick) / 20.0;
         String resetReason = null;
         if (!this.initialised) {
@@ -144,7 +153,8 @@ public final class SmartCameraRig {
         double wantedFixed = settings.fixedFov > 0.0f ? settings.fixedFov : baseFov;
         double fovNow = this.fovValid && !reset ? this.fov : wantedFixed;
         double elapsed = Math.max(0.0, (tick - keyframeTick) / 20.0);
-        ShotSolver.Input input = new ShotSolver.Input(subject, this.motion, world, settings, dt, fovNow, aspect, tick, elapsed);
+        ShotSolver.Input input = new ShotSolver.Input(subject, this.motion, world, settings, dt, fovNow, aspect, tick, elapsed,
+            rider != null ? rider : subject.aim(), rider != null ? seeing : world);
 
         ShotSolver.Pose pose;
         if (reset || changed || this.solver == null) {

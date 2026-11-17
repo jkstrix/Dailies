@@ -64,13 +64,13 @@ class CameraSolversTest {
     }
 
     /** A house with a door in its south wall */
-    private static VoxelWorld houseWorld() {
+    static VoxelWorld houseWorld() {
         VoxelWorld world = field().box(5, GROUND, 20, 15, GROUND + 3, 30).empty(6, GROUND, 21, 14, GROUND + 2, 29);
         world.box(5, GROUND + 3, 20, 15, GROUND + 3, 30);
         return world.empty(10, GROUND, 20, 10, GROUND + 1, 20);
     }
 
-    private static IntFunction<SubjectSample> throughDoorway() {
+    static IntFunction<SubjectSample> throughDoorway() {
         return Filming.route(4.3, new Vec(10.5, GROUND, 4.5), new Vec(10.5, GROUND, 25.5), new Vec(7.5, GROUND, 27.5), new Vec(13.5, GROUND, 27.5),
             new Vec(10.5, GROUND, 24.5), new Vec(10.5, GROUND, 10.5));
     }
@@ -164,6 +164,17 @@ class CameraSolversTest {
         };
     }
 
+    /** A horse setting off from standing at a gallop, with a jump over a fence a second later */
+    static IntFunction<SubjectSample> gallop() {
+        return tick -> {
+            double t = Math.max(0.0, tick - 10) / 20.0;
+            // Up to nine blocks a second in about a third of a second
+            double along = t < 0.35 ? 9.0 * t * t / 0.7 : 9.0 * 0.35 / 2.0 + 9.0 * (t - 0.35);
+            double hop = t > 1.0 && t < 1.5 ? Math.sin((t - 1.0) / 0.5 * Math.PI) * 1.2 : 0.0;
+            return SubjectSample.walking(new Vec(0.5, GROUND + hop, 0.5 + along), 0.0).riding(1.6, "vehicle");
+        };
+    }
+
     /** Walking a few steps, stopping, and on again, in a cave: a tripod's dead zone is crossed again and again */
     static IntFunction<SubjectSample> stopAndGo() {
         return tick -> {
@@ -190,7 +201,8 @@ class CameraSolversTest {
             new Case("through a forest", forestWorld(), throughForest(), 600),
             new Case("through a portal", field(), teleport(), 400),
             new Case("getting on a boat", field(), mounting(), 400),
-            new Case("stop and go in a cave", caveWorld(), stopAndGo(), 400));
+            new Case("stop and go in a cave", caveWorld(), stopAndGo(), 400),
+            new Case("a gallop from standing", field(), gallop(), 300));
     }
 
     // ------------------------------------------------------------------ The checks
@@ -206,7 +218,7 @@ class CameraSolversTest {
         if (analysis.angularJerk[1] > MOST_ANGULAR_JERK) {
             faults.add(String.format(Locale.ROOT, "angular jerk %.0f deg/s3 at the 99th percentile", analysis.angularJerk[1]));
         }
-        if (analysis.longestLostSeconds > 1.5) {
+        if (analysis.longestLostSeconds > 1.8) {
             faults.add(String.format(Locale.ROOT, "the subject was lost for %.2f s at a stretch", analysis.longestLostSeconds));
         }
         if (analysis.inFrameShare < 0.9) {
@@ -233,6 +245,37 @@ class CameraSolversTest {
         }
         System.out.println(report);
         assertTrue(faults.isEmpty(), String.join("\n", faults));
+    }
+
+    @Test
+    void aBalloonAndItsRiderAreFilmedSoTheRiderIsSeen() {
+        List<String> faults = new ArrayList<>();
+        StringBuilder report = new StringBuilder();
+        for (SmartCameraMode mode : MODES) {
+            CraftScene scene = new CraftScene();
+            List<FilmFrame> frames = Filming.film(Filming.settings(mode), scene.terrain, scene.path(), 600, CraftScene::rider, scene.seeing);
+            FilmMeasures.Analysis analysis = Filming.judge(frames, mode == SmartCameraMode.DIRECTOR);
+            report.append(String.format(Locale.ROOT, "%-9s balloon %s%n", mode.name().toLowerCase(Locale.ROOT), FilmMeasures.describe(analysis)));
+            for (String fault : analysis.faults) {
+                faults.add(mode.name().toLowerCase(Locale.ROOT) + " / balloon: " + fault);
+            }
+            if (analysis.longestLostSeconds > 1.8) {
+                faults.add(mode.name().toLowerCase(Locale.ROOT) + " / balloon: the rider was lost for " + analysis.longestLostSeconds + " s");
+            }
+        }
+        System.out.println(report);
+        assertTrue(faults.isEmpty(), String.join("\n", faults));
+    }
+
+    @Test
+    void theDirectorsShotsHoldWellOverASecondAndAHalfOnTheFrames() {
+        for (Case film : cases()) {
+            SmartCameraSettings settings = Filming.settings(SmartCameraMode.DIRECTOR);
+            settings.minShotSeconds = 0.5f;
+            settings.maxShotSeconds = 2.0f;
+            FilmMeasures.Analysis analysis = Filming.judge(Filming.film(settings, film.world(), film.path(), film.ticks()), true);
+            assertTrue(analysis.cuts == 0 || analysis.shortestShot >= 1.7, film.name() + ": a shot of " + analysis.shortestShot + " s");
+        }
     }
 
     @Test

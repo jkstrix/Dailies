@@ -28,6 +28,7 @@ public final class Clearance {
     private Vec eyeVelocity = Vec.ZERO;
     private Vec targetVelocity = Vec.ZERO;
     private Vec lastTarget = Vec.ZERO;
+    private boolean blockedMove = false;
 
     private final Spring share = new Spring(1.0);
     private boolean started = false;
@@ -105,7 +106,14 @@ public final class Clearance {
         double now = allowedShare(world, pivot, wanted, start);
         double goal = now;
         for (double seconds : LOOK_AHEAD) {
-            goal = Math.min(goal, allowedShare(world, pivot.add(pivotVelocity.scale(seconds)), wanted.add(wantedVelocity.scale(seconds)), start));
+            Vec futurePivot = pivot.add(pivotVelocity.scale(seconds));
+            Vec futureWanted = wanted.add(wantedVelocity.scale(seconds));
+            double share = allowedShare(world, futurePivot, futureWanted, start);
+            // A block right at where the subject will be is what it carries with it (the craft it rides), which the
+            // world here shows where it is now: it is no reason to pull in early
+            if (share * futurePivot.distanceTo(futureWanted) > Math.min(start, 1.0) + 1.5) {
+                goal = Math.min(goal, share);
+            }
         }
         if (!this.started || this.lastEye == null) {
             this.share.reset(now);
@@ -118,9 +126,12 @@ public final class Clearance {
         Vec eye = pivot.add(wanted.sub(pivot).scale(this.share.value));
         this.jumped = false;
         Vec settled = this.settle(world, eye, pivot, dt);
-        boolean held = settled.distanceTo(eye) > 0.5;
+        // Held back by a block, not just still catching up
+        boolean held = this.blockedMove && settled.distanceTo(eye) > 0.5;
         boolean unseen = CameraProbe.visibility(world, settled, pivot, 1.0) < 0.5;
-        this.stuckSeconds = held && unseen ? this.stuckSeconds + dt : 0.0;
+        // Held back from a place that would see the subject well (round a post it cannot slide past) is stuck too
+        boolean wantedIsBetter = now >= 0.999 && settled.distanceTo(eye) > 1.5;
+        this.stuckSeconds = held && (unseen || wantedIsBetter) ? this.stuckSeconds + dt : 0.0;
         if (this.mayJump && this.stuckSeconds > MOST_STUCK_SECONDS) {
             // Walled off from the subject for good: rather than stay looking at a wall, go to where it can see, at once
             this.lastEye = null;
@@ -161,7 +172,9 @@ public final class Clearance {
             if (velocity.length() > most) {
                 velocity = velocity.scale(most / velocity.length());
             }
-            eye = slide(world, from, from.add(velocity.scale(dt)));
+            Vec intended = from.add(velocity.scale(dt));
+            eye = slide(world, from, intended);
+            this.blockedMove = eye.distanceTo(intended) > 0.01;
             this.eyeVelocity = eye.sub(from).scale(1.0 / dt);
         }
         this.lastTarget = target;

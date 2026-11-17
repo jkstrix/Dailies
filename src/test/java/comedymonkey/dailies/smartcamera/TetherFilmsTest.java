@@ -19,7 +19,19 @@ class TetherFilmsTest {
 
     private static final int GROUND = 64;
 
-    private record Place(String name, CameraWorld world, IntFunction<SubjectSample> path, int ticks) {
+    private record Place(String name, CameraWorld world, IntFunction<SubjectSample> path, int ticks, Vec watchFrom) {
+        Place(String name, CameraWorld world, IntFunction<SubjectSample> path, int ticks) {
+            this(name, world, path, ticks, new Vec(4.0, 2.5, -6.0));
+        }
+    }
+
+    /** Falling down a shaft, straight down past where a watching camera was put */
+    private static IntFunction<SubjectSample> fall() {
+        return tick -> {
+            double t = Math.max(0.0, tick - 20) / 20.0;
+            double drop = Math.min(30.0, 0.5 * 25.0 * t * t);
+            return SubjectSample.walking(new Vec(0.5, 96.0 - drop, 0.5), 0.0);
+        };
     }
 
     private static List<Place> places() {
@@ -28,7 +40,12 @@ class TetherFilmsTest {
             new Place("portal", new VoxelWorld(GROUND), CameraSolversTest.teleport(), 400),
             new Place("boat", new VoxelWorld(GROUND), CameraSolversTest.mounting(), 400),
             new Place("cave", new VoxelWorld(GROUND).box(-20, GROUND, -10, 45, GROUND + 8, 60).empty(-1, GROUND, -10, 1, GROUND + 2, 30)
-                .empty(-1, GROUND, 28, 30, GROUND + 2, 30), CameraSolversTest.stopAndGo(), 400));
+                .empty(-1, GROUND, 28, 30, GROUND + 2, 30), CameraSolversTest.stopAndGo(), 400),
+            new Place("house", CameraSolversTest.houseWorld(), CameraSolversTest.throughDoorway(), 480),
+            new Place("gallop", new VoxelWorld(GROUND), CameraSolversTest.gallop(), 300),
+            new Place("shaft", new VoxelWorld(GROUND).box(-6, 64, -6, 6, 97, 6).empty(-1, 64, -1, 1, 97, 1).empty(-1, 97, -1, 1, 110, 1),
+                fall(), 200, new Vec(0.6, 8.0, 0.4)),
+            new Place("balloon", new CraftScene().seeing, null, 600));
     }
 
     private static List<String> faults(String camera, Place place, Filming.Tethered tethered) {
@@ -45,7 +62,13 @@ class TetherFilmsTest {
     @Test
     void theTetheredCamerasFilmTheHardPathsWithoutFaults() {
         List<String> faults = new ArrayList<>();
-        for (Place place : places()) {
+        for (Place given : places()) {
+            Place place = given;
+            if (given.path() == null) {
+                // The balloon: the tethered cameras see the craft's blocks, as the game's do
+                CraftScene scene = new CraftScene();
+                place = new Place(given.name(), scene.seeing, scene.path(), given.ticks());
+            }
             CameraWorld world = place.world();
             // The follow entity keyframe keeping its place behind and above the eyes
             faults.addAll(faults("follow", place, (solver, subject, dt) -> {
@@ -63,7 +86,7 @@ class TetherFilmsTest {
                 return solver.keep(world, middle, new Vec(6.0, 3.6, 0.0), middle, 0.4, 0.12, 70.0, 16.0 / 9.0, dt, true);
             }));
             // Staying to watch from where it was first put
-            Vec start = place.path().apply(0).feet().add(4.0, 2.5, -6.0);
+            Vec start = place.path().apply(0).feet().add(place.watchFrom());
             faults.addAll(faults("watch", place, (solver, subject, dt) -> {
                 Vec eyes = subject.feet().add(0.0, 1.62, 0.0);
                 return solver.watch(world, start, eyes, eyes, 1.8, 0.25, 70.0, 16.0 / 9.0, dt);

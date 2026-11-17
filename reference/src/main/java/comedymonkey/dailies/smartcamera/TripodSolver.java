@@ -22,7 +22,7 @@ public final class TripodSolver implements ShotSolver {
     private static final double LEAST_STAY_SECONDS = 1.0;
 
     // A tripod's pans start and stop gently: it stands still a lot, and a pan from rest must not start with a jolt
-    private final Aimer aimer = new Aimer().turnChange(160.0);
+    private final Aimer aimer = new Aimer().turnChange(20.0);
     private Vec eye = Vec.ZERO;
     private double goalYaw;
     private double goalPitch;
@@ -87,6 +87,10 @@ public final class TripodSolver implements ShotSolver {
         Vec aim = input.subject().aim();
         this.stayedSeconds += dt;
         this.lastVisibility = CameraProbe.visibility(input.world(), this.eye, aim, input.subject().height());
+        if (input.rider().distanceTo(aim) > 0.5) {
+            // Aboard a craft: what counts is seeing the rider past the craft's own blocks
+            this.lastVisibility = Math.min(this.lastVisibility, input.riderSeen(this.eye));
+        }
         SmartCameraMath.ScreenPoint seen = SmartCameraMath.project(this.eye.x(), this.eye.y(), this.eye.z(), this.aimer.yaw(), this.aimer.pitch(),
             aim.x(), aim.y(), aim.z(), input.fov(), input.aspect());
         Vec soon = aim.add(input.motion().velocity().scale(0.75));
@@ -159,8 +163,14 @@ public final class TripodSolver implements ShotSolver {
      */
     Vec place(Input input) {
         Motion motion = input.motion();
+        boolean riding = input.rider().distanceTo(input.subject().aim()) > 0.5;
         return placeFor(input.world(), input.subject(), motion.velocity(), motion.travelHeading(), motion.moving(), this.preferredDistance, this.keepSide,
-            this.sideAlong);
+            this.sideAlong, riding ? input.seeing() : null, riding ? input.rider() : null);
+    }
+
+    public static Vec placeFor(CameraWorld world, SubjectSample subject, Vec velocity, double travelHeading, boolean moving, double preferredDistance,
+                               int keepSide, Vec sideAlong) {
+        return placeFor(world, subject, velocity, travelHeading, moving, preferredDistance, keepSide, sideAlong, null, null);
     }
 
     /**
@@ -169,9 +179,11 @@ public final class TripodSolver implements ShotSolver {
      *
      * @param preferredDistance blocks away, or 0 for the usual
      * @param keepSide          the side of the line of travel to keep to (1, -1), or 0 for either
+     * @param seeing            for someone aboard a framed craft: the world with the craft's blocks in, or null
+     * @param rider             that someone, who must be seen past their craft from the place chosen, or null
      */
     public static Vec placeFor(CameraWorld world, SubjectSample subject, Vec velocity, double travelHeading, boolean moving, double preferredDistance,
-                               int keepSide, Vec sideAlong) {
+                               int keepSide, Vec sideAlong, CameraWorld seeing, Vec rider) {
         Vec aim = subject.aim();
         double speed = velocity.length();
         // No further ahead than about thirty blocks, however fast
@@ -205,7 +217,7 @@ public final class TripodSolver implements ShotSolver {
                     continue;
                 }
                 double ground = CameraProbe.groundBelow(world, probe, 14.0);
-                double y = Double.isNaN(ground) ? Math.max(aim.y(), eyeLevel) + 1.0 : Math.max(ground + 1.62 + 0.7, Math.min(eyeLevel + 0.8, ground + 6.0));
+                double y = Double.isNaN(ground) ? Math.max(aim.y(), eyeLevel) + 1.0 : Math.max(ground + 1.62 + 0.7, eyeLevel + 0.8);
                 Vec candidate = level.withY(y);
                 double ceiling = CameraProbe.ceilingAbove(world, probe, Math.max(0.0, y - probe.y()) + 0.6);
                 if (!Double.isNaN(ceiling)) {
@@ -224,6 +236,10 @@ public final class TripodSolver implements ShotSolver {
                             seesNow = true;
                         }
                     }
+                }
+                if (rider != null && CameraProbe.boxSeen(seeing, candidate, rider.add(0.0, -1.35, 0.0), 1.8, 0.6) < 0.6) {
+                    // The craft's own envelope or frame would hide who rides it
+                    seesNow = false;
                 }
                 double seenShare = seen / (double) path.length;
                 if (seesNow && seenShare > fallbackSeen) {

@@ -130,8 +130,10 @@ public final class SmartCameraSolver {
         Object ownSubLevel = settings.frameVehicle ? subject.subLevel() : null;
         CameraWorld world = new LevelCameraWorld(level, ownSubLevel);
 
+        // The rider is seen, or not, with the craft's own blocks in the way
+        CameraWorld seeing = ownSubLevel != null ? new LevelCameraWorld(level, null) : world;
         SmartCameraRig.Step step = this.rig.step(settings, keyframeTick, tick, subject.sample(), subject.velocityHint(), world, currentFov(minecraft),
-            aspectRatio(minecraft));
+            aspectRatio(minecraft), subject.rider(), seeing);
         this.blend.push(new PoseBlend.Pose(tick, step.eye().x(), step.eye().y(), step.eye().z(), step.yaw(), step.pitch(), step.fov(), step.applyFov(), step.cut()));
 
         this.initialised = true;

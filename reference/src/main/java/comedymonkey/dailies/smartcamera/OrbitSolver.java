@@ -21,6 +21,11 @@ public final class OrbitSolver implements ShotSolver {
     private final Spring height = new Spring();
     private final Spring rate = new Spring();
     private final Spring widen = new Spring();
+    /** Raised to see the rider of a craft past its own envelope and frame */
+    private final Spring riderLift = new Spring();
+    private double riderLiftGoal;
+    private double riderHidden;
+    private double liftIn;
     private final Clearance clearance = new Clearance();
     private boolean mayCut = true;
     private final Aimer aimer = new Aimer();
@@ -83,6 +88,11 @@ public final class OrbitSolver implements ShotSolver {
         this.steps = 0;
         this.sinceHop = 99.0;
         this.widen.reset(this.widenGoal(input));
+        // Level with the rider, not with the middle of their craft
+        this.riderLiftGoal = input.rider().distanceTo(input.subject().aim()) > 0.5 ? input.rider().y() - input.subject().aim().y() : 0.0;
+        this.riderLift.reset(this.riderLiftGoal);
+        this.riderHidden = 0.0;
+        this.liftIn = 0.0;
         this.choose(input, true);
         this.radius.reset(this.wantedRadius(settings, input.subject()));
         this.height.reset(this.wantedHeight(settings));
@@ -107,6 +117,22 @@ public final class OrbitSolver implements ShotSolver {
         this.rate.step(this.ahead ? 1.0 : 0.25, 0.8, dt);
         this.angle += settings.degreesPerSecond * this.rate.value * dt;
         this.radius.step(this.wantedRadius(settings, input.subject()), SHAPE_TIME, dt);
+        // A rider hidden by their own craft: the circle moves up or down to the height from which they are seen
+        this.liftIn -= dt;
+        if (this.riderHidden > 0.4 && this.liftIn <= 0.0) {
+            this.liftIn = 1.0;
+            double radians = Math.toRadians(this.angle);
+            for (double change : new double[]{-2.0, 2.0, -4.0, 4.0, -6.0, 7.0}) {
+                double lift = this.riderLiftGoal + change;
+                Vec eye = this.centre.value().add(Math.sin(radians) * this.radius.value, settings.height + LIFTS[this.liftChoice] + lift,
+                    -Math.cos(radians) * this.radius.value);
+                if (!input.world().solid(eye) && input.riderSeen(eye) >= 0.67) {
+                    this.riderLiftGoal = lift;
+                    break;
+                }
+            }
+        }
+        this.riderLift.step(this.riderLiftGoal, 0.8, dt);
         this.height.step(this.wantedHeight(settings), SHAPE_TIME, dt);
         this.sinceHop += dt;
         if (this.mayCut && settings.avoidObstructions && this.sinceHop > 1.5 && this.squeezed(input) && this.hop(input)) {
@@ -118,8 +144,14 @@ public final class OrbitSolver implements ShotSolver {
             return new Pose(eye, aim.yaw(), aim.pitch(), this.clearance.blocked(), settings.screenX, settings.screenY, true);
         }
         Vec eye = this.place(input);
+        boolean riding = input.rider().distanceTo(input.subject().aim()) > 0.5;
+        this.riderHidden = riding && input.riderSeen(eye) < 0.5 ? this.riderHidden + dt : 0.0;
         SmartCameraMath.Aim aim = this.goal(input, eye);
-        this.aimer.step(aim.yaw(), aim.pitch(), AIM_TIME, input.fov(), input.aspect(), dt);
+        if (this.clearance.jumped()) {
+            this.aimer.reset(aim);
+        } else {
+            this.aimer.step(aim.yaw(), aim.pitch(), AIM_TIME, input.fov(), input.aspect(), dt);
+        }
         return new Pose(eye, this.aimer.yaw(), this.aimer.pitch(), this.clearance.blocked(), settings.screenX, settings.screenY, this.clearance.jumped());
     }
 
@@ -144,7 +176,7 @@ public final class OrbitSolver implements ShotSolver {
     }
 
     private double wantedHeight(SmartCameraSettings settings) {
-        return settings.height + LIFTS[this.liftChoice];
+        return settings.height + LIFTS[this.liftChoice] + this.riderLift.value;
     }
 
     private Vec place(Input input) {
@@ -158,7 +190,8 @@ public final class OrbitSolver implements ShotSolver {
 
     private SmartCameraMath.Aim goal(Input input, Vec eye) {
         SmartCameraSettings settings = input.settings();
-        Vec aim = input.subject().aim();
+        // A craft and its rider: aimed between the middle of the craft and the rider
+        Vec aim = input.subject().aim().lerp(input.rider(), 0.4);
         return SmartCameraMath.aimAt(eye.x(), eye.y(), eye.z(), aim.x(), aim.y(), aim.z(), settings.screenX, settings.screenY, input.fov(), input.aspect());
     }
 

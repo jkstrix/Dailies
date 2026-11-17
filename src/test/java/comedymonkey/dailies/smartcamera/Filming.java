@@ -23,6 +23,15 @@ final class Filming {
 
     /** One step per tick of the path, ticks 0 to {@code ticks} */
     static List<FilmFrame> film(SmartCameraSettings settings, CameraWorld world, IntFunction<SubjectSample> path, int ticks) {
+        return film(settings, world, path, ticks, null, world);
+    }
+
+    /**
+     * As the other, for someone aboard a craft framed with them: {@code rider} says where they are, {@code seeing} is
+     * the world with the craft's blocks in, which is also what the frames are judged against
+     */
+    static List<FilmFrame> film(SmartCameraSettings settings, CameraWorld world, IntFunction<SubjectSample> path, int ticks,
+                                java.util.function.Function<SubjectSample, Vec> rider, CameraWorld seeing) {
         SmartCameraRig rig = new SmartCameraRig();
         PoseBlend blend = new PoseBlend();
         List<FilmFrame> frames = new ArrayList<>();
@@ -32,7 +41,7 @@ final class Filming {
         for (int tick = 0; tick <= ticks; tick++) {
             SubjectSample subject = path.apply(tick);
             Vec hint = before == null ? Vec.ZERO : subject.feet().sub(before.feet()).scale(20.0);
-            SmartCameraRig.Step step = rig.step(settings, 0, tick, subject, hint, world, FOV, ASPECT);
+            SmartCameraRig.Step step = rig.step(settings, 0, tick, subject, hint, world, FOV, ASPECT, rider == null ? null : rider.apply(subject), seeing);
             blend.push(new PoseBlend.Pose(tick, step.eye().x(), step.eye().y(), step.eye().z(), step.yaw(), step.pitch(), step.fov(), step.applyFov(), step.cut()));
             // The frames that fall after the last tick and up to this one
             while (tick > 0 && frame * 20.0 / FPS <= tick + 1.0e-9) {
@@ -52,6 +61,7 @@ final class Filming {
                 noted.aspect = ASPECT;
                 noted.cameraInBlock = world.solid(new Vec(pose.x(), pose.y(), pose.z()));
                 Vec feet = before.feet().lerp(subject.feet(), amount);
+                CameraWorld judged = seeing;
                 Vec aim = previous.aim().lerp(step.aim(), amount);
                 noted.subjectPresent = true;
                 noted.eyeX = feet.x();
@@ -72,7 +82,7 @@ final class Filming {
                 for (int i = 0; i < points.length; i++) {
                     Vec point = new Vec(points[i][0], points[i][1], points[i][2]);
                     double length = eye.distanceTo(point);
-                    if (world.clip(eye, point) * length < length - 0.05) {
+                    if (judged.clip(eye, point) * length < length - 0.05) {
                         noted.occludedMask |= 1 << i;
                     }
                 }

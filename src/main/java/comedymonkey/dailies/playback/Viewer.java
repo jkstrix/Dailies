@@ -269,6 +269,7 @@ public final class Viewer {
         double fov = Viewer.fov > 0.0 ? Viewer.fov : minecraft.options.fov().get();
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
         comedymonkey.dailies.smartcamera.Vec point = new comedymonkey.dailies.smartcamera.Vec(eyes.x, eyes.y, eyes.z);
+        FOLLOW.box(target.getEyeHeight(), target.getBbHeight(), target.getBbWidth());
         comedymonkey.dailies.smartcamera.TetherSolver.Result result = FOLLOW.keep(new comedymonkey.dailies.smartcamera.LevelCameraWorld(minecraft.level, null),
             point, new comedymonkey.dailies.smartcamera.Vec(followOffset.x, followOffset.y, followOffset.z), point, FOLLOW_SMOOTHING, FOLLOW_AIM, fov, aspect, dt, true);
         if (result.cut()) {

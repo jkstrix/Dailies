@@ -64,6 +64,14 @@ public record SmartCameraSubject(Vec3 position, AABB bounds, String framed, @Nul
             extra, this.bodyYaw, this.riding, this.gliding, this.flying, this.airborne, this.swimming, this.framed);
     }
 
+    /** The person filmed (their chest), when what is framed is more than them; null when they are all that is framed */
+    public Vec rider() {
+        if (!this.framesMore()) {
+            return null;
+        }
+        return new Vec(this.position.x, this.position.y + 1.35, this.position.z);
+    }
+
     public Vec velocityHint() {
         return new Vec(this.tickVelocity.x, this.tickVelocity.y, this.tickVelocity.z);
     }
