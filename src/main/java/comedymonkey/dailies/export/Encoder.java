@@ -1,6 +1,7 @@
 package comedymonkey.dailies.export;
 
 import comedymonkey.dailies.Host;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
 
@@ -26,13 +28,14 @@ import java.util.jar.JarInputStream;
  * end, in an LGPL build, packed into the mod's jar. Nothing has to be installed. On first use the files are unpacked
  * into the game's dailies/encoder folder; frames are then piped to the encoder as it runs beside the game.
  * <p>
- * Which codecs can be offered is asked of the build itself, never assumed.
+ * Which codecs can be offered is asked of the build itself and tried on this machine, never assumed (EXP-1): see
+ * {@link #choices}. What may be used at all, and what stands in for what, is in {@link Codecs}.
  */
 public final class Encoder {
 
     /** The packed encoder for this platform inside the mod's jar, or absent in a build made without one */
     private static final String PACKED = "/encoder/ffmpeg-%s.jar";
-    public static final String NOTICE = "FFmpeg, LGPL build, as packaged by the JavaCPP Presets (org.bytedeco:ffmpeg)";
+    public static final String NOTICE = "FFmpeg, LGPL build, as packaged by the JavaCPP Presets (org.bytedeco:ffmpeg). Licences: THIRD-PARTY-NOTICES.md and the licenses folder inside the Dailies jar";
 
     private static Path program = null;
     private static Set<String> encoders = null;
@@ -40,11 +43,21 @@ public final class Encoder {
     private Encoder() {
     }
 
-    private static String platform() {
+    /** Where a video encoder is packed into Dailies today. Other platforms export numbered pictures (EXP-8) */
+    public static final String SUPPORTED = "Windows on 64-bit Intel or AMD processors";
+
+    /** The platform the game runs on, as the packed encoders are named: windows-x86_64, linux-arm64 and so on */
+    public static String platform() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
         String cpu = arch.contains("aarch64") || arch.contains("arm64") ? "arm64" : "x86_64";
         return (os.contains("win") ? "windows" : os.contains("mac") ? "macosx" : "linux") + "-" + cpu;
+    }
+
+    /** What to tell someone whose platform has no encoder packed in, rather than failing obscurely */
+    public static String noEncoderWords() {
+        return "Dailies carries a video encoder for " + SUPPORTED + " only for now, and this is " + platform()
+            + ". Numbered PNG pictures can be exported here instead (container png_sequence)";
     }
 
     public static boolean bundled() {
@@ -60,7 +73,7 @@ public final class Encoder {
         String resource = String.format(PACKED, platform);
         try (InputStream packed = Encoder.class.getResourceAsStream(resource)) {
             if (packed == null) {
-                throw new IOException("This build of Dailies has no video encoder for " + platform + ". Export a PNG sequence instead (container png_sequence)");
+                throw new IOException(noEncoderWords());
             }
             Path folder = Host.get().dataDirectory().resolve("encoder").resolve(platform);
             Files.createDirectories(folder);
@@ -123,26 +136,109 @@ public final class Encoder {
         return found;
     }
 
-    /** For each codec name of the specification, the encoders to try, hardware first */
-    private static final Map<String, List<String>> CANDIDATES = new LinkedHashMap<>();
+    // ------------------------------------------------------------------ What this machine can really do (EXP-1)
 
-    static {
-        CANDIDATES.put("h264", List.of("h264_nvenc", "h264_amf", "h264_qsv", "h264_videotoolbox", "libopenh264", "h264_mf"));
-        CANDIDATES.put("h265", List.of("hevc_nvenc", "hevc_amf", "hevc_qsv", "hevc_videotoolbox", "hevc_mf"));
-        CANDIDATES.put("av1", List.of("av1_nvenc", "av1_amf", "av1_qsv", "libsvtav1", "libaom-av1"));
-        CANDIDATES.put("vp9", List.of("libvpx-vp9", "vp9_qsv"));
+    /**
+     * A switch for trying out what a machine without any hardware encoder gets: with the system property set to
+     * true, no hardware encoder is offered or used. The scripted test uses it to walk the fallbacks of EXP-14
+     */
+    public static final String SOFTWARE_ONLY = "dailies.encoder.softwareOnly";
+
+    /** What the game draws with, as it names itself: the graphics card and its driver. Trials are remembered against it */
+    private static volatile String machine = "unknown graphics";
+    private static final Map<String, List<Codecs.Choice>> TRIED = new ConcurrentHashMap<>();
+
+    /** Told once by the client thread, which is the only one that may ask the graphics driver its name */
+    public static void machine(String graphicsAndDriver) {
+        if (graphicsAndDriver != null && !graphicsAndDriver.isBlank()) {
+            machine = graphicsAndDriver;
+        }
     }
 
-    /** What can be exported with this build on this machine's encoder list: codec name to the encoders it has for it */
-    public static Map<String, List<String>> offered() throws IOException {
-        Set<String> present = encoders();
-        Map<String, List<String>> offered = new LinkedHashMap<>();
-        CANDIDATES.forEach((codec, names) -> {
-            List<String> have = names.stream().filter(present::contains).toList();
-            if (!have.isEmpty()) {
-                offered.put(codec, have);
+    /**
+     * The codec choices this machine really has, each codec's fastest first: every software encoder of the build that
+     * Dailies uses, and every hardware encoder that has just encoded a few frames here. An encoder being in the
+     * build says nothing about the graphics card, so each hardware one is tried once and the answer kept for the
+     * session, per graphics card and driver. Takes a few seconds the first time; not for the client thread where it
+     * can be helped.
+     */
+    public static List<Codecs.Choice> choices() throws IOException {
+        boolean softwareOnly = Boolean.getBoolean(SOFTWARE_ONLY);
+        String key = softwareOnly ? machine + ", hardware encoders left out" : machine;
+        List<Codecs.Choice> known = TRIED.get(key);
+        if (known != null) {
+            return known;
+        }
+        synchronized (TRIED) {
+            known = TRIED.get(key);
+            if (known != null) {
+                return known;
             }
-        });
+            Set<String> inBuild = encoders();
+            String ffmpeg = program().toString();
+            Map<String, Boolean> passed = new ConcurrentHashMap<>();
+            List<Thread> trials = new ArrayList<>();
+            for (Codecs.Choice candidate : Codecs.candidates(inBuild)) {
+                if (!candidate.hardware() || softwareOnly) {
+                    continue;
+                }
+                // Side by side: an encoder for a card that is not there can take two seconds to say so
+                Thread trial = new Thread(() -> passed.put(candidate.encoder(), trial(ffmpeg, candidate.encoder())), "Dailies-Encoder-Trial-" + candidate.encoder());
+                trial.setDaemon(true);
+                trial.start();
+                trials.add(trial);
+            }
+            for (Thread trial : trials) {
+                try {
+                    trial.join(30_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            known = List.copyOf(Codecs.working(inBuild, encoder -> passed.getOrDefault(encoder, false)));
+            TRIED.put(key, known);
+            Host.LOGGER.info("Dailies: on {} the encoder offers {}", key, known.stream().map(choice -> choice.encoder() + " (" + choice.where() + ")").toList());
+            return known;
+        }
+    }
+
+    /** The choices if they have been worked out already, else null. Never waits */
+    public static @Nullable List<Codecs.Choice> choicesIfKnown() {
+        return TRIED.get(Boolean.getBoolean(SOFTWARE_ONLY) ? machine + ", hardware encoders left out" : machine);
+    }
+
+    private static boolean trial(String ffmpeg, String encoder) {
+        try {
+            Process process = new ProcessBuilder(Codecs.trialArguments(ffmpeg, encoder)).redirectErrorStream(true).start();
+            // Read to the end so a talkative failure cannot fill the pipe and hang
+            Thread drain = new Thread(() -> {
+                try {
+                    process.getInputStream().readAllBytes();
+                } catch (IOException ignored) {
+                    // The encoder has gone
+                }
+            }, "Dailies-Encoder-Trial-Log");
+            drain.setDaemon(true);
+            drain.start();
+            if (!process.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** What can be exported on this machine: codec name to the encoders that work for it, fastest first */
+    public static Map<String, List<String>> offered() throws IOException {
+        Map<String, List<String>> offered = new LinkedHashMap<>();
+        for (Codecs.Choice choice : choices()) {
+            offered.computeIfAbsent(choice.codec(), codec -> new ArrayList<>()).add(choice.encoder());
+        }
         return offered;
     }
 
@@ -152,29 +248,46 @@ public final class Encoder {
 
     /** As above, written to another file than the export's own: the soundless video that sound is joined to afterwards */
     static FrameSink videoSink(Export.Settings settings, int scale, Path output) throws IOException {
-        Map<String, List<String>> offered = offered();
-        List<String> names = offered.get(settings.videoCodec.toLowerCase(Locale.ROOT));
-        if (names == null) {
-            throw new IllegalArgumentException("This build cannot encode " + settings.videoCodec + ". It can encode: " + String.join(", ", offered.keySet()));
+        if (!bundled()) {
+            throw new IOException(noEncoderWords());
         }
-        List<String> order = new ArrayList<>(names);
+        List<Codecs.Choice> working = choices();
+        String codec = settings.videoCodec.toLowerCase(Locale.ROOT);
+        List<Codecs.Choice> forCodec = Codecs.forCodec(working, codec);
+        List<String> can = working.stream().map(Codecs.Choice::codec).distinct().toList();
+        if (forCodec.isEmpty()) {
+            String why = Codecs.known(codec) ? Codecs.whyMissing(working, codec) : "There is no codec '" + settings.videoCodec + "'";
+            throw new IllegalArgumentException(why + ". This computer can encode: " + String.join(", ", can));
+        }
+        String container = settings.container.toLowerCase(Locale.ROOT);
+        if (!Codecs.holds(container, codec)) {
+            throw new IllegalArgumentException("A " + container + " file cannot hold " + Codecs.codecLabel(codec) + ". It holds: " + String.join(", ", Codecs.heldBy(container))
+                + ". " + Codecs.codecLabel(codec) + " goes in " + Codecs.containerFor(codec, container));
+        }
+        List<Codecs.Choice> order = forCodec;
         if (settings.encoder != null && !settings.encoder.isBlank()) {
-            if (!names.contains(settings.encoder)) {
-                throw new IllegalArgumentException("There is no encoder '" + settings.encoder + "' for " + settings.videoCodec + ". There are: " + String.join(", ", names));
+            String asked = settings.encoder.trim();
+            if (asked.equals(Codecs.FORBIDDEN)) {
+                throw new IllegalArgumentException("Dailies does not use " + Codecs.FORBIDDEN + ": H.264 is only made by hardware encoders. There are: "
+                    + String.join(", ", forCodec.stream().map(Codecs.Choice::encoder).toList()));
             }
-            order = List.of(settings.encoder);
+            order = forCodec.stream().filter(choice -> choice.encoder().equals(asked)).toList();
+            if (order.isEmpty()) {
+                throw new IllegalArgumentException("There is no working encoder '" + asked + "' for " + settings.videoCodec + " on this computer. There are: "
+                    + String.join(", ", forCodec.stream().map(Codecs.Choice::encoder).toList()));
+            }
         }
         IOException last = null;
-        for (String name : order) {
+        for (Codecs.Choice choice : order) {
             try {
-                // A hardware encoder may be in the build and still not work on this machine: try, and fall back
-                return new VideoSink(settings, scale, name, output);
+                // Tried already, but a card can still refuse the size or rate of this export: go on to the next
+                return new VideoSink(settings, scale, choice.encoder(), output);
             } catch (IOException e) {
                 last = e;
-                Host.LOGGER.info("Dailies: encoder {} is not usable here ({}), trying the next", name, e.getMessage());
+                Host.LOGGER.info("Dailies: encoder {} is not usable for this export ({}), trying the next", choice.encoder(), e.getMessage());
             }
         }
-        throw new IOException("None of the encoders for " + settings.videoCodec + " works on this machine", last);
+        throw new IOException("None of the encoders for " + settings.videoCodec + " could encode this export: " + (last == null ? "" : last.getMessage()), last);
     }
 
     private static final class VideoSink implements FrameSink {
@@ -194,10 +307,7 @@ public final class Encoder {
                 "-f", "rawvideo", "-pix_fmt", "rgba", "-s", this.width + "x" + this.height, "-r", String.valueOf(settings.framesPerSecond), "-i", "pipe:0"));
             // Frames arrive bottom row first; supersampled frames are brought down to size here
             command.addAll(List.of("-vf", scale > 1 ? "vflip,scale=" + settings.width + ":" + settings.height + ":flags=lanczos" : "vflip"));
-            command.addAll(List.of("-c:v", encoder, "-pix_fmt", settings.transparent && encoder.startsWith("libvpx") ? "yuva420p" : "yuv420p"));
-            if (settings.bitrate > 0) {
-                command.addAll(List.of("-b:v", String.valueOf(settings.bitrate)));
-            }
+            command.addAll(Codecs.videoArguments(encoder, settings.bitrate, settings.transparent));
             command.add("-an");
             if (settings.container.equals("mp4") || settings.container.equals("mov")) {
                 // A file cut short by a cancel must still play (EXP-6)

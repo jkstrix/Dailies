@@ -127,6 +127,9 @@ processResources {
         into 'encoder'
         rename { String name -> name.replaceFirst(/^ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar') }
     }
+    // The notices and Dailies' own licence travel in the jar, beside the licence texts in the licenses folder (EXP-8)
+    from(rootProject.file('THIRD-PARTY-NOTICES.md'))
+    from(rootProject.file('LICENSE'))
     inputs.property 'version', project.version
     filesMatching('META-INF/neoforge.mods.toml') {
         expand(version: project.version)
