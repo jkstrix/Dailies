@@ -124,8 +124,18 @@ public final class Snapshots {
         }
     }
 
+    /**
+     * A block has changed. Its chunk has to be described afresh, and so have the eight round it: light reaches up to
+     * fifteen blocks, the game works that out for itself with no packet to say so, and a chunk is stored with its light.
+     * A neighbour stored while lava glowed next door would otherwise keep that glow in every later snapshot
+     */
     private static void dirty(BlockPos pos) {
-        CHUNKS.remove(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
+        int x = pos.getX() >> 4, z = pos.getZ() >> 4;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                CHUNKS.remove(ChunkPos.asLong(x + dx, z + dz));
+            }
+        }
     }
 
     /**

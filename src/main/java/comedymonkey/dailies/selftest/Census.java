@@ -385,7 +385,10 @@ final class Census {
                     state.append("wears.").append(slot.getName()).append('=').append(item(stack)).append(';');
                 }
             }
-            state.append("health=").append(String.format("%.1f", living.getHealth())).append(';');
+            // The recorder's own health comes to their game in a packet of its own that is not recorded: the recorded HUD holds it
+            if (!own) {
+                state.append("health=").append(String.format("%.1f", living.getHealth())).append(';');
+            }
             if (living.isSleeping()) {
                 state.append("asleep=true;");
             }
@@ -602,8 +605,15 @@ final class Census {
     static int compareLight(Census then, byte[] now, String mode, Tally tally, boolean warning) {
         List<String> differ = lightDifferences(then, now);
         if (differ != null && !differ.isEmpty()) {
-            tally.add(mode, "light", "differs", then.tick, differ.size() + " places, block/sky live -> playback: " + few(differ), warning);
+            // By chunk, so it can be seen whether whole chunks or the edges of something are wrong
+            TreeMap<String, Integer> chunks = new TreeMap<>();
+            for (String place : differ) {
+                String[] at = place.substring(0, place.indexOf(':')).split(" ");
+                chunks.merge((Integer.parseInt(at[0]) >> 4) + "," + (Integer.parseInt(at[2]) >> 4), 1, Integer::sum);
+            }
+            tally.add(mode, "light", "differs", then.tick, differ.size() + " places at tick " + then.tick + ", block/sky live -> playback: " + few(differ) + "; by chunk " + chunks, warning);
             tally.lightPlaces.merge(mode, differ.size(), Integer::sum);
+            tally.lightTicks.computeIfAbsent(mode, key -> new TreeMap<>()).put(then.tick, differ.size());
         }
         return differ == null ? -1 : differ.size();
     }
@@ -718,6 +728,8 @@ final class Census {
         int thingsCompared = 0;
         /** How many places had the wrong light, summed over the ticks looked at, by mode */
         final Map<String, Integer> lightPlaces = new TreeMap<>();
+        /** And how many at each tick */
+        final Map<String, TreeMap<Integer, Integer>> lightTicks = new TreeMap<>();
 
         synchronized void add(String mode, String label, String what, int tick, String detail, boolean warning) {
             Entry entry = this.entries.computeIfAbsent(mode + "|" + label + "|" + what, key -> new Entry(mode, label, what, warning));

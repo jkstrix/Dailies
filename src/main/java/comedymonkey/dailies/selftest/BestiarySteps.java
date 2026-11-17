@@ -551,15 +551,15 @@ final class BestiarySteps {
 
     private static double apart(Path one, Path two) throws Exception {
         java.awt.image.BufferedImage a = javax.imageio.ImageIO.read(one.toFile()), b = javax.imageio.ImageIO.read(two.toFile());
-        if (a == null || b == null || a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+        if (a == null || b == null) {
             return -1.0;
         }
         long sum = 0;
         int count = 0;
-        // The world, not the bars along the top and bottom of the screen
-        for (int y = a.getHeight() / 8; y < a.getHeight() * 3 / 4; y += 2) {
-            for (int x = 0; x < a.getWidth(); x += 2) {
-                int p = a.getRGB(x, y), q = b.getRGB(x, y);
+        // The world, not the bars along the top and bottom of the screen; by place on the screen, whatever size each picture is
+        for (int row = 60; row < 360; row++) {
+            for (int column = 0; column < 854; column++) {
+                int p = a.getRGB(column * a.getWidth() / 854, row * a.getHeight() / 480), q = b.getRGB(column * b.getWidth() / 854, row * b.getHeight() / 480);
                 sum += Math.abs((p >> 16 & 255) - (q >> 16 & 255)) + Math.abs((p >> 8 & 255) - (q >> 8 & 255)) + Math.abs((p & 255) - (q & 255));
                 count += 3;
             }
@@ -651,6 +651,7 @@ final class BestiarySteps {
         });
         lines.add("BESTIARY furthest from the live place, in blocks (only those over 0.05):" + far);
         lines.add("BESTIARY places with the wrong light, summed over the ticks looked at: " + tally.lightPlaces);
+        tally.lightTicks.forEach((mode, ticks) -> lines.add("BESTIARY wrong light, " + mode + ", places by tick: " + ticks));
         pictureNotes.forEach(note -> lines.add("BESTIARY pictures: " + note));
         lines.add("BESTIARY marks: " + marks);
         lines.add("BESTIARY sounds: " + Census.liveSounds.size() + " live, " + Census.playSounds.size() + " in play and landings, " + Census.skippedSounds.size() + " from skipped time");

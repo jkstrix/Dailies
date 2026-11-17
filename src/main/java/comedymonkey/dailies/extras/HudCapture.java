@@ -36,15 +36,14 @@ final class HudCapture {
     }
 
     private static void snapshot(Recorder.Out out, GameCodec codec) {
-        // A snapshot starts afresh: whatever was written before it is not there after a jump
-        written = null;
+        // A snapshot says what the HUD is for a jump that lands on it. Plain play passes over snapshots, so what was last
+        // written for play is left as it was: a change that falls on the very tick of a snapshot is then still written
+        // after it. (It used to be taken as written, and play showed the old HUD until the next change.)
         HudState state = now();
         if (state == null) {
             return;
         }
         out.extension(HudState.ID, state.encode(codec.registries(), codec.connectionType()));
-        state.keep();
-        written = state;
     }
 
     private static void tick() {
