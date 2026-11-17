@@ -19,6 +19,7 @@
     "playback.MinecraftMixin",
     "playback.SoundEngineMixin",
     "playback.ParticleEngineMixin",
+    "playback.CommandMixin",
     "export.TimerMixin",
     "export.WindowMixin",
     "export.ExportPreviewMixin"

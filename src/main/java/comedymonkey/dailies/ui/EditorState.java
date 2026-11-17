@@ -57,6 +57,7 @@ final class EditorState {
     static boolean sideFolded = false;
     static boolean timelineFolded = false;
     static boolean viewerFolded = false;
+    static boolean playersFolded = false;
     /** The first tick the timeline shows and how many it shows; a span of 0 or less means the whole recording */
     static double viewStart = 0.0;
     static double viewSpan = 0.0;

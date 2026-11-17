@@ -5,7 +5,6 @@ import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.mixin.access.TimerAccess;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -98,15 +97,19 @@ public final class Playback {
                 event.setCanceled(true);
             }
         });
-        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4)
+        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4). The chat itself
+        // opens, since that is where "/dailies" is typed: what is said in it goes nowhere, and commands other than
+        // that one are turned away where they would be sent (mixin.playback.CommandMixin)
         NeoForge.EVENT_BUS.addListener((ScreenEvent.Opening event) -> {
-            if (loaded && (event.getNewScreen() instanceof ChatScreen || event.getNewScreen() instanceof AbstractContainerScreen<?>)) {
+            if (loaded && event.getNewScreen() instanceof AbstractContainerScreen<?>) {
                 event.setCanceled(true);
             }
         });
         NeoForge.EVENT_BUS.addListener((ClientChatEvent event) -> {
             if (active) {
                 event.setCanceled(true);
+                Minecraft.getInstance().gui.getChat().addMessage(
+                    net.minecraft.network.chat.Component.translatable("dailies.command.no_chat").withStyle(net.minecraft.ChatFormatting.RED));
             }
         });
     }
@@ -601,7 +604,30 @@ public final class Playback {
         TimerAccess timer = (TimerAccess) minecraft.getTimer();
         timer.dailies$setPausedPartialTick(1.0F);
         timer.dailies$setPartialTick(0.0F);
+        settleLight(minecraft);
         PlaybackExtensions.arrivedAll();
+    }
+
+    /**
+     * Brings the light up to date at once. The game takes the light the server sends a little at a time, a tenth of
+     * what is waiting each frame, which in live play nobody sees. A jump hands it several seconds of the recording in
+     * one go, or a whole world: left to itself the light would then arrive over many frames, with chunks drawn in
+     * the old light, or none, until it did.
+     */
+    private static void settleLight(Minecraft minecraft) {
+        net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
+        if (level == null) {
+            return;
+        }
+        try {
+            // Each call takes a share of what is waiting, so it is asked until nothing is
+            for (int turn = 0; turn < 100_000 && !level.isLightUpdateQueueEmpty(); turn++) {
+                level.pollLightUpdates();
+            }
+            level.getChunkSource().getLightEngine().runLightUpdates();
+        } catch (RuntimeException e) {
+            Host.LOGGER.warn("Dailies: the light could not be brought up to date after a jump; it will catch up over the next frames", e);
+        }
     }
 
     /** The start of every game tick */

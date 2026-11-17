@@ -1013,21 +1013,30 @@ public final class MomentsTools {
     // --- Tools that need the game ---
 
     private static JsonObject eventAdd(McpArgs args) {
+        String type = args.optString("type");
+        return addEvent(type, args.string("label"), args.has("metadata") ? args.object("metadata") : null);
+    }
+
+    /**
+     * Logs a custom event at the current moment of the running session: what moments_event_add does, for the
+     * "/dailies moment" command and its key as well. Client thread.
+     *
+     * @throws McpToolException when no session is being tracked or the label is empty
+     */
+    public static JsonObject addEvent(@Nullable String type, String label, @Nullable JsonObject metadata) {
         GameplayTracker gameplay = Moments.gameplay();
         MomentsSession session = Moments.currentSession();
         if (gameplay == null || session == null) {
             throw new McpToolException("No session is being tracked right now. Events can only be added while the player is in a world (not a replay) with momentsEnabled on");
         }
-        String label = args.string("label").trim();
-        if (label.isEmpty()) {
+        String words = label == null ? "" : label.trim();
+        if (words.isEmpty()) {
             throw new McpToolException("label must not be empty");
         }
-        String type = args.optString("type");
-        JsonObject metadata = args.has("metadata") ? args.object("metadata") : null;
 
         JsonObject json = ok();
         json.addProperty("session", session.id);
-        json.add("event", gameplay.addCustom(type == null || type.isBlank() ? null : type.trim(), label, metadata));
+        json.add("event", gameplay.addCustom(type == null || type.isBlank() ? null : type.trim(), words, metadata));
         return json;
     }
 

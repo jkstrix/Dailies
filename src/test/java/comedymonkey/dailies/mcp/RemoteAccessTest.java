@@ -303,6 +303,116 @@ class RemoteAccessTest {
         }
     }
 
+    // --- One port, plain for this computer and HTTPS for the rest ---
+
+    @Test
+    void onlyATlsGreetingLooksLikeTls() {
+        assertTrue(McpConnection.looksLikeTls(0x16));
+        for (int first : new int[]{'G', 'P', 'O', 'H', 'D', ' ', '\r', 0x00, 0x15, 0x17, 0x80, 0xFF}) {
+            assertFalse(McpConnection.looksLikeTls(first), "byte " + first);
+        }
+    }
+
+    @Test
+    void plainHttpIsForThisComputerAlone() throws Exception {
+        assertTrue(McpConnection.plainAllowedFrom(address("127.0.0.1")));
+        assertTrue(McpConnection.plainAllowedFrom(address("127.0.0.2")));
+        assertTrue(McpConnection.plainAllowedFrom(address("::1")));
+        // Being an allowed client is not enough: other machines get HTTPS or nothing
+        assertFalse(McpConnection.plainAllowedFrom(address("192.168.1.20")));
+        assertFalse(McpConnection.plainAllowedFrom(address("10.0.0.1")));
+        assertFalse(McpConnection.plainAllowedFrom(address("fe80::1")));
+        assertFalse(McpConnection.plainAllowedFrom(null));
+    }
+
+    /** A listener that answers each connection with what kind it was and the first line it sent */
+    private static java.net.ServerSocket echoKind(ServerCertificate certificate, int connections) throws Exception {
+        SSLContext context = certificate.context();
+        java.net.ServerSocket listener = new java.net.ServerSocket(0, 4, address("127.0.0.1"));
+        Thread thread = new Thread(() -> {
+            for (int i = 0; i < connections; i++) {
+                try (java.net.Socket raw = listener.accept()) {
+                    raw.setSoTimeout(10_000);
+                    try (McpConnection connection = McpConnection.open(raw, context)) {
+                        java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(connection.in(), StandardCharsets.US_ASCII));
+                        String line = reader.readLine();
+                        String reply = (connection.secure() ? "https" : "plain") + "|" + connection.plainAllowed() + "|" + line + "\n";
+                        connection.out().write(reply.getBytes(StandardCharsets.US_ASCII));
+                        connection.out().flush();
+                    }
+                } catch (Exception e) {
+                    // The test's own assertions notice a connection that went wrong
+                }
+            }
+        }, "sniff-test");
+        thread.setDaemon(true);
+        thread.start();
+        return listener;
+    }
+
+    private static String firstLine(java.net.Socket socket, String request) throws Exception {
+        socket.setSoTimeout(10_000);
+        socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+        socket.getOutputStream().flush();
+        return new java.io.BufferedReader(new java.io.InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII)).readLine();
+    }
+
+    @Test
+    void theSamePortAnswersPlainHttpAndHttps() throws Exception {
+        ServerCertificate made = ServerCertificate.create(List.of("localhost"), List.of(address("127.0.0.1")), Instant.now());
+        TrustManager pin = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                throw new CertificateException("not a client");
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                if (!made.fingerprint().equals(ServerCertificate.fingerprint(chain[0]))) {
+                    throw new CertificateException("not the pinned certificate");
+                }
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
+        SSLContext client = SSLContext.getInstance("TLS");
+        client.init(null, new TrustManager[]{pin}, null);
+
+        try (java.net.ServerSocket listener = echoKind(made, 4)) {
+            int port = listener.getLocalPort();
+            // Plain, as a local agent sends it: nothing of the request is lost to the look at its first byte
+            try (java.net.Socket socket = new java.net.Socket(address("127.0.0.1"), port)) {
+                assertEquals("plain|true|POST /mcp HTTP/1.1", firstLine(socket, "POST /mcp HTTP/1.1\r\n\r\n"));
+            }
+            // HTTPS, as another machine sends it: the greeting's first byte is handed on and the handshake completes
+            try (SSLSocket socket = (SSLSocket) client.getSocketFactory().createSocket(address("127.0.0.1"), port)) {
+                assertEquals("https|false|GET /live HTTP/1.1", firstLine(socket, "GET /live HTTP/1.1\r\n\r\n"));
+            }
+            // And turn about, so neither leaves the listener in a state
+            try (java.net.Socket socket = new java.net.Socket(address("127.0.0.1"), port)) {
+                assertEquals("plain|true|GET / HTTP/1.1", firstLine(socket, "GET / HTTP/1.1\r\n\r\n"));
+            }
+            try (SSLSocket socket = (SSLSocket) client.getSocketFactory().createSocket(address("127.0.0.1"), port)) {
+                assertEquals("https|false|POST /mcp HTTP/1.1", firstLine(socket, "POST /mcp HTTP/1.1\r\n\r\n"));
+            }
+        }
+    }
+
+    @Test
+    void aConnectionThatSaysNothingIsAnError() throws Exception {
+        ServerCertificate made = ServerCertificate.create(List.of("localhost"), List.of(address("127.0.0.1")), Instant.now());
+        try (java.net.ServerSocket listener = new java.net.ServerSocket(0, 1, address("127.0.0.1"))) {
+            new java.net.Socket(address("127.0.0.1"), listener.getLocalPort()).close();
+            try (java.net.Socket raw = listener.accept()) {
+                raw.setSoTimeout(5000);
+                org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> McpConnection.open(raw, made.context()));
+            }
+        }
+    }
+
     // --- The live feed ---
 
     @Test

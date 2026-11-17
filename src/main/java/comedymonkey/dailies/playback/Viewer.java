@@ -29,8 +29,14 @@ public final class Viewer {
     private static Vec3 velocity = Vec3.ZERO;
     private static long lastNanos = 0;
     private static double blocksPerSecond = 10.0;
+    /** The height of the viewer's eyes above its feet */
+    private static final double EYE_HEIGHT = 1.62;
     /** While true the camera is being driven (by a camera track, a tool) and the keys do not move it */
     private static boolean driven = false;
+    /** The player the camera keeps with and keeps in view, by id: a jump puts new entities in the world */
+    private static @Nullable UUID followed = null;
+    /** Where that player was when the camera last moved with them */
+    private static @Nullable Vec3 followedAt = null;
 
     private Viewer() {
     }
@@ -55,6 +61,8 @@ public final class Viewer {
         fov = 0.0;
         driven = false;
         lastNanos = 0;
+        followed = null;
+        followedAt = null;
     }
 
     private static boolean watchingThroughOwnEyes() {
@@ -171,6 +179,65 @@ public final class Viewer {
         if (minecraft.player != null) {
             minecraft.setCameraEntity(entity == null ? minecraft.player : entity);
         }
+        if (entity != null) {
+            // Through their eyes there is nothing left to keep in view
+            followed = null;
+            followedAt = null;
+        }
+    }
+
+    /** The player the camera is keeping in view, or null */
+    public static @Nullable UUID following() {
+        return followed;
+    }
+
+    /**
+     * Keeps a player in view (specification PLAY-3): from now on the camera moves as they move, so it stays where it
+     * is beside them, and turns to look at them. The keys still fly it round them. Null stops.
+     */
+    public static void follow(@Nullable UUID player) {
+        followed = player;
+        followedAt = null;
+        if (player != null) {
+            ride(null);
+            followed = player;
+        }
+    }
+
+    /** Once per drawn frame while the camera is its own: go where the followed player went and look at them */
+    private static void keepInView(Minecraft minecraft) {
+        UUID wanted = followed;
+        if (wanted == null || minecraft.level == null || riding() != null) {
+            return;
+        }
+        Player target = minecraft.level.getPlayerByUUID(wanted);
+        if (target == null) {
+            // Out of the world for now (a jump, or too far away): the camera waits and catches up when they are back
+            return;
+        }
+        Vec3 now = target.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
+        Vec3 before = followedAt;
+        if (before != null) {
+            x += now.x - before.x;
+            y += now.y - before.y;
+            z += now.z - before.z;
+        }
+        double away = Math.sqrt((x - now.x) * (x - now.x) + (y - now.y) * (y - now.y) + (z - now.z) * (z - now.z));
+        if (before == null && (away > 24.0 || away < 1.0)) {
+            // Begun from too far off to see them, or from inside them: a little behind and above, as playback opens
+            Vec3 back = Vec3.directionFromRotation(0.0F, target.getYRot()).scale(-5.0);
+            x = now.x + back.x;
+            y = now.y + 2.0;
+            z = now.z + back.z;
+        }
+        followedAt = now;
+        double lookX = now.x - x;
+        double lookY = now.y + target.getEyeHeight() - (y + EYE_HEIGHT);
+        double lookZ = now.z - z;
+        if (lookX * lookX + lookY * lookY + lookZ * lookZ > 1.0e-6) {
+            yaw = (float) Math.toDegrees(Math.atan2(-lookX, lookZ));
+            pitch = Mth.clamp((float) Math.toDegrees(-Math.atan2(lookY, Math.sqrt(lookX * lookX + lookZ * lookZ))), -90.0F, 90.0F);
+        }
     }
 
     /** Once per drawn frame, after the game's ticks and before the picture */
@@ -199,6 +266,7 @@ public final class Viewer {
             pitch = Mth.clamp(player.getXRot(), -90.0F, 90.0F);
             if (!exporting) {
                 fly(minecraft, seconds);
+                keepInView(minecraft);
             }
         }
         apply(player);
