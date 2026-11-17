@@ -317,19 +317,28 @@ public final class Controls {
 
     /**
      * Opens the moments page in the person's web browser. The page is served by the mod's own local server, so there
-     * is nothing to open while that is switched off; the notice says how to switch it on.
+     * is nothing to open while that is switched off; the notice says how to switch it on. The button, the key and
+     * "/dailies moments" all come here.
+     *
+     * @return whether the page is being served, and so was opened
      */
-    public static void openMomentsPage() {
+    public static boolean openMomentsPage() {
+        boolean[] opened = {false};
         guarded(() -> {
             int port = comedymonkey.dailies.mcp.McpHttpServer.getListeningPort();
             if (port <= 0) {
                 tell(Component.translatable("dailies.ui.notice.moments_page_off"));
                 return;
             }
-            // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token
-            net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
+            // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token.
+            // A scripted run must not put browser windows on the desk of whoever is watching it
+            if (!comedymonkey.dailies.selftest.SelfTest.asked()) {
+                net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
+            }
+            opened[0] = true;
             tell(Component.translatable("dailies.ui.notice.moments_page_opened"));
         });
+        return opened[0];
     }
 
     /** Says something to the person: in the editor when it is open, where its top bar would cover a notice, else as a notice */

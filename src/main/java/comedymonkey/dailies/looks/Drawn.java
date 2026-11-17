@@ -17,9 +17,10 @@ public final class Drawn {
     private static int terrainLayersHidden;
     private static int blockEntities;
     private static int blockEntitiesHidden;
-    private static int beaconsHidden;
+    private static int beams;
+    private static int beamsHidden;
 
-    private static volatile int[] last = new int[7];
+    private static volatile int[] last = new int[8];
     private static volatile long frames = 0;
     /** The part of the screen the frame leaves clear, in the interface's own measure, and whether the bars are solid */
     private static volatile double[] clear = null;
@@ -32,9 +33,9 @@ public final class Drawn {
 
     /** Once per frame, before anything is drawn: what was counted belongs to the frame that has just ended */
     static void frame() {
-        last = new int[]{entities, players, terrainLayers, terrainLayersHidden, blockEntities, blockEntitiesHidden, beaconsHidden};
+        last = new int[]{entities, players, terrainLayers, terrainLayersHidden, blockEntities, blockEntitiesHidden, beams, beamsHidden};
         frames++;
-        entities = players = terrainLayers = terrainLayersHidden = blockEntities = blockEntitiesHidden = beaconsHidden = 0;
+        entities = players = terrainLayers = terrainLayersHidden = blockEntities = blockEntitiesHidden = beams = beamsHidden = 0;
         clear = barsNow;
         solidBars = solidNow;
         barsNow = null;
@@ -57,13 +58,20 @@ public final class Drawn {
         }
     }
 
-    public static void blockEntity(boolean hidden, boolean beacon) {
-        if (!hidden) {
-            blockEntities++;
-        } else if (beacon) {
-            beaconsHidden++;
-        } else {
+    public static void blockEntity(boolean hidden) {
+        if (hidden) {
             blockEntitiesHidden++;
+        } else {
+            blockEntities++;
+        }
+    }
+
+    /** A beam of a beacon, an end gateway or a mod's block that borrows the game's beam */
+    public static void beam(boolean hidden) {
+        if (hidden) {
+            beamsHidden++;
+        } else {
+            beams++;
         }
     }
 
@@ -103,8 +111,13 @@ public final class Drawn {
         return last[5];
     }
 
-    public static int beaconsHidden() {
+    /** Beams drawn in the last frame, and those a look turned away */
+    public static int beams() {
         return last[6];
+    }
+
+    public static int beamsHidden() {
+        return last[7];
     }
 
     /** {left, top, right, bottom} of what the frame bars of the last frame left clear, or null when none were drawn in it */

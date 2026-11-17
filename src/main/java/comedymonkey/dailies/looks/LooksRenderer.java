@@ -149,6 +149,83 @@ public final class LooksRenderer {
         return now.frameRatio();
     }
 
+    // ------------------------------------------------------------------ The frame among the editor's panels
+
+    /** The part of the window the editor's panels leave clear, as shares of it: {left, top, right, bottom} */
+    private static volatile double[] clearOfPanels = null;
+    private static volatile long clearSaidAt = -10;
+    private static volatile boolean projectionHooked = false;
+
+    /**
+     * Said by the editor on every frame it is on screen: the part of the window its panels leave clear, as shares
+     * of the window. A framed picture is then shown whole inside that part and not under the panels.
+     */
+    public static void clearOfPanels(double left, double top, double right, double bottom) {
+        if (right - left > 0.05 && bottom - top > 0.05) {
+            clearOfPanels = new double[]{Math.max(0.0, left), Math.max(0.0, top), Math.min(1.0, right), Math.min(1.0, bottom)};
+            clearSaidAt = Drawn.frames();
+        }
+    }
+
+    private static double windowRatio() {
+        com.mojang.blaze3d.platform.Window window = Minecraft.getInstance().getWindow();
+        return window.getHeight() > 0 ? (double) window.getWidth() / window.getHeight() : 16.0 / 9.0;
+    }
+
+    /**
+     * Where the framed picture is shown, as shares of the window: {left, top, right, bottom}. The largest frame of
+     * the scene's shape that fits in the middle of the window, or, while the editor is up, of the part its panels
+     * leave clear. Null when the scene has no frame of its own.
+     */
+    public static double @Nullable [] frameRect() {
+        double ratio = framedRatio();
+        if (ratio <= 0.0) {
+            return null;
+        }
+        double window = windowRatio();
+        double[] area = clearOfPanels;
+        if (area == null || !projectionHooked || Drawn.frames() - clearSaidAt > 3) {
+            double[] middle = Looks.clearPart(ratio, window);
+            return middle;
+        }
+        double areaWidth = area[2] - area[0];
+        double areaHeight = area[3] - area[1];
+        double width = areaWidth;
+        double height = width * window / ratio;
+        if (height > areaHeight) {
+            height = areaHeight;
+            width = height * ratio / window;
+        }
+        double left = area[0] + (areaWidth - width) / 2.0;
+        double top = area[1] + (areaHeight - height) / 2.0;
+        return new double[]{left, top, left + width, top + height};
+    }
+
+    /**
+     * How the picture is made smaller and moved to stand in {@link #frameRect}: {scale, across, up}, the last two in
+     * the measure where the window runs from -1 to 1 each way. Null when it stands where the game draws it.
+     */
+    public static double @Nullable [] viewShift() {
+        double[] rect = frameRect();
+        if (rect == null || !projectionHooked) {
+            return null;
+        }
+        double[] middle = Looks.clearPart(framedRatio(), windowRatio());
+        double scale = (rect[2] - rect[0]) / (middle[2] - middle[0]);
+        double across = (rect[0] + rect[2]) - 1.0;
+        double up = 1.0 - (rect[1] + rect[3]);
+        if (Math.abs(scale - 1.0) < 1.0e-6 && Math.abs(across) < 1.0e-6 && Math.abs(up) < 1.0e-6) {
+            return null;
+        }
+        return new double[]{scale, across, up};
+    }
+
+    /** For the hook on the game's projection: {@link #viewShift}, and the note that the hook is there */
+    public static double @Nullable [] projectionShift() {
+        projectionHooked = true;
+        return looks == null ? null : viewShift();
+    }
+
     /**
      * A frame wider than the window is shown between bars above and below. The view is drawn that much taller, so
      * that what is left between the bars is exactly the picture an export of that shape will hold.
@@ -186,6 +263,7 @@ public final class LooksRenderer {
                 if (looks != null) {
                     forget();
                 }
+                comedymonkey.dailies.compat.create.FlywheelLooks.frame(false);
                 return;
             }
             Minecraft minecraft = Minecraft.getInstance();
@@ -220,6 +298,7 @@ public final class LooksRenderer {
             }
             particlesShown = now.showParticles;
             looks = now;
+            comedymonkey.dailies.compat.create.FlywheelLooks.frame(true);
             BlockChanges.frame(minecraft, scene);
         } catch (Throwable t) {
             // For example the recording closing between two of the questions above
@@ -323,6 +402,12 @@ public final class LooksRenderer {
         }
         Set<EntityType<?>> hidden = hiddenEntityTypes;
         return !hidden.isEmpty() && hidden.contains(entity.getType()) || override(now, entity).hide();
+    }
+
+    /** Whether any entity at all may be hidden just now, so that asking about each one is worth it */
+    public static boolean hidesAnyEntity() {
+        Looks now = looks;
+        return now != null && (!now.showEntities || !now.showPlayers || anyOverrides || !hiddenEntityTypes.isEmpty());
     }
 
     /** Whether the terrain, and the block entities in it, are left out */

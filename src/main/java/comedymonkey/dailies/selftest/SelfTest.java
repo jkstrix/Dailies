@@ -94,6 +94,8 @@ public final class SelfTest {
             SettingsSteps.editorDropdown(this);
             ExportPresetSteps.run(this);
             PlaybackSteps.close(this);
+            // While the recording with the machines in it is still there: the library steps take it apart
+            WatchingSteps.machines(this);
             OwnerFeatureSteps.run(this);
             TimelineSteps.original(this);
             LibrarySteps.run(this);

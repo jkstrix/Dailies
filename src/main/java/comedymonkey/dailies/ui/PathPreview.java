@@ -229,7 +229,7 @@ public final class PathPreview {
                 line.add(point.lens());
             }
             if (stretch.smartCamera()) {
-                batch.line(stretch.stale() ? dashes(line) : line, 2.0F, SMART, stretch.stale() ? 0.55F : 0.85F, stretch.stale());
+                batch.line(stretch.stale() ? dashes(line) : line, 2.5F, SMART, stretch.stale() ? 0.75F : 0.9F, stretch.stale());
             } else {
                 batch.line(line, 2.5F, PATH, 1.0F, false);
             }
@@ -247,7 +247,7 @@ public final class PathPreview {
         List<Vec3> spread = new ArrayList<>();
         Vec3 last = null;
         for (Vec3 point : line) {
-            if (last == null || point.distanceTo(last) >= 0.35) {
+            if (last == null || point.distanceTo(last) >= 0.6) {
                 spread.add(point);
                 last = point;
             }

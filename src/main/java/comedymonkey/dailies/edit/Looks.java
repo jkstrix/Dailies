@@ -516,11 +516,11 @@ public final class Looks {
         toggle("show_action_bar", "Draw the line of words above the hotbar", looks -> looks.showActionBar, (looks, value) -> looks.showActionBar = value);
         toggle("show_hotbar", "Draw the hotbar: the game's own, and the recorder's when riding along", looks -> looks.showHotbar,
                 (looks, value) -> looks.showHotbar = value);
-        toggle("show_blocks", "Draw the terrain and everything built in it. When off only the sky, entities and particles are left",
+        toggle("show_blocks", "Draw the terrain and every block entity in it, however it is drawn. When off only the sky, entities and particles are left; an assembled contraption is an entity",
                 looks -> looks.showBlocks, (looks, value) -> looks.showBlocks = value);
         toggle("show_entities", "Draw entities other than players", looks -> looks.showEntities, (looks, value) -> looks.showEntities = value);
         toggle("show_players", "Draw players", looks -> looks.showPlayers, (looks, value) -> looks.showPlayers = value);
-        toggle("show_beacon_beams", "Draw the beams of beacons", looks -> looks.showBeaconBeams, (looks, value) -> looks.showBeaconBeams = value);
+        toggle("show_beacon_beams", "Draw the beams of beacons, end gateways and anything else that uses the game's beam; the beacon itself stays", looks -> looks.showBeaconBeams, (looks, value) -> looks.showBeaconBeams = value);
         list("hidden_entity_types", "Ids of entity types that are not drawn, for example [\"minecraft:bat\"]. An empty list draws them all",
                 looks -> looks.hiddenEntityTypes, (looks, value) -> looks.hiddenEntityTypes = value);
         list("hidden_particle_types", "Ids of particle types that are not drawn, for example [\"minecraft:rain\"]. An empty list draws them all",

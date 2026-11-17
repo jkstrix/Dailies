@@ -6,16 +6,13 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
-import comedymonkey.dailies.mcp.McpHttpServer;
 import comedymonkey.dailies.mcp.McpToolException;
 import comedymonkey.dailies.mcp.tools.MomentsTools;
 import comedymonkey.dailies.playback.Playback;
-import comedymonkey.dailies.selftest.SelfTest;
 import comedymonkey.dailies.ui.Controls;
 import comedymonkey.dailies.ui.Notices;
 import comedymonkey.dailies.ui.Screens;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -255,30 +252,8 @@ public final class DailiesCommand {
     }
 
     private static int moments(CommandSourceStack source) {
-        try {
-            return openMomentsPage() ? say(source, "moments") : fail(source, "moments.off");
-        } catch (RuntimeException | LinkageError e) {
-            Host.LOGGER.error("Dailies: /dailies moments failed", e);
-            return fail(source, "went_wrong");
-        }
-    }
-
-    /**
-     * Opens the moments page in the browser. The one place the command knows how: when the rest of the mod has a
-     * way of its own to open the page, this is the method to point at it.
-     *
-     * @return false when the page is not being served (the MCP server is switched off)
-     */
-    static boolean openMomentsPage() {
-        int port = McpHttpServer.getListeningPort();
-        if (port <= 0) {
-            return false;
-        }
-        // A scripted run must not put browser windows on the desk of whoever is watching it
-        if (!SelfTest.asked()) {
-            Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
-        }
-        return true;
+        // The same way in as the button and the key have
+        return Controls.openMomentsPage() ? say(source, "moments") : fail(source, "moments.off");
     }
 
     private static int hide(CommandSourceStack source) {

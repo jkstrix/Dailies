@@ -454,6 +454,9 @@ public final class EditorScreen extends Screen {
                 this.keyframeForm.forget();
             }
             this.arrange();
+            // A scene held to a frame shape shows its picture whole in what the panels leave clear
+            comedymonkey.dailies.looks.LooksRenderer.clearOfPanels((double) this.viewerRight / this.width, (double) this.topBottom / this.height,
+                    (double) this.sideLeft / this.width, (double) this.timelineTop / this.height);
             this.timeline.frame(mouseX, GLFW.glfwGetMouseButton(this.minecraft.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS);
 
             boolean busy = Menu.open != null || this.flying;

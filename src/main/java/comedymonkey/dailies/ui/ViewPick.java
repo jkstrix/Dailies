@@ -68,6 +68,12 @@ final class ViewPick {
         }
         double across = 2.0 * mouseX / screenWidth - 1.0;
         double up = 1.0 - 2.0 * mouseY / screenHeight;
+        // A picture held to its frame is shown smaller and to one side, clear of the panels
+        double[] shift = comedymonkey.dailies.looks.LooksRenderer.viewShift();
+        if (shift != null) {
+            across = (across - shift[1]) / shift[0];
+            up = (up - shift[2]) / shift[0];
+        }
         double tangent = Math.tan(Math.toRadians(Math.max(1.0, Math.min(170.0, fieldOfView)) / 2.0));
         double aspect = (double) minecraft.getWindow().getWidth() / Math.max(1, minecraft.getWindow().getHeight());
         Vector3f look = camera.getLookVector();
