@@ -192,7 +192,9 @@ public final class Export {
         timeMap = new TimeMap(scene, start, end);
         totalFrames = wanted.still ? 1 : Math.max(1, timeMap.frameCount(wanted.framesPerSecond));
         frame = 0;
-        worldRebuilt = false;
+        // The first picture always waits for the terrain to settle: the world may have been rebuilt a moment ago
+        worldRebuilt = true;
+        lastDrawn = -1;
         rebuildWaits = 0;
         settledFrames = 0;
         preparedFrame = -1;

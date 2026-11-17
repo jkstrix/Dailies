@@ -23,7 +23,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.WeakHashMap;
 
 /**
  * The link between the editor and the provided Smart Camera (specification chapter VIII). A Smart Camera keyframe is
@@ -35,7 +34,13 @@ public final class SmartCameraDriver {
     /** The height of the viewer's eyes above its feet: the solver gives the eye, the viewer is placed by its feet */
     private static final double VIEWER_EYE_HEIGHT = 1.62;
 
-    private static final Map<Keyframe.SmartCamera, SmartCameraSettings> PARSED = new WeakHashMap<>();
+    // Held firmly: the solver takes a new settings object to mean the keyframe was edited, and starts its shots again
+    private static final Map<Keyframe.SmartCamera, SmartCameraSettings> PARSED = new java.util.LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Keyframe.SmartCamera, SmartCameraSettings> eldest) {
+            return this.size() > 256;
+        }
+    };
     private static volatile SmartCameraSolver lastSolver = null;
     private static volatile Track lastTrack = null;
 

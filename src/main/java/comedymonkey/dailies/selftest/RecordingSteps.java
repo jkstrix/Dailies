@@ -107,6 +107,9 @@ final class RecordingSteps {
         test.command("tp @s 4.5 -60 0.5 90 10");
         test.sleepTicks(10);
 
+        // A known piece of sound, as if from voice chat, close to the kill so that its clip takes it in (MOM-31)
+        OwnerFeatureSteps.speak(test);
+
         // Chapter XIV step 2: machines, built while the recording runs
         CraftSteps.build(test);
 
