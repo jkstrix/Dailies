@@ -153,6 +153,14 @@ public final class Export {
         return active;
     }
 
+    /** The size to show an export picture at in the real window: as large as fits, in its own proportions */
+    public static int[] previewSize(int pictureWidth, int pictureHeight) {
+        int windowWidth = realWidth > 0 ? realWidth : pictureWidth;
+        int windowHeight = realHeight > 0 ? realHeight : pictureHeight;
+        double scale = Math.min((double) windowWidth / pictureWidth, (double) windowHeight / pictureHeight);
+        return new int[]{Math.max(1, (int) Math.round(pictureWidth * scale)), Math.max(1, (int) Math.round(pictureHeight * scale))};
+    }
+
     public static void windowResized(int width, int height) {
         realWidth = width;
         realHeight = height;
@@ -391,7 +399,6 @@ public final class Export {
     /** Puts the game back exactly as it was before the export (EXP-7) */
     private static void restore(Minecraft minecraft) {
         boolean wasStill = settings != null && settings.still;
-        active = false;
         frameReady = false;
         Window window = minecraft.getWindow();
         window.setWidth(realWidth > 0 ? realWidth : savedWidth);
@@ -411,6 +418,8 @@ public final class Export {
                 }
             }
         }
+        // Said last: by the time anyone hears the export is over, playback is already on its way back
+        active = false;
     }
 
 }

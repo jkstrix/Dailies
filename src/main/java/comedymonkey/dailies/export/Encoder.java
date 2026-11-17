@@ -90,6 +90,20 @@ public final class Encoder {
         }
     }
 
+    public static Path programPath() throws IOException {
+        return program();
+    }
+
+    /** The program that reads a video file and says what is in it, unpacked beside the encoder */
+    public static Path inspector() throws IOException {
+        Path encoder = program();
+        Path probe = encoder.resolveSibling(encoder.getFileName().toString().replace("ffmpeg", "ffprobe"));
+        if (!Files.exists(probe)) {
+            throw new IOException("The packed encoder has no inspector");
+        }
+        return probe;
+    }
+
     /** The names of the encoders this build really contains */
     public static synchronized Set<String> encoders() throws IOException {
         if (encoders != null) {

@@ -128,8 +128,58 @@ final class ExportSteps {
 
         if (!Encoder.bundled()) {
             test.skip("this build has no video encoder packed in: exporting a video file was not tried (EXP-1 containers and codecs, EXP-8)");
+        } else {
+            video(test, minecraft, from, to);
         }
         test.skip("sound in exports is not built yet (EXP-3)");
+    }
+
+    /** Two seconds of video: the file must hold the right number of frames, of the right size and length, that are real pictures */
+    private static void video(SelfTest test, Minecraft minecraft, int from, int to) throws Exception {
+        java.util.Map<String, List<String>> offered = Encoder.offered();
+        test.log("the packed encoder offers " + offered);
+        check(offered.containsKey("h264"), "the packed encoder cannot encode H.264 at all: " + offered);
+        Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test.mp4");
+        Files.deleteIfExists(file);
+        long started = System.currentTimeMillis();
+        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "video_codec", "h264", "width", 1920, "height", 1080, "framerate", 30,
+            "start_tick", from, "end_tick", to, "no_gui", true, "bitrate", "8m"));
+        test.waitFor(() -> !Export.active(), 300, "the video to export");
+        JsonObject done = test.tool("export_status", new JsonObject());
+        check(!done.has("last_error"), "the video export failed: " + done);
+        test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
+        check(Files.exists(file) && Files.size(file) > 20_000, "the video file is missing or nearly empty");
+
+        // Ask the encoder's own inspector what is in the file
+        Path probe = Encoder.inspector();
+        String told = run(probe.toString(), "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
+            "stream=codec_name,width,height,nb_read_frames,r_frame_rate:format=duration", "-of", "default=noprint_wrappers=1", file.toString());
+        int expected = (int) Math.round((to - from) / 20.0 * 30.0);
+        check(told.contains("codec_name=h264"), "the video is not H.264: " + told);
+        check(told.contains("width=1920") && told.contains("height=1080"), "the video is not 1920x1080: " + told);
+        check(told.contains("nb_read_frames=" + expected), "the video does not hold " + expected + " frames: " + told);
+        double seconds = Double.parseDouble(told.lines().filter(line -> line.startsWith("duration=")).findFirst().orElse("duration=0").substring(9));
+        check(Math.abs(seconds - (to - from) / 20.0) < 0.1, "the video is " + seconds + " seconds long, not " + (to - from) / 20.0);
+
+        // Pull a frame back out of the video and look at it
+        Path frame = file.resolveSibling("self-test-video-frame.png");
+        Files.deleteIfExists(frame);
+        run(Encoder.programPath().toString(), "-v", "error", "-y", "-i", file.toString(), "-vf", "select=eq(n\\,30)", "-frames:v", "1", frame.toString());
+        BufferedImage picture = ImageIO.read(frame.toFile());
+        check(picture != null && picture.getWidth() == 1920 && spread(picture) > 12.0, "a frame taken back out of the video is missing or blank");
+        // Upright: the sky is above the grass
+        int top = picture.getRGB(960, 40) & 0xFF;
+        int bottom = picture.getRGB(960, 1040) & 0xFF;
+        check(top > bottom, "the video is upside down or scrambled: blue at the top is " + top + " and at the bottom " + bottom);
+        test.log("exported " + expected + " frames of 1920x1080 H.264 in " + (System.currentTimeMillis() - started) + " ms, " + Files.size(file) / 1024 + " KB; the file reports "
+            + told.replace('\n', ' ').trim());
+    }
+
+    private static String run(String... command) throws Exception {
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        String said = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        check(process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS), "a check of the video did not finish");
+        return said;
     }
 
     /** How much the colours of a picture vary: near zero for a blank one */

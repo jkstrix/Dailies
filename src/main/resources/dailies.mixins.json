@@ -18,7 +18,8 @@
     "playback.SoundEngineMixin",
     "playback.ParticleEngineMixin",
     "export.TimerMixin",
-    "export.WindowMixin"
+    "export.WindowMixin",
+    "export.ExportPreviewMixin"
   ],
   "injectors": {
     "defaultRequire": 1

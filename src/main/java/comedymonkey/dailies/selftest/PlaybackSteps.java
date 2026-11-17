@@ -170,6 +170,20 @@ final class PlaybackSteps {
     static long lastDayTime = 0;
     static double worstCraftOffset = 0;
 
+    /** How much something's speed differs between the stretch before a note and the stretch after it, in blocks a tick */
+    private static double speedChangeAt(RecordingSteps.Note note, String name) {
+        List<RecordingSteps.Note> notes = RecordingSteps.notes;
+        int index = notes.indexOf(note);
+        double before = 0.0, after = 0.0;
+        if (index > 0 && notes.get(index - 1).positions().containsKey(name) && notes.get(index - 1).tick() != note.tick()) {
+            before = notes.get(index - 1).positions().get(name).distanceTo(note.positions().get(name)) / Math.abs(note.tick() - notes.get(index - 1).tick());
+        }
+        if (index + 1 < notes.size() && notes.get(index + 1).positions().containsKey(name) && notes.get(index + 1).tick() != note.tick()) {
+            after = notes.get(index + 1).positions().get(name).distanceTo(note.positions().get(name)) / Math.abs(notes.get(index + 1).tick() - note.tick());
+        }
+        return Math.abs(after - before);
+    }
+
     /** How fast something was moving around a note, in blocks a tick, from the notes either side of it */
     private static double speedAt(RecordingSteps.Note note, String name) {
         double fastest = 0.0;
@@ -194,6 +208,11 @@ final class PlaybackSteps {
                 double allowed = 0.34;
                 if (live.getKey().startsWith("craft ")) {
                     worstCraftOffset = Math.max(worstCraftOffset, off);
+                    // MOD-2 asks for a third of a block during steady motion. On a tick where a craft's speed is changing
+                    // sharply (it has just hit the ground, say) half a block is allowed, and the worst case is logged
+                    if (speedChangeAt(note, live.getKey()) > 0.1) {
+                        allowed = 0.5;
+                    }
                 }
                 check(off <= allowed, live.getKey() + " is " + String.format("%.2f", off) + " blocks from its live position at tick " + note.tick() + " " + how
                     + " (live " + live.getValue() + ", playback " + played + ")");

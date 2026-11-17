@@ -60,7 +60,18 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    // The video encoder packed into the mod's jar (specification EXP-8). Not a Java library on the classpath: the jar
+    // is carried as a file, and its contents are unpacked and run beside the game when a video is exported
+    encoder {
+        transitive = false
+    }
+}
+
 dependencies {
+    // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
+    encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
+
     // Unit tests cover the parts that need no running game: the file format, curves, timing, the undo stack
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -74,6 +85,10 @@ test {
 }
 
 processResources {
+    from(configurations.encoder) {
+        into 'encoder'
+        rename { String name -> name.replaceFirst(/^ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar') }
+    }
     inputs.property 'version', project.version
     filesMatching('META-INF/neoforge.mods.toml') {
         expand(version: project.version)
