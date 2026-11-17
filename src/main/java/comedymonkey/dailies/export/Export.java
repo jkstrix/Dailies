@@ -92,6 +92,11 @@ public final class Export {
     private static int lastDrawn = -1;
     private static int settledFrames = 0;
     private static int rebuildWaits = 0;
+    private static int farTerrainWaits = 0;
+    private static boolean farTerrainWaitTold = false;
+    /** Where the export's own clock started, by the real clocks, for the renderers that keep time by them (REN-4) */
+    private static long clockBaseNanos = 0;
+    private static long clockBaseMillis = 0;
 
     // What is put back afterwards (EXP-7)
     private static int savedPosition;
@@ -220,6 +225,24 @@ public final class Export {
         return active;
     }
 
+    /**
+     * The moment of the video the frame being drawn belongs to, as a reading of {@link System#nanoTime}: the export's
+     * start plus exactly frame ÷ frame rate seconds, however long the frames really took. Shader packs and other
+     * renderers that animate by the real clock (water, wind, Veil's effects) read this instead while an export holds
+     * the clock, so an exported frame shows what a live one at that moment would (REN-4). Only meaningful while
+     * {@link #holdsClock()} is true. Render thread
+     */
+    public static long frameClockNanos() {
+        Settings current = settings;
+        return current == null ? System.nanoTime() : clockBaseNanos + Math.round(frame * 1.0e9 / current.framesPerSecond);
+    }
+
+    /** As {@link #frameClockNanos()}, as a reading of {@link System#currentTimeMillis} */
+    public static long frameClockMillis() {
+        Settings current = settings;
+        return current == null ? System.currentTimeMillis() : clockBaseMillis + Math.round(frame * 1000.0 / current.framesPerSecond);
+    }
+
     /** The size to show an export picture at in the real window: as large as fits, in its own proportions */
     public static int[] previewSize(int pictureWidth, int pictureHeight) {
         int windowWidth = realWidth > 0 ? realWidth : pictureWidth;
@@ -282,6 +305,10 @@ public final class Export {
         lastDrawn = -1;
         rebuildWaits = 0;
         settledFrames = 0;
+        farTerrainWaits = 0;
+        farTerrainWaitTold = false;
+        clockBaseNanos = System.nanoTime();
+        clockBaseMillis = System.currentTimeMillis();
         preparedFrame = -1;
         frameReady = false;
         cancelRequested = false;
@@ -419,9 +446,21 @@ public final class Export {
                 if (settledFrames < 8 && rebuildWaits++ < 600) {
                     return;
                 }
+                // Distant Horizons builds and draws its far terrain over many frames of its own after the near terrain is
+                // done: the same wait, for it (CMP-1). Never forever: a far terrain that will not settle is exported as it is
+                if (!comedymonkey.dailies.compat.distanthorizons.DistantHorizonsCompat.settled()) {
+                    if (farTerrainWaits++ < 600) {
+                        return;
+                    }
+                    if (!farTerrainWaitTold) {
+                        farTerrainWaitTold = true;
+                        Host.LOGGER.warn("Dailies: Distant Horizons had not settled after 600 frames; the export goes on with its far terrain as it is. Said once per export");
+                    }
+                }
                 worldRebuilt = false;
                 rebuildWaits = 0;
                 settledFrames = 0;
+                farTerrainWaits = 0;
             }
             if (framesToThrowAway > 0) {
                 framesToThrowAway--;

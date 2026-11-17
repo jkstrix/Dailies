@@ -1,0 +1,7 @@
+nv-codec-headers (FFmpeg's copy of NVIDIA's encoder interface)
+
+Licence: MIT licence, as stated at the head of each header.
+Source: https://github.com/FFmpeg/nv-codec-headers (the exact version and its sha256 are in sources.lock)
+Used for: Headers only: lets ffmpeg use NVIDIA's NVENC hardware encoder, which the NVIDIA driver supplies at run time. No NVIDIA code is in the build.
+
+The licence text, as the project publishes it in its own source, is in licenses/nv-codec-headers/.

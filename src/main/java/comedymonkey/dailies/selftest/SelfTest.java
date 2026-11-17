@@ -111,6 +111,8 @@ public final class SelfTest {
             SettingsSteps.editorDropdown(this);
             EditorDesignSteps.run(this);
             ExportPresetSteps.run(this);
+            // With the recording that has the machines in it still open: Flywheel's contraption, Iris's clock, Distant Horizons
+            RendererSteps.run(this);
             PlaybackSteps.close(this);
             // While the recording with the machines in it is still there: the library steps take it apart
             WatchingSteps.machines(this);
@@ -135,6 +137,12 @@ public final class SelfTest {
                 RealWorldSteps.run(this);
             } else {
                 this.skip("the tour of generated terrain was not asked for (dailies.test.realWorld)");
+            }
+            // Last, so the tour's measures are there to be reported with its own. About three minutes, in a world of its own
+            if (!Boolean.getBoolean("dailies.test.skipBudgets")) {
+                BudgetSteps.run(this);
+            } else {
+                this.skip("the budgets were switched off for this run (dailies.test.skipBudgets)");
             }
             result = "PASSED";
         } catch (Throwable t) {

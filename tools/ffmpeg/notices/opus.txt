@@ -1,0 +1,7 @@
+Opus (libopus)
+
+Licence: BSD 3-clause licence.
+Source: https://opus-codec.org/ (the exact version and its sha256 are in sources.lock)
+Used for: Opus sound, built into ffmpeg.
+
+The licence text, as the project publishes it in its own source, is in licenses/opus/.

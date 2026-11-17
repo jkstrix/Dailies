@@ -1,0 +1,76 @@
+# The scripted run of chapter XIV on every change (specification TEST-5). It needs a real game window and a graphics
+# card, so it runs on a self-hosted Windows runner with a GPU (the owner's PC is enough), labelled "dailies-gpu".
+#
+# Set on the runner or the repository:
+#   variable DAILIES_MODS_FOLDER   the folder the modded run copies Create, Sable, Aeronautics, Sodium, Iris and the
+#                                  rest from (read, never written). Without it the modded run is skipped.
+#   variable DAILIES_TEST_MODS     optional: the -Pdailies.testMods list, to add Distant Horizons for example
+#
+# Kept with each run: the game logs, the run's output, test-result.txt, budgets.txt, and every picture the run made.
+name: Scripted test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One game at a time on the one graphics card
+concurrency:
+  group: dailies-scripted-test
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: [self-hosted, windows, dailies-gpu]
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build the mod and the companion, and run the unit tests
+        run: |
+          ./gradlew.bat build --no-daemon
+          ./gradlew.bat -p companion build --no-daemon
+
+      - name: Scripted run, plain game
+        run: ./tools/ci/scripted-run.ps1 -Task runTestClient -Log run-test-output.log -GameDir run-test
+
+      - name: Scripted run, modded game
+        if: vars.DAILIES_MODS_FOLDER != ''
+        env:
+          DAILIES_MODS_FOLDER: ${{ vars.DAILIES_MODS_FOLDER }}
+          DAILIES_TEST_MODS: ${{ vars.DAILIES_TEST_MODS }}
+        run: ./tools/ci/scripted-run.ps1 -Task runTestModded -Log run-modded-output.log -GameDir run-modded
+
+      - name: Keep logs, pictures and measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripted-test-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            run-test-output.log
+            run-modded-output.log
+            run-test/logs/
+            run-modded/logs/
+            run-test/crash-reports/
+            run-modded/crash-reports/
+            run-test/dailies/test-result.txt
+            run-modded/dailies/test-result.txt
+            run-test/dailies/budgets.txt
+            run-modded/dailies/budgets.txt
+            run-test/dailies/**/*.png
+            run-modded/dailies/**/*.png
+            run-test/screenshots/
+            run-modded/screenshots/
+            build/reports/tests/

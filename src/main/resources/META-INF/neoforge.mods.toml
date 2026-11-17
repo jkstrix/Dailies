@@ -24,6 +24,9 @@ config = "dailies.sound.mixins.json"
 [[mixins]]
 config = "dailies.looks.mixins.json"
 
+[[mixins]]
+config = "dailies.renderers.mixins.json"
+
 [[dependencies.dailies]]
 modId = "neoforge"
 type = "required"

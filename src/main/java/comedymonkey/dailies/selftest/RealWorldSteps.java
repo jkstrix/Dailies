@@ -876,6 +876,8 @@ final class RealWorldSteps {
         if (recording.average() > idle.average() * 1.5 + 2.0) {
             fault(test, "recording slowed the game while " + what + ": frames averaged " + recording.average() + " ms against " + idle.average() + " ms idle");
         }
+        BudgetSteps.measured("BUD-1", "recording's cost, added a frame", Math.max(0, added), 1.0, true, "ms", "the tour of generated terrain, " + what);
+        BudgetSteps.measured("BUD-1", "recording's cost, of a frame at 144 a second", Math.max(0, added) / (1000.0 / 144) * 100, 3.0, true, "%", "the tour of generated terrain, " + what);
     }
 
     // --- 1. Travel: chunks arriving ahead and forgotten behind
@@ -1045,6 +1047,7 @@ final class RealWorldSteps {
         if (hourly > 450) {
             fault(test, "ordinary play in a village filled the recording at " + (int) hourly + " MB an hour, three times what the plan allows");
         }
+        BudgetSteps.measured("BUD-2", "recording size, an hour", hourly, 150, true, "MB", "the tour of generated terrain, ordinary play on foot in a village for " + length + " ticks");
         note(test, "after a walk round the village");
     }
 
@@ -1991,6 +1994,7 @@ final class RealWorldSteps {
         if (opened > 15_000) {
             fault(test, "opening the recording took " + opened + " ms");
         }
+        BudgetSteps.measured("BUD-4", "opening a recording, to its first frame", opened, 5000, true, "ms", "the tour of generated terrain's recording, " + Playback.manifest().totalTicks + " ticks");
         test.sleepTicks(10);
         RecordingManifest manifest = Playback.manifest();
         int total = manifest.totalTicks;
@@ -2047,6 +2051,10 @@ final class RealWorldSteps {
         table.add("longest jump of all: " + longest + " ms; the plan asks for under 2000, and under 500 inside one stretch" + (longest > 2000 || hops.longestWithin > 500 ? " -- OVER" : ""));
         if (longest > 6000) {
             fault(test, "a jump took " + longest + " ms, three times what the plan allows");
+        }
+        BudgetSteps.measured("BUD-3", "a jump to any tick", longest, 2000, true, "ms", "the tour of generated terrain's recording, every noted tick both ways");
+        if (hops.longestWithin > 0) {
+            BudgetSteps.measured("BUD-3", "a jump inside one segment", hops.longestWithin, 500, true, "ms", "the tour of generated terrain's recording, short hops");
         }
 
         // 3. Plain play from the start to the end, stopping at every noted tick

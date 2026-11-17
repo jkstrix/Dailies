@@ -202,6 +202,9 @@ final class PlaybackSteps {
     static long longestJumpMillis = 0;
     static long lastDayTime = 0;
     static double worstCraftOffset = 0;
+    /** The worst offsets of craft and of someone standing on a deck, less the tick of travel the checks allow for sampling; -1 when none was compared */
+    static double worstCraftBeyondSampling = -1;
+    static double worstDeckBeyondSampling = -1;
 
     /** How much something's speed differs between the stretch before a note and the stretch after it, in blocks a tick */
     private static double speedChangeAt(RecordingSteps.Note note, String name) {
@@ -249,12 +252,15 @@ final class PlaybackSteps {
                 double allowed = 0.34 + Math.min(1.2, speedAt(note, live.getKey()));
                 if (live.getKey().startsWith("craft ")) {
                     worstCraftOffset = Math.max(worstCraftOffset, off);
+                    // For the budget of chapter XIV (BUD-7): what is left once the tick of sampling allowed for is taken off
+                    worstCraftBeyondSampling = Math.max(worstCraftBeyondSampling, off - Math.min(1.2, speedAt(note, live.getKey())));
                 } else if (live.getKey().equals(CraftSteps.RECORDER_ON_CRAFT)) {
                     // Someone standing on a craft stays on its deck to within a quarter of a block (MOD-4). This is measured
                     // from the craft, so the craft's own travel does not come into it
                     // The live sample is taken between two ticks with the deck up to a tick behind the person on it, so one tick
                     // of their travel is allowed here too; once the craft moves steadily this is the plain quarter block
                     allowed = 0.25 + Math.min(0.6, speedAt(note, "recorder"));
+                    worstDeckBeyondSampling = Math.max(worstDeckBeyondSampling, off - Math.min(0.6, speedAt(note, "recorder")));
                 }
                 check(off <= allowed, live.getKey() + " is " + String.format("%.2f", off) + " blocks from its live position at tick " + note.tick() + " " + how
                     + " (live " + live.getValue() + ", playback " + played + ")");

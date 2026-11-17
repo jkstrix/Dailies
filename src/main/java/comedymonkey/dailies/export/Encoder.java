@@ -92,6 +92,9 @@ public final class Encoder {
                     if (base.equals("ffmpeg.exe") || base.equals("ffmpeg")) {
                         found = file;
                         file.toFile().setExecutable(true);
+                    } else if (base.equals("ffprobe.exe") || base.equals("ffprobe")) {
+                        // A jar keeps no execute bit, and on Linux and macOS the inspector needs one as much as the encoder
+                        file.toFile().setExecutable(true);
                     }
                 }
             }

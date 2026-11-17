@@ -9,3 +9,5 @@ run-server/
 *.class
 .claude/
 run-modded/
+tools/ffmpeg/work/
+tools/ffmpeg/out/
