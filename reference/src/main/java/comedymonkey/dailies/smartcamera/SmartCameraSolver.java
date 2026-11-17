@@ -450,7 +450,7 @@ public final class SmartCameraSolver {
         boolean applyFov = true;
         double wantedFov;
         if (keyframe.autoZoom) {
-            wantedFov = SmartCameraMath.autoZoomFov(this.subjectSize, cameraDistance, keyframe.subjectScreenHeight, keyframe.minFov, keyframe.maxFov, aspectRatio(minecraft));
+            wantedFov = SmartCameraMath.autoZoomFov(this.subjectSize, cameraDistance, keyframe.subjectScreenHeight, keyframe.minFov, keyframe.maxFov);
         } else if (keyframe.fixedFov > 0.0f) {
             wantedFov = keyframe.fixedFov;
         } else {

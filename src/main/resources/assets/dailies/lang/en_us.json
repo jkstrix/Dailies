@@ -302,7 +302,6 @@
   "dailies.editor.moments.band.tip": "Clip: %1$s. %2$s long, importance %3$s. Click to set the export range to it and go to its start; right-click for more",
   "dailies.editor.moments.band.tip_cut": "Clip: %1$s. %2$s of it is left in this recording, importance %3$s; part was cut. Click to set the export range to it and go to its start; right-click for more",
   "dailies.editor.moments.band.scene": "Make a scene from this clip",
-  "dailies.editor.moments.band.scene_vertical": "Make a vertical scene (9:16)",
   "dailies.editor.moments.band.range": "Set the export range to it",
   "dailies.editor.moments.band.jump": "Go to its start",
   "dailies.editor.moments.band.chosen": "Export range set to the clip \"%1$s\"",

@@ -152,8 +152,6 @@ public final class Host {
          * @return the index of the new scene
          */
         int createScene(String name, int startTick, int endTick) throws Exception;
-        /** Change look settings of the current scene by name, as visuals_set does, through the editor's undo stack. Client thread */
-        void setSceneLooks(JsonObject values) throws Exception;
         /** Run several edits so that they are one step to undo, under this description. Client thread */
         void asOneEdit(String description, EditWork edits) throws Exception;
 

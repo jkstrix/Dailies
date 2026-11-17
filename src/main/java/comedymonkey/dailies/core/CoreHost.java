@@ -283,11 +283,6 @@ public final class CoreHost implements Host.Mod {
     }
 
     @Override
-    public void setSceneLooks(JsonObject values) {
-        this.openHistory().setLooks(values);
-    }
-
-    @Override
     public void asOneEdit(String description, Host.EditWork edits) throws Exception {
         var history = this.openHistory();
         history.beginGroup(description);

@@ -7,7 +7,6 @@ import comedymonkey.dailies.moments.MomentsTimeline.Band;
 import comedymonkey.dailies.moments.MomentsTimeline.Cluster;
 import comedymonkey.dailies.moments.MomentsTimeline.Mark;
 import comedymonkey.dailies.moments.MomentsTimeline.Timeline;
-import comedymonkey.dailies.smartcamera.SmartCameraMath;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -249,21 +248,6 @@ class MomentsTimelineTest {
         List<Cluster> near = MomentsTimeline.cluster(marks, 990, 2.0, 13.0, mark -> mark.tick() < 2000);
         assertEquals(3, near.size());
         assertEquals(20.0, near.get(0).x(), 1.0e-9, "positions are measured from the left edge of what is shown");
-    }
-
-    // --- A tall frame (plan 2.2) ---
-
-    @Test
-    void autoZoomFitsTheSubjectToTheNarrowSideOfATallFrame() {
-        double wide = SmartCameraMath.autoZoomFov(2.0, 10.0, 0.3, 5.0, 150.0);
-        assertEquals(wide, SmartCameraMath.autoZoomFov(2.0, 10.0, 0.3, 5.0, 150.0, 16.0 / 9.0), 1.0e-9, "a wide frame is as it always was");
-        assertEquals(wide, SmartCameraMath.autoZoomFov(2.0, 10.0, 0.3, 5.0, 150.0, 1.0), 1.0e-9);
-        double tall = SmartCameraMath.autoZoomFov(2.0, 10.0, 0.3, 5.0, 150.0, 9.0 / 16.0);
-        assertTrue(tall > wide, "a tall frame needs a wider view for the same subject to fit its width");
-        // In the tall frame the subject is 0.3 of the width: half the view's width at that distance is tan(fov / 2) x aspect x distance
-        double halfWidth = Math.tan(Math.toRadians(tall) / 2.0) * (9.0 / 16.0) * 10.0;
-        assertEquals(0.3, 2.0 / (2.0 * halfWidth), 1.0e-9);
-        assertEquals(90.0, SmartCameraMath.autoZoomFov(2.0, 1.0, 0.3, 30.0, 90.0, 9.0 / 16.0), 1.0e-9, "and never past the limits set");
     }
 
 }

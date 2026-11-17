@@ -106,20 +106,6 @@ public final class SmartCameraMath {
     }
 
     /**
-     * {@link #autoZoomFov(double, double, double, double, double)} for a frame of a given shape. In a frame taller
-     * than it is wide (a vertical video) the width is what the subject has to fit, so the fraction is taken of the
-     * width; in any other frame nothing changes.
-     *
-     * @param aspect the frame's width divided by its height
-     */
-    public static double autoZoomFov(double subjectSize, double distance, double screenFraction, double minFov, double maxFov, double aspect) {
-        if (aspect <= 0.0 || aspect >= 1.0) {
-            return autoZoomFov(subjectSize, distance, screenFraction, minFov, maxFov);
-        }
-        return autoZoomFov(subjectSize, distance, screenFraction * aspect, minFov, maxFov);
-    }
-
-    /**
      * One step of a critically damped spring towards the target. Exact for any step size, so the result does not
      * depend on the frame rate. smoothTime is roughly how long the value takes to catch up.
      */

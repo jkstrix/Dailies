@@ -132,7 +132,7 @@ final class TimelineSteps {
         String refused = test.toolError("moments_clip_to_scene", args("session", session, "clip_id", clipId, "colour", "red"));
         check(refused.contains("colour"), "moments_clip_to_scene did not refuse an unknown argument by name: " + refused);
         JsonObject made = test.tool("moments_clip_to_scene", args("session", session, "clip_id", clipId));
-        check(made.get("start_tick").getAsInt() == clipStart && made.get("end_tick").getAsInt() == clipEnd && made.get("camera_added").getAsBoolean() && !made.get("vertical").getAsBoolean(),
+        check(made.get("start_tick").getAsInt() == clipStart && made.get("end_tick").getAsInt() == clipEnd && made.get("camera_added").getAsBoolean(),
             "moments_clip_to_scene did not say what it made: " + made);
         String title = clip.get("title").getAsString();
         String wantedName = title.length() > 60 ? title.substring(0, 60).trim() : title;
@@ -149,24 +149,6 @@ final class TimelineSteps {
             check(EditorSession.history().state().scenes().size() == scenesBefore, "one undo did not take the scene made from a clip away");
             check(EditorSession.scene().name().equals(sceneBefore), "after the undo the current scene is '" + EditorSession.scene().name() + "', not '" + sceneBefore + "'");
         });
-
-        // --- The same for a vertical video: a 9:16 scene, a closer chase, and the Smart Camera composing for that frame ---
-        JsonObject tall = test.tool("moments_clip_to_scene", args("session", session, "clip_id", clipId, "vertical", true, "name", "For Shorts"));
-        check(tall.get("vertical").getAsBoolean() && tall.getAsJsonObject("suggested_camera").get("mode").getAsString().equals("chase")
-            && tall.getAsJsonObject("suggested_camera").getAsJsonObject("settings").get("distance").getAsDouble() <= 5.0, "a vertical scene was not given a closer chase: " + tall);
-        test.onClientRun(() -> {
-            Scene scene = EditorSession.scene();
-            check(scene.name().equals("For Shorts") && scene.looks().letterbox && Math.abs(scene.looks().frameRatio() - 9.0 / 16.0) < 1.0e-6, "the vertical scene is not held to 9:16");
-            Keyframe camera = smartCameraAt(scene, clipStart);
-            check(camera != null, "the vertical scene has no Smart Camera keyframe");
-        });
-        test.waitFor(() -> {
-            Double ratio = Host.get().exportAspectRatio();
-            return ratio != null && Math.abs(ratio - 9.0 / 16.0) < 1.0e-6;
-        }, 10, "the frame the Smart Camera composes for to become 9:16");
-        test.tool("editor_undo", none);
-        check(test.onClient(() -> EditorSession.history().state().scenes().size()) == scenesBefore, "one undo did not take the vertical scene away");
-        test.waitFor(() -> Host.get().exportAspectRatio() == null, 10, "the frame to go back to the window's shape");
 
         test.log("timeline: " + timeline.marks().size() + " marks (the kill at tick " + killTick + "), " + timeline.bands().size() + " band(s), " + timeline.strips().size()
             + " voice strip(s); gathered into " + squeezed.size() + " at 30 pixels; switch, band click and scene from a clip each undone in one step");

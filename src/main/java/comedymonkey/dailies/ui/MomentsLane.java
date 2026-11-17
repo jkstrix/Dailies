@@ -411,8 +411,7 @@ public final class MomentsLane {
                 chooseBand(band);
             } else if (button == 1) {
                 List<Menu.Item> items = new ArrayList<>();
-                items.add(new Menu.Item(Kit.t("moments.band.scene"), () -> makeScene(band, false)));
-                items.add(new Menu.Item(Kit.t("moments.band.scene_vertical"), () -> makeScene(band, true)));
+                items.add(new Menu.Item(Kit.t("moments.band.scene"), () -> makeScene(band)));
                 items.add(new Menu.Item(Kit.t("moments.band.range"), () -> chooseBand(band)));
                 items.add(new Menu.Item(Kit.t("moments.band.jump"), () -> Controls.jumpTo(band.start())));
                 Menu.show(items, mouseX, mouseY);
@@ -436,9 +435,9 @@ public final class MomentsLane {
     }
 
     /** "Make a scene from this clip": a scene named after it with its range and the suggested camera, as one step to undo */
-    public static void makeScene(Band band, boolean vertical) {
+    public static void makeScene(Band band) {
         try {
-            MomentsTools.makeScene(band.sessionId(), band.clipId(), vertical);
+            MomentsTools.makeScene(band.sessionId(), band.clipId());
             EditorState.selection.clear();
             EditorState.say(Kit.t("moments.band.scene_made", band.title()));
         } catch (Exception refused) {

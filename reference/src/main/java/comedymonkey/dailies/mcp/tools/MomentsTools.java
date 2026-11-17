@@ -306,13 +306,11 @@ public final class MomentsTools {
         registrar.add("moments_clip_to_scene",
             "Make a scene of the open replay from a clip candidate: a new scene named after the clip, with its export range set to the clip and the suggested smart camera "
                 + "at its start, following the player who recorded. The new scene becomes the current one and the replay jumps to the clip's start, paused. All of it is one step: "
-                + "editor_undo takes the whole scene away again. Works when the open replay holds the clip, as moments_clip_goto does; call moments_cue first to open the right one. "
-                + "With vertical the scene is held to a 9:16 frame for Shorts and Reels and the camera is a closer chase that suits it.",
+                + "editor_undo takes the whole scene away again. Works when the open replay holds the clip, as moments_clip_goto does; call moments_cue first to open the right one.",
             schema()
                 .string("clip_id", "Clip id from moments_clips_generate / moments_clips_list")
                 .string("name", "Name of the scene (default: the clip's title)")
                 .bool("camera", "Add the suggested smart camera at the clip's start (default true)")
-                .bool("vertical", "Make it for a vertical video: a 9:16 letterboxed scene and a closer chase camera (default false)")
                 .required("clip_id"),
             MomentsTools::clipToScene);
     }
@@ -1355,30 +1353,6 @@ public final class MomentsTools {
      * Tripods are left to the director, which places its own; a lone tripod needs a position somebody chose.
      */
     private static JsonObject suggestCamera(JsonArray events) {
-        return suggestCamera(events, false);
-    }
-
-    /**
-     * @param vertical the clip is for a tall frame (Shorts, Reels): there is no room at the sides, so the camera stays
-     *                 close behind and the player fills the height
-     */
-    private static JsonObject suggestCamera(JsonArray events, boolean vertical) {
-        if (vertical) {
-            JsonObject settings = new JsonObject();
-            settings.addProperty("distance", 4.0);
-            settings.addProperty("height", 1.5);
-            settings.addProperty("side_angle", 0.0);
-            settings.addProperty("lead_room", 0.1);
-            settings.addProperty("auto_zoom", true);
-            settings.addProperty("subject_screen_height", 0.35);
-            JsonObject json = new JsonObject();
-            json.addProperty("mode", "chase");
-            json.addProperty("label", "Chase, close");
-            json.addProperty("reason", "A tall frame has no room at the sides, so the camera stays close behind the player and keeps them large");
-            json.add("settings", settings);
-            return json;
-        }
-
         int action = 0, travel = 0;
         for (JsonElement element : events) {
             JsonObject event = element.getAsJsonObject();
@@ -1463,23 +1437,23 @@ public final class MomentsTools {
 
     private static JsonObject clipToScene(McpArgs args) throws Exception {
         MomentsSession session = session(args);
-        return makeScene(session, args.string("clip_id"), args.optString("name"), args.optBool("camera", true), args.optBool("vertical", false));
+        return makeScene(session, args.string("clip_id"), args.optString("name"), args.optBool("camera", true));
     }
 
     /** {@link #makeScene} for the editor, which knows a clip by its session and id. Client thread */
-    public static JsonObject makeScene(String sessionId, String clipId, boolean vertical) throws Exception {
+    public static JsonObject makeScene(String sessionId, String clipId) throws Exception {
         MomentsSession session = Moments.storage().getSession(sessionId);
         if (session == null) {
             throw new McpToolException("The play session this clip belongs to is gone");
         }
-        return makeScene(session, clipId, null, true, vertical);
+        return makeScene(session, clipId, null, true);
     }
 
     /**
      * A scene of the open recording for a clip: named after it, exporting exactly it, with the suggested camera at its
      * start. One step to undo. Client thread.
      */
-    private static JsonObject makeScene(MomentsSession session, String clipId, @Nullable String wantedName, boolean withCamera, boolean vertical) throws Exception {
+    private static JsonObject makeScene(MomentsSession session, String clipId, @Nullable String wantedName, boolean withCamera) throws Exception {
         JsonObject clip = null;
         for (JsonObject candidate : session.clips()) {
             if (clipId.equals(MJson.str(candidate, "id"))) {
@@ -1506,7 +1480,7 @@ public final class MomentsTools {
         if (name.length() > 60) {
             name = name.substring(0, 60).trim();
         }
-        JsonObject camera = suggestCamera(MJson.arr(clip, "events"), vertical);
+        JsonObject camera = suggestCamera(MJson.arr(clip, "events"));
         JsonObject cameraArgs = camera.getAsJsonObject("settings").deepCopy();
         cameraArgs.addProperty("mode", MJson.str(camera, "mode"));
         cameraArgs.addProperty("tick", startTick);
@@ -1521,12 +1495,6 @@ public final class MomentsTools {
         boolean[] cameraAdded = {false};
         Host.get().asOneEdit("Make scene \"" + sceneName + "\" from a clip", () -> {
             index[0] = Host.get().createScene(sceneName, startTick, endTick);
-            if (vertical) {
-                JsonObject frame = new JsonObject();
-                frame.addProperty("aspect_guide", "9:16");
-                frame.addProperty("letterbox", true);
-                Host.get().setSceneLooks(frame);
-            }
             if (withCamera) {
                 try {
                     Host.get().addSmartCamera(cameraArgs);
@@ -1545,7 +1513,6 @@ public final class MomentsTools {
         json.addProperty("scene_name", sceneName);
         json.addProperty("start_tick", startTick);
         json.addProperty("end_tick", endTick);
-        json.addProperty("vertical", vertical);
         json.addProperty("camera_added", cameraAdded[0]);
         json.add("suggested_camera", camera);
         json.addProperty("cut", here.cut());
