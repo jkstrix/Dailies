@@ -45,6 +45,23 @@ neoForge {
     }
 }
 
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Unit tests cover the parts that need no running game: the file format, curves, timing, the undo stack
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // The game brings its own copy when it runs; unit tests run without the game
+    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
+}
+
+test {
+    useJUnitPlatform()
+}
+
 processResources {
     inputs.property 'version', project.version
     filesMatching('META-INF/neoforge.mods.toml') {
