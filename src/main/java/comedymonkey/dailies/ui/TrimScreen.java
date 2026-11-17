@@ -228,7 +228,7 @@ public final class TrimScreen extends KitScreen {
         this.centre(760, 0);
         Component under = t("explained");
         int head = this.headingHeight(font, under);
-        int wanted = head + 76 + 6 + Kit.ROW + 8 + 90 + 6 + Kit.ROW * 3 + 6 * 3 + Kit.ROW + 2 + 8 + 8;
+        int wanted = head + 76 + 6 + Kit.ROW + 18 + 90 + 6 + Kit.ROW * 3 + 6 * 3 + Kit.ROW + 2 + 8 + 8;
         this.centre(760, Math.min(this.height - 24, wanted));
         int inner = this.right - this.left - 16;
         int x = this.left + 8;
@@ -242,7 +242,7 @@ public final class TrimScreen extends KitScreen {
             bx += width + Kit.GAP * 2;
         }
         place(font, this.summary, bx + 6, y, this.right - 8 - bx - 6, Kit.ROW);
-        y += Kit.ROW + 8;
+        y += Kit.ROW + 6 + 12;
         int footTop = this.bottom - 8 - Kit.ROW - 2;
         int below = footTop - 6 - (Kit.ROW + 6) * 3;
         this.ranges.place(font, x - 3, y, inner + 6, Math.max(20, below - y));
@@ -273,7 +273,7 @@ public final class TrimScreen extends KitScreen {
         if (this.ranges.isEmpty()) {
             return;
         }
-        Kit.text(graphics, font, t("kept_heading").getString(), this.left + 9, this.ranges.y - 9, Controls.BRASS_BRIGHT);
+        Kit.text(graphics, font, t("kept_heading").getString(), this.left + 9, this.ranges.y - 10, Controls.BRASS_BRIGHT);
     }
 
     // ------------------------------------------------------------------ The list of what is kept

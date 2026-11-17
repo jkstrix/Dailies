@@ -198,6 +198,12 @@ final class LibraryBits {
         }
     }
 
+    /** Why a job failed, without the word a tool reads to know it must ask before leaving a world */
+    static String plain(@Nullable String error) {
+        String words = String.valueOf(error);
+        return words.startsWith("LEAVE_WORLD_NEEDED: ") ? words.substring("LEAVE_WORLD_NEEDED: ".length()) : words;
+    }
+
     /**
      * How a combine or a trim is getting on: a bar with what it is doing, and once it is over, how it ended. Takes no
      * room while there is no job.
@@ -224,7 +230,7 @@ final class LibraryBits {
                 case RUNNING -> Component.translatable("dailies.library.job.running", now.stage(), Math.round(now.progress() * 100)).getString();
                 case DONE -> Component.translatable("dailies.library.job.done").getString();
                 case CANCELLED -> Component.translatable("dailies.library.job.cancelled").getString();
-                case FAILED -> Component.translatable("dailies.library.job.failed", String.valueOf(now.error())).getString();
+                case FAILED -> Component.translatable("dailies.library.job.failed", plain(now.error())).getString();
             };
             int fill = now.state() == LibraryJob.State.FAILED ? 0xFF7A2E22 : now.state() == LibraryJob.State.CANCELLED ? 0xFF4A3A1C : Controls.FACE_LIT;
             bar(graphics, font, this.x, this.y, this.width, this.height, now.state() == LibraryJob.State.RUNNING ? now.progress() : 1.0, fill, words);
@@ -236,7 +242,7 @@ final class LibraryBits {
             if (now == null || !this.over(mouseX, mouseY)) {
                 return null;
             }
-            Component tip = now.state() == LibraryJob.State.FAILED ? Component.literal(String.valueOf(now.error())) : Component.translatable("dailies.library.job.tip");
+            Component tip = now.state() == LibraryJob.State.FAILED ? Component.literal(plain(now.error())) : Component.translatable("dailies.library.job.tip");
             if (now.throughGame() && now.state() == LibraryJob.State.RUNNING) {
                 tip = Component.empty().append(tip).append("\n").append(Component.translatable("dailies.library.job.through_game"));
             }
