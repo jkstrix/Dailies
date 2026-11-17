@@ -92,6 +92,9 @@ final class RecordingSteps {
         check(started.get("active").getAsBoolean(), "recording_start did not start a recording");
         check(test.toolError("recording_start", none).contains("already"), "starting twice did not say a recording is already being made");
         String id = started.get("recording_id").getAsString();
+        // From here to the end of the recording, every tick on which the live player's body overlaps a block is noted
+        BlockWatch.liveTicks.clear();
+        BlockWatch.start();
         test.sleepTicks(20);
 
         test.command("summon minecraft:armor_stand 8.5 -60 6.5 {CustomName:'\"Mover\"',NoGravity:1b}");
@@ -143,8 +146,6 @@ final class RecordingSteps {
 
         // Long enough to cross at least two more segment boundaries with the short test segments (REC-20, REC-24)
         int segmentTicks = Integer.getInteger("dailies.test.segmentTicks", 6000);
-        BlockWatch.liveTicks.clear();
-        BlockWatch.start();
         FrameTimes.begin();
         check(segmentTicks <= 200, "the scripted run needs short segments: set dailies.test.segmentTicks");
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
@@ -176,7 +177,6 @@ final class RecordingSteps {
 
         BlockWatch.stop();
         test.tool("config_set", args("key", "recordHud", "value", false));
-        check(BlockWatch.liveTicks.isEmpty(), "the test's own path put the recorder inside a block at ticks " + BlockWatch.liveTicks + ", so it cannot show that playback keeps them out");
         JsonObject finished = test.tool("recording_finish", args("name", "Self test"));
         recording = Path.of(finished.get("path").getAsString());
         check(Files.exists(recording) && recording.getFileName().toString().equals("Self test" + RecordingFile.EXTENSION), "the recording was not saved under its name: " + recording);

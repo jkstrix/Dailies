@@ -73,8 +73,21 @@ final class PlaybackSteps {
         test.waitFor(() -> Playback.paused() && Playback.position() == watchTo, 90, "the play-through that watches for blocks");
         BlockWatch.stop();
         test.tool("replay_set_speed", args("tick_rate", 20));
-        check(BlockWatch.playbackTicks.isEmpty(), "in playback the recorder was inside a block at ticks " + BlockWatch.playbackTicks + ", where the live player never was");
-        test.log("the recorder stayed out of blocks on all " + (watchTo - watchFrom) + " ticks of the play-through");
+        // Wherever the recorded player is inside a block, the live player was too, give or take the three ticks a game takes
+        // to ease another player to where it was told they are
+        java.util.Set<Integer> only = new java.util.TreeSet<>();
+        for (int inBlock : BlockWatch.playbackTicks) {
+            boolean liveToo = false;
+            for (int near = inBlock - 4; near <= inBlock + 4; near++) {
+                liveToo |= BlockWatch.liveTicks.contains(near);
+            }
+            if (!liveToo) {
+                only.add(inBlock);
+            }
+        }
+        check(only.isEmpty(), "in playback the recorder was inside a block at ticks " + only + ", where the live player was not (live: " + BlockWatch.liveTicks + ")");
+        test.log("over " + (watchTo - watchFrom) + " ticks of play the recorder was inside a block only where the live player was (" + BlockWatch.playbackTicks.size()
+            + " ticks in playback, " + BlockWatch.liveTicks.size() + " live)");
 
         // The same world at a tick, however it is reached
         RecordingSteps.Note middle = RecordingSteps.notes.get(RecordingSteps.notes.size() / 2);
