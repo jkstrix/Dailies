@@ -377,7 +377,7 @@ final class CraftSteps {
 
     /** Call on the client thread, so the tick and the positions belong together */
     static RecordingSteps.Note flightNote(Minecraft minecraft) {
-        return new RecordingSteps.Note(comedymonkey.dailies.capture.Recorder.get().recordingTick(), flightPositions(minecraft, null));
+        return new RecordingSteps.Note(comedymonkey.dailies.capture.Recorder.get().recordingTick(), flightPositions(minecraft, null), System.currentTimeMillis(), minecraft.level.getGameTime());
     }
 
     /**
