@@ -84,7 +84,7 @@ final class EditingTools {
 
         add(registrar, "scene_remove",
             "Remove a scene with all its tracks, keyframes and looks. The only scene left cannot be removed, and a scene that still has tracks is only removed with 'force'. "
-                + "Can be undone with editor_undo.",
+                + "Can be undone with editor_undo, and a copy is kept in the bin for binDays days (replay_bin_list, replay_bin_restore).",
             McpSchema.object()
                 .integer("index", "Index of the scene, from scene_list. Left out, the current scene is removed")
                 .bool("force", "Remove the scene even though it still has tracks. Default false"),
@@ -96,6 +96,8 @@ final class EditingTools {
                         + (doomed.tracks().size() == 1 ? " track" : " tracks") + ". Pass force=true to remove it with them, or remove them first with track_remove");
                 }
                 history.removeScene(index);
+                // A copy goes to the bin as well, so it can be got back after the undo history is gone (REC-9)
+                comedymonkey.dailies.library.Library.binScene(doomed);
                 JsonObject json = scenes(history);
                 json.addProperty("removed", doomed.name());
                 return changed(json, history);

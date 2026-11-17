@@ -60,6 +60,14 @@ public final class DailiesConfig {
             bool("showMomentsOnTimeline", true, "Show the recording's moments on the editor's timeline: events as marks, clips as bands and a strip for each voice");
             bool("showMarkersInWorld", true, "Show markers that stored a position as coloured rings on the ground while watching. Never in exports");
         });
+        group("storage", "Disk space and the bin", () -> {
+            integer("binDays", 30, 1, 3650, "How many days something deleted stays in the bin, where it can be restored, before it is deleted for good");
+            integer("retentionDays", 0, 0, 36500, "Move recordings older than this many days to the bin, unless they are starred or hold footage that was exported. 0 keeps every recording");
+            bool("voiceAudioOnceTranscribed", false, "Remove a voice segment's audio once it has been transcribed. Its words, times and speaker are kept");
+            integer("voiceAudioDays", 0, 0, 36500, "Remove a voice segment's audio once it is this many days old, transcribed or not. 0 keeps it");
+            integer("diskWarnGigabytes", 20, 0, 100000, "Warn while recording when the disk has less than this many gigabytes free. 0 never warns");
+            integer("diskPauseGigabytes", 5, 0, 100000, "Pause the recording, with a notice, when the disk has less than this many gigabytes free, before it fills. 0 never pauses");
+        });
         group("advanced", "Advanced", () -> {
             text("ignoredPayloads", "", "Mod messages that playback must not hand back to their mod, added to the built-in list. Ids or namespace:* separated by commas or new lines; a leading + allows one the built-in list ignores");
             text("testShaderPack", "", "For the scripted test only: the file name of a shader pack in the test game's shaderpacks folder (run-modded/shaderpacks) to try playback and export with, such as the zip of Complementary Shaders - Reimagined. Needs Iris. Empty skips the shader pack checks");

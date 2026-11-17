@@ -72,6 +72,119 @@ final class LibraryTools {
                 job.cancel();
                 return describe(job);
             });
+
+        registrar.add("replay_delete",
+            "Delete a recording by moving it to the bin, where it stays for binDays days (30 unless changed) and can be restored with replay_bin_restore. Nothing is deleted for good "
+                + "until the bin is emptied or the days run out. While it is in the bin its moments are found only in recordings made from it. The open recording cannot be deleted.",
+            McpSchema.object().string("recording", "A name, a file name, a path or a recording id, as replay_list shows them").required("recording"),
+            McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args, "recording");
+                Path file = recording(args.string("recording"));
+                try {
+                    return item(Library.delete(file));
+                } catch (IllegalStateException e) {
+                    throw new McpToolException(e.getMessage());
+                }
+            });
+
+        registrar.add("moments_session_delete",
+            "Delete a moments session by moving its folder to the bin, where it can be restored with replay_bin_restore until binDays days have passed. The session being written "
+                + "now cannot be deleted.",
+            McpSchema.object().string("session", "The session id, as moments_sessions_list shows it").required("session"),
+            McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args, "session");
+                try {
+                    return item(Library.binSession(args.string("session")));
+                } catch (IllegalArgumentException | IllegalStateException e) {
+                    throw new McpToolException(e.getMessage());
+                }
+            });
+
+        registrar.add("replay_bin_list",
+            "What is in the bin: deleted recordings, scenes and moments sessions, the most recently deleted first, each with its id, kind, name, world, size, when it was deleted "
+                + "and how many days are left before it is deleted for good.",
+            McpSchema.object(), McpTool.ThreadMode.HTTP, 30, args -> {
+                CoreTools.allowOnly(args);
+                JsonArray items = new JsonArray();
+                for (comedymonkey.dailies.library.Bin.Item item : Library.bin().list()) {
+                    items.add(item(item));
+                }
+                JsonObject json = new JsonObject();
+                json.add("items", items);
+                json.addProperty("bin_days", Library.binDays());
+                json.addProperty("size_bytes", Library.bin().size());
+                return json;
+            });
+
+        registrar.add("replay_bin_restore",
+            "Put something back from the bin where it came from: a recording into the recordings folder (under a free name if its old one was taken), a moments session into "
+                + "the moments folder, a scene into its recording (into the editor when that recording is open).",
+            McpSchema.object().string("id", "The item's id, from replay_bin_list").required("id"),
+            McpTool.ThreadMode.HTTP, 60, args -> {
+                CoreTools.allowOnly(args, "id");
+                try {
+                    JsonObject json = new JsonObject();
+                    json.addProperty("message", Library.restore(args.string("id")));
+                    return json;
+                } catch (IllegalArgumentException | IllegalStateException | java.io.IOException e) {
+                    throw new McpToolException(e.getMessage());
+                }
+            });
+
+        registrar.add("replay_bin_empty",
+            "Delete everything in the bin for good. This cannot be undone, so it is refused unless 'confirm' is true: ask the person first.",
+            McpSchema.object().bool("confirm", "Must be true: the person has agreed that what is in the bin is gone for good").required("confirm"),
+            McpTool.ThreadMode.HTTP, 120, args -> {
+                CoreTools.allowOnly(args, "confirm");
+                if (!args.optBool("confirm", false)) {
+                    throw new McpToolException("Emptying the bin deletes everything in it for good. Ask the person, then call again with confirm = true");
+                }
+                JsonObject json = new JsonObject();
+                json.addProperty("deleted", Library.emptyBin());
+                return json;
+            });
+
+        registrar.add("replay_storage",
+            "How much room Dailies takes, per world: recordings, moments audio, exports and the bin, and how much is free on the disk, with what the free space calls for "
+                + "(fine, low or full by the diskWarnGigabytes and diskPauseGigabytes settings). Looks at every folder, so it can take a moment on a big library.",
+            McpSchema.object(), McpTool.ThreadMode.HTTP, 120, args -> {
+                CoreTools.allowOnly(args);
+                comedymonkey.dailies.library.StorageReport report = Library.storage();
+                JsonObject json = new JsonObject();
+                json.addProperty("recordings_bytes", report.recordings);
+                json.addProperty("audio_bytes", report.audio);
+                json.addProperty("exports_bytes", report.exports);
+                json.addProperty("bin_bytes", report.bin);
+                json.addProperty("free_bytes", report.free);
+                json.addProperty("disk", comedymonkey.dailies.library.DiskGuard.state(report.free).name().toLowerCase(java.util.Locale.ROOT));
+                JsonArray worlds = new JsonArray();
+                for (comedymonkey.dailies.library.StorageReport.World world : report.byWorld()) {
+                    JsonObject one = new JsonObject();
+                    one.addProperty("world", world.name);
+                    one.addProperty("recordings", world.recordingCount);
+                    one.addProperty("recordings_bytes", world.recordings);
+                    one.addProperty("audio_bytes", world.audio);
+                    one.addProperty("exports_bytes", world.exports);
+                    one.addProperty("bin_bytes", world.bin);
+                    worlds.add(one);
+                }
+                json.add("worlds", worlds);
+                return json;
+            });
+    }
+
+    private static JsonObject item(comedymonkey.dailies.library.Bin.Item item) {
+        JsonObject json = new JsonObject();
+        json.addProperty("id", item.id);
+        json.addProperty("kind", item.kind);
+        json.addProperty("name", item.name);
+        json.addProperty("world", item.world);
+        json.addProperty("from", item.from);
+        json.addProperty("recording_id", item.recordingId);
+        json.addProperty("deleted_at", java.time.Instant.ofEpochMilli(item.binned).toString());
+        json.addProperty("size_bytes", item.size);
+        json.addProperty("days_left", comedymonkey.dailies.library.Retention.daysLeft(item, Library.binDays(), System.currentTimeMillis()));
+        return json;
     }
 
     private static Path recording(String text) {

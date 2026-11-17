@@ -165,6 +165,15 @@ public class MomentsStorage {
         }
     }
 
+    /**
+     * Forgets a session held in memory, after its folder was moved to the bin, so that nothing is written into a
+     * folder that is no longer there. Restoring it brings it back from its files the next time it is asked for.
+     */
+    public void release(String id) {
+        this.flush();
+        this.sessions.remove(id);
+    }
+
     public FirstsStore getFirsts(String worldKey) {
         return this.firsts.computeIfAbsent(worldKey, key -> FirstsStore.load(this, this.root.resolve("firsts").resolve(key + ".json")));
     }

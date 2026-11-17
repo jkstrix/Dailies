@@ -274,6 +274,37 @@ public final class EditHistory {
         return index + 1;
     }
 
+    /**
+     * Puts back a scene that was taken out (from the bin, REC-9): a copy of it after the others, made current. When a
+     * scene of the same name is there already, the one put back is called "Name (restored)", so neither is mistaken
+     * for the other.
+     *
+     * @return the index it is at
+     */
+    public int putBackScene(Scene scene) {
+        this.step(next -> {
+            Scene copy = scene.copy();
+            copy.setName(restoredName(next, scene.name()));
+            next.addScene(next.scenes().size(), copy);
+            next.selectScene(next.scenes().size() - 1);
+            return "Restore scene \"" + copy.name() + "\"";
+        });
+        return this.state.currentSceneIndex();
+    }
+
+    /** The name a scene put back is given: its own, or one beside it that no scene has */
+    public static String restoredName(EditState state, String name) {
+        java.util.function.Predicate<String> taken = wanted -> state.scenes().stream().anyMatch(other -> other.name().equals(wanted));
+        if (!taken.test(name)) {
+            return name;
+        }
+        String restored = name + " (restored)";
+        for (int number = 2; taken.test(restored); number++) {
+            restored = name + " (restored " + number + ")";
+        }
+        return restored;
+    }
+
     /** Removes a scene with everything in it. Refused for the last scene left */
     public void removeScene(int index) {
         this.step(next -> "Remove scene \"" + next.removeScene(index).name() + "\"");

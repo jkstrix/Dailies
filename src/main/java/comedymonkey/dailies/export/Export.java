@@ -75,6 +75,9 @@ public final class Export {
     private static ExportPresets presets = null;
 
     private static Settings settings;
+    /** The ticks exported, the first included and the last not */
+    private static int exportFrom;
+    private static int exportTo;
     private static TimeMap timeMap;
     private static FrameSink sink;
     private static Thread writer;
@@ -298,6 +301,8 @@ public final class Export {
         lastNote = wanted.note;
         sink = newSink;
         timeMap = new TimeMap(scene, start, end);
+        exportFrom = start;
+        exportTo = Math.min(total, end + 1);
         totalFrames = wanted.still ? 1 : Math.max(1, timeMap.frameCount(wanted.framesPerSecond));
         frame = 0;
         // The first picture always waits for the terrain to settle: the world may have been rebuilt a moment ago
@@ -522,6 +527,11 @@ public final class Export {
         }
         lastOutput = ExportSound.finish(sink.finish(cancelled), cancelled);
         lastCancelled = cancelled;
+        comedymonkey.dailies.file.RecordingFile exportedFrom = Playback.file();
+        if (!cancelled && settings != null && !settings.still && exportedFrom != null) {
+            // Remembered by original and tick, so the retention rule spares every recording that holds this footage (REC-8)
+            comedymonkey.dailies.library.Library.exported(exportedFrom.id(), exportedFrom.manifest().worldName, exportedFrom.sourceMap(), exportFrom, exportTo, lastOutput);
+        }
         Host.LOGGER.info("Dailies: export {} after {} of {} frames: {}", cancelled ? "stopped" : "finished", frame, totalFrames, lastOutput);
         restore(minecraft);
     }

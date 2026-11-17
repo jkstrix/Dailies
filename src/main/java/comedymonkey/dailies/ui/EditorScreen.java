@@ -329,6 +329,9 @@ public final class EditorScreen extends Screen {
             int end = Playback.position();
             EditorState.history().setExportRange(scene.hasExportRange() ? Math.min(end, scene.exportStart()) : 0, end);
         }).tip(Kit.t("range.end_here.tip")));
+        // Trimming starts from the export range: what is kept is what would be exported (FILE-10)
+        range.add(new Gadget.Push(Kit.t("range.trim"), () -> Minecraft.getInstance().setScreen(TrimScreen.fromEditor(this)))
+                .tip(Kit.t("range.trim.tip")));
         this.group(this.topLeft, range.toArray(new Gadget[0]));
 
         Gadget undo = Gadget.Push.icon(Kit.Icon.UNDO, Component.translatable("dailies.ui.timeline.undo"), EditorState::undo).liveTip(() -> {
@@ -377,7 +380,10 @@ public final class EditorScreen extends Screen {
         }));
         items.add(new Menu.Item(Kit.t("more.scene_remove"), () -> {
             EditorState.selection.clear();
-            EditorState.history().removeScene(EditorState.history().state().currentSceneIndex());
+            int doomed = EditorState.history().state().currentSceneIndex();
+            // Into the bin, from where it can be put back (REC-9)
+            comedymonkey.dailies.library.Library.binScene(EditorState.history().state().scene(doomed));
+            EditorState.history().removeScene(doomed);
         }, EditorState.history().state().scenes().size() > 1, false));
         items.add(new Menu.Item(Kit.t("more.range_clear"), () -> EditorState.history().clearExportRange(), EditorState.scene().hasExportRange(), false));
         return items;
