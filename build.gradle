@@ -107,9 +107,28 @@ configurations {
     }
 }
 
+// Which encoder is packed in (EXP-8). "bytedeco", the default until the owner switches: the JavaCPP Presets' LGPL
+// build, Windows only. "dailies": our own LGPL build from tools/ffmpeg/build.sh, one jar per platform, taken from
+// -Pdailies.encoderDir (default tools/ffmpeg/out/jars, where "build.sh pack" or the FFmpeg workflow's artifact puts
+// them), for the platforms in -Pdailies.encoderPlatforms (comma-separated, default all that are there)
+def encoderSource = providers.gradleProperty('dailies.encoderSource').getOrElse('bytedeco')
+def encoderDir = file(providers.gradleProperty('dailies.encoderDir').getOrElse('tools/ffmpeg/out/jars'))
+def encoderPlatforms = providers.gradleProperty('dailies.encoderPlatforms').getOrElse('windows-x86_64,linux-x86_64,linux-arm64,macosx-arm64,macosx-x86_64').split(',').collect { it.trim() }
+if (!(encoderSource in ['bytedeco', 'dailies'])) {
+    throw new GradleException("dailies.encoderSource is '${encoderSource}': it must be bytedeco or dailies")
+}
+def encoderJars = encoderSource == 'bytedeco' ? configurations.encoder : fileTree(encoderDir) {
+    include encoderPlatforms.collect { "dailies-ffmpeg-*-${it}.jar".toString() }
+}
+if (encoderSource == 'dailies' && encoderJars.isEmpty()) {
+    throw new GradleException("dailies.encoderSource is dailies, and there are no dailies-ffmpeg-*-<platform>.jar files in ${encoderDir}: run tools/ffmpeg/build.sh pack, or point dailies.encoderDir at the FFmpeg workflow's jars")
+}
+
 dependencies {
     // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
-    encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
+    if (encoderSource == 'bytedeco') {
+        encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
+    }
 
     // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
     compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
@@ -127,10 +146,20 @@ test {
 }
 
 processResources {
-    from(configurations.encoder) {
+    from(encoderJars) {
         into 'encoder'
-        rename { String name -> name.replaceFirst(/^ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar') }
+        // Either kind becomes encoder/ffmpeg-<platform>.jar, which is where Encoder looks
+        rename { String name ->
+            name.replaceFirst(/^ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar')
+                .replaceFirst(/^dailies-ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar')
+        }
     }
+    if (encoderSource == 'dailies') {
+        // Our own build's licence texts and notices, one folder per library, beside the others (EXP-8)
+        from(new File(encoderDir, 'licenses')) { into 'licenses/ffmpeg-build' }
+        from(new File(encoderDir, 'notices')) { into 'licenses/ffmpeg-build/notices' }
+    }
+    inputs.property 'encoderSource', encoderSource
     // The notices and Dailies' own licence travel in the jar, beside the licence texts in the licenses folder (EXP-8)
     from(rootProject.file('THIRD-PARTY-NOTICES.md'))
     from(rootProject.file('LICENSE'))

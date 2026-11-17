@@ -1,0 +1,99 @@
+# Builds the LGPL FFmpeg that Dailies carries (specification EXP-8), for every platform, with tools/ffmpeg/build.sh.
+# Each platform is built, checked on its own kind of machine, then all are packed as one jar per platform and one of
+# all. Run by hand, or when the build script or its pinned sources change. sources.lock must be pinned first
+# (./build.sh lock): the build refuses unpinned sources.
+name: FFmpeg for Dailies
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/ffmpeg/**'
+      - '.github/workflows/ffmpeg.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x86_64
+            runner: ubuntu-22.04
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+          - platform: linux-arm64
+            runner: ubuntu-22.04-arm
+          - platform: macosx-arm64
+            runner: macos-14
+          - platform: macosx-x86_64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build meson nasm pkg-config \
+            patchelf zip xz-utils curl libdrm-dev
+          if [ "${{ matrix.platform }}" = windows-x86_64 ]; then
+            sudo apt-get install -y --no-install-recommends mingw-w64
+            # The posix-threads flavour: the oneVPL dispatcher is C++ and needs std::mutex
+            sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          fi
+
+      - name: Tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install nasm ninja pkgconf
+
+      - name: Build
+        run: tools/ffmpeg/build.sh build ${{ matrix.platform }}
+
+      - name: Check (built on this machine)
+        if: matrix.platform != 'windows-x86_64'
+        run: tools/ffmpeg/build.sh verify ${{ matrix.platform }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-${{ matrix.platform }}
+          path: |
+            tools/ffmpeg/out/platforms
+            tools/ffmpeg/out/licenses
+            tools/ffmpeg/out/notices
+
+  # The Windows programs are cross-built on Linux, so they are checked on Windows
+  verify-windows:
+    needs: build
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-windows-x86_64
+          path: tools/ffmpeg/out
+      - run: tools/ffmpeg/build.sh verify windows-x86_64
+
+  pack:
+    needs: [build, verify-windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ffmpeg-*
+          path: tools/ffmpeg/out
+          merge-multiple: true
+      - run: sudo apt-get install -y --no-install-recommends zip
+      - run: tools/ffmpeg/build.sh pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dailies-ffmpeg-jars
+          path: tools/ffmpeg/out/jars

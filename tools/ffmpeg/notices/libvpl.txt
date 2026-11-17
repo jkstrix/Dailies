@@ -1,0 +1,7 @@
+Intel Video Processing Library (oneVPL) dispatcher
+
+Licence: MIT licence.
+Source: https://github.com/intel/libvpl (the exact version and its sha256 are in sources.lock)
+Used for: Built into ffmpeg on Windows and Linux x86_64: finds Intel's Quick Sync runtime, which the Intel driver supplies, at run time.
+
+The licence text, as the project publishes it in its own source, is in licenses/libvpl/.
