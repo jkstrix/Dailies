@@ -64,6 +64,7 @@ final class ExportPresetSteps {
         List<Codecs.Choice> working = codecList(test);
         presetsAreKept(test);
         builtInPresets(test, folder, from, working);
+        everyEncoder(test, folder, from, working);
         withoutHardware(test, folder, from);
         otherMaster(test, folder, from);
         separateTracks(test, folder, from);
@@ -201,8 +202,29 @@ final class ExportPresetSteps {
         check(probe("v:0", "stream=width,height", file).replaceAll("\\s+", " ").contains("width=360 height=640"), "what is given beside a preset does not win over it");
     }
 
+    /** Every encoder the list offers makes a file the inspector accepts: being on the list is a promise that it works */
+    private static void everyEncoder(SelfTest test, Path folder, int from, List<Codecs.Choice> working) throws Exception {
+        StringBuilder made = new StringBuilder();
+        for (Codecs.Choice choice : working) {
+            String container = Codecs.containerFor(choice.codec(), "mp4");
+            Path file = folder.resolve("self-test-encoder-" + choice.encoder() + "." + container);
+            Files.deleteIfExists(file);
+            test.tool("export_start", args("output_path", file.toString(), "container", container, "video_codec", choice.codec(), "encoder", choice.encoder(), "width", 640, "height", 360,
+                "framerate", 30, "start_tick", from, "end_tick", from + 10, "no_gui", true, "bitrate", "2m", "overwrite", true));
+            finish(test, "the export with " + choice.encoder());
+            String told = probe("v:0", "stream=codec_name,width,height,nb_read_frames", file);
+            check(told.contains("codec_name=" + Codecs.probeName(choice.codec())) && told.contains("width=640") && told.contains("height=360") && told.contains("nb_read_frames=15"),
+                choice.encoder() + " is on the codec list and did not write 15 frames of 640x360 " + choice.codec() + ": " + told);
+            check(Files.size(file) > 2000, choice.encoder() + " wrote a file that is nearly empty");
+            made.append(' ').append(choice.encoder()).append(" (").append(Files.size(file) / 1024).append(" KB);");
+        }
+        test.log("every encoder on the list wrote a file the inspector accepts:" + made);
+    }
+
     /** What a machine without any hardware encoder gets: no H.264, a preset that says what it used instead, and a file of that codec */
     private static void withoutHardware(SelfTest test, Path folder, int from) throws Exception {
+        // The whole run may have been started with this switch already on, and then it stays on
+        String before = System.getProperty(Encoder.SOFTWARE_ONLY);
         System.setProperty(Encoder.SOFTWARE_ONLY, "true");
         try {
             JsonObject listed = test.tool("export_codecs_list", new JsonObject());
@@ -243,7 +265,11 @@ final class ExportPresetSteps {
             check(told.contains("codec_name=av1") && told.contains("width=640") && told.contains("nb_read_frames=15"), "the file of the preset that fell back is not 15 frames of AV1: " + told);
             test.log("without hardware encoders: H.264 refused with its reason; presets took AV1 (" + started.get("note").getAsString() + ")");
         } finally {
-            System.clearProperty(Encoder.SOFTWARE_ONLY);
+            if (before == null) {
+                System.clearProperty(Encoder.SOFTWARE_ONLY);
+            } else {
+                System.setProperty(Encoder.SOFTWARE_ONLY, before);
+            }
             if (Export.presets().find("Self test h264") != null) {
                 test.tool("export_presets_remove", args("name", "Self test h264"));
             }

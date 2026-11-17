@@ -17,45 +17,53 @@ everything else in the mod works the same. Encoders for the other platforms are 
 - **Version:** FFmpeg 8.1.2, as packaged by the JavaCPP Presets, artifact `org.bytedeco:ffmpeg:8.1.2-1.5.14`,
   platform `windows-x86_64`. This is the build without the `-gpl` classifier: it is configured with
   `--enable-version3` and without `--enable-gpl` or `--enable-nonfree`.
-- **Licence:** GNU Lesser General Public License, version 3 or later: `licenses/LGPL-3.0-or-later.txt`, which adds to
-  the GNU General Public License, version 3: `licenses/GPL-3.0-or-later.txt`.
+- **Licence:** GNU Lesser General Public License, version 3 or later (FFmpeg is LGPL 2.1 or later; `--enable-version3`
+  makes this build LGPL 3 or later). FFmpeg's own statement is `licenses/FFmpeg-LICENSE.md`; the licence is
+  `licenses/FFmpeg-COPYING.LGPLv3`, which adds to the GNU General Public License, version 3,
+  `licenses/FFmpeg-COPYING.GPLv3`.
 - **Where it is:** `encoder/ffmpeg-windows-x86_64.jar` inside the Dailies jar. On first export its files are unpacked
   to `<game>/dailies/encoder/windows-x86_64/`.
 - **Replacing it:** Dailies runs the encoder as a separate program and does not link against it. Any FFmpeg build can
   be used in its place by replacing the unpacked files in that folder, which is what the LGPL asks to be possible.
 - **Source:** https://ffmpeg.org/ and https://github.com/bytedeco/javacpp-presets/tree/master/ffmpeg (the build
-  script `cppbuild.sh` there names the exact version of every library below and fetches its source).
+  script `cppbuild.sh` there names the version of every library below and fetches its source).
 
 ## Libraries built into that FFmpeg
 
-The list is taken from the build's own configuration line (`ffmpeg -version`). Each library is under the licence
-named, whose text is in the `licenses` folder.
+The list is taken from the build's own configuration line (`ffmpeg -version`) and from the JavaCPP Presets' build
+script. Each library is under the licence named. The text in the `licenses` folder is that project's own licence
+file, copyright notice included, as its official repository publishes it.
 
-| Library | Used for | Licence | Text |
+| Library | Used for | Licence | Text in `licenses/` |
 |---|---|---|---|
-| SVT-AV1 (Alliance for Open Media) | AV1 video, software | BSD 3-Clause Clear, with the Alliance for Open Media Patent License 1.0 | `BSD-3-Clause-Clear.txt` |
-| libaom (Alliance for Open Media) | AV1 video, software | BSD 2-Clause, with the Alliance for Open Media Patent License 1.0 | `BSD-2-Clause.txt` |
-| libvpx (The WebM Project) | VP8 and VP9 video | BSD 3-Clause, with a patent grant | `BSD-3-Clause.txt` |
-| libopus (Xiph.Org and others) | Opus sound | BSD 3-Clause, with patent grants | `BSD-3-Clause.txt` |
-| OpenH264 (Cisco Systems) | Not used by Dailies, see below | BSD 2-Clause | `BSD-2-Clause.txt` |
-| LAME (libmp3lame) | Not used by Dailies | GNU Library General Public License, version 2 or later; taken here as version 2.1 | `LGPL-2.1-or-later.txt` |
-| Speex (Xiph.Org) | Not used by Dailies | BSD 3-Clause | `BSD-3-Clause.txt` |
-| OpenCORE AMR, VisualOn AMR-WB | Not used by Dailies | Apache License 2.0 | `Apache-2.0.txt` |
-| OpenSSL | Not used by Dailies (network protocols) | Apache License 2.0 | `Apache-2.0.txt` |
-| libsrt (Haivision) | Not used by Dailies (network protocols) | Mozilla Public License 2.0 | `MPL-2.0.txt` |
-| FreeType | Not used by Dailies (text drawing) | FreeType Project License | `FTL.txt` |
-| HarfBuzz | Not used by Dailies (text drawing) | MIT ("Old MIT") | `MIT.txt` |
-| libxml2 | Not used by Dailies | MIT | `MIT.txt` |
-| libwebp (Google) | Not used by Dailies | BSD 3-Clause, with a patent grant | `BSD-3-Clause.txt` |
-| zimg | Not used by Dailies | WTFPL, version 2 | `WTFPL.txt` |
-| zlib | Compression inside file formats | zlib licence | `Zlib.txt` |
-| Intel Media SDK dispatcher (libmfx) | Intel Quick Sync hardware encoding | MIT | `MIT.txt` |
-| NVIDIA codec headers (nv-codec-headers) | NVIDIA hardware encoding | MIT | `MIT.txt` |
-| mingw-w64 winpthreads (`libwinpthread-1.dll`) | Threads on Windows | MIT and BSD 3-Clause | `MIT.txt`, `BSD-3-Clause.txt` |
-| GCC runtime libraries, linked in | The C and C++ runtime | GNU General Public License, version 3 or later, with the GCC Runtime Library Exception | `GPL-3.0-or-later.txt` |
-| JavaCPP Presets glue (`jni*.dll`, Bytedeco) | Not used by Dailies; unpacked with the rest | Apache License 2.0 | `Apache-2.0.txt` |
+| SVT-AV1 (Alliance for Open Media) | AV1 video, software | BSD 3-Clause Clear, with the Alliance for Open Media Patent License 1.0 | `SVT-AV1-LICENSE.md`, `SVT-AV1-PATENTS.md` |
+| libaom (Alliance for Open Media) | AV1 video, software | BSD 2-Clause, with the Alliance for Open Media Patent License 1.0 | `libaom-LICENSE`, `libaom-PATENTS` |
+| libvpx (The WebM Project) | VP8 and VP9 video | BSD 3-Clause, with Google's additional patent grant | `libvpx-LICENSE`, `libvpx-PATENTS` |
+| Opus (Xiph.Org and others) | Opus sound | BSD 3-Clause | `opus-COPYING` |
+| OpenH264 (Cisco Systems) | Not used by Dailies, see below | BSD 2-Clause | `openh264-LICENSE` |
+| LAME (libmp3lame) | Not used by Dailies | GNU Library General Public License, version 2 or later | `lame-COPYING` |
+| Speex (Xiph.Org and others) | Not used by Dailies | BSD 3-Clause | `speex-COPYING` |
+| OpenCORE AMR | Not used by Dailies | Apache License 2.0 | `opencore-amr-LICENSE` |
+| VisualOn AMR-WB encoder | Not used by Dailies | Apache License 2.0 | `vo-amrwbenc-COPYING` |
+| OpenSSL | Not used by Dailies (network protocols) | Apache License 2.0 | `openssl-LICENSE.txt` |
+| SRT (Haivision) | Not used by Dailies (network protocols) | Mozilla Public License 2.0 | `srt-LICENSE` |
+| FreeType | Not used by Dailies (text drawing) | FreeType License (the project offers that or GPL 2; the FreeType License is taken) | `freetype-LICENSE.TXT`, `freetype-FTL.TXT` |
+| HarfBuzz | Not used by Dailies (text drawing) | "Old MIT" | `harfbuzz-COPYING` |
+| libxml2 | Not used by Dailies | MIT | `libxml2-Copyright` |
+| libwebp (Google) | Not used by Dailies | BSD 3-Clause, with Google's additional patent grant | `libwebp-COPYING`, `libwebp-PATENTS` |
+| zimg | Not used by Dailies | WTFPL, version 2 | `zimg-COPYING` |
+| zlib | Compression inside file formats | zlib licence | `zlib-LICENSE` |
+| Intel Media SDK dispatcher (mfx_dispatch) | Intel Quick Sync hardware encoding | BSD 3-Clause | `mfx_dispatch-LICENSE` |
+| NVIDIA codec headers (nv-codec-headers) | NVIDIA hardware encoding | MIT | `nv-codec-headers-LICENSE.txt` |
+| mingw-w64 winpthreads (`libwinpthread-1.dll`) | Threads on Windows | MIT and BSD 3-Clause | `winpthreads-COPYING` |
+| GCC runtime libraries, linked in | The C and C++ runtime | GNU General Public License, version 3 or later, with the GCC Runtime Library Exception 3.1 | `FFmpeg-COPYING.GPLv3`, `gcc-COPYING.RUNTIME` |
+| JavaCPP Presets glue (`jni*.dll`, Bytedeco) | Not used by Dailies; unpacked with the rest | Apache License 2.0 (or GPL 2 with the Classpath exception; Apache is taken) | `javacpp-presets-LICENSE.txt` |
 
-The Alliance for Open Media Patent License 1.0 is at https://aomedia.org/license/patent-license/.
+FreeType asks for this acknowledgement: portions of this software are copyright The FreeType Project
+(https://freetype.org). All rights reserved.
+
+The licence files were taken from each project's official repository in November 2026, from its main branch. The
+versions built into the packaged FFmpeg may be a little older, and their copyright years with them.
 
 The hardware encoders (NVIDIA, Intel, and Windows Media Foundation) are part of the graphics driver or of Windows;
 Dailies carries only the open headers needed to call them.
