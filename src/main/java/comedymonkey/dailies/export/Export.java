@@ -18,10 +18,18 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import net.minecraft.Util;
 
 /**
  * Renders a scene's range to pictures or a video, one frame at a time, however long each frame takes (specification
@@ -60,7 +68,23 @@ public final class Export {
         public boolean transparent = false;
         /** One picture of the view as it is now, not a range */
         public boolean still = false;
+        /** Also write what was said in the range as SRT and WebVTT files beside the video (EXP-11) */
+        public boolean captionSrt = false;
+        public boolean captionVtt = false;
+        /** Begin each caption with the speaker's name */
+        public boolean captionSpeakers = true;
+        /** Draw what was said into the picture (EXP-15) */
+        public boolean burnCaptions = false;
+        /** Lines or word by word; null for the setting */
+        public @Nullable Captions.Style captionStyle = null;
+
+        public boolean captions() {
+            return this.captionSrt || this.captionVtt || this.burnCaptions;
+        }
     }
+
+    /** How long a burned-in export waits for its captions to be worked out before it goes on without them */
+    private static final long CAPTION_WAIT_MILLIS = 30_000;
 
     private static volatile boolean active = false;
     private static volatile boolean cancelRequested = false;
@@ -71,6 +95,10 @@ public final class Export {
     private static volatile boolean lastCancelled = false;
     private static volatile long startedNanos = 0;
     private static volatile String lastNote = null;
+    private static volatile @Nullable String captionNote = null;
+    private static volatile List<Path> captionFiles = List.of();
+    private static volatile @Nullable List<Captions.Cue> burnCues = null;
+    private static long captionWaitSince = 0;
     private static boolean machineTold = false;
     private static ExportPresets presets = null;
 
@@ -107,6 +135,8 @@ public final class Export {
 
     public static void init() {
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Post event) -> afterFrame());
+        QueueRunner.init();
+        CaptionBurner.init();
     }
 
     // --- What others may ask (any thread) ---
@@ -138,6 +168,16 @@ public final class Export {
     /** What the preset of the export under way or the last one had to change to work here, or null */
     public static @Nullable String lastNote() {
         return lastNote;
+    }
+
+    /** What became of the captions of the export under way or the last one; null when none were asked for (EXP-11, EXP-15) */
+    public static @Nullable String captionNote() {
+        return captionNote;
+    }
+
+    /** The caption files the last export wrote */
+    public static List<Path> captionFiles() {
+        return captionFiles;
     }
 
     /** The export presets, kept with the mod's data (EXP-14) */
@@ -316,6 +356,7 @@ public final class Export {
             // From here the game's sound goes into the file and not to the speakers; restore() puts it back
             ExportSound.begin(wanted, timeMap, scene);
         }
+        startCaptions(wanted, pictures, start, end);
         Host.LOGGER.info("Dailies: export started, {} frames of {}x{} to {}", totalFrames, wanted.width, wanted.height, wanted.output);
     }
 
@@ -324,6 +365,73 @@ public final class Export {
             throw new IllegalStateException("No export is running");
         }
         cancelRequested = true;
+    }
+
+    /**
+     * Works out what was said in the range and writes it as caption files beside the output, away from the client
+     * thread; a burned-in export waits for it before its first frame (EXP-11, EXP-15).
+     */
+    private static void startCaptions(Settings wanted, boolean pictures, int start, int end) {
+        burnCues = null;
+        captionFiles = List.of();
+        captionNote = null;
+        captionWaitSince = System.currentTimeMillis();
+        if (wanted.still || !wanted.captions()) {
+            return;
+        }
+        String recording = Playback.recordingId();
+        TimeMap map = timeMap;
+        double total = map.totalRealSeconds();
+        Path output = wanted.output;
+        boolean srt = wanted.captionSrt;
+        boolean vtt = wanted.captionVtt;
+        boolean speakers = wanted.captionSpeakers;
+        boolean burn = wanted.burnCaptions;
+        captionNote = "the captions are being worked out";
+        CompletableFuture.supplyAsync(() -> {
+            comedymonkey.dailies.moments.MomentsTranscript.Transcript transcript = comedymonkey.dailies.moments.Moments.transcriptFor(recording, start, end);
+            List<Captions.Cue> cues = Captions.cues(transcript, map::realSecondsAt, total);
+            List<Path> written = new ArrayList<>();
+            try {
+                if (srt) {
+                    written.add(writeCaptions(output, pictures, "srt", Captions.srt(cues, speakers)));
+                }
+                if (vtt) {
+                    written.add(writeCaptions(output, pictures, "vtt", Captions.vtt(cues, speakers)));
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            captionFiles = List.copyOf(written);
+            String said = cues.isEmpty() ? "nobody was heard in this range, so the captions are empty" : cues.size() + " captions";
+            captionNote = said + (written.isEmpty() ? "" : ", written to " + String.join(" and ", written.stream().map(path -> path.getFileName().toString()).toList()))
+                + (burn ? (cues.isEmpty() ? "" : ", drawn into the picture") : "");
+            return cues;
+        }, Util.ioPool()).whenComplete((cues, error) -> {
+            if (error != null) {
+                Host.LOGGER.error("Dailies: the captions could not be made", error);
+                Throwable cause = error.getCause() != null ? error.getCause() : error;
+                captionNote = "the captions could not be made: " + (cause.getMessage() == null ? cause.toString() : cause.getMessage());
+                burnCues = List.of();
+            } else {
+                burnCues = cues;
+            }
+        });
+    }
+
+    /** clip.mp4 gets clip.srt beside it; a folder of pictures gets captions.srt inside it */
+    private static Path writeCaptions(Path output, boolean pictures, String ending, String text) throws IOException {
+        Path file;
+        if (pictures) {
+            Files.createDirectories(output);
+            file = output.resolve("captions." + ending);
+        } else {
+            String name = output.getFileName().toString();
+            int dot = name.lastIndexOf('.');
+            file = output.resolveSibling((dot > 0 ? name.substring(0, dot) : name) + "." + ending);
+        }
+        Files.writeString(file, text, StandardCharsets.UTF_8);
+        return file;
     }
 
     // --- The work ---
@@ -428,6 +536,22 @@ public final class Export {
                 return;
             }
             RenderTarget target = minecraft.getMainRenderTarget();
+            if (settings.burnCaptions && !settings.still) {
+                List<Captions.Cue> cues = burnCues;
+                if (cues == null && System.currentTimeMillis() - captionWaitSince < CAPTION_WAIT_MILLIS) {
+                    // Every frame has its words, the first ones too
+                    return;
+                }
+                if (cues == null) {
+                    burnCues = cues = List.of();
+                    captionNote = "the captions took too long to work out and were left out of the picture";
+                }
+                String said = Captions.at(cues, frame / settings.framesPerSecond, settings.captionStyle != null ? settings.captionStyle
+                    : Captions.style(Host.get().setting("captionStyle", "LINES")), settings.captionSpeakers);
+                if (said != null) {
+                    CaptionBurner.drawIntoFrame(minecraft, target, said, settings.captionStyle);
+                }
+            }
             int bytes = target.width * target.height * 4;
             if (pixels == null || pixels.capacity() != bytes) {
                 if (pixels != null) {

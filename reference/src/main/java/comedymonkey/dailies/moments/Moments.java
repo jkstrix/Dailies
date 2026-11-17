@@ -265,6 +265,51 @@ public final class Moments {
         return MomentsTimeline.build(recordingId, sources, mapper, MomentsConfig::isIgnored, total);
     }
 
+    /**
+     * What was said in ticks fromTick to toTick of a recording, line by line and word by word, for captions
+     * (specification EXP-11, EXP-15). Works for a recording trimmed or combined from others, as {@link #timelineFor}
+     * does, and leaves out everyone on the list of voices never transcribed. Reads files, so not for the client thread.
+     */
+    public static MomentsTranscript.Transcript transcriptFor(String recordingId, int fromTick, int toTick) {
+        if (storage == null || recordingId == null || recordingId.isBlank()) {
+            return MomentsTranscript.Transcript.empty(String.valueOf(recordingId));
+        }
+        Host.Mod host = Host.get();
+        boolean open = recordingId.equals(host.openRecordingId());
+        MomentsTranscript.Mapper mapper = (from, start, end) -> {
+            List<MomentsTranscript.Piece> pieces = new java.util.ArrayList<>();
+            for (Host.ClipLocation location : host.locateClip(from, start, end)) {
+                if (location.recordingId().equals(recordingId)) {
+                    for (Host.Stretch stretch : location.stretches()) {
+                        pieces.add(new MomentsTranscript.Piece(stretch.tick(), stretch.endTick(), stretch.sourceTick(), stretch.sourceEndTick()));
+                    }
+                    return pieces;
+                }
+            }
+            if (open) {
+                // A recording opened from outside the recordings folder is in no index: it answers for itself, end by end
+                int first = host.openRecordingContains(from, start);
+                int last = host.openRecordingContains(from, end);
+                if (first >= 0 && last >= first) {
+                    pieces.add(new MomentsTranscript.Piece(first, last, start, start + (last - first)));
+                } else if (first >= 0) {
+                    // The sentence runs past the end of what is held: as far as the recording goes
+                    int total = host.openRecordingTicks();
+                    pieces.add(new MomentsTranscript.Piece(first, total, start, start + (total - first)));
+                }
+            }
+            return pieces;
+        };
+        List<JsonObject> dialogue = new java.util.ArrayList<>();
+        for (String sessionId : storage.listSessionIds()) {
+            MomentsSession session = storage.getSession(sessionId);
+            if (session != null && madeDuring(session, recordingId, open, host)) {
+                dialogue.addAll(session.list(MomentsSession.Kind.DIALOGUE));
+            }
+        }
+        return MomentsTranscript.build(recordingId, dialogue, mapper, MomentsConfig::isVoiceExcluded, fromTick, toTick);
+    }
+
     /** Whether any recording made during a session is this one, or one this one was made from */
     private static boolean madeDuring(MomentsSession session, String recordingId, boolean open, Host.Mod host) {
         for (com.google.gson.JsonElement element : MJson.arr(session.meta(), "replays")) {

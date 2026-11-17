@@ -63,6 +63,7 @@ public final class SettingsScreen extends KitScreen {
 
     static {
         offer("marker\\d+Colour", COLOURS);
+        offer("caption(Colour|Outline)", List.of("white", "yellow", "black", "red", "orange", "green", "cyan", "blue", "purple"));
         offer(".*Language", LANGUAGES);
         // No setting holds one of these yet; the lists are the ones the export panel offers, ready for when one does
         offer("(?i).*(video)?codec", List.of("h264", "h265", "av1", "vp9"));

@@ -72,7 +72,8 @@ public final class EditorSession {
         RecordingFile closingFile = file;
         history = null;
         file = null;
-        if (closingHistory != null && closingFile != null && closingHistory.revision() != savedRevision) {
+        // The background export game reads recordings and never writes to them (EXP-13)
+        if (closingHistory != null && closingFile != null && closingHistory.revision() != savedRevision && !comedymonkey.dailies.export.Worker.active()) {
             byte[] bytes = closingHistory.state().toBytes();
             try {
                 // After anything the saver thread still has in hand, and before the file is closed
@@ -120,7 +121,8 @@ public final class EditorSession {
     private static void autosave() {
         EditHistory current = history;
         RecordingFile target = file;
-        if (current == null || target == null || current.revision() == savedRevision || System.currentTimeMillis() - changedAt < SAVE_AFTER_MILLIS) {
+        if (current == null || target == null || current.revision() == savedRevision || System.currentTimeMillis() - changedAt < SAVE_AFTER_MILLIS
+            || comedymonkey.dailies.export.Worker.active()) {
             return;
         }
         long revision = current.revision();
@@ -133,6 +135,29 @@ public final class EditorSession {
                 Host.LOGGER.error("Dailies: the editor state could not be saved", e);
             }
         });
+    }
+
+    /**
+     * Saves what has changed now, without waiting for things to be still, and waits for it to be on disk: the
+     * background export game reads scenes from the file (EXP-13). Client thread
+     */
+    public static void saveNow() {
+        EditHistory current = history;
+        RecordingFile target = file;
+        if (current == null || target == null || current.revision() == savedRevision || comedymonkey.dailies.export.Worker.active()) {
+            return;
+        }
+        long revision = current.revision();
+        byte[] bytes = current.state().toBytes();
+        savedRevision = revision;
+        try {
+            SAVER.submit(() -> {
+                target.saveEditState(bytes);
+                return null;
+            }).get(20, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            Host.LOGGER.error("Dailies: the editor state could not be saved", e);
+        }
     }
 
     /** The playback speed a speed track asks for at this moment, or 0 when none applies */

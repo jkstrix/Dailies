@@ -311,6 +311,9 @@ public final class MomentsTools {
                 .string("clip_id", "Clip id from moments_clips_generate / moments_clips_list")
                 .string("name", "Name of the scene (default: the clip's title)")
                 .bool("camera", "Add the suggested smart camera at the clip's start (default true)")
+                .bool("export", "Also put an export of the new scene on the export queue (export_queue_list, export_queue_start). Default false")
+                .string("preset", "With export: the export preset (export_presets_list). Default: the first")
+                .string("file", "With export: the file name. Default: the clip's title and date, in dailies/exports")
                 .required("clip_id"),
             MomentsTools::clipToScene);
     }
@@ -1437,7 +1440,55 @@ public final class MomentsTools {
 
     private static JsonObject clipToScene(McpArgs args) throws Exception {
         MomentsSession session = session(args);
-        return makeScene(session, args.string("clip_id"), args.optString("name"), args.optBool("camera", true));
+        boolean export = args.optBool("export", false);
+        if (!export && (args.has("preset") || args.has("file"))) {
+            throw new McpToolException("'preset' and 'file' go with export true");
+        }
+        if (export && args.has("preset") && !Host.get().exportPresets().containsKey(args.string("preset"))
+            && Host.get().exportPresets().keySet().stream().noneMatch(name -> name.equalsIgnoreCase(args.string("preset")))) {
+            // Asked before the scene is made, so a mistyped preset leaves nothing behind
+            throw new McpToolException("There is no export preset called '" + args.string("preset") + "'. There are: " + String.join(", ", Host.get().exportPresets().keySet()));
+        }
+        JsonObject made = makeScene(session, args.string("clip_id"), args.optString("name"), args.optBool("camera", true));
+        if (export) {
+            JsonObject clip = null;
+            for (JsonObject candidate : session.clips()) {
+                if (args.string("clip_id").equals(MJson.str(candidate, "id"))) {
+                    clip = candidate;
+                }
+            }
+            String file = args.optString("file");
+            if (file == null || file.isBlank()) {
+                file = exportName(clip);
+            }
+            try {
+                String job = Host.get().queueExport(made.get("scene").getAsInt(), args.optString("preset"), file);
+                made.addProperty("export_job", job);
+                made.addProperty("export_file", file);
+            } catch (IllegalStateException | IllegalArgumentException e) {
+                throw new McpToolException("The scene was made, but its export could not be queued: " + e.getMessage());
+            }
+        }
+        return made;
+    }
+
+    /**
+     * The name of a clip's exported file: its title and the day it happened, "Ann falls off the bridge 2026-11-17",
+     * with nothing a file system refuses
+     */
+    static String exportName(@Nullable JsonObject clip) {
+        String title = clip == null ? "Clip" : MJson.str(clip, "title", "Clip");
+        long when = clip == null ? 0 : MJson.lng(clip, "start_real_time", 0);
+        String day = when > 0 ? Instant.ofEpochMilli(when).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+            : java.time.LocalDate.now().toString();
+        String name = title.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").replaceAll("\\s+", " ").trim();
+        while (name.startsWith(".")) {
+            name = name.substring(1);
+        }
+        if (name.length() > 80) {
+            name = name.substring(0, 80).trim();
+        }
+        return (name.isEmpty() ? "Clip" : name) + " " + day;
     }
 
     /** {@link #makeScene} for the editor, which knows a clip by its session and id. Client thread */

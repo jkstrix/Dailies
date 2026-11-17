@@ -69,7 +69,8 @@ public final class Dailies {
     }
 
     private static void settingsChanged(ModConfigEvent event) {
-        if (event.getConfig().getSpec() == DailiesConfig.SPEC) {
+        // The background export game shares the settings, and would otherwise try to take the same port (EXP-13)
+        if (event.getConfig().getSpec() == DailiesConfig.SPEC && !comedymonkey.dailies.export.Worker.active()) {
             McpHttpServer.applyConfig();
         }
     }

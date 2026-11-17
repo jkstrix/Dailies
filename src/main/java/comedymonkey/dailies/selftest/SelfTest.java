@@ -110,6 +110,7 @@ public final class SelfTest {
             ExportSteps.run(this);
             SettingsSteps.editorDropdown(this);
             ExportPresetSteps.run(this);
+            QueueSteps.run(this);
             PlaybackSteps.close(this);
             // While the recording with the machines in it is still there: the library steps take it apart
             WatchingSteps.machines(this);
