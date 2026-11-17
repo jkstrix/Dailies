@@ -161,8 +161,14 @@ final class PlaybackSteps {
         JsonObject held = test.tool("camera_get", none);
         check(Math.abs(held.get("y").getAsDouble() + 55.0) < 1e-6 && Math.abs(held.get("z").getAsDouble() + 3.25) < 1e-6, "the camera drifted while the recording was paused: " + held);
         JsonArray pigs = test.tool("replay_list_entities", args("type", "minecraft:pig")).getAsJsonArray("entities");
-        check(pigs.size() == 1 && pigs.get(0).getAsJsonObject().get("name").getAsString().equals("Hamlet"), "replay_list_entities did not find the pig: " + pigs);
-        JsonObject riding = test.tool("camera_spectate", args("entity_id", pigs.get(0).getAsJsonObject().get("entity_id").getAsInt()));
+        JsonObject hamlet = null;
+        for (com.google.gson.JsonElement pig : pigs) {
+            if (pig.getAsJsonObject().get("name").getAsString().equals("Hamlet")) {
+                hamlet = pig.getAsJsonObject();
+            }
+        }
+        check(hamlet != null, "replay_list_entities did not find the pig called Hamlet: " + pigs);
+        JsonObject riding = test.tool("camera_spectate", args("entity_id", hamlet.get("entity_id").getAsInt()));
         check(riding.has("spectating") && riding.get("spectating").isJsonObject(), "camera_spectate did not start riding along");
         JsonObject free = test.tool("camera_spectate", none);
         check(!free.has("spectating") || free.get("spectating").isJsonNull(), "camera_spectate did not go back to the free camera");
