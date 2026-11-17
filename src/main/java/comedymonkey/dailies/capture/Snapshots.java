@@ -83,7 +83,8 @@ public final class Snapshots {
 
     private static void warnOnce(String what, Throwable problem) {
         if (WARNED.add(what)) {
-            Host.LOGGER.warn("Dailies: a {} could not describe itself for a snapshot and is recorded without its own data. Said once per kind. ({})", what, problem.toString());
+            Host.LOGGER.warn("Dailies: a {} could not describe itself for a snapshot and is recorded with what could be had. Its state may reset after a jump to a later part. Said once per kind. ({})",
+                what, problem.getClass().getSimpleName());
         }
     }
 
@@ -151,6 +152,9 @@ public final class Snapshots {
 
     /** Where a watching game would be drawing the recorder: set by the recorder just before each snapshot. Null when unknown */
     static double[] ownShown = null;
+
+    /** Something to write straight after each entity's spawn, for mods that keep entities somewhere special. Null for none */
+    public static java.util.function.BiConsumer<Recorder.Out, Entity> entityFollowUp = null;
 
     /** How long the last snapshot held the game up, for the tests that watch what recording costs */
     public static volatile double lastMillis = 0;
@@ -320,6 +324,9 @@ public final class Snapshots {
         if (entity instanceof ExperienceOrb) {
             // The game gives a new orb a random push of its own; say how it is really moving
             out.packet(new ClientboundSetEntityMotionPacket(entity));
+        }
+        if (entityFollowUp != null) {
+            entityFollowUp.accept(out, entity);
         }
         var values = entity.getEntityData().getNonDefaultValues();
         if (values != null && !values.isEmpty()) {

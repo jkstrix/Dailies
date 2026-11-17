@@ -39,6 +39,7 @@ public final class Dailies {
         McpCraftCompat.init();
         ServerMoments.init();
         Recorder.init();
+        comedymonkey.dailies.compat.sable.SableCompat.init();
         Playback.init();
         Viewer.init();
 

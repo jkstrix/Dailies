@@ -34,15 +34,7 @@ final class RecordingSteps {
     record Note(int tick, java.util.Map<String, net.minecraft.world.phys.Vec3> positions) {
         /** Call on the client thread, so the tick and the positions belong together */
         static Note take(Minecraft minecraft) {
-            java.util.Map<String, net.minecraft.world.phys.Vec3> positions = new java.util.TreeMap<>();
-            for (net.minecraft.world.entity.Entity entity : minecraft.level.entitiesForRendering()) {
-                if (entity == minecraft.player) {
-                    positions.put("recorder", entity.position());
-                } else if (entity.hasCustomName()) {
-                    positions.put(entity.getCustomName().getString(), entity.position());
-                }
-            }
-            return new Note(Recorder.get().recordingTick(), positions);
+            return new Note(Recorder.get().recordingTick(), CraftSteps.positions(minecraft, null));
         }
     }
 
@@ -115,6 +107,9 @@ final class RecordingSteps {
         test.command("tp @s 4.5 -60 0.5 90 10");
         test.sleepTicks(10);
 
+        // Chapter XIV step 2: machines, built while the recording runs
+        CraftSteps.build(test);
+
         JsonObject marker = test.tool("recording_add_marker", args("color", "#33AAFF", "description", "The pig"));
         check(marker.get("tick").getAsInt() > 0, "the marker has no tick");
 
@@ -140,6 +135,20 @@ final class RecordingSteps {
             test.sleepTicks(4);
         }
 
+        // How far each thing travelled between the first and the last note, so it is plain what the position checks prove
+        StringBuilder travel = new StringBuilder();
+        java.util.Map<String, double[]> spans = new java.util.TreeMap<>();
+        for (Note note : notes) {
+            note.positions().forEach((name, at) -> {
+                double[] span = spans.computeIfAbsent(name, key -> new double[]{at.y, at.y, at.x, at.x});
+                span[0] = Math.min(span[0], at.y);
+                span[1] = Math.max(span[1], at.y);
+                span[2] = Math.min(span[2], at.x);
+                span[3] = Math.max(span[3], at.x);
+            });
+        }
+        spans.forEach((name, span) -> travel.append(String.format(" %s %.1f up-down %.1f across;", name.length() > 20 ? name.substring(0, 20) : name, span[1] - span[0], span[3] - span[2])));
+        test.log("range of the noted positions, in blocks:" + travel);
         FrameTimes.Result recordingFrames = FrameTimes.end();
         test.log("frame times idle: " + idle + "; while recording, with teleports and two snapshots: " + recordingFrames);
         check(recordingFrames.average() <= idle.average() * 1.5 + 2.0, "recording slowed the game: frames averaged " + recordingFrames.average() + " ms against " + idle.average() + " ms idle");

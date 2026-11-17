@@ -50,6 +50,35 @@ public final class GameCodec {
         return this.codec.decode(Unpooled.wrappedBuffer(bytes, from, length));
     }
 
+    private byte[] payloadPrefix = null;
+
+    /**
+     * A mod message as a whole packet, written from the message's own codec. For messages a mod keeps off the normal
+     * connection, which the game's packet codec may not know how to write.
+     */
+    public byte[] payloadFrame(net.minecraft.resources.ResourceLocation id, java.util.function.Consumer<RegistryFriendlyByteBuf> body) {
+        if (this.payloadPrefix == null) {
+            // Every custom payload packet starts with the same packet number; take it from one the game can always write
+            byte[] sample = this.encode(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.BrandPayload("")));
+            int length = 1;
+            while ((sample[length - 1] & 0x80) != 0) {
+                length++;
+            }
+            this.payloadPrefix = java.util.Arrays.copyOf(sample, length);
+        }
+        RegistryFriendlyByteBuf buffer = this.buffer();
+        try {
+            buffer.writeBytes(this.payloadPrefix);
+            buffer.writeResourceLocation(id);
+            body.accept(buffer);
+            byte[] bytes = new byte[buffer.readableBytes()];
+            buffer.readBytes(bytes);
+            return bytes;
+        } finally {
+            buffer.release();
+        }
+    }
+
     /** A buffer for writing a packet's fields by hand, for the packets that have no usable constructor on a client */
     public RegistryFriendlyByteBuf buffer() {
         return new RegistryFriendlyByteBuf(Unpooled.buffer(256), this.registries, this.connectionType);

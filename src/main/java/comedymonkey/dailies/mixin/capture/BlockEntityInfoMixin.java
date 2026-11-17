@@ -27,7 +27,12 @@ public abstract class BlockEntityInfoMixin {
             return original.call(blockEntity, registries);
         } catch (Throwable t) {
             Snapshots.blockEntityFailed(blockEntity, t);
-            return new CompoundTag();
+            try {
+                // Its plain saved data is better than nothing: most of what a game draws is in there
+                return blockEntity.saveWithoutMetadata(registries);
+            } catch (Throwable again) {
+                return new CompoundTag();
+            }
         }
     }
 

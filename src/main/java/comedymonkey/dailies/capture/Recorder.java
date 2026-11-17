@@ -67,6 +67,12 @@ public final class Recorder {
     private static final DateTimeFormatter NAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss");
 
     private static final Recorder INSTANCE = new Recorder();
+    private static final List<Runnable> TICK_HOOKS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Something to run at the end of every recorded tick, on the client thread: for extensions that write state of their own */
+    public static void everyRecordedTick(Runnable hook) {
+        TICK_HOOKS.add(hook);
+    }
 
     public static Recorder get() {
         return INSTANCE;
@@ -399,6 +405,10 @@ public final class Recorder {
 
         this.tick++;
         this.pendingTicks++;
+        // What the world looks like now that this tick is over belongs to the tick count just reached
+        for (Runnable hook : TICK_HOOKS) {
+            hook.run();
+        }
         if (++this.ticksSinceFlush >= PART_TICKS || this.part.size() >= PART_BYTES) {
             this.flushPart();
         }
@@ -550,6 +560,32 @@ public final class Recorder {
         if (this.capturing()) {
             this.flushTicks();
             this.part.named(Records.EXTENSION, id, data, 0, data.length);
+        }
+    }
+
+    /**
+     * Records a mod message that reached the game some other way than the normal connection, as if it had arrived
+     * there now. Does nothing unless a recording is capturing. Client thread
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public void writePayload(net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
+        if (!this.capturing()) {
+            return;
+        }
+        String id = payload.type().id().toString();
+        try {
+            net.minecraft.network.codec.StreamCodec codec = net.neoforged.neoforge.network.registration.NetworkRegistry.getCodec(payload.type().id(),
+                net.minecraft.network.ConnectionProtocol.PLAY, net.minecraft.network.protocol.PacketFlow.CLIENTBOUND);
+            if (codec == null) {
+                throw new IllegalStateException("no codec is registered for it");
+            }
+            byte[] frame = this.codec.payloadFrame(payload.type().id(), buffer -> codec.encode(buffer, payload));
+            this.flushTicks();
+            this.part.named(Records.PAYLOAD, id, frame, 0, frame.length);
+        } catch (Throwable t) {
+            if (this.warnedPayloads.add(id)) {
+                Host.LOGGER.warn("Dailies: mod message {} cannot be recorded and is being left out. Said once per kind", id, t);
+            }
         }
     }
 

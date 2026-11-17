@@ -12,6 +12,9 @@ description = '''Records what you played, plays it back from any angle, and tell
 [[mixins]]
 config = "dailies.mixins.json"
 
+[[mixins]]
+config = "dailies.sable.mixins.json"
+
 [[dependencies.dailies]]
 modId = "neoforge"
 type = "required"

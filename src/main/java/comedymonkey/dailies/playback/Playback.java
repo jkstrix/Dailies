@@ -416,6 +416,7 @@ public final class Playback {
         TimerAccess timer = (TimerAccess) minecraft.getTimer();
         timer.dailies$setPausedPartialTick(1.0F);
         timer.dailies$setPartialTick(0.0F);
+        PlaybackExtensions.arrivedAll();
     }
 
     /** The start of every game tick */
