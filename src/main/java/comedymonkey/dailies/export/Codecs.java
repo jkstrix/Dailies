@@ -329,6 +329,19 @@ public final class Codecs {
         return arguments;
     }
 
+    /**
+     * Whether an encoder, set up as {@link #videoArguments} sets it up, writes 4:2:0 YUV without transparency, so frames
+     * already in that format ({@link I420}) can go to it as they are. The editing masters keep more colour than that,
+     * and transparent VP9 keeps the alpha, so those are given RGBA and make what they need of it themselves.
+     */
+    public static boolean takesI420(String encoder, boolean transparent) {
+        return switch (encoder) {
+            case "prores_ks", "dnxhd" -> false;
+            case "libvpx-vp9" -> !transparent;
+            default -> true;
+        };
+    }
+
     /** A trial small enough to take a moment: a few grey frames, encoded and thrown away */
     public static List<String> trialArguments(String program, String encoder) {
         List<String> command = new ArrayList<>(List.of(program, "-hide_banner", "-loglevel", "error", "-y",

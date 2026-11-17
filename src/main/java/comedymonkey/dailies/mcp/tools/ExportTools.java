@@ -474,6 +474,9 @@ final class ExportTools {
             if (Export.lastError() != null) {
                 json.addProperty("last_error", Export.lastError());
             }
+            if (Export.lastTimings() != null) {
+                json.addProperty("timings", Export.lastTimings());
+            }
         }
         if (Export.soundNote() != null) {
             json.addProperty("sound", Export.soundNote());

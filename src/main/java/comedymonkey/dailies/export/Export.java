@@ -1,9 +1,7 @@
 package comedymonkey.dailies.export;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.Window;
-import com.mojang.blaze3d.systems.RenderSystem;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.edit.TimeMap;
@@ -14,9 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
-import org.lwjgl.system.MemoryUtil;
+
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -26,9 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import net.minecraft.Util;
 
 /**
@@ -95,6 +89,7 @@ public final class Export {
     private static volatile boolean lastCancelled = false;
     private static volatile long startedNanos = 0;
     private static volatile String lastNote = null;
+    private static volatile @Nullable String lastTimings = null;
     private static volatile @Nullable String captionNote = null;
     private static volatile List<Path> captionFiles = List.of();
     private static volatile @Nullable List<Captions.Cue> burnCues = null;
@@ -109,16 +104,21 @@ public final class Export {
     private static TimeMap timeMap;
     private static FrameSink sink;
     private static Thread writer;
-    private static ArrayBlockingQueue<byte[]> queue;
+    private static FramePool pool;
+    private static @Nullable GpuCapture capture;
+    private static long delivered = 0;
     private static volatile Throwable writerFailure = null;
-    private static final byte[] END = new byte[0];
+    private static final ExportTimings TIMINGS = new ExportTimings();
+    /** When the game's thread last left the export's hooks, by {@link System#nanoTime}; 0 before the first frame */
+    private static long drawFrom = 0;
+    private static long loopFrom = 0;
+    private static long titleNanos = 0;
 
     private static float partialTick = 1.0F;
     private static long preparedFrame = -1;
     private static int framesToThrowAway = 0;
     private static int chunkWaits = 0;
     private static boolean frameReady = false;
-    private static ByteBuffer pixels = null;
     private static boolean worldRebuilt = false;
     private static int lastDrawn = -1;
     private static int settledFrames = 0;
@@ -176,6 +176,11 @@ public final class Export {
     /** What the preset of the export under way or the last one had to change to work here, or null */
     public static @Nullable String lastNote() {
         return lastNote;
+    }
+
+    /** Where the time of the last export went, stage by stage, as its line in the log; null before the first */
+    public static @Nullable String lastTimings() {
+        return lastTimings;
     }
 
     /** What became of the captions of the export under way or the last one; null when none were asked for (EXP-11, EXP-15) */
@@ -347,10 +352,21 @@ public final class Export {
         }
         // With sound, the video is first written without it beside the output and joined with the sound at the end (EXP-3)
         Path soundless = ExportSound.prepare(wanted, pictures);
-        FrameSink newSink = pictures ? new PngSink(wanted.output, wanted.still, scale, wanted.transparent) : Encoder.videoSink(wanted, scale, soundless != null ? soundless : wanted.output);
+        // A video is handed to the encoder in its own format, converted on the graphics card, wherever that loses nothing
+        boolean i420 = !pictures && scale == 1 && !wanted.transparent && I420.fits(wanted.width, wanted.height)
+            && Host.get().setting("exportGpuColour", true) && GpuCapture.converterReady();
+        FrameSink newSink = pictures ? new PngSink(wanted.output, wanted.still, scale, wanted.transparent) : Encoder.videoSink(wanted, scale, soundless != null ? soundless : wanted.output, i420);
+        int drawnWidth = wanted.width * scale;
+        int drawnHeight = wanted.height * scale;
+        long frameBytes = newSink.layout() == FrameSink.Layout.I420 ? I420.size(drawnWidth, drawnHeight) : 4L * drawnWidth * drawnHeight;
+        if (frameBytes > Integer.MAX_VALUE - 16) {
+            newSink.abort();
+            throw new IllegalArgumentException("A picture of " + drawnWidth + "x" + drawnHeight + " is too large to export");
+        }
 
         settings = wanted;
         lastNote = wanted.note;
+        lastTimings = null;
         sink = newSink;
         timeMap = new TimeMap(scene, start, end);
         exportFrom = start;
@@ -371,7 +387,14 @@ public final class Export {
         cancelRequested = false;
         lastError = null;
         writerFailure = null;
-        queue = new ArrayBlockingQueue<>(3);
+        // Enough for the encoder to work on one while the game fills the next; fewer of the very large ones
+        pool = new FramePool(wanted.still ? 1 : frameBytes > 64L * 1024 * 1024 ? 3 : 5, (int) frameBytes);
+        capture = null;
+        delivered = 0;
+        TIMINGS.reset();
+        drawFrom = 0;
+        loopFrom = 0;
+        titleNanos = 0;
         writer = new Thread(Export::write, "Dailies-Export-Writer");
         writer.setDaemon(true);
         writer.start();
@@ -488,6 +511,18 @@ public final class Export {
         if (!active) {
             return;
         }
+        long begun = System.nanoTime();
+        if (loopFrom > 0) {
+            TIMINGS.add(ExportTimings.Stage.LOOP, begun - loopFrom);
+        }
+        try {
+            prepareFrame(minecraft);
+        } finally {
+            drawFrom = System.nanoTime();
+        }
+    }
+
+    private static void prepareFrame(Minecraft minecraft) {
         try {
             if (writerFailure != null) {
                 throw new IllegalStateException("The frames could not be written: " + writerFailure.getMessage(), writerFailure);
@@ -525,7 +560,10 @@ public final class Export {
                 worldRebuilt = true;
                 return;
             }
-            if (!Playback.runTo(minecraft, position)) {
+            long ticksFrom = System.nanoTime();
+            boolean there = Playback.runTo(minecraft, position);
+            TIMINGS.add(ExportTimings.Stage.TICKS, System.nanoTime() - ticksFrom);
+            if (!there) {
                 return;
             }
             if (Playback.jumping()) {
@@ -556,6 +594,22 @@ public final class Export {
                 Host.LOGGER.debug("Dailies: the graphics card could not be asked its name", t);
             }
         }
+        if (!active) {
+            return;
+        }
+        long entered = System.nanoTime();
+        if (drawFrom > 0) {
+            TIMINGS.add(ExportTimings.Stage.DRAW, entered - drawFrom);
+            drawFrom = 0;
+        }
+        try {
+            takePicture();
+        } finally {
+            loopFrom = System.nanoTime();
+        }
+    }
+
+    private static void takePicture() {
         if (!active || !frameReady) {
             return;
         }
@@ -611,56 +665,101 @@ public final class Export {
                     CaptionBurner.drawIntoFrame(minecraft, target, said, settings.captionStyle);
                 }
             }
-            int bytes = target.width * target.height * 4;
-            if (pixels == null || pixels.capacity() != bytes) {
-                if (pixels != null) {
-                    MemoryUtil.memFree(pixels);
-                }
-                pixels = MemoryUtil.memAlloc(bytes);
+            if (capture == null) {
+                capture = new GpuCapture(sink.layout() == FrameSink.Layout.I420, target.width, target.height);
             }
-            pixels.clear();
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, target.frameBufferId);
-            RenderSystem.pixelStore(GL11.GL_PACK_ALIGNMENT, 1);
-            GL11.glReadPixels(0, 0, target.width, target.height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
-            byte[] copy = new byte[bytes + 8];
-            pixels.get(0, copy, 0, bytes);
-            // The size rides along in the last eight bytes, so the writer needs nothing but the array
-            ByteBuffer.wrap(copy, bytes, 8).putInt(target.width).putInt(target.height);
-            while (!queue.offer(copy, 50, TimeUnit.MILLISECONDS)) {
-                if (writerFailure != null) {
-                    throw new IllegalStateException("The frames could not be written: " + writerFailure.getMessage(), writerFailure);
-                }
+            if (capture.full()) {
+                // Never so with the usual lag, but a frame must never be lost: the oldest goes first
+                capture.collect(true, Export::deliver, waited -> TIMINGS.add(ExportTimings.Stage.READBACK, waited));
             }
+            long convertFrom = System.nanoTime();
+            capture.issue(target);
+            TIMINGS.add(ExportTimings.Stage.CONVERT, System.nanoTime() - convertFrom);
             frame++;
             // The sound that belongs to this picture, exactly as much as one frame lasts
+            long soundFrom = System.nanoTime();
             ExportSound.frame(frame);
+            TIMINGS.add(ExportTimings.Stage.SOUND, System.nanoTime() - soundFrom);
             frameReady = false;
-            minecraft.getWindow().setTitle("Dailies: exporting " + frame + " of " + totalFrames);
+            // The pictures asked for two frames ago are ready by now, and go to the writer
+            capture.collect(false, Export::deliver, waited -> TIMINGS.add(ExportTimings.Stage.READBACK, waited));
+            long now = System.nanoTime();
+            if (now - titleNanos > 250_000_000L || frame >= totalFrames) {
+                // The window's title goes through the window system on this thread: a few times a second is plenty
+                titleNanos = now;
+                minecraft.getWindow().setTitle("Dailies: exporting " + frame + " of " + totalFrames);
+            }
         } catch (Throwable t) {
             fail(minecraft, t);
         }
     }
 
+    /** A picture read back from the graphics card, copied into a free frame buffer for the writer. Render thread */
+    private static void deliver(ByteBuffer pixels, int length, int width, int height) throws Exception {
+        long from = System.nanoTime();
+        FramePool.Frame free;
+        while ((free = pool.take(50)) == null) {
+            if (writerFailure != null) {
+                throw new IllegalStateException("The frames could not be written: " + writerFailure.getMessage(), writerFailure);
+            }
+        }
+        long got = System.nanoTime();
+        TIMINGS.add(ExportTimings.Stage.QUEUE, got - from);
+        if (length > free.data.length) {
+            pool.giveBack(free);
+            throw new IllegalStateException("A picture of " + length + " bytes does not fit the export's frame buffers of " + free.data.length);
+        }
+        pixels.get(0, free.data, 0, length);
+        free.length = length;
+        free.width = width;
+        free.height = height;
+        free.number = delivered++;
+        pool.send(free);
+        TIMINGS.add(ExportTimings.Stage.COPY, System.nanoTime() - got);
+    }
+
     private static void write() {
-        long number = 0;
+        FramePool frames = pool;
         try {
             while (true) {
-                byte[] picture = queue.take();
-                if (picture == END) {
+                long idleFrom = System.nanoTime();
+                FramePool.Frame picture = frames.next();
+                long from = System.nanoTime();
+                TIMINGS.add(ExportTimings.Stage.WRITER_IDLE, from - idleFrom);
+                if (picture == FramePool.END) {
                     return;
                 }
-                ByteBuffer size = ByteBuffer.wrap(picture, picture.length - 8, 8);
-                sink.frame(number++, picture, size.getInt(), size.getInt());
+                try {
+                    sink.frame(picture.number, picture.data, picture.length, picture.width, picture.height);
+                } finally {
+                    frames.giveBack(picture);
+                }
+                TIMINGS.add(ExportTimings.Stage.PIPE, System.nanoTime() - from);
             }
         } catch (Throwable t) {
             writerFailure = t;
-            queue.clear();
+            frames.abandon();
         }
     }
 
+    /** Where the time went, in one line of the log, so a slow export can be read rather than guessed at */
+    private static void logTimings() {
+        TIMINGS.frames(frame);
+        Settings current = settings;
+        String what = (current == null ? "?" : current.width + "x" + current.height + " " + (current.still || current.container.equals("png_sequence") ? "pictures" : current.videoCodec))
+            + ", " + (capture != null && capture.i420() ? "converted on the graphics card" : "RGBA");
+        lastTimings = TIMINGS.line(what);
+        Host.LOGGER.info("Dailies: {}", lastTimings);
+    }
+
     private static void finish(Minecraft minecraft, boolean cancelled) throws Exception {
-        queue.put(END);
+        if (capture != null) {
+            // The last pictures are still on the graphics card
+            capture.collect(true, Export::deliver, waited -> TIMINGS.add(ExportTimings.Stage.READBACK, waited));
+        }
+        pool.end();
         writer.join(120_000);
+        logTimings();
         if (writerFailure != null) {
             throw new IllegalStateException("The frames could not be written: " + writerFailure.getMessage(), writerFailure);
         }
@@ -678,9 +777,9 @@ public final class Export {
     private static void fail(Minecraft minecraft, Throwable problem) {
         Host.LOGGER.error("Dailies: the export failed", problem);
         lastError = problem.getMessage() == null ? problem.toString() : problem.getMessage();
+        logTimings();
         try {
-            queue.clear();
-            queue.offer(END);
+            pool.abandon();
             sink.abort();
         } catch (Throwable ignored) {
             // Already failing
@@ -693,6 +792,10 @@ public final class Export {
     private static void restore(Minecraft minecraft) {
         boolean wasStill = settings != null && settings.still;
         frameReady = false;
+        if (capture != null) {
+            capture.close();
+            capture = null;
+        }
         // The game's usual sound device comes back however the export ended
         ExportSound.restore();
         Window window = minecraft.getWindow();

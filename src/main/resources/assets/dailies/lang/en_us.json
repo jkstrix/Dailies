@@ -99,6 +99,7 @@
   "dailies.configuration.export": "Export",
   "dailies.configuration.defaultFileName": "Default File Name",
   "dailies.configuration.throwawayFrames": "Throwaway Frames",
+  "dailies.configuration.exportGpuColour": "Convert Colours on the Graphics Card",
   "dailies.configuration.exportQueueNotify": "Notify When the Queue Is Done",
   "dailies.configuration.captionStyle": "Caption Style",
   "dailies.configuration.captionFont": "Caption Font",
