@@ -334,7 +334,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<p>The <b>Players</b> card in the editor lists everyone in the recording at this moment, with their face, name and distance. For each:</p>
 				<ul class="plain">
 					<li><b>Look</b> turns the camera to face them.</li>
-					<li><b>Follow</b> keeps them in view: the camera moves as they move. The movement keys still fly it round them. Press again to stop.</li>
+					<li><b>Follow</b> keeps them in view: the camera keeps the place you flew it to beside them, follows smoothly as they move and turns to look at them. It eases in before blocks come between you and eases back out. The movement keys still fly it round them. Press again to stop.</li>
 					<li><b>Ride</b> sees through their eyes. Press again to leave.</li>
 					<li><b>Hide</b> leaves them out of the picture in this scene, in exports too.</li>
 				</ul>
@@ -440,8 +440,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<thead><tr><th class="nw">Kind</th><th>What it sets</th></tr></thead>
 			<tbody>
 				<tr><td class="nw">Camera</td><td>Where the camera is and how it is turned: position, yaw, pitch and roll. Takes the view as it is now. Blends between keyframes.</td></tr>
-				<tr><td class="nw">Orbit</td><td>Circles a point while looking at it: centre, distance, height and angle. Change the angle between two keyframes to swing round.</td></tr>
-				<tr><td class="nw">Follow entity</td><td>Ties the camera to an entity, measured from its feet, body, head or eyes with an offset. "Keep place" moves with it; "Stay and watch" stays put and turns to watch.</td></tr>
+				<tr><td class="nw">Orbit</td><td>Circles a point while looking at it: centre, distance, height and angle. Change the angle between two keyframes to swing round. <b>Centre on someone</b> and click an entity to circle it as it moves: the circle follows it smoothly and keeps clear of blocks, and the centre numbers become an offset from its middle. <b>Centre on a point</b> goes back to a fixed point.</td></tr>
+				<tr><td class="nw">Follow entity</td><td>Ties the camera to an entity, measured from its feet, body, head or eyes with an offset. <b>Keep place</b> keeps that offset smoothly, follows the entity in through doors and round corners, and moves round to a clear view when it is hidden. <b>Stay and watch</b> stays put and turns to watch; when the entity has been hidden for a second, it cuts to a new place that sees it. See <a href="#camera">Smart Camera</a>.</td></tr>
 				<tr><td class="nw">Smart Camera</td><td>Films a player by itself. See <a href="#camera">Smart Camera</a>.</td></tr>
 				<tr><td class="nw">Field of view</td><td>How wide the lens is, 1 to 170 degrees.</td></tr>
 				<tr><td class="nw">Camera shake</td><td>A hand-held wobble: strength and frequency.</td></tr>
@@ -534,10 +534,14 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ Smart Camera -->
 	<section id="camera">
 		<h2>Smart Camera</h2>
-		<div class="note"><b>Being reworked</b>
-			<p>The Smart Camera is the owner's own part of Dailies and is being reworked by its owner. This chapter says only what it does today.</p>
-		</div>
-		<p>A Smart Camera keyframe names a player and a way of filming them. From there until the next keyframe on its track, the camera places and aims itself. Add one from the Keyframe tab and click the player, or choose them from a list.</p>
+		<p class="lede">A Smart Camera keyframe names a player and a way of filming them. From there until the next keyframe on its track, the camera places and aims itself. Every tracking camera in Dailies is smooth, keeps its player in frame and never goes into or through a block.</p>
+		<h3>To film a player by itself</h3>
+		<ol class="plain">
+			<li>Add a Smart Camera keyframe from the Keyframe tab.</li>
+			<li>Click the player in the view, or choose them from a list. The recorder is the default.</li>
+			<li>Choose a <b>Way of filming</b>: chase, tripod, orbit or director.</li>
+			<li>Play. The camera works itself out from the recording, so playing again or exporting gives the same shots every time.</li>
+		</ol>
 		<div class="two">
 			<figure>
 				<img src="img/08-smart-camera-chase.jpg" alt="The recorder, named Dev, walking across a stone square seen from behind and above, a little to one side, with the balloon and a campfire beyond" width="1280" height="720">
@@ -549,15 +553,52 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			</figure>
 		</div>
 		<div class="tablebox"><table>
-			<thead><tr><th class="nw">Way of filming</th><th>What the camera does</th></tr></thead>
+			<thead><tr><th class="nw">Way of filming</th><th>What the camera does</th><th>Settings that matter</th></tr></thead>
 			<tbody>
-				<tr><td class="nw">Chase</td><td>Follows from a set distance, height and side angle, measured from the way the player is heading.</td></tr>
-				<tr><td class="nw">Tripod</td><td>Stands where you put it ("Stand it where I am") and turns to keep the player in frame.</td></tr>
-				<tr><td class="nw">Orbit</td><td>Circles the player at a set radius and rate.</td></tr>
-				<tr><td class="nw">Director</td><td>Chooses chase, tripod and orbit shots by itself and cuts between them, within a shortest and longest shot. The same seed gives the same shots every time.</td></tr>
+				<tr><td class="nw">Chase</td><td>Follows behind the player, measured from the way they travel. Small turns and wobbles are ignored; a real turn swings the camera round them at its distance. It leaves more room in front as they speed up. It rises over ground behind them and stays under a cave's roof. Where there is no room behind (a cave, a doorway, a wall), it follows the way they came, round bends and in through doors.</td><td><b>Distance</b> 6 and <b>Height</b> 2, in blocks. <b>Side angle</b> 0: 0 is behind, 90 to their right, 180 in front. <b>Ignore turns under</b> 15 degrees. <b>Widen in flight</b> 0.6, from 0 to 2. <b>Catch-up</b> 0.35 s. <b>Heading from</b> movement or body.</td></tr>
+				<tr><td class="nw">Tripod</td><td>Stands still and pans and tilts after the player. A dead zone stops small moves from swinging it. Placed <b>By itself</b>, it picks a place with a clear view of where the player is going: nothing in the way, a sensible distance, a little above eye level and beside their path, not in it. When they leave its view for good, it cuts to a new place. Placed <b>Fixed</b>, it stays where it is set.</td><td><b>Placed</b>: by itself (the default) or fixed. <b>Stand it where I am</b> fixes it where the camera is now. <b>Dead zone</b> 0.12 of half the frame. <b>Turn lag</b> 0.25 s.</td></tr>
+				<tr><td class="nw">Orbit</td><td>Circles the player at a steady rate. It looks along the circle ahead and shrinks or lifts the circle to fit between blocks, slowing near them. When the player goes through a door and walls it out, it cuts to the nearest place with room and carries on round.</td><td><b>Radius</b> 8 and <b>Height</b> 2. <b>Degrees a second</b> 20; a minus sign turns the other way. Start angle.</td></tr>
+				<tr><td class="nw">Director</td><td>Edits its own film. It cuts between chase, over the shoulder, tracking alongside, tripod and orbit shots, and opens with a wide shot whenever the player comes into a new kind of place.</td><td><b>Shortest shot</b> 3 s and <b>Longest shot</b> 10 s. A <b>May use</b> switch for each kind of shot. <b>Wide shot in new places</b>, on. Seed. Distance, height and radius, which its own shots start from.</td></tr>
 			</tbody>
 		</table></div>
-		<p>Every way can place the player anywhere in the frame, leave lead room in front of them, zoom to keep them the same size, fit what they ride into the picture, and move in when blocks get in the way. "Blend in" sets how long it takes to move over from where the camera was; 0 is a cut.</p>
+		<div class="two">
+			<div class="stack">
+				<h3>How the director edits</h3>
+				<ul class="plain">
+					<li><b>Establishing shots.</b> Going into a cave, out into the open or into a building, it cuts to a slow, high, wide orbit, or to a tripod a dozen blocks off in a tight space.</li>
+					<li><b>Shot length.</b> No shot is under 1.5 seconds. A shot runs to the longest at walking pace, and nearer the shortest as the player speeds up. Flying and riding count as fast.</li>
+					<li><b>Cutting on action.</b> It cuts on a sharp turn, taking off, landing, getting on or off something, or a change in what the player is doing. It also cuts away at once when the view is blocked.</li>
+					<li><b>No jump cuts.</b> Each new shot looks from at least 35 degrees away from the last, so a cut never looks like a hiccup.</li>
+					<li><b>One side of the action.</b> It keeps to the same side of the way the player travels, so they never seem to turn round across a cut.</li>
+					<li><b>Shots that suit the moment.</b> Tight spaces get chase, over the shoulder and tripod shots. A player standing still gets orbits and tripods. Flying and riding get chase, alongside and tripod shots.</li>
+				</ul>
+				<p>The same seed gives the same edit every time.</p>
+			</div>
+			<div class="stack">
+				<h3>Framing, in every way of filming</h3>
+				<ul class="plain">
+					<li><b>Screen X and Y</b> place the player anywhere in the frame. ±0.333 is the rule of thirds.</li>
+					<li><b>Lead room</b> leaves space in front of a moving player.</li>
+					<li><b>Auto zoom</b> changes the lens to keep them the same size. Off, a fixed field of view applies.</li>
+					<li><b>Fit what they ride</b> frames a vehicle, contraption or craft together with its rider.</li>
+					<li><b>Move in past blocks</b> eases the camera in before a wall comes between it and the player, and back out after.</li>
+					<li><b>Blend in</b> sets how long the camera takes to move over from where it was. 0 is a cut.</li>
+				</ul>
+			</div>
+		</div>
+		<h3>Flight, vehicles and awkward places</h3>
+		<div class="tablebox"><table>
+			<thead><tr><th class="nw">When</th><th>What the cameras do</th></tr></thead>
+			<tbody>
+				<tr><td class="nw">Flying</td><td>With an elytra, in creative flight or at speed, chase and orbit move further back and higher, by <b>Widen in flight</b>. Chase follows climbs and dives.</td></tr>
+				<tr><td class="nw">Vehicles and craft</td><td>A boat, minecart, horse, Create contraption or flying craft is framed with its rider, and distances are measured from its edge. Its own blocks do not stop the camera standing close. When they hide the rider, the camera looks round, up or down for a place that sees them. Getting on or off something close by is eased over, not cut.</td></tr>
+				<tr><td class="nw">Doorways and caves</td><td>The camera never goes into a block nor through one; it slides along walls. Chase and Follow entity follow the player in through doors and along tunnels. Leaves and glass count as solid; water does not.</td></tr>
+				<tr><td class="nw">Hidden player</td><td>A camera stuck behind a wall for a second moves out by a cut. "Stay and watch" moves by a cut to a new place that sees the player once they have been hidden for a second, and cuts straight back onto them if they come out somewhere else.</td></tr>
+				<tr><td class="nw">Teleports and portals</td><td>A teleport, a portal or a jump in the timeline starts the camera afresh, by a cut.</td></tr>
+			</tbody>
+		</table></div>
+		<p>The Orbit and Follow entity keyframes and the players panel's Follow track in the same way. "Keep place" keeps its offset smoothly and moves round to a clear view when the entity stays hidden. An Orbit keyframe centred on someone circles them as they move.</p>
+		<p><b>How they were tested.</b> Every tracking camera was filmed for a minute (30 to 35 seconds for each kind of flight and each vehicle) in a forest, a village with doors, a cave, the Nether, elytra and creative flight, a boat, a minecart, a horse and the Aeronautics balloon, all on one recorded route, and each film was measured for tracking, smoothness and the director's cuts. In the last filming run, 78 of 80 films had no hard fault. The two left are small jumps in the players panel's Follow, in the forest and at the start of creative flight, to be fixed.</p>
 	</section>
 
 	<!-- ============================================================ Export -->
@@ -830,7 +871,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li><b>Aeronautics effects in a video:</b> whether they move at the video's pace can only be judged by eye.</li>
 					<li><b>AMD, Intel and Apple encoders:</b> only the test computer's own graphics card has made video.</li>
 					<li><b>The encoder build for other platforms:</b> Linux, macOS and Windows on ARM export PNG pictures only until a build of Dailies' own is proven.</li>
-					<li><b>The Smart Camera's new work:</b> the owner's, being reworked; its checks and its frame-time budget are left to the owner.</li>
+					<li><b>Two small jumps in the players panel's Follow:</b> in the forest and at the start of creative flight, the last camera films caught a pop. To be fixed.</li>
+					<li><b>The Smart Camera by eye:</b> the films measure tracking, smoothness and cuts; whether the shots look good is judged from their stills by a person.</li>
 					<li><b>AI on:</b> transcription keeping up in real time was not measured, since AI was off.</li>
 					<li><b>McpCraft job board moments:</b> the installed McpCraft does not tell other mods about its job board, so these were not tried.</li>
 				</ul>
@@ -858,6 +900,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td class="nw"><code>gradlew runTestClient</code></td><td>The scripted run in a plain game, about 2 minutes. Prints <code>DAILIES TEST PASSED</code>, or <code>DAILIES TEST FAILED:</code> and the reason, then closes.</td></tr>
 				<tr><td class="nw"><code>gradlew runTestModded</code></td><td>The same with the built jar beside the other mods and the companion, about 3 minutes. Builds the companion first. <code>-Pdailies.modsFolder=&lt;folder&gt;</code> takes the other mods' jars from another folder.</td></tr>
 				<tr><td class="nw"><code>gradlew runTestModded -PdailiesFlags=dailies.test.bestiary,dailies.test.realWorld</code></td><td>The combined run, with both tours. Much longer.</td></tr>
+				<tr><td class="nw"><code>gradlew runTestModded -PdailiesFlags=dailies.test.cameraFilms,dailies.test.cameraFilmsOnly</code></td><td>Only the camera films: every tracking camera filmed in every place of the recorded route, measured, with every fault listed at the end. Videos, stills and measurements go to <code>dailies/camera-films</code> in the game folder. Long.</td></tr>
 				<tr><td class="nw"><code>gradlew runHandsOn</code></td><td>Sixty seconds at the controls while recording, then the recording left open in the editor for you to watch.</td></tr>
 				<tr><td class="nw"><code>gradlew runManualShots</code></td><td>Retakes this manual's pictures.</td></tr>
 			</tbody>
