@@ -35,7 +35,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.ClientCommandHandler;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
-import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -74,9 +73,9 @@ final class WatchingSteps {
     private WatchingSteps() {
     }
 
-    /** The settings screen, or the page of it the game goes straight to when a mod has only one file of settings */
+    /** Dailies' own settings screen (CFG-4) */
     private static boolean settingsOpen(Minecraft minecraft) {
-        return minecraft.screen != null && minecraft.screen.getClass().getName().startsWith(ConfigurationScreen.class.getName());
+        return minecraft.screen instanceof comedymonkey.dailies.ui.SettingsScreen;
     }
 
     // ------------------------------------------------------------------ Recording, by command
