@@ -65,16 +65,24 @@ public final class VoidSpill {
         return lingering.containsKey(entity.getId());
     }
 
-    /** The ids of a recorded removal the game is to take out now: those playback is letting fall go when their time is up */
+    /**
+     * The ids of a recorded removal the game is to take out now: those playback is letting fall go when their time is up.
+     * An item already below the world when its removal comes is let fall too: the server can drop it and take it away
+     * again before this game has ticked it down there, and then only its removal says it fell out
+     */
     static IntList stillToRemove(IntList ids) {
-        if (lingering.isEmpty()) {
-            return ids;
-        }
+        ClientLevel level = Minecraft.getInstance().level;
         IntArrayList left = new IntArrayList(ids.size());
         for (int i = 0; i < ids.size(); i++) {
-            if (!lingering.containsKey(ids.getInt(i))) {
-                left.add(ids.getInt(i));
+            int id = ids.getInt(i);
+            if (lingering.containsKey(id)) {
+                continue;
             }
+            Entity entity = level == null ? null : level.getEntity(id);
+            if (entity != null && entity.getY() < level.getMinBuildHeight() - 64 && keeps(entity)) {
+                continue;
+            }
+            left.add(id);
         }
         return left;
     }

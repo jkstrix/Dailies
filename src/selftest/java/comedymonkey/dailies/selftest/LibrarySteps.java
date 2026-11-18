@@ -748,12 +748,17 @@ final class LibrarySteps {
      * Comes in at the title screen and leaves there, with no recorded pack in force.
      */
     private static void packs(SelfTest test, Minecraft minecraft, Path bare) throws Exception {
-        Path source = ResourcePackSteps.recording();
-        if (source == null && Boolean.getBoolean("dailies.test.skipPacks")) {
+        Path made = ResourcePackSteps.recording();
+        if (made == null && Boolean.getBoolean("dailies.test.skipPacks")) {
             test.skip("the resource pack steps were switched off, so packs through a trim and a combine were not tried (REC-19 with FILE-9 and FILE-10)");
             return;
         }
-        check(source != null && Files.isRegularFile(source), "the pack recording is not where the pack steps left it");
+        check(made != null && Files.isRegularFile(made), "the pack recording is not where the pack steps left it");
+        // The pack steps keep their recording outside the recordings folder, and the library edits only recordings inside
+        // it: a copy goes in for these steps and is deleted after them
+        Path source = comedymonkey.dailies.capture.Recorder.folder().resolve("Pack test" + RecordingFile.EXTENSION);
+        Files.copy(made, source, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        Library.index().update(source);
         int pop = ResourcePackSteps.popTick();
         int push = ResourcePackSteps.pushTick();
         RecordingManifest sourceManifest = RecordingFile.readManifest(source);
@@ -894,6 +899,7 @@ final class LibrarySteps {
         Library.delete(trimmedFile);
         Library.delete(gapFile);
         Library.delete(episodeFile);
+        Library.delete(source);
     }
 
     /** Jumps to a tick and checks whether the test pack is in force there */

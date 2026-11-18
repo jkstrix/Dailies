@@ -240,7 +240,8 @@ final class PointOfViewSteps {
         test.waitFor(() -> Playback.loaded() && !Playback.jumping() && mineId.equals(Playback.recordingId()), 120, "my recording to open");
         JsonObject batch = test.tool("export_points_of_view", args("start_tick", 20, "end_tick", 80));
         JsonArray jobs = batch.getAsJsonArray("jobs");
-        check(jobs.size() == 2 && jobs.toString().contains(mineId) && jobs.toString().contains(friendId), "the batch is not the stretch from both points of view: " + jobs);
+        check(jobs.size() == 2 && jobs.toString().contains(mineId) && jobs.toString().contains(friendId), "the batch is not the stretch from both points of view: " + jobs
+            + "; " + whatIsLinked(test, mineId, friendId));
         for (JsonElement job : jobs) {
             check(job.getAsJsonObject().get("start_tick").getAsInt() == 20 && job.getAsJsonObject().get("end_tick").getAsInt() == 80,
                 "a point of view's stretch is not lined up with mine: " + job);
@@ -271,7 +272,7 @@ final class PointOfViewSteps {
         Vec3 after = test.onClient(Viewer::position);
         check(after.distanceTo(camera) < 0.5, "the camera did not carry across the cut: it was at " + camera + " and is at " + after);
         check(test.onClient(() -> EditorSession.open() && EditorSession.scene().linked().size() == 1 && Objects.equals(PointOfView.homeId(), mineId)),
-            "the scene was lost across the cut: the editor should still be editing my recording, with the friend's linked");
+            "the scene was lost across the cut: the editor should still be editing my recording, with the friend's linked; " + whatIsLinked(test, mineId, friendId));
         test.waitFor(() -> mineId.equals(PointOfView.shownId()) && Playback.loaded() && !Playback.jumping(), 60, "the cut back to my recording at tick 110");
         test.tool("replay_pause", none);
         test.log("points of view: shared, imported as " + FRIEND + "'s, linked by game time, listed on the page and in the export batch, and cut to and back in a scene");
@@ -281,6 +282,33 @@ final class PointOfViewSteps {
         Library.delete(theirs);
         Library.delete(mine);
         deleteTree(work);
+    }
+
+    /** For a failure: what the library, the links, playback and the editor say of the two recordings at this moment */
+    private static String whatIsLinked(SelfTest test, String mineId, String friendId) {
+        StringBuilder said = new StringBuilder();
+        try {
+            Path friendFile = Library.index().findById(friendId);
+            said.append("friend's file in the index ").append(friendFile);
+            said.append(", described ").append(friendFile == null ? "-" : comedymonkey.dailies.library.Links.describe(friendFile) != null);
+            said.append(", friend ").append(friendId);
+            comedymonkey.dailies.library.Links.Link own = comedymonkey.dailies.library.Links.find(mineId);
+            said.append(", linked to mine ").append(own == null ? "(mine not found)" : comedymonkey.dailies.library.Links.linked(own).stream()
+                .map(link -> link.id() + " by " + link.manifest().recorderName + " sharing " + own.alignment().shared(link.alignment()).stream().map(java.util.Arrays::toString).toList()).toList());
+            if (own != null && friendFile != null && comedymonkey.dailies.library.Links.describe(friendFile) != null) {
+                comedymonkey.dailies.library.Links.Link friend = comedymonkey.dailies.library.Links.describe(friendFile);
+                said.append(", mine and the friend's share ").append(own.alignment().shared(friend.alignment()).stream().map(java.util.Arrays::toString).toList())
+                    .append(" (same stretch ").append(own.alignment().sameStretch(friend.alignment())).append(", recorders ").append(own.manifest().recorderId)
+                    .append(" and ").append(friend.manifest().recorderId).append(", real ").append(own.manifest().realStart).append('-').append(own.manifest().realEnd)
+                    .append(" and ").append(friend.manifest().realStart).append('-').append(friend.manifest().realEnd).append(')');
+            }
+            said.append(", points of view of 20-80 ").append(comedymonkey.dailies.library.Links.pointsOfView(mineId, 20, 80).stream().map(view -> view.recordingId() + " " + view.startTick() + "-" + view.endTick()).toList());
+            said.append(", ").append(test.onClient(() -> "playback " + Playback.loaded() + " showing " + Playback.recordingId() + ", home " + PointOfView.homeId() + ", shown " + PointOfView.shownId()
+                + ", editor " + EditorSession.open() + (EditorSession.open() ? " linked " + EditorSession.scene().linked() : "")));
+        } catch (Throwable t) {
+            said.append(" (and then ").append(t).append(')');
+        }
+        return said.toString();
     }
 
 }

@@ -229,8 +229,12 @@ final class RecordingSteps {
             long pigs = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket spawn
                 && spawn.getType() == net.minecraft.world.entity.EntityType.PIG).count();
             check(pigs >= manifest.segments.size() - 1, "the pig is missing from the later snapshots");
-            check(audit.count(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket.class) >= audit.sharedPackets && audit.sharedPackets >= 9 * manifest.segments.size(),
-                "snapshots hold too few chunks: " + audit.sharedPackets);
+            // What a snapshot shares is its chunks, and for a chunk whose blocks are unchanged but whose light may not be, that
+            // light on its own (Snapshots.writeChunks)
+            long snapshotChunks = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket).count();
+            check(audit.count(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket.class) + audit.count(net.minecraft.network.protocol.game.ClientboundLightUpdatePacket.class) >= audit.sharedPackets,
+                "snapshots share something besides chunks and their light: " + audit.sharedPackets + " shared packets, " + audit.packets);
+            check(snapshotChunks >= 9L * manifest.segments.size(), "snapshots hold too few chunks: " + snapshotChunks + " in " + manifest.segments.size() + " snapshots");
             check(file.sharedCount() < audit.sharedPackets / 2, "unchanged chunks were stored again: " + file.sharedCount() + " stored for " + audit.sharedPackets + " uses");
             test.log("snapshots: " + audit.sharedPackets + " chunk uses stored as " + file.sharedCount() + " pieces; last snapshot held the game for "
                 + String.format("%.1f", comedymonkey.dailies.capture.Snapshots.lastMillis) + " ms; file is " + java.nio.file.Files.size(recording) / 1024 + " KB");

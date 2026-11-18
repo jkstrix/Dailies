@@ -144,7 +144,9 @@ final class PlaybackSteps {
         check(Playback.position() == pausedState.get("tick").getAsInt(), "the recording moved on while paused");
         test.tool("replay_set_speed", args("tick_rate", 2));
         test.tool("replay_play", none);
-        test.waitTicks(40);
+        // Two seconds by the clock: the game's own ticks are slowed with the recording, so waiting for forty of them would
+        // wait for forty ticks of the recording
+        Thread.sleep(2000);
         int slow = test.tool("replay_pause", none).get("tick").getAsInt() - pausedState.get("tick").getAsInt();
         check(slow >= 2 && slow <= 8, "two seconds at a tenth of normal speed moved " + slow + " ticks");
         test.tool("replay_set_speed", args("tick_rate", 20));

@@ -101,6 +101,11 @@ public final class Links {
             if (Alignment.sameFootage(own.id(), ownSources, other.id(), sources(other.manifest()))) {
                 continue; // a trimmed or combined copy is the same point of view
             }
+            if (samePlayer(own.manifest(), other.manifest())) {
+                // One player is one point of view: their recordings of other worlds whose game times and real times
+                // happen to meet (two new worlds, both from game time 0, recorded a minute apart) are not linked
+                continue;
+            }
             if (own.alignment().sameStretch(other.alignment())) {
                 found.add(other);
             }
@@ -148,6 +153,11 @@ public final class Links {
             }
         }
         return first < 0 || last < first ? null : new int[]{first, last};
+    }
+
+    /** Whether two recordings were made by the same player (PLAY-18 links different players' recordings only) */
+    static boolean samePlayer(RecordingManifest a, RecordingManifest b) {
+        return !a.recorderId.isBlank() && a.recorderId.equals(b.recorderId);
     }
 
     private static Set<String> sources(RecordingManifest manifest) {
