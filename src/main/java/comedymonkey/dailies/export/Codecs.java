@@ -364,10 +364,25 @@ public final class Codecs {
         };
     }
 
+    /**
+     * Whether an export with this encoder can be made by several of it at once, each taking every so many chunks of
+     * the video ({@link ParallelVideoSink}). Only NVIDIA's H.264: an NVIDIA card has several encoding units, one H.264
+     * encoder uses only one of them, and H.264 frames cannot be split between them as HEVC and AV1 frames are
+     * ({@link #splitModes}). Measured on an RTX 5090 at 4K: one encoder 147 frames a second, three 300.
+     */
+    public static boolean parallel(String encoder) {
+        return encoder.equals("h264_nvenc");
+    }
+
     /** A trial small enough to take a moment: a few grey frames, encoded and thrown away */
     public static List<String> trialArguments(String program, String encoder) {
+        return trialArguments(program, encoder, 640, 360);
+    }
+
+    /** As above, at the size of an export */
+    public static List<String> trialArguments(String program, String encoder, int width, int height) {
         List<String> command = new ArrayList<>(List.of(program, "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "color=c=gray:s=640x360:r=30", "-frames:v", "5"));
+            "-f", "lavfi", "-i", "color=c=gray:s=" + width + "x" + height + ":r=30", "-frames:v", "5"));
         command.addAll(videoArguments(encoder, 2_000_000L, false));
         command.addAll(List.of("-f", "null", "-"));
         return command;

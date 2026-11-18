@@ -289,11 +289,18 @@ public final class Encoder {
         IOException last = null;
         boolean split = Host.get().setting("exportSplitEncoding", true);
         for (Codecs.Choice choice : order) {
+            boolean takesI420 = i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent);
+            if (takesI420 && Codecs.parallel(choice.encoder())) {
+                FrameSink parallel = parallelSink(settings, choice.encoder(), container, output);
+                if (parallel != null) {
+                    return parallel;
+                }
+            }
             for (int mode : Codecs.splitModes(choice.encoder(), split)) {
                 try {
                     // Tried already, but a card can still refuse the size or rate of this export, or a way of splitting
                     // frames it has too few encoding units for: go on to the next
-                    return new VideoSink(settings, scale, choice.encoder(), mode, output, i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent));
+                    return new VideoSink(settings, scale, choice.encoder(), mode, output, takesI420);
                 } catch (IOException e) {
                     last = e;
                     Host.LOGGER.info("Dailies: encoder {}{} is not usable for this export ({}), trying the next", choice.encoder(),
@@ -302,6 +309,85 @@ public final class Encoder {
             }
         }
         throw new IOException("None of the encoders for " + settings.videoCodec + " could encode this export: " + (last == null ? "" : last.getMessage()), last);
+    }
+
+    /** The most memory the frames held for side-by-side encoders may take, however much the game has spare */
+    private static final long PARALLEL_MEMORY = 2L * 1024 * 1024 * 1024;
+    /** Encoder, size and number of encoders that were tried side by side this session, and whether they all started */
+    private static final Map<String, Boolean> PARALLEL_TRIED = new ConcurrentHashMap<>();
+
+    /**
+     * An export made by several encoders at once ({@link ParallelVideoSink}), as many as the NVIDIA H.264 Encoders at
+     * Once setting says; or null, and the caller goes on to a single encoder, when the setting is 1, when there is too
+     * little memory spare for the frames they must hold, or when they cannot all start on this card. Never throws.
+     */
+    private static @Nullable FrameSink parallelSink(Export.Settings settings, String encoder, String container, Path output) {
+        int processes = Host.get().setting("exportParallelEncoders", 3);
+        int width = settings.width;
+        int height = settings.height;
+        if (processes < 2 || !I420.fits(width, height)) {
+            return null;
+        }
+        // Half of what the game has spare, so the game itself is never short; what it counts as used includes garbage
+        // not yet collected, so this errs on the small side
+        Runtime runtime = Runtime.getRuntime();
+        long spare = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory());
+        long frameBytes = I420.size(width, height);
+        ParallelVideoSink.Plan plan = ParallelVideoSink.plan(settings.framesPerSecond, frameBytes, processes, Math.min(spare / 2, PARALLEL_MEMORY));
+        if (plan == null) {
+            Host.LOGGER.info("Dailies: one {} encoder, not {}: {} MB of memory spare is too little to hold the frames they would need", encoder, processes, spare >> 20);
+            return null;
+        }
+        try {
+            Path ffmpeg = program();
+            if (!parallelTrial(ffmpeg.toString(), encoder, width, height, processes)) {
+                Host.LOGGER.info("Dailies: {} {} encoders could not all start at once on this card at {}x{}; one is used", processes, encoder, width, height);
+                return null;
+            }
+            FrameSink sink = new ParallelVideoSink(ffmpeg, width, height, settings.framesPerSecond, Codecs.videoArguments(encoder, settings.bitrate, false, -1),
+                container, output, processes, plan.chunk(), plan.buffers(), line -> Host.LOGGER.info("Dailies: {}", line));
+            Host.LOGGER.info("Dailies: {} {} encoders side by side, in chunks of {} frames, each holding up to {} frames ({} MB in all at most)",
+                processes, encoder, plan.chunk(), plan.buffers(), (long) processes * plan.buffers() * frameBytes >> 20);
+            return sink;
+        } catch (IOException e) {
+            Host.LOGGER.info("Dailies: {} {} encoders side by side could not start ({}); one is used", processes, encoder, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Whether this many encoders start at once on this card at this size. An encoder only opens on the card when its
+     * first frame comes, which for an export is after it has begun; a card or driver that allows fewer encoders at
+     * once than asked for (or other programs using some) would then fail the export a few seconds in. So they are
+     * tried together first, a few frames each, and the answer kept for the session
+     */
+    private static boolean parallelTrial(String ffmpeg, String encoder, int width, int height, int processes) {
+        return PARALLEL_TRIED.computeIfAbsent(encoder + " " + width + "x" + height + " x" + processes + " on " + machine, key -> {
+            List<Process> started = new ArrayList<>();
+            try {
+                for (int i = 0; i < processes; i++) {
+                    started.add(new ProcessBuilder(Codecs.trialArguments(ffmpeg, encoder, width, height)).redirectErrorStream(true)
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD).start());
+                }
+                boolean all = true;
+                for (Process process : started) {
+                    if (!process.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)) {
+                        process.destroyForcibly();
+                        all = false;
+                    } else if (process.exitValue() != 0) {
+                        all = false;
+                    }
+                }
+                return all;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                started.forEach(Process::destroyForcibly);
+                return false;
+            } catch (IOException | RuntimeException e) {
+                started.forEach(Process::destroyForcibly);
+                return false;
+            }
+        });
     }
 
     private static final class VideoSink implements FrameSink {

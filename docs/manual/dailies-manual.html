@@ -831,6 +831,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>Seconds between Stored Worlds</td><td>5</td><td>How often the whole world is stored afresh. Shorter makes going back quicker and the file a little larger.</td></tr>
 				<tr><td>Default File Name</td><td>{date}_{time}</td><td>The name of an exported file.</td></tr>
 				<tr><td>Use Every NVIDIA Encoder</td><td>On</td><td>An NVIDIA card encodes HEVC and AV1 on all of its encoding units at once, each taking a strip of the frame. On an RTX 5090, 4K AV1 exports run about two and a half times as fast. Off for the last bit of quality.</td></tr>
+				<tr><td>NVIDIA H.264 Encoders at Once</td><td>3</td><td>H.264 frames cannot be split that way, so an NVIDIA card runs this many H.264 encoders at once instead, each taking a second of the video in turn, and the parts are joined at the end without being encoded again. On an RTX 5090, 4K H.264 exports run about twice as fast. It holds frames in memory while it runs (up to about 1.5 GB at 4K, less when the game has less to spare). 1 uses a single encoder.</td></tr>
 				<tr><td>Throwaway Frames</td><td>0</td><td>Extra frames drawn and thrown away before each one kept, for shader packs that build up their picture over time.</td></tr>
 				<tr><td>Caption Style, Font, Size, Colour, Outline, Position</td><td>A line at a time, Minecraft, 5%, white, black, bottom</td><td>How captions drawn into the video look.</td></tr>
 				<tr><td>New Keyframes Blend</td><td>Smooth curve</td><td>How a new keyframe travels to the next.</td></tr>
