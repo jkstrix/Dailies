@@ -97,7 +97,8 @@ public final class EditorScreen extends Screen {
     private Gadget.Push sideFold;
     private Gadget.Push viewerFold;
     private Gadget.Push playersFold;
-    private @Nullable Gadget held;
+    /** How the mouse and the keys reach the controls, as in every other Dailies screen */
+    private final InputRouter input = new InputRouter();
     /** The revision of the selection the keyframe tab last saw */
     private long selectionSeen = -1;
     /** The things near the viewer the pick panel lists, looked for again every 0.8 s, and the word for them */
@@ -253,10 +254,7 @@ public final class EditorScreen extends Screen {
     }
 
     private void build() {
-        Entry.drop();
-        Menu.close();
-        Gadget.focus = null;
-        this.held = null;
+        this.input.begin();
         EditorState.attach();
         this.top.clear();
         this.topLeft.clear();
@@ -504,10 +502,7 @@ public final class EditorScreen extends Screen {
     /** The screen was taken away. After a jump {@link #watch} puts it back; otherwise it stays away */
     @Override
     public void removed() {
-        EditorState.guard(Entry::blur);
-        Menu.close();
-        Gadget.focus = null;
-        this.held = null;
+        this.input.end();
         this.stopFlying();
         if (this.minecraft != null) {
             // Whatever comes next is drawn at the game's own size
@@ -589,7 +584,7 @@ public final class EditorScreen extends Screen {
             Menu menu = Menu.open;
             if (menu != null) {
                 menu.draw(graphics, this.font, mouseX, mouseY, this.width, this.height);
-            } else if (!this.flying && this.held == null && !this.timeline.dragging()) {
+            } else if (!this.flying && this.input.held() == null && !this.timeline.dragging()) {
                 Component words = this.tipAt(mouseX, mouseY);
                 if (words != null) {
                     this.setTooltipForNextRenderPass(words);
@@ -917,21 +912,16 @@ public final class EditorScreen extends Screen {
     }
 
     private @Nullable Component tipAt(double mouseX, double mouseY) {
-        for (Gadget gadget : this.top) {
-            Component words = gadget.height > 0 ? gadget.tipAt(mouseX, mouseY) : null;
-            if (words != null) {
-                return words;
-            }
+        Component barWords = InputRouter.tipAmong(this.top, mouseX, mouseY);
+        if (barWords != null) {
+            return barWords;
         }
         EditorLayout.Layout at = this.layout;
         Component words = null;
         if (at.side().contains(mouseX, mouseY)) {
             words = this.sideFold.tipAt(mouseX, mouseY);
-            List<Gadget> heads = this.sideOpen() ? this.tabs : this.edgeTabs;
-            for (Gadget tab : heads) {
-                if (words == null && tab.height > 0) {
-                    words = tab.tipAt(mouseX, mouseY);
-                }
+            if (words == null) {
+                words = InputRouter.tipAmong(this.sideOpen() ? this.tabs : this.edgeTabs, mouseX, mouseY);
             }
             if (words == null && this.sideOpen()) {
                 words = this.sideForm().tipAt(mouseX, mouseY);
@@ -1007,20 +997,11 @@ public final class EditorScreen extends Screen {
             }
             return;
         }
-        Menu menu = Menu.open;
-        if (menu != null) {
-            menu.press(mouseX, mouseY);
+        if (InputRouter.beforeClick(mouseX, mouseY)) {
             return;
         }
-        Entry typing = Entry.focused;
-        if (typing != null && !typing.over(mouseX, mouseY)) {
-            // What was typed is handed over before the click does anything, so the click acts on the new value
-            Entry.blur();
-        }
-        // The ring is for the keys; the mouse says where it is by itself
-        Gadget.focus = null;
         if (this.overPanels(mouseX, mouseY)) {
-            this.held = this.pressPanels(mouseX, mouseY, button);
+            this.input.hold(this.pressPanels(mouseX, mouseY, button));
             return;
         }
         if (button == 1) {
@@ -1055,24 +1036,15 @@ public final class EditorScreen extends Screen {
     private @Nullable Gadget pressPanels(double mouseX, double mouseY, int button) {
         EditorLayout.Layout at = this.layout;
         if (at.bar().contains(mouseX, mouseY)) {
-            for (Gadget gadget : this.top) {
-                Gadget hit = gadget.height > 0 ? gadget.press(mouseX, mouseY, button) : null;
-                if (hit != null) {
-                    return hit;
-                }
-            }
-            return null;
+            return InputRouter.pressAmong(this.top, mouseX, mouseY, button);
         }
         if (at.side().contains(mouseX, mouseY)) {
             Gadget hit = this.sideFold.press(mouseX, mouseY, button);
+            if (hit == null) {
+                hit = InputRouter.pressAmong(this.sideOpen() ? this.tabs : this.edgeTabs, mouseX, mouseY, button);
+            }
             if (hit != null) {
                 return hit;
-            }
-            for (Gadget tab : this.sideOpen() ? this.tabs : this.edgeTabs) {
-                hit = tab.height > 0 ? tab.press(mouseX, mouseY, button) : null;
-                if (hit != null) {
-                    return hit;
-                }
             }
             return this.sideOpen() ? this.sideForm().press(mouseX, mouseY, button) : null;
         }
@@ -1120,8 +1092,7 @@ public final class EditorScreen extends Screen {
         if (button == 1) {
             this.stopFlying();
         }
-        Gadget was = this.held;
-        this.held = null;
+        Gadget was = this.input.letGo();
         if (this.usable()) {
             EditorState.guard(() -> {
                 if (was != null) {
@@ -1142,9 +1113,7 @@ public final class EditorScreen extends Screen {
         }
         if (button == 0 && this.usable() && !this.hidden()) {
             EditorState.guard(() -> {
-                if (this.held != null) {
-                    this.held.drag(mouseX, mouseY);
-                }
+                this.input.drag(mouseX, mouseY);
                 this.timeline.dragTo(mouseX, mouseY);
             });
         }
@@ -1208,13 +1177,13 @@ public final class EditorScreen extends Screen {
     }
 
     private void key(int keyCode, int scanCode, int modifiers) {
-        boolean back = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        boolean back = InputRouter.back(modifiers);
         Entry typing = Entry.focused;
         if (typing != null) {
             // A real box, and not the stand-in that hands the keys to an open menu
             boolean box = Entry.typing();
-            typing.key(keyCode, scanCode, modifiers);
-            if (box && keyCode == GLFW.GLFW_KEY_TAB && Entry.focused == null && Menu.open == null && !this.hidden()) {
+            boolean handedOver = InputRouter.typeKey(typing, keyCode, scanCode, modifiers);
+            if (box && handedOver && Menu.open == null && !this.hidden()) {
                 // Tab hands over what was typed and moves on, as it does in every other Dailies screen
                 this.moveFocus(typing, back);
             }
@@ -1334,28 +1303,8 @@ public final class EditorScreen extends Screen {
     }
 
     private void moveFocus(@Nullable Gadget from, boolean back) {
-        List<Gadget> order = this.order();
-        if (order.isEmpty()) {
-            Gadget.focus = null;
-            return;
-        }
-        int at = from == null ? -1 : order.indexOf(from);
-        int next = at < 0 ? (back ? order.size() - 1 : 0) : Math.floorMod(at + (back ? -1 : 1), order.size());
-        Gadget control = order.get(next);
-        if (control instanceof Entry box) {
-            box.focus();
-        } else {
-            Entry.blur();
-            Gadget.focus = control;
-        }
         // A control further down a panel than it shows is scrolled into sight
-        for (Form form : List.of(this.viewerForm, this.playersForm, this.sideForm())) {
-            List<Gadget> inside = new ArrayList<>();
-            form.collect(inside);
-            if (inside.contains(control)) {
-                form.reveal(control);
-            }
-        }
+        InputRouter.moveFocus(this.order(), from, back, List.of(this.viewerForm, this.playersForm, this.sideForm()));
     }
 
     @Override

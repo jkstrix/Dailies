@@ -20,7 +20,8 @@ import java.util.function.Supplier;
 /**
  * The small things the screens of the library share (the list, the bin, the storage view, combining and trimming):
  * a recording's preview picture as a texture, the little pictures of a star, a folder and the bin, and a bar that
- * shows how a combine or trim is getting on. Drawn with the kit's colours, in whole pixels of the interface.
+ * shows how a combine or trim is getting on, and a line with a name and its value. Drawn with the kit's colours, in
+ * whole pixels of the interface.
  */
 final class LibraryBits {
 
@@ -247,6 +248,46 @@ final class LibraryBits {
                 tip = Component.empty().append(tip).append("\n").append(Component.translatable("dailies.library.job.through_game"));
             }
             return tip;
+        }
+    }
+
+
+    /** A name and its value on one line, the value cut short with its whole in the explanation when it does not fit */
+    static final class Fact extends Gadget {
+
+        final Component label;
+        final String value;
+        private boolean cut = false;
+
+        Fact(Component label, String value) {
+            this.label = label;
+            this.value = value == null ? "" : value;
+        }
+
+        @Override
+        int heightFor(Font font, int forWidth) {
+            return 12;
+        }
+
+        private int labelWidth() {
+            return Math.max(48, Math.min(76, this.width * 34 / 100));
+        }
+
+        @Override
+        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            int labelWidth = this.labelWidth();
+            Kit.text(graphics, font, Kit.clip(font, this.label.getString(), labelWidth - 4), this.x + 1, this.y + 2, Controls.PARCHMENT_DIM);
+            int room = this.width - labelWidth - 2;
+            this.cut = font.width(this.value) > room;
+            Kit.text(graphics, font, Kit.clip(font, this.value, room), this.x + labelWidth, this.y + 2, Controls.PARCHMENT);
+        }
+
+        @Override
+        @Nullable Component tipAt(double mouseX, double mouseY) {
+            if (!this.over(mouseX, mouseY)) {
+                return null;
+            }
+            return this.cut ? Component.empty().append(this.label).append(": ").append(this.value) : null;
         }
     }
 
