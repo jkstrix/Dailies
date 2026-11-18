@@ -24,8 +24,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The bottom panel of the editor (specification chapter V): the transport buttons, a ruler in seconds over the whole
- * recording with the playhead, segment boundaries, marker flags and the export range, and under it one row for every
+ * The bottom panel of the editor (specification chapter V): the transport buttons, a ruler over the part of the
+ * recording in view, its notches spaced by {@link Ruler}, with the playhead, marker flags and the export range, and under it one row for every
  * track of the scene with its keyframes as diamonds. The names of the tracks, with what can be done to each, stand in
  * a column at the left. Between the ruler and the rows, when there are any and they are wanted, the recording's
  * moments: see {@link MomentsLane}.
@@ -46,9 +46,7 @@ final class TimelinePanel {
     private static final int GROUP_GAP = 8;
     /** Where each group of transport buttons ends, as an index into the list of them: a little room follows it */
     private static final int[] GROUP_ENDS = {4, 7};
-    private static final int SEGMENT_LINE = 0x90EFE6D6;
     private static final int RANGE_TINT = 0x38D4B25A;
-    private static final double[] RULER_STEPS = {0.05, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600};
 
     /** What the left mouse button is in the middle of doing in the rows */
     private enum Drag {
@@ -494,34 +492,26 @@ final class TimelinePanel {
     }
 
     private void drawRuler(GuiGraphics graphics, Font font, int total) {
-        double pixelsPerSecond = this.laneWidth / (EditorState.viewSpan / 20.0);
-        double step = RULER_STEPS[RULER_STEPS.length - 1];
-        for (double candidate : RULER_STEPS) {
-            if (candidate * pixelsPerSecond >= 56.0) {
-                step = candidate;
-                break;
-            }
-        }
-        double stepTicks = step * 20.0;
-        long first = (long) Math.floor(EditorState.viewStart / stepTicks);
-        long last = (long) Math.ceil((EditorState.viewStart + EditorState.viewSpan) / stepTicks);
-        // Never more lines than there are pixels to put them on
-        if (last - first > this.laneWidth) {
+        double start = EditorState.viewStart;
+        double span = EditorState.viewSpan;
+        if (span <= 0.0 || this.laneWidth <= 0) {
             return;
         }
-        for (long mark = first; mark <= last; mark++) {
-            double tick = mark * stepTicks;
-            if (tick > total) {
-                break;
-            }
-            int x = (int) Math.round(this.across(tick));
-            graphics.fill(x, this.rulerBottom - 5, x + 1, this.rulerBottom, Controls.BRASS);
-            int whole = (int) Math.round(tick);
-            String label = step < 1.0 ? Controls.time(whole) : Controls.length(whole);
-            Kit.text(graphics, font, label, x + 2, this.rulerTop + 2, Controls.PARCHMENT_DIM);
-            int half = (int) Math.round(this.across(tick + stepTicks / 2.0));
-            if (tick + stepTicks / 2.0 <= total) {
-                graphics.fill(half, this.rulerBottom - 2, half + 1, this.rulerBottom, Controls.BRASS);
+        double end = Math.min(total, start + span);
+        long minor = Ruler.minor(span, this.laneWidth, Ruler.MINOR_GAP);
+        long major = Ruler.major(minor, span, this.laneWidth, Ruler.MAJOR_GAP);
+        // The tall notches carry a time each, so they must also leave room for the longest of those to be read
+        int widest = font.width(Ruler.label((long) end, major)) + 6;
+        if (major * this.laneWidth / span < widest) {
+            major = Ruler.major(minor, span, this.laneWidth, widest);
+        }
+        for (long tick = Ruler.first(start, minor); tick <= end; tick += minor) {
+            int x = Ruler.x(tick, start, span, this.laneLeft, this.laneWidth);
+            if (tick % major == 0) {
+                graphics.fill(x, this.rulerBottom - 5, x + 1, this.rulerBottom, Controls.BRASS);
+                Kit.text(graphics, font, Ruler.label(tick, major), x + 2, this.rulerTop + 2, Controls.PARCHMENT_DIM);
+            } else {
+                graphics.fill(x, this.rulerBottom - 2, x + 1, this.rulerBottom, Controls.BRASS);
             }
         }
     }
@@ -531,16 +521,8 @@ final class TimelinePanel {
         if (manifest == null) {
             return;
         }
-        int floor = Math.max(this.lanesTop, this.lanesBottom);
-        for (RecordingManifest.Segment segment : manifest.segments) {
-            if (segment.startTick > 0 && segment.startTick < total) {
-                int x = (int) Math.round(this.across(segment.startTick));
-                // A broken line, so that it is not taken for the playhead
-                for (int y = this.rulerTop; y < floor; y += 4) {
-                    graphics.fill(x, y, x + 1, Math.min(floor, y + 2), SEGMENT_LINE);
-                }
-            }
-        }
+        // Segments are not drawn: a new one starts at every stored world, every few seconds, so their lines would be a
+        // comb over the whole timeline that tells the viewer nothing. Joins and cuts have markers of their own.
         for (RecordingManifest.Marker marker : manifest.markers) {
             int colour = 0xFF000000 | (marker.colour & 0xFFFFFF);
             int x = (int) Math.round(this.across(Math.max(0, Math.min(total, marker.tick))));

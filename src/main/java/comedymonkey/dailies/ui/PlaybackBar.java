@@ -16,8 +16,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * The strip along the bottom of the screen while a recording is watched (specification chapter IV, "The screen during
- * playback"): the whole recording as a brass gauge, filled up to the current tick, with segment boundaries as thin
- * lines and markers as small flags, and above it the time, the speed, what playback is doing and whether the camera
+ * playback"): the whole recording as a brass gauge, filled up to the current tick, with notches at round times spaced
+ * by {@link Ruler} for the bar's width and markers as small flags, and above it the time, the speed, what playback is doing and whether the camera
  * follows its track. The game's own "hide the interface" key hides it with everything else.
  *
  * While the editor is open it has a timeline of its own and this strip stays away.
@@ -26,7 +26,8 @@ public final class PlaybackBar {
 
     private static final int HEIGHT = 26;
     private static final int GAUGE_HEIGHT = 6;
-    private static final int SEGMENT_LINE = 0x90EFE6D6;
+    /** Light and part seen through, so a notch shows on the dark of the gauge still to play and on the brass of what has played */
+    private static final int NOTCH = 0x80EFE6D6;
 
     private static boolean failureLogged = false;
 
@@ -102,14 +103,19 @@ public final class PlaybackBar {
         graphics.fill(left, top, left + played, bottom, Controls.BRASS);
         graphics.fill(left, top, left + played, top + 1, Controls.BRASS_BRIGHT);
 
+        // Notches at round times, far enough apart at this width to be told apart: small ones up from the foot of the
+        // gauge and taller ones at a longer round time. Segment boundaries are not drawn, since a segment begins at
+        // every stored world, every few seconds, and their lines made a comb of the whole gauge.
+        long minor = Ruler.minor(total, width, Ruler.MINOR_GAP);
+        long major = Ruler.major(minor, total, width, Ruler.MAJOR_GAP);
+        for (long tick = minor; tick < total; tick += minor) {
+            int x = Ruler.x(tick, 0, total, left, width);
+            int tall = tick % major == 0 ? height - 1 : Math.max(1, height / 3);
+            graphics.fill(x, bottom - tall, x + 1, bottom, NOTCH);
+        }
+
         RecordingManifest manifest = Playback.manifest();
         if (manifest != null) {
-            for (RecordingManifest.Segment segment : manifest.segments) {
-                if (segment.startTick > 0 && segment.startTick < total) {
-                    int x = left + Math.min(width - 1, across(segment.startTick, total, width));
-                    graphics.fill(x, top, x + 1, bottom, SEGMENT_LINE);
-                }
-            }
             for (RecordingManifest.Marker marker : manifest.markers) {
                 int colour = 0xFF000000 | (marker.colour & 0xFFFFFF);
                 int x = left + markerOffset(marker.tick, total, width);

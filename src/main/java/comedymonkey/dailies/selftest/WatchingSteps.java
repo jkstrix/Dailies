@@ -408,6 +408,23 @@ final class WatchingSteps {
         check(test.onClient(() -> minecraft.player.connection.sendUnsignedCommand("gamemode creative")) && DailiesCommand.lastAnswer().equals("only_own"),
             "an unsigned command that is not Dailies' own was not turned away while watching");
         check(minecraft.player.isSpectator(), "the viewer is no longer a spectator after a command");
+
+        // The chat never opens while watching: the chat key opens the editor and the command key does nothing
+        test.onClientRun(() -> minecraft.setScreen(new net.minecraft.client.gui.screens.ChatScreen("/")));
+        test.sleepTicks(2);
+        check(minecraft.screen == null, "the command key opened a screen while watching: " + minecraft.screen);
+        test.onClientRun(() -> minecraft.setScreen(new net.minecraft.client.gui.screens.ChatScreen("")));
+        test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the chat key to open the editor while watching");
+        test.onClientRun(() -> minecraft.screen.onClose());
+        test.sleepTicks(2);
+
+        // Escape gives Dailies' own menu in place of the game's pause menu, and Escape there goes back to watching
+        test.onClientRun(() -> minecraft.pauseGame(false));
+        test.sleepTicks(2);
+        check(minecraft.screen instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape while watching brought up " + minecraft.screen + " rather than Dailies' menu");
+        test.onClientRun(() -> minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        test.sleepTicks(2);
+        check(minecraft.screen == null, "Escape in Dailies' menu did not go back to watching: " + minecraft.screen);
     }
 
     // --- REC-32: markers in the world ---

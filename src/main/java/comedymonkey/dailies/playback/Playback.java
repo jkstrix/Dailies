@@ -104,9 +104,9 @@ public final class Playback {
                 event.setCanceled(true);
             }
         });
-        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4). The chat itself
-        // opens, since that is where "/dailies" is typed: what is said in it goes nowhere, and commands other than
-        // that one are turned away where they would be sent (mixin.playback.CommandMixin)
+        // The viewer watches; they cannot talk into the recording or open its containers (PLAY-4). The chat does not
+        // open at all (ui.Screens swaps it for the editor), but should something send a line anyway it goes nowhere,
+        // and commands other than Dailies' own are turned away where they would be sent (mixin.playback.CommandMixin)
         NeoForge.EVENT_BUS.addListener((ScreenEvent.Opening event) -> {
             if (loaded && event.getNewScreen() instanceof AbstractContainerScreen<?>) {
                 event.setCanceled(true);

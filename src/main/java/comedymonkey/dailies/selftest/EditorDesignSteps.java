@@ -71,12 +71,19 @@ final class EditorDesignSteps {
         check(!second.isEmpty() && !second.equals("Dropdown"), "a second Tab left the ring on '" + second + "'");
         test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_TAB, 0, GLFW.GLFW_MOD_SHIFT));
         check(test.onClient(Previews::focusedControl).equals("Dropdown"), "Shift and Tab did not take the ring back to the scene dropdown");
-        // Escape takes the ring away first and leaves the editor up; the next one would close it as it always has
+        // Escape takes the ring away first and leaves the editor up; the next one brings up Dailies' own menu, and
+        // Escape there puts the editor back
         test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
         check(test.onClient(Previews::focusedControl).isEmpty() && minecraft.screen == editor, "Escape did not take the ring away and only the ring");
         test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
         test.sleepTicks(3);
-        check(!(minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen), "Escape with no ring and no menu no longer closes the editor");
+        check(minecraft.screen instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape with no ring and no menu did not bring up Dailies' menu: " + minecraft.screen);
+        net.minecraft.client.gui.screens.Screen menu = minecraft.screen;
+        test.onClientRun(() -> menu.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "Escape in Dailies' menu to put the editor back");
+        // Left closed, as the steps after these expect
+        test.onClientRun(() -> minecraft.screen.onClose());
+        test.sleepTicks(3);
         test.log("editor design: laid out with no overlaps, view " + Math.round(open * 100) + "% open and " + Math.round(folded * 100)
                 + "% folded, \"...\" menu and Tab order work");
     }

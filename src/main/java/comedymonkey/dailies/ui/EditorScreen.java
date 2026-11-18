@@ -159,10 +159,20 @@ public final class EditorScreen extends Screen {
     /** Puts the editor on screen */
     static void open() {
         if (Playback.loaded()) {
-            wanted = true;
-            pointerKept = false;
-            Minecraft.getInstance().setScreen(new EditorScreen());
+            Minecraft.getInstance().setScreen(opening());
         }
+    }
+
+    /** The editor is not to come back by itself, even if the game took it away for a jump */
+    static void letGo() {
+        wanted = false;
+    }
+
+    /** A new editor, wanted on screen from now on, for whoever is about to put it there: {@link #open}, or a screen being swapped for it */
+    static EditorScreen opening() {
+        wanted = true;
+        pointerKept = false;
+        return new EditorScreen();
     }
 
     /**
@@ -1208,7 +1218,8 @@ public final class EditorScreen extends Screen {
                 this.minecraft.options.hideGui = false;
                 Notices.setHidden(false);
             } else {
-                this.onClose();
+                // Dailies' own menu, as Escape gives anywhere a recording is watched; it brings the editor back
+                this.minecraft.setScreen(new PlaybackMenu(true));
             }
             return;
         }
@@ -1252,7 +1263,9 @@ public final class EditorScreen extends Screen {
             // Not ours, and not to be taken for a playback key
             return;
         } else if (Keys.isTimelineKey(keyCode, scanCode)) {
-            this.onClose();
+            // The key that opens the editor does nothing while it is open; the editor's Close button and the menu
+            // Escape brings up are the ways out
+            return;
         } else {
             Keys.playbackKeyPressed(keyCode, scanCode);
         }

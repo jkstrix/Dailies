@@ -22,6 +22,7 @@
     "access.TimerAccess",
     "access.MinecraftAccess",
     "access.ClientLevelAccess",
+    "access.ChatScreenAccess",
     "playback.MinecraftMixin",
     "playback.HoldFrameMixin",
     "playback.ChatMixin",
