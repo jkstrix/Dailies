@@ -15,7 +15,7 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 sourceSets {
     main {
-        // The owner's provided features (specification chapters VIII to XII) are compiled from where they were handed over
+        // The owner's features (specification chapters VIII to XII) are compiled from reference/
         java.srcDir 'reference/src/main/java'
         resources.srcDir 'reference/src/main/resources'
     }

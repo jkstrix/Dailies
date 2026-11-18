@@ -14,7 +14,7 @@ Every task names who does it:
 
 Sizes are rough: **S** is under an hour, **M** is a session, **L** is several sessions.
 
-> **This file is not for the builder.** It refers to the earlier build. Remove it from the folder before handover (task 4.7).
+The earlier build is the owner's previous work on the same idea. It may be read and named. This plan stays in the folder.
 
 ## Principles
 
@@ -31,18 +31,18 @@ Every task below follows these. Where a task once fell short of one, it has been
 
 ---
 
-## Phase 0: before the earlier build is archived
+## Phase 0: from the earlier build
 
-These depend on source or behaviour that only exists in the earlier build. Do them first.
+These use source or behaviour that lives in the earlier build. Do them while that tree is still at hand.
 
 | # | Task | Side | Size |
 |---|---|---|---|
 | 0.1 | **Keep the carry-over script.** The script that produced `reference/` lives in a temporary folder that a reboot can clear. Move it next to the earlier build's source and commit it there. Every "Yours" task below re-runs it. | Folder | S |
 | 0.2 | **Provide the voice capture.** Moments needs 48 kHz mono audio per speaker, but the code that takes it from Simple Voice Chat's API was not carried. Separate the part that listens to Simple Voice Chat and calls `Moments.onVoiceChatAudio` from the part that writes recordings, and carry the first. Add the voice chat API events it uses to chapter XV. | Yours | M |
-| 0.3 | **Provide the Sable answers for the camera.** `Host.Crafts` has nothing behind it. The eight camera methods in the earlier build's Sable code are pure reflection with no other dependency. Carry them as `comedymonkey.dailies.compat.sable.SableCrafts implements Host.Crafts`, and add the four craft-target methods of 2.13 while the Sable code is still at hand. The recording and playback parts of that code stay described only, in the tech note. | Yours | S |
-| 0.4 | **Write down behaviour the spec needs for Phase 1.** For server resource packs, combining recordings, the camera path preview, in-world markers and Distant Horizons, note what each does **as a user sees it** (not how it is coded). Phase 1 turns those notes into requirements. | Folder | M |
+| 0.3 | **Provide the Sable answers for the camera.** `Host.Crafts` has nothing behind it. The eight camera methods in the earlier build's Sable code are pure reflection with no other dependency. Carry them as `comedymonkey.dailies.compat.sable.SableCrafts implements Host.Crafts`, and add the four craft-target methods of 2.13 while the Sable code is still at hand. The recording and playback parts are written up in the tech note, which may be read alongside that code. | Yours | S |
+| 0.4 | **Write down behaviour the spec needs for Phase 1.** For server resource packs, combining recordings, the camera path preview, in-world markers and Distant Horizons, note what each does as a user sees it. The earlier build's code may be read while writing that down. Phase 1 turns those notes into requirements. | Folder | M |
 | 0.5 | **Update McpCraft's playback check.** `dev.mcpcraft.core.Replay` recognises the earlier build's playback server by class name. Make it accept both that and Dailies' documented check (PLAY-6), so it works before and after the switch. | Yours | S |
-| 0.6 | **Archive the earlier build** somewhere the new agent cannot read, rather than deleting it. Back up its git history. | Folder | S |
+| 0.6 | **Keep the earlier build.** Back up its git history and leave the tree where it can still be read. It is the work Dailies is inspired by. | Folder | S |
 
 ---
 
@@ -332,7 +332,7 @@ The game's standard settings screen shows every choice as a "< value >" button t
 | # | Problem | Fix | Side | Size |
 |---|---|---|---|---|
 | 3.2 | The main spec does not link the Create and Aeronautics note. | Link it from chapter VII's lede, chapter XV's file table and chapter I's "what is being built". | Spec | S |
-| 3.3 | No README in the folder. | Add `README.md`: what Dailies is, the reading order (README, spec chapter I, the rest of the spec, the tech note), what each folder holds, the clean-room rules in short, how to build each part, and who to ask. | Folder | S |
+| 3.3 | No README in the folder. | Add `README.md`: what Dailies is, the reading order (README, spec chapter I, the rest of the spec, the tech note), what each folder holds, where the work comes from, how to build each part, and who to ask. | Folder | S |
 | 3.4 | `Host.Crafts` and the voice feed have nothing behind them. | Done by 0.2 and 0.3; update chapter XV's file table and the core's step list. | Spec | S |
 | 3.5 | Renderer compatibility is missing. Create draws contraptions through Flywheel, Aeronautics uses Veil, and shader packs and Sodium-style renderers change how frames are produced. | New chapter, "Other renderers", with requirements: playback and export are correct with Flywheel, Veil, Iris or Oculus shader packs, and Sodium or Embeddium; contraptions are fully updated in every exported frame at any export speed; tests for each combination. | Spec | M |
 | 3.6 | Appendix B's interactions example is made up. | Run a two-player session in the earlier build, copy a real `meeting` and `group_formed` record, and replace the example. | Folder | S |
@@ -356,17 +356,17 @@ The game's standard settings screen shows every choice as a "< value >" button t
 
 ---
 
-## Phase 4: finish and hand over
+## Phase 4: finish
 
 | # | Task | Size |
 |---|---|---|
 | 4.1 | Re-run the carry-over script after every "Yours" change, and confirm `reference/` still compiles. | S |
 | 4.2 | Check every requirement id is unique and every test step points at real ids. Validate the HTML and links of both documents. | S |
-| 4.3 | Scrub both documents and all code for the earlier build's name, its author's name and the earlier build's package names. | S |
-| 4.4 | Read both documents end to end as a builder would, and fix anything ambiguous, contradictory or left to guesswork. | M |
-| 4.5 | Brief the reviewer: the documents were written by someone who knew the original mod's code; list what is behaviour and what is provided source; include the encoder licences from 3.1 and the codec patent position. | S |
-| 4.6 | **Gate: the review is done and its changes are made.** Nothing goes to a builder before this. | — |
-| 4.7 | Remove this plan from the folder, then hand the folder to the builder. | S |
+| 4.3 | The earlier build's name, its author and its package names may stay wherever they identify that work. | S |
+| 4.4 | Read both documents end to end, and fix anything ambiguous, contradictory or left to guesswork. | M |
+| 4.5 | Brief the reviewer: list what is behaviour and what is provided source; include the encoder licences from 3.1 and the codec patent position. | S |
+| 4.6 | **Gate: the review is done and its changes are made.** | — |
+| 4.7 | Keep this plan in the folder. | S |
 
 ---
 
@@ -392,7 +392,7 @@ No decisions are open. New ones found while working go in this table before the 
 
 ## Suggested order
 
-1. **Phase 0:** all of it, before anything is archived.
+1. **Phase 0:** all of it, while the earlier build is still at hand.
 2. **FILE-16, the time index:** into the spec straight away, since recordings made without it can never gain it.
 3. **3.2 to 3.4, 3.7:** quick fixes that make the folder correct as it stands.
 4. **1.1 to 1.7:** nothing is lost in the move.

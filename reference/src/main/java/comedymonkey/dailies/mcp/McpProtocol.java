@@ -49,7 +49,7 @@ public class McpProtocol implements McpHttpServer.Endpoint {
         Registrar registrar = new Registrar();
         MomentsTools.register(registrar);
         // The other tool groups of the specification (status, recording, playback, editing, looks, export, smart camera)
-        // belong to the new core and register here in the same way
+        // belong to the core and register here in the same way
         Host.get().registerTools(registrar);
     }
 

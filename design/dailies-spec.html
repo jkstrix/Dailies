@@ -151,24 +151,22 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ I -->
 	<section id="rules">
 		<div class="chapter"><span class="no">I</span><h2>Ground rules</h2></div>
-		<p class="lede">Dailies is a new mod, written from this document and from nothing else. Other replay mods exist, and none of their code, names or designs may end up in it. This chapter says how that is kept true.</p>
+		<p class="lede">Dailies is its own mod, inspired by the owner's earlier work on recording play and cutting it into video. This chapter says what is being built and how to read the rest.</p>
 
 		<div class="notice">
 			<h3>Read this before anything else</h3>
-			<p><b>What this is.</b> A description of what a replay mod must do, as a player or a tester would see it. It contains requirements, facts about Minecraft and other mods, and test steps. It contains no code and no internal design to copy.</p>
-			<p><b>Who may build from it.</b> Only someone who has never read the source of another Minecraft replay mod, in any form. The author of this document and the owner of the project are both ruled out as builders of the core.</p>
+			<p><b>What this is.</b> What Dailies does, as a player or a tester would see it: requirements, facts about Minecraft and the mods it works beside, and test steps.</p>
+			<p><b>Who works from it.</b> Anyone working on the mod, including the author of this document and the owner of the project. The owner's earlier work, and other replay mods, may be read while doing that.</p>
 		</div>
 
-		<h3>What the builder may and may not use</h3>
+		<h3>What to work from</h3>
 		<div class="rules">
 			<div class="rule"><b>This document</b><span>Everything in it. Where it says "must", build it; where it says "suggested", you may do it another way.</span></div>
 			<div class="rule"><b>Public documentation</b><span>Minecraft's own code as mapped by NeoForge's toolchain, NeoForge's docs and source, and the public docs of Create, Sable, Create Aeronautics and Simple Voice Chat.</span></div>
-			<div class="rule"><b>The parts marked "yours"</b><span>Chapters VIII to XII describe features written by the project's owner. Their source is provided in <code>reference/</code> and <code>companion/</code> and is used as it stands (chapter XV).</span></div>
-			<div class="rule"><b>When something is unclear</b><span>Ask for this document to be corrected. Do not go and study how another replay mod behaves.</span></div>
-			<div class="rule no"><b>No other replay mod's source</b><span>Not a repository, not a decompiled jar, not snippets quoted in forums or issue trackers.</span></div>
-			<div class="rule no"><b>No borrowed names or look</b><span>Design your own class names, file layout, screens, labels, icons and wording. Do not imitate another mod's editor.</span></div>
-			<div class="rule no"><b>No borrowed file format</b><span>Dailies has its own recording format (chapter III). It does not read or write any other mod's recordings.</span></div>
-			<div class="rule no"><b>No "how" from the author</b><span>The author may clarify what must happen, never how to build it.</span></div>
+			<div class="rule"><b>The parts marked "yours"</b><span>Chapters VIII to XII describe features written by the project's owner. Their source is in <code>reference/</code> and <code>companion/</code> and is used as it stands (chapter XV).</span></div>
+			<div class="rule"><b>The earlier work</b><span>The owner's earlier build of this idea may be read, named and learned from. So may any other replay mod.</span></div>
+			<div class="rule"><b>When something is unclear</b><span>Ask for this document to be corrected. Reading the earlier work, or another replay mod, is a fair way to work out what was meant.</span></div>
+			<div class="rule"><b>Dailies' own recordings</b><span>Dailies has its own recording format (chapter III) and opens only its own recordings.</span></div>
 		</div>
 
 		<h3>What is being built</h3>
@@ -185,8 +183,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			</div>
 			<div class="card"><h3>The pieces</h3>
 				<ul>
-					<li><b>Core</b> (chapters II to VII): record, store, play back, edit, export. <i>New work.</i></li>
-					<li><b>Smart Camera, Moments, MCP, the page</b> (VIII to XI): the owner's features. Their source is provided and plugs into the new core through one interface. The Smart Camera is the owner's to change: anyone else may correct its ids, links and counts, and reports anything more instead of changing it.</li>
+					<li><b>Core</b> (chapters II to VII): record, store, play back, edit, export. The code is in <code>src/</code>.</li>
+					<li><b>Smart Camera, Moments, MCP, the page</b> (VIII to XI): the owner's features. Their source is in <code>reference/</code> and plugs into the core through one interface. The Smart Camera is the owner's to change: anyone else may correct its ids, links and counts, and reports anything more instead of changing it.</li>
 					<li><b>Server companion</b> (XII): the owner's separate server mod, provided complete.</li>
 					<li><b>What is provided</b> (XV) and two appendices: every tool's arguments, and the stored records.</li>
 					<li><b>The Create and Aeronautics note</b>, <a href="create-and-aeronautics.html">create-and-aeronautics.html</a> beside this document: how contraptions and Sable craft were made to record and play back, fault by fault. It goes with chapter VII.</li>
@@ -221,7 +219,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 	<!-- ============================================================ II -->
 	<section id="recording">
-		<div class="chapter"><span class="no">II</span><h2>Recording</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">II</span><h2>Recording</h2><span class="owner new">core</span></div>
 		<p class="lede">While a recording runs, Dailies keeps everything needed to show the session again exactly as the recorder's game received it, and adds the few things the game never receives about its own player.</p>
 
 		<div class="fact"><b>Facts</b>
@@ -307,7 +305,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 	<!-- ============================================================ III -->
 	<section id="file">
-		<div class="chapter"><span class="no">III</span><h2>The recording file</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">III</span><h2>The recording file</h2><span class="owner new">core</span></div>
 		<p class="lede">Dailies has its own format. The layout below is original to this document and is only a suggestion; what the format must be able to do is binding.</p>
 
 		<div class="tablebox"><table class="req">
@@ -369,7 +367,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 	<!-- ============================================================ IV -->
 	<section id="playback">
-		<div class="chapter"><span class="no">IV</span><h2>Playback</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">IV</span><h2>Playback</h2><span class="owner new">core</span></div>
 		<p class="lede">Opening a recording puts the viewer inside the recorded session as a free camera. Nothing is simulated: everything that moves does so because the recording says it did.</p>
 
 		<div class="fact"><b>Facts</b>
@@ -422,7 +420,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 	<!-- ============================================================ V -->
 	<section id="editor">
-		<div class="chapter"><span class="no">V</span><h2>The editor</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">V</span><h2>The editor</h2><span class="owner new">core</span></div>
 		<p class="lede">The editor turns a recording into shots. It is a timeline of tracks, each holding keyframes of one kind, laid over the recording's ticks. Design the screens yourself; what they must let a person do is below.</p>
 
 		<h3>Scenes, tracks and keyframes</h3>
@@ -502,7 +500,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 	<!-- ============================================================ VI -->
 	<section id="export">
-		<div class="chapter"><span class="no">VI</span><h2>Export</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">VI</span><h2>Export</h2><span class="owner new">core</span></div>
 		<p class="lede">Export renders a scene's range to a video file, one frame at a time, however long each frame takes. The result must be identical however fast or slow the computer is.</p>
 
 		<div class="tablebox"><table class="req">
@@ -566,7 +564,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 
 	<!-- ============================================================ VII -->
 	<section id="crafts">
-		<div class="chapter"><span class="no">VII</span><h2>Create and flying machines</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">VII</span><h2>Create and flying machines</h2><span class="owner new">core</span></div>
 		<p class="lede">The video series this mod exists for is about Create contraptions and Create Aeronautics aircraft. They must record and play back correctly, including people riding them. This is the hardest part of the core, so the facts are spelled out. How each fault was met and put right, with the names it relies on in the other mods, is in the technical note <a href="create-and-aeronautics.html">Create and Aeronautics</a>.</p>
 
 		<div class="rules">
@@ -966,7 +964,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<tr><td>moments_ignored_events</td><td>list, add, remove, set or clear the ignore list.</td></tr>
 			<tr><td>moments_voice_excluded</td><td>list, add, remove, set or clear the players whose voice is never captured or transcribed (MOM-36). Says where voice audio currently goes.</td></tr>
 		</tbody></table></div></details>
-		<p>The server itself and all 19 moments tools are provided in <code>reference/</code>. The other 75 tools belong to the new core; appendix A gives every argument of all 82.</p>
+		<p>The server itself and all 19 moments tools are provided in <code>reference/</code>. The other 75 tools belong to the core; appendix A gives every argument of all 82.</p>
 		<p>Every query tool takes <code>session</code>: an id, <code>current</code> or <code>latest</code>. The default is the running session, else the latest.</p>
 	</section>
 
@@ -1234,8 +1232,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 		<div class="tablebox"><table>
 			<thead><tr><th>Decision</th><th>Whose</th><th>Notes</th></tr></thead>
 			<tbody>
-				<tr><td>Review of this document</td><td>Decided: done</td><td>The owner had it reviewed before the core was built (chapter I). A second review comes before the folder is handed to anyone else.</td></tr>
-				<tr><td>Who builds the core</td><td>Decided: Claude</td><td>Accepted by the owner because it cannot see any other replay mod's source. It still never looks one up or studies one.</td></tr>
+				<tr><td>Review of this document</td><td>Decided: done</td><td>The owner had it reviewed before the core was built (chapter I).</td></tr>
+				<tr><td>Who builds the core</td><td>Decided: this repository</td><td>The core in <code>src/</code> was written here. The owner and anyone else working on the mod may read the earlier work and other replay mods while building it.</td></tr>
 				<tr><td>Dailies' own licence</td><td>Decided: MIT</td><td>The companion is MIT too. The encoder is an LGPL build of FFmpeg, run as a separate program (EXP-8).</td></tr>
 				<tr><td>The Smart Camera</td><td>Decided: the owner's</td><td>Chapter VIII and the Smart Camera's provided code, its tools and its tests are the owner's to change. Anyone else corrects only ids, links and counts, and reports the rest.</td></tr>
 				<tr><td>How often snapshots are taken</td><td>Decided: every 2 seconds</td><td>In place of every five minutes, because going back must be quick however long the recording; from five to two seconds on 18 November, so a step back while dragging the playhead replays at most two seconds. A setting, <code>snapshotSeconds</code> (REC-20).</td></tr>
@@ -1252,7 +1250,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ XV -->
 	<section id="provided">
 		<div class="chapter"><span class="no">XV</span><h2>What is provided</h2><span class="owner yours">yours</span></div>
-		<p class="lede">The owner's features come as source, not only as description. It was compiled against Minecraft 1.21.1 and NeoForge 21.1.266 before being handed over, and reaches the rest of the mod through one interface that the new core implements.</p>
+		<p class="lede">The owner's features come as source, not only as description. They were compiled against Minecraft 1.21.1 and NeoForge 21.1.266, and they reach the rest of the mod through one interface that the core implements.</p>
 
 		<div class="tablebox"><table>
 			<thead><tr><th>Where</th><th>What</th></tr></thead>
@@ -1268,7 +1266,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<br><code>compat/</code>: the listeners for the companion and for McpCraft.
 					<br><code>mixin/moments/</code>: the three hooks Moments needs that NeoForge has no event for.</td></tr>
 				<tr><td>reference/src/main/resources/<br>assets/dailies/web/moments.html</td><td>The moments page.</td></tr>
-				<tr><td>src/main/java/<br>comedymonkey/dailies/</td><td>The new core, written from chapters II to VII (not provided; listed so the parts can be found):
+				<tr><td>src/main/java/<br>comedymonkey/dailies/</td><td>The core, in this repository (chapters II to VII):
 					<br><code>core/CoreHost</code>: <code>Host.Mod</code>. <code>compat/sable/SableCompat</code>: <code>Host.Crafts</code>, and Sable's craft in recordings and playback.
 					<br><code>capture/</code>, <code>file/</code>, <code>playback/</code>: recording, the recording file with its time index and source map, playback.
 					<br><code>library/</code>: the recordings index, combining and trimming (FILE-9 to FILE-14).
@@ -1326,14 +1324,14 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 		</ol>
 		<div class="rules">
 			<div class="rule"><b>Use it as it stands</b><span>Change the provided code where the core needs it to, and keep its behaviour as chapters VIII to XII describe.</span></div>
-			<div class="rule no"><b>Proved here, by the run</b><span>Only chapter XIV's run proves the provided code in Dailies. Whatever it did before it was handed over counts for nothing here.</span></div>
-			<div class="rule no"><b>Not a model for the core</b><span>It shows nothing about how to record, store, play back, edit or export. Those are built from chapters II to VII.</span></div>
+			<div class="rule"><b>Proved here, by the run</b><span>Chapter XIV's run is what proves the provided code in this mod.</span></div>
+			<div class="rule"><b>Readable alongside the core</b><span>Recording, storage, playback, editing and export are specified in chapters II to VII and live in <code>src/</code>. <code>reference/</code> may be read while working on them.</span></div>
 		</div>
 	</section>
 
 	<!-- ============================================================ XVI -->
 	<section id="renderers">
-		<div class="chapter"><span class="no">XVI</span><h2>Other renderers</h2><span class="owner new">new work</span></div>
+		<div class="chapter"><span class="no">XVI</span><h2>Other renderers</h2><span class="owner new">core</span></div>
 		<p class="lede">Create draws its moving parts through Flywheel, Create Aeronautics draws some of its effects with Veil, shader packs replace the game's drawing through Iris (or Oculus), Sodium (or Embeddium) replaces how terrain is built, and Distant Horizons draws terrain far beyond the view distance. Each changes how a frame comes to be. Playback and export must be as right with them as without them. Numbered XVI, after the others, so that no chapter number already referred to elsewhere changes.</p>
 
 		<div class="rules">
@@ -1578,7 +1576,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	</section>
 
 	<footer>
-		<p>Dailies build specification, first issue, 17 November 2026. Chapters II to VII describe new work to be written from this document alone. Chapters VIII to XII describe the project owner's own features, whose source is in <code>reference/</code> and <code>companion/</code> beside this document.</p>
+		<p>Dailies build specification, first issue, 17 November 2026. Chapters II to VII describe the core: recording, the file, playback, the editor, export, and Create and flying machines. Chapters VIII to XII describe the project owner's own features, whose source is in <code>reference/</code> and <code>companion/</code> beside this document.</p>
 	</footer>
 </div>
 </body>

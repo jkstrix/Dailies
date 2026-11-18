@@ -5,7 +5,7 @@
 **How the review was done**
 
 - It was read-only. No code was changed, and no unit tests, game runs or Gradle tasks were run.
-- It followed the clean-room rule. No other replay or recording mod was looked at or recalled. The code was judged against `design/dailies-spec.html`, Java, Minecraft/NeoForge and general CS practice.
+- The code was judged against `design/dailies-spec.html`, Java, Minecraft/NeoForge and general practice.
 - The repository was split into eight areas. Each area was read in depth, and every finding was checked against the code and its callers before being kept.
 - The findings marked ✔ were then re-checked line by line a second time (the "re-checked" column). The others were confirmed by the area reviewer against the code but not traced a second time.
 - **PLAUSIBLE** means the code path is real, but the trigger or the size of the effect needs a runtime check, which is described in each case.

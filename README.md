@@ -11,8 +11,7 @@ with Simple Voice Chat.
 ## Reading order
 
 1. This file.
-2. `design/dailies-spec.html`, chapter I ("Ground rules"): what is being built, the principles, and the clean-room
-   rules.
+2. `design/dailies-spec.html`, chapter I ("Ground rules"): what is being built, and the principles.
 3. The rest of `design/dailies-spec.html`: recording, the file, playback, the editor, export, Create and flying
    machines, the Smart Camera, moments, the MCP server, the moments page, the server side, settings, the tests, what
    is provided, and the appendices (every MCP tool; the stored records).
@@ -25,24 +24,24 @@ with Simple Voice Chat.
 | Folder | What it is |
 |---|---|
 | `design/` | The specification and the Create and Aeronautics note. The specification is the authority on behaviour. |
-| `src/` | The core of the mod: recording, the file format, playback, the editor, export, the interface, compatibility; and in `src/selftest/` the scripted test, a mod of its own (`dailies_selftest`) that never goes into the Dailies jar. Written for this project from the specification. |
+| `src/` | The core of the mod: recording, the file format, playback, the editor, export, the interface, compatibility; and in `src/selftest/` the scripted test, a mod of its own (`dailies_selftest`) that never goes into the Dailies jar. Implements the specification in `design/`. |
 | `reference/` | The owner's own code, compiled into the same mod: Moments, the Smart Camera, the MCP server and its tools, the moments page. It meets the core through one interface, `comedymonkey.dailies.Host`. |
 | `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README. |
 | `docs/manual/` | The user manual and its pictures. |
 | `run-test/`, `run-modded/` | Game folders the scripted tests run in. Not kept in git. |
 
-## The clean-room rules, in short
+## Where the work comes from
 
-Dailies is written from its specification, not from any other mod.
+Dailies is its own mod. It is inspired by the owner's earlier work on recording play and cutting it into video. The
+specification in `design/` is the authority on what this mod does.
 
-- Nobody working on it looks up, recalls, imitates or studies the code, file formats, names or interface of any other
-  Minecraft replay or recording mod.
-- The only sources are the documents in `design/`, the code in this folder, Minecraft and NeoForge themselves, and the
-  public APIs of the mods Dailies works beside (Create, Sable, Create Aeronautics, Simple Voice Chat, Distant Horizons).
+- That earlier work, this repository, and other replay mods may all be read while working on it.
+- Everyday sources are the documents in `design/`, the code in this folder, Minecraft and NeoForge, and the public
+  APIs of the mods Dailies works beside (Create, Sable, Create Aeronautics, Simple Voice Chat, Distant Horizons).
 - Where a mod has to be reached that offers no API (Sable, Create), it is done by reflection on its public classes,
   failing soft with one line in the log when a version differs.
 
-The full rules are in chapter I of the specification.
+Chapter I of the specification says the same, with what is being built.
 
 ## Building
 

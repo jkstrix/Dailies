@@ -19,7 +19,7 @@ import static comedymonkey.dailies.selftest.SelfTestSupport.array;
 import static comedymonkey.dailies.selftest.SelfTestSupport.shorten;
 
 /**
- * Chapter XIV steps 5 to 7: the provided features running on the new core. Moments logged with recording ticks and
+ * Chapter XIV steps 5 to 7: the provided features running on the core. Moments logged with recording ticks and
  * turned into clips, the ignore list, cueing a clip with its suggested camera, and the Smart Camera's modes.
  */
 final class OwnerFeatureSteps {
