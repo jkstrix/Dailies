@@ -195,13 +195,21 @@ tasks.register('buildCompanion', GradleBuild) {
     tasks = ['build']
 }
 
+// Jars that take the place of the same mod from the mods folder, e.g. a fix not yet in the owner's profile:
+// -Pdailies.modJars=E:/Repos/McpCraft/build/libs/mcpcraft-1.21.1-0.2.0.jar (comma-separated). Matched by the mod's name,
+// the part before the first "-<digit>", so another version of it in the folder is left out too
+def overrideJars = providers.gradleProperty('dailies.modJars').getOrElse('').split(',').findAll { !it.trim().isEmpty() }.collect { file(it.trim()) }
+def overriddenMods = overrideJars.collect { it.name.replaceFirst(/-\d.*$/, '') + '-*.jar' }
+
 tasks.register('installTestMods', Sync) {
     description = 'Puts the built Dailies jar and the other test mods into run-modded/mods'
     dependsOn tasks.named('jar'), 'buildCompanion'
     from(tasks.named('jar'))
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
+        exclude overriddenMods
     }
+    from(overrideJars)
     from(file('companion/build/libs')) {
         include 'dailies-companion-*.jar'
     }
