@@ -264,7 +264,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>REC-10</td><td>Everything the game receives about the world is kept, in order, with the tick it arrived on.</td><td>World, blocks, entities, effects, sound, weather, time, scoreboard, boss bars, titles, chat.</td></tr>
 				<tr><td>REC-11</td><td>Nothing about the connection or the recorder's private screens is kept: keep-alives, pings, login and resource pack steps, chat signing and session data, container windows, recipe books, advancement screens, statistics replies.</td><td>The test is "would showing this again need the original server or leak the recorder's account?" One exception: what became of each server resource pack is kept, with the pack itself (REC-19), because without it the world is shown with the wrong textures, models and sounds.</td></tr>
 				<tr><td>REC-12</td><td>The recorder's own player is captured so that it appears in playback like any other player: position, look and head direction, pose (sneaking, swimming, gliding, sleeping, riding), arm swings, held and worn items, item use, hurt and death, and the vehicle it rides.</td><td>Update rate is an option, 1 to 20 per second; default 20.</td></tr>
-				<tr><td>REC-13</td><td>An option also captures the recorder's hotbar, selected slot, health, hunger and experience, so playback can show their HUD. Default off.</td><td></td></tr>
+				<tr><td>REC-13</td><td>Every recording also captures the recorder's hotbar, selected slot, health, hunger and experience, so playback can show their HUD. Always on; whether it is shown is chosen in the editor (the scene's "recorder's HUD" look, also in the Viewer card).</td><td></td></tr>
 				<tr><td>REC-14</td><td>Other players' skins and names are captured as the recorder's game knew them, so playback needs no network.</td><td>Playback must work offline.</td></tr>
 				<tr><td>REC-15</td><td>Custom payloads from mods are kept as raw bytes with their id, without understanding them. A payload that cannot be kept is skipped and reported once per id in the log, never per message.</td><td>See PLAY-12 for how they are shown again.</td></tr>
 				<tr><td>REC-16</td><td>NeoForge's extra spawn data for an entity is kept with that entity's spawn and survives into every later snapshot that contains the entity.</td><td>Without it, Create contraptions cannot be rebuilt.</td></tr>
@@ -1107,7 +1107,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td></td><td>showNotices · saveWithoutAsking</td><td>on · off</td><td>REC-4, REC-5</td></tr>
 				<tr><td></td><td>controlsLocation</td><td>right</td><td>Where the pause menu buttons sit</td></tr>
 				<tr><td></td><td>markDimensionChanges</td><td>on</td><td>REC-17</td></tr>
-				<tr><td></td><td>recordHud · recorderUpdatesPerSecond · recordVoiceChat</td><td>off · 20 · on</td><td>REC-13, REC-12, REC-18</td></tr>
+				<tr><td></td><td>recorderUpdatesPerSecond · recordVoiceChat</td><td>20 · on</td><td>REC-12, REC-18</td></tr>
 				<tr><td></td><td>snapshotSeconds</td><td>5</td><td>REC-20: seconds between snapshots, 1 to 1800</td></tr>
 				<tr><td></td><td>marker 1 to 4</td><td>red, save position</td><td>REC-30</td></tr>
 				<tr><td>storage</td><td>binDays</td><td>30</td><td>REC-9: days in the bin before deleted for good</td></tr>

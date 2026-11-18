@@ -784,7 +784,6 @@ final class RealWorldSteps {
             found -> found.is(Biomes.SNOWY_SLOPES) || found.is(Biomes.GROVE) || found.is(Biomes.SNOWY_PLAINS) || found.is(Biomes.SNOWY_TAIGA) || found.is(Biomes.ICE_SPIKES));
 
         boolean[] vsync = new boolean[1];
-        test.tool("config_set", args("key", "recordHud", "value", true));
         JsonObject started = test.tool("recording_start", none);
         check(started.get("active").getAsBoolean(), "the recording in the generated world did not start");
         test.waitFor(() -> Recorder.get().recordingTick() >= 5, 30, "the generated world's recording to get going");
@@ -857,7 +856,6 @@ final class RealWorldSteps {
 
         phase = "end";
         ticks(test, 20);
-        test.tool("config_set", args("key", "recordHud", "value", false));
         JsonObject finished = test.tool("recording_finish", args("name", "Real world"));
         Path saved = Path.of(finished.get("path").getAsString());
         Files.move(saved, recording, StandardCopyOption.REPLACE_EXISTING);

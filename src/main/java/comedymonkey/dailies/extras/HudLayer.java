@@ -27,7 +27,8 @@ import java.util.Arrays;
  * The playback half of the recorder's HUD (specification PLAY-3). While the viewer rides along with the recorder and
  * the scene's "recorder's HUD" look is on, the hotbar, hearts, hunger, armour, air and experience the recorder saw
  * are drawn from what the recording holds, with the game's own sprites and in the game's own places. The viewer
- * itself stays a spectator with no HUD of its own. A recording made without the HUD draws nothing.
+ * itself stays a spectator with no HUD of its own. Every recording keeps the HUD; one made before it always did, with
+ * the old setting off, draws nothing.
  */
 public final class HudLayer implements PlaybackExtensions.Extension {
 

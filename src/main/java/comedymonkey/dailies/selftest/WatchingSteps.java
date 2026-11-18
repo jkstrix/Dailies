@@ -151,8 +151,6 @@ final class WatchingSteps {
         test.command("scoreboard players set @s dailies_watch 7");
         test.sleepTicks(20);
 
-        boolean hudBefore = Host.get().setting("recordHud", false);
-        test.tool("config_set", args("key", "recordHud", "value", true));
         expect(test, "start", "started");
         test.sleepTicks(30);
 
@@ -230,7 +228,6 @@ final class WatchingSteps {
         RecordingManifest.Marker plain = manifest.markers.get(1);
         check(plain.position == null && plain.colour == 0xE0483A && plain.description.isEmpty(), "'/dailies mark no' did not drop a plain red marker without a position");
         Files.move(saved, recording);
-        test.tool("config_set", args("key", "recordHud", "value", hudBefore));
 
         // The stage is struck, so the steps that follow find the world as they expect it
         test.command("kill @e[tag=dailies_watching]");

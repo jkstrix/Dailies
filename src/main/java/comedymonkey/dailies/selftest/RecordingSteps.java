@@ -89,7 +89,6 @@ final class RecordingSteps {
         FrameTimes.Result idle = FrameTimes.measure(test, 60);
 
         // The real thing, with the recorder's HUD captured too (REC-13)
-        test.tool("config_set", args("key", "recordHud", "value", true));
         JsonObject started = test.tool("recording_start", none);
         check(started.get("active").getAsBoolean(), "recording_start did not start a recording");
         check(test.toolError("recording_start", none).contains("already"), "starting twice did not say a recording is already being made");
@@ -188,7 +187,6 @@ final class RecordingSteps {
         test.sleepTicks(10);
 
         BlockWatch.stop();
-        test.tool("config_set", args("key", "recordHud", "value", false));
         JsonObject finished = test.tool("recording_finish", args("name", "Self test"));
         recording = Path.of(finished.get("path").getAsString());
         check(Files.exists(recording) && recording.getFileName().toString().equals("Self test" + RecordingFile.EXTENSION), "the recording was not saved under its name: " + recording);

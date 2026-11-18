@@ -121,7 +121,6 @@ final class AddonSteps {
         c("tp @s 22.5 -59 14.5 150 20");
         test.sleepTicks(60);
 
-        test.tool("config_set", args("key", "recordHud", "value", true));
         test.tool("recording_start", new JsonObject());
         Census.start(Census.Mode.LIVE);
         try {
@@ -140,7 +139,6 @@ final class AddonSteps {
             test.sleepTicks(10);
         } finally {
             Census.stop();
-            test.tool("config_set", args("key", "recordHud", "value", false));
         }
         JsonObject finished = test.tool("recording_finish", args("name", "Addon"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);

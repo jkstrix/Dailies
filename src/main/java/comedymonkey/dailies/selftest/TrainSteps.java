@@ -164,8 +164,6 @@ final class TrainSteps {
             problems.add("Create did not find a driver each way on the assembled train (" + drivers + ")");
         }
 
-        // The census compares the recorded HUD as well, so the recording keeps it
-        test.tool("config_set", args("key", "recordHud", "value", true));
         test.tool("recording_start", new JsonObject());
         Census.start(Census.Mode.LIVE);
         try {
@@ -175,7 +173,6 @@ final class TrainSteps {
             test.sleepTicks(10);
         } finally {
             Census.stop();
-            test.tool("config_set", args("key", "recordHud", "value", false));
         }
         JsonObject finished = test.tool("recording_finish", args("name", "Trains"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);

@@ -49,7 +49,6 @@ public final class DailiesConfig {
             bool("saveWithoutAsking", false, "Finish a recording under its default name without asking for one");
             choice("controlsLocation", Side.RIGHT, "The side of the pause menu the recording buttons sit on");
             bool("markDimensionChanges", true, "Drop a marker on every change of dimension");
-            bool("recordHud", false, "Also capture your hotbar, selected slot, health, hunger and experience, so playback can show your HUD");
             integer("recorderUpdatesPerSecond", 20, 1, 20, "How often your own player's movement is captured each second");
             integer("snapshotSeconds", 5, 1, 1800, "How often a recording stores the whole world afresh. Going back in playback replays from the stored world before, so a shorter time makes going back quicker and the file a little larger");
             bool("recordVoiceChat", true, "Capture the voice chat you hear, per speaker, so playback and exports have it (needs Simple Voice Chat)");

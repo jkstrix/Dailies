@@ -492,7 +492,6 @@ final class BestiarySteps {
         JsonObject none = new JsonObject();
         WorldSteps.createWorld(test, WORLD);
         Census.watch(OVERWORLD, 0, -40, -64, -40, 40, -46, 40);
-        test.tool("config_set", args("key", "recordHud", "value", true));
         BestiaryStages.prepare();
         test.tool("recording_start", none);
         Census.start(Census.Mode.LIVE);
@@ -500,7 +499,6 @@ final class BestiarySteps {
         BestiaryStages.all();
         test.sleepTicks(10);
         Census.stop();
-        test.tool("config_set", args("key", "recordHud", "value", false));
         JsonObject finished = test.tool("recording_finish", args("name", "Bestiary"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);
         weigh();

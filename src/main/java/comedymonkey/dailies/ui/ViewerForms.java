@@ -39,6 +39,14 @@ final class ViewerForms {
                     EditorState.sideFolded = false;
                 }).tip(Kit.t("viewer.ride.tip")),
                 new Gadget.Push(Kit.t("viewer.leave"), () -> Viewer.ride(null)).when(() -> Viewer.riding() != null).tip(Kit.t("viewer.leave.tip"))));
+        // Every recording keeps the recorder's HUD; whether it is drawn is the scene's look, one step to undo
+        form.add(new Gadget.Check(Kit.t("viewer.hud"), () -> EditorState.scene().looks().showHud, on -> {
+            if (on != EditorState.scene().looks().showHud) {
+                com.google.gson.JsonObject values = new com.google.gson.JsonObject();
+                values.addProperty("show_hud", on);
+                EditorState.history().setLooks(values);
+            }
+        }).tip(Kit.t("viewer.hud.tip")));
         form.add(new Gadget.Check(Kit.t("viewer.path"), () -> EditorState.setting("showCameraPath", true),
                 on -> EditorState.saveSetting("showCameraPath", on)).tip(Kit.t("viewer.path.tip")));
         form.add(new Gadget.Check(Kit.t("viewer.markers"), () -> EditorState.setting("showMarkersInWorld", true),

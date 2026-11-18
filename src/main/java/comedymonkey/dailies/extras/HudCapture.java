@@ -9,8 +9,9 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
 
 /**
- * The recording half of the recorder's HUD (specification REC-13). While the setting {@code recordHud} is on, the
- * HUD is written into every snapshot, and again at the end of any recorded tick on which something in it changed.
+ * The recording half of the recorder's HUD (specification REC-13). Always recorded (the owner, 18 November: the HUD is
+ * kept in every recording, and the editor chooses whether to show it): written into every snapshot, and again at the
+ * end of any recorded tick on which something in it changed.
  */
 final class HudCapture {
 
@@ -29,7 +30,7 @@ final class HudCapture {
     private static HudState now() {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
-        if (player == null || minecraft.gameMode == null || !Host.get().setting("recordHud", false)) {
+        if (player == null || minecraft.gameMode == null) {
             return null;
         }
         return HudState.of(player, minecraft.gameMode.getPlayerMode());
