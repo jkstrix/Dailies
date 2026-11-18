@@ -27,6 +27,7 @@ import javax.imageio.ImageIO;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.difference;
 
 /**
  * Chapter XIV, "Other renderers" (chapter XVI's REN requirements and CMP-1): with the scripted recording open, that the
@@ -244,7 +245,7 @@ final class RendererSteps {
         // Iris counts whole milliseconds, so a thirtieth of a second comes out as 33 or 34 ms
         check(worst <= 0.0015, String.format(Locale.ROOT, "Iris's frame timer moved by up to %.4f s more or less than a thirtieth of a second between exported frames: it follows the real clock, not the video (REN-4)", worst));
         float after = test.onClient(RendererSteps::irisTimerNow);
-        test.sleepTicks(4);
+        test.waitTicks(4);
         float later = test.onClient(RendererSteps::irisTimerNow);
         check(later >= after || after - later > 3000, "Iris's frame timer ran backwards after the export");
         test.log(String.format(Locale.ROOT, "Iris's frame timer stepped a thirtieth of a second (within %.4f s) on each of %d exported frames", worst, steps));
@@ -444,7 +445,7 @@ final class RendererSteps {
             }
         });
         // Iris compiles the pack's programs over the next frames
-        test.sleepTicks(60);
+        test.waitTicks(60);
     }
 
     private static void choosePackBack(SelfTest test, Class<?> irisClass, Object config, String pack, boolean enabled) throws Exception {
@@ -551,21 +552,6 @@ final class RendererSteps {
         }
         double mean = sum / count;
         return Math.sqrt(Math.max(0.0, squares / count - mean * mean));
-    }
-
-    /** The average difference between two pictures, per colour, on a scale of 0 to 255 */
-    private static double difference(BufferedImage a, BufferedImage b) {
-        double sum = 0;
-        int count = 0;
-        for (int y = 0; y < Math.min(a.getHeight(), b.getHeight()); y += 2) {
-            for (int x = 0; x < Math.min(a.getWidth(), b.getWidth()); x += 2) {
-                int p = a.getRGB(x, y);
-                int q = b.getRGB(x, y);
-                sum += Math.abs((p >> 16 & 0xFF) - (q >> 16 & 0xFF)) + Math.abs((p >> 8 & 0xFF) - (q >> 8 & 0xFF)) + Math.abs((p & 0xFF) - (q & 0xFF));
-                count += 3;
-            }
-        }
-        return sum / count;
     }
 
 }

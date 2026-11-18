@@ -135,10 +135,10 @@ final class BudgetSteps {
         // Three turns each, so the machine waking or warming up does not pass for a cost
         for (int turn = 0; turn < 3; turn++) {
             test.tool("config_set", args("key", "momentsEnabled", "value", true));
-            test.sleepTicks(20);
+            test.waitTicks(20);
             on += tickTime(test, 200);
             test.tool("config_set", args("key", "momentsEnabled", "value", false));
-            test.sleepTicks(20);
+            test.waitTicks(20);
             off += tickTime(test, 200);
         }
         test.tool("config_set", args("key", "momentsEnabled", "value", true));
@@ -151,12 +151,12 @@ final class BudgetSteps {
         }
     }
 
-    private static double tickTime(SelfTest test, int ticks) throws InterruptedException {
+    private static double tickTime(SelfTest test, int ticks) throws Exception {
         tickSum = 0;
         tickCount = 0;
         tickStarted = 0;
         timingTicks = true;
-        test.sleepTicks(ticks);
+        test.waitTicks(ticks);
         timingTicks = false;
         return tickCount == 0 ? 0 : tickSum / tickCount;
     }
@@ -167,7 +167,7 @@ final class BudgetSteps {
         Minecraft minecraft = Minecraft.getInstance();
         JsonObject none = new JsonObject();
         test.tool("recording_start", none);
-        test.sleepTicks(40);
+        test.waitTicks(40);
         boolean vsync = minecraft.options.enableVsync().get();
         int limit = minecraft.options.framerateLimit().get();
         double idleSum = 0, recordingSum = 0;
@@ -180,10 +180,10 @@ final class BudgetSteps {
             });
             for (int turn = 0; turn < 4; turn++) {
                 test.tool("recording_pause", none);
-                test.sleepTicks(10);
+                test.waitTicks(10);
                 FrameTimes.Result idle = FrameTimes.measure(test, 70);
                 test.tool("recording_resume", none);
-                test.sleepTicks(10);
+                test.waitTicks(10);
                 FrameTimes.Result recorded = FrameTimes.measure(test, 70);
                 idleSum += idle.average() * idle.frames();
                 idleFrames += idle.frames();
@@ -213,13 +213,13 @@ final class BudgetSteps {
         try {
             for (float heading : headings) {
                 walkYaw = heading;
-                test.sleepTicks(60);
+                test.waitTicks(60);
             }
         } finally {
             walking = false;
             test.onClientRun(() -> minecraft.options.keyUp.setDown(false));
         }
-        test.sleepTicks(45);
+        test.waitTicks(45);
         long bytes = workingSize() - size;
         int ticks = Recorder.get().recordingTick() - from;
         double hourly = bytes / 1048576.0 / (Math.max(1, ticks) / 72000.0);
@@ -276,7 +276,7 @@ final class BudgetSteps {
         RecordingManifest manifest = Playback.manifest();
         measured("BUD-4", "opening a recording, to its first frame", opened, 5000, true, "ms",
             String.format(Locale.ROOT, "the budgets' recording, %d ticks (the budget is for two hours: a short one only shows a gross breach), %d frames drawn meanwhile", manifest.totalTicks, frames - before));
-        test.sleepTicks(10);
+        test.waitTicks(10);
 
         // Jumps to anywhere: the end, the start, the middle, and across snapshots both ways
         int total = manifest.totalTicks;
@@ -302,18 +302,10 @@ final class BudgetSteps {
         }
     }
 
-    /** Jumps, and says how long until the recording stood at exactly that tick */
+    /** Jumps, and says how long until the recording stood at exactly that tick; then a tick for the picture to settle */
     private static long jump(SelfTest test, int tick) throws Exception {
-        long started = System.nanoTime();
-        test.onClientRun(() -> Playback.jumpTo(tick, true));
-        long deadline = System.currentTimeMillis() + 120_000;
-        while (Playback.jumping() || Playback.position() != tick) {
-            check(System.currentTimeMillis() < deadline, "gave up waiting for the jump to tick " + tick);
-            check(Playback.lastError() == null, "playback stopped during the jump to tick " + tick + ": " + Playback.lastError());
-            Thread.sleep(2);
-        }
-        long took = (System.nanoTime() - started) / 1_000_000;
-        Thread.sleep(60);
+        long took = SelfTestSupport.timedJump(test, tick);
+        test.waitTicks(1);
         return took;
     }
 

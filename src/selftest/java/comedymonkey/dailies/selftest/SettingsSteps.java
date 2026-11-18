@@ -38,7 +38,7 @@ final class SettingsSteps {
         test.onClientRun(() -> SettingsScreen.open(minecraft.screen));
         test.waitFor(() -> minecraft.screen instanceof SettingsScreen, 10, "the settings screen to open");
         SettingsScreen screen = (SettingsScreen) minecraft.screen;
-        test.sleepTicks(5);
+        test.waitTicks(5);
 
         // Every declared setting is shown, in the order it is declared, with nothing made up
         List<String> declared = new ArrayList<>();
@@ -102,7 +102,7 @@ final class SettingsSteps {
             int[] place = screen.where("showNotices");
             screen.mouseClicked(place[0] + screen.width * 0.25, place[1] + 5.0, 0);
         });
-        test.sleepTicks(4);
+        test.waitTicks(4);
         check(!test.onClient(Previews::menuOpen), "a click outside the dropdown did not close it");
         check(!test.onClient(screen::saving) && notices == Host.get().setting("showNotices", !notices), "the click that closed the dropdown also did something else");
         String refusal = test.onClient(() -> screen.choose("controlsLocation", "LEFT"));
@@ -127,7 +127,7 @@ final class SettingsSteps {
         check(refusal != null, "7.5 updates per second was not refused");
         refusal = test.onClient(() -> screen.type("recorderUpdatesPerSecond", "lots"));
         check(refusal != null, "'lots' was taken as a number");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         check(Host.get().setting("recorderUpdatesPerSecond", 20) == 20 && !test.onClient(screen::saving), "a refused number changed the setting");
         // One in range is taken and written, and the reset writes the default back
         refusal = test.onClient(() -> screen.type("recorderUpdatesPerSecond", "7"));
@@ -174,7 +174,7 @@ final class SettingsSteps {
             screen.abandon();
             minecraft.setScreen(null);
         });
-        test.sleepTicks(10);
+        test.waitTicks(10);
         check(whisper.equals(Host.get().setting("momentsWhisperUrl", "")), "testing an address changed the setting");
         check(!Host.get().setting("momentsAiEnabled", true), "the settings steps left the AI switch on");
         test.log("settings screen: " + declared.size() + " settings shown, searched, changed, refused, reset and tested");
@@ -194,7 +194,7 @@ final class SettingsSteps {
             comedymonkey.dailies.ui.Controls.openTimeline();
         });
         test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor to open");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         net.minecraft.client.gui.screens.Screen editor = minecraft.screen;
         String before = test.onClient(() -> Previews.editorDropdownShows(0));
         check(!before.isEmpty(), "the export tab has no dropdown showing a choice");
@@ -215,13 +215,13 @@ final class SettingsSteps {
             List<String> narrowed = test.onClient(Previews::menuShown);
             check(!narrowed.isEmpty() && narrowed.get(0).equals(wanted), "typing '" + wanted + "' in the editor's dropdown left " + narrowed);
             test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0));
-            test.sleepTicks(3);
+            test.waitTicks(3);
             String now = test.onClient(() -> Previews.editorDropdownShows(0));
             check(now.equals(wanted) && !test.onClient(Previews::menuOpen), "choosing '" + wanted + "' with the keys left the dropdown showing '" + now + "'");
         }
         check(minecraft.screen == editor, "the editor closed while its dropdown was used");
         test.onClientRun(() -> minecraft.setScreen(null));
-        test.sleepTicks(5);
+        test.waitTicks(5);
         test.log("editor dropdown: opened, narrowed by typing, chosen with Enter, closed with Escape");
     }
 

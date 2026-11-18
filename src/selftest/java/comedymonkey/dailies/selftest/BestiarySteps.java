@@ -468,7 +468,7 @@ final class BestiarySteps {
                     PlaybackSteps.jump(test, still.tick());
                 }
                 test.onClientRun(() -> Viewer.set(still.x(), still.y(), still.z(), still.yaw(), still.pitch()));
-                Thread.sleep(150);
+                test.waitTicks(3);
                 Path picture = folder.resolve(still.name() + ".png");
                 test.tool("export_screenshot", args("output_path", picture.toString(), "width", 1280, "height", 720, "no_gui", false, "overwrite", true));
                 test.waitFor(() -> !Export.active(), 60, "the still " + still.name());
@@ -495,9 +495,9 @@ final class BestiarySteps {
         BestiaryStages.prepare();
         test.tool("recording_start", none);
         Census.start(Census.Mode.LIVE);
-        test.sleepTicks(20);
+        test.waitTicks(20);
         BestiaryStages.all();
-        test.sleepTicks(10);
+        test.waitTicks(10);
         Census.stop();
         JsonObject finished = test.tool("recording_finish", args("name", "Bestiary"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);

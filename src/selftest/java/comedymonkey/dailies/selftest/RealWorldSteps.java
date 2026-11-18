@@ -377,7 +377,7 @@ final class RealWorldSteps {
         regions.clear();
         askers.clear();
         noteHud = false;
-        test.sleepTicks(2);
+        test.waitTicks(2);
         test.onClientRun(() -> {
             if (minecraft.screen != null && minecraft.player != null) {
                 if (minecraft.screen instanceof DeathScreen) {
@@ -517,14 +517,14 @@ final class RealWorldSteps {
 
     static void goTo(SelfTest test, double x, double y, double z, float yaw, float pitch) throws Exception {
         command(test, "tp @s %.2f %.2f %.2f %.1f %.1f", x, y, z, yaw, pitch);
-        test.sleepTicks(10);
+        test.waitTicks(10);
         settle(test);
     }
 
     /** Lets this many ticks of the recording go by */
     static void ticks(SelfTest test, int count) throws Exception {
         if (Recorder.get().state() != Recorder.State.RECORDING) {
-            test.sleepTicks(count);
+            test.waitTicks(count);
             return;
         }
         int until = Recorder.get().recordingTick() + count;
@@ -791,16 +791,16 @@ final class RealWorldSteps {
         // What recording costs a frame, standing still: four turns each of paused and recording, a few seconds at a time,
         // so that the machine warming up or another program waking does not pass for a cost
         uncapped(test, true, vsync);
-        test.sleepTicks(20);
+        test.waitTicks(20);
         double idleSum = 0, recordingSum = 0;
         int idleFrames = 0, recordingFrames = 0;
         double idleWorst = 0, recordingWorst = 0;
         for (int turn = 0; turn < 4; turn++) {
             test.tool("recording_pause", none);
-            test.sleepTicks(10);
+            test.waitTicks(10);
             FrameTimes.Result idle = FrameTimes.measure(test, 70);
             test.tool("recording_resume", none);
-            test.sleepTicks(10);
+            test.waitTicks(10);
             FrameTimes.Result recording = FrameTimes.measure(test, 70);
             idleSum += idle.average() * idle.frames();
             idleFrames += idle.frames();
@@ -1068,7 +1068,7 @@ final class RealWorldSteps {
         ticks(test, 160);
         FrameTimes.Result recordingFlight = FrameTimes.end();
         test.tool("recording_pause", new JsonObject());
-        test.sleepTicks(20);
+        test.waitTicks(20);
         FrameTimes.Result idleFlight = FrameTimes.measure(test, 160);
         test.tool("recording_resume", new JsonObject());
         uncapped(test, false, vsync);
@@ -1111,7 +1111,7 @@ final class RealWorldSteps {
         // The people of the place, some given names so they can be followed
         command(test, "execute unless entity @e[type=minecraft:villager,distance=..64] run summon minecraft:villager %d %d %d", x + 2, ground + 1, z + 2);
         command(test, "execute unless entity @e[type=minecraft:iron_golem,distance=..64] run summon minecraft:iron_golem %d %d %d", x - 3, ground + 1, z + 2);
-        test.sleepTicks(10);
+        test.waitTicks(10);
         test.command("data merge entity @e[type=minecraft:villager,limit=1,sort=nearest] {CustomName:'\"Mayor\"'}");
         test.command("data merge entity @e[type=minecraft:iron_golem,limit=1,sort=nearest] {CustomName:'\"Guard\"'}");
         command(test, "summon minecraft:cat %d %d %d {CustomName:'\"Tom\"',PersistenceRequired:1b}", x + 3, ground + 1, z - 2);
@@ -1200,7 +1200,7 @@ final class RealWorldSteps {
         float[] headings = {0, 90, 180, 270, 45, 225};
         for (int done = 0, turn = 0; done < ticks; done += 60, turn++) {
             drive = new Drive(headings[turn % headings.length], 5, true, false, false, false, false);
-            test.sleepTicks(Math.min(60, ticks - done));
+            test.waitTicks(Math.min(60, ticks - done));
         }
         drive = null;
     }
@@ -1401,7 +1401,7 @@ final class RealWorldSteps {
         // A tree, grown by the game's own rules where it will; built by hand where it will not
         command(test, "setblock %d %d %d minecraft:dirt", x - 12, y - 1, z + 6);
         command(test, "place feature minecraft:oak %d %d %d", x - 12, y, z + 6);
-        test.sleepTicks(5);
+        test.waitTicks(5);
         if (!blockAt(test, new BlockPos(x - 12, y, z + 6)).is(Blocks.OAK_LOG)) {
             command(test, "fill %d %d %d %d %d %d minecraft:oak_leaves", x - 14, y + 3, z + 4, x - 10, y + 5, z + 8);
             command(test, "fill %d %d %d %d %d %d minecraft:oak_log", x - 12, y, z + 6, x - 12, y + 4, z + 6);
@@ -1936,7 +1936,7 @@ final class RealWorldSteps {
         test.command("weather clear");
         flying(test, false, 0.05F);
         command(test, "execute in minecraft:overworld run tp @s %.2f %d %.2f 0 0", x - 2.0, y, z + 12.5);
-        test.sleepTicks(10);
+        test.waitTicks(10);
         settle(test);
         // The frame: four wide, five high, its foot in the floor so the way in is level
         command(test, "fill %d %d %d %d %d %d minecraft:air", x - 5, y, z + 12, x, y + 4, z + 15);
@@ -1966,7 +1966,7 @@ final class RealWorldSteps {
         test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.NETHER, 30, "the walk through the portal into the Nether");
         drive = null;
         test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Nether to appear");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         settle(test);
         Vec3 arrived = playerAt(test);
         regions.clear();
@@ -1986,7 +1986,7 @@ final class RealWorldSteps {
             BlockPos from = openSpot(test, BlockPos.containing(arrived.x + 30 * (i + 1), arrived.y, arrived.z), 14);
             if (from != null) {
                 command(test, "tp @s %.2f %.2f %.2f", from.getX() + 0.5, from.getY() + 1.0, from.getZ() + 0.5);
-                test.sleepTicks(5);
+                test.waitTicks(5);
             }
             flying(test, true, 0.05F);
             drive = new Drive(openYaw(test), 0, true, true, false, false, false);
@@ -2016,14 +2016,14 @@ final class RealWorldSteps {
         // And home, by stepping back into the portal on that side
         flying(test, true, 0.05F);
         command(test, "tp @s %.2f %.2f %.2f", arrived.x + 3, arrived.y, arrived.z);
-        test.sleepTicks(10);
+        test.waitTicks(10);
         settle(test);
         ticks(test, 30);
         note(test, "back at the portal in the Nether");
         command(test, "tp @s %.2f %.2f %.2f", arrived.x, arrived.y, arrived.z);
         test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD, 40, "the step back through the portal");
         test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Overworld to appear again");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         settle(test);
         Vec3 home = playerAt(test);
         regions.add(frame);
@@ -2138,7 +2138,7 @@ final class RealWorldSteps {
             fault(test, "opening the recording took " + opened + " ms");
         }
         BudgetSteps.measured("BUD-4", "opening a recording, to its first frame", opened, 5000, true, "ms", "the tour of generated terrain's recording, " + Playback.manifest().totalTicks + " ticks");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         RecordingManifest manifest = Playback.manifest();
         int total = manifest.totalTicks;
         List<Integer> segmentStarts = manifest.segments.stream().map(segment -> segment.startTick).toList();
@@ -2215,7 +2215,7 @@ final class RealWorldSteps {
             test.onClientRun(() -> Playback.playTo(target));
             test.waitFor(() -> (Playback.paused() && Playback.position() == target && !Playback.jumping()) || Playback.lastError() != null, 240, "play to reach tick " + target);
             check(Playback.lastError() == null, "playback stopped while playing to tick " + target + ": " + Playback.lastError());
-            test.sleepTicks(3);
+            test.waitTicks(3);
             compare(test, live, "reached by play");
         }
         test.tool("replay_set_speed", args("tick_rate", 20));
@@ -2279,15 +2279,7 @@ final class RealWorldSteps {
 
     /** Jumps, waits until the recording stands at exactly that tick, and says how long that took */
     private static long jump(SelfTest test, int tick) throws Exception {
-        long started = System.nanoTime();
-        test.onClientRun(() -> Playback.jumpTo(tick, true));
-        long deadline = System.currentTimeMillis() + 120_000;
-        while (Playback.jumping() || Playback.position() != tick) {
-            check(System.currentTimeMillis() < deadline, "gave up waiting for the jump to tick " + tick);
-            check(Playback.lastError() == null, "playback stopped during the jump to tick " + tick + ": " + Playback.lastError());
-            Thread.sleep(2);
-        }
-        long took = (System.nanoTime() - started) / 1_000_000;
+        long took = SelfTestSupport.timedJump(test, tick);
         double[] rebuild = Playback.lastRebuild();
         if (rebuild != null && rebuild != lastRebuild) {
             lastRebuild = rebuild;

@@ -270,7 +270,8 @@ final class CameraRoute {
             play.run();
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: the '{}' stretch of the camera route stopped", name, t);
-            test.skip("camera route: the " + name + " stretch could not be played to its end: " + t);
+            // The place was found (one that is not is skipped before this), so a stretch that breaks off on the way is a fault
+            test.fault("camera route: the " + name + " stretch could not be played to its end: " + t);
         } finally {
             RealWorldSteps.drive = null;
             test.onClientRun(() -> {
@@ -281,7 +282,7 @@ final class CameraRoute {
             if (marked) {
                 test.tool("recording_add_marker", args("description", name + " end"));
             }
-            test.sleepTicks(2);
+            test.waitTicks(2);
             test.command("ride @s dismount");
             test.command("gamemode creative");
             test.onClientRun(() -> {
@@ -333,7 +334,7 @@ final class CameraRoute {
             yaw = approach(yaw, wanted, 8.0F);
             boolean jump = jumpEvery > 0 && tick % jumpEvery < 4;
             RealWorldSteps.drive = new Drive(yaw, 0.0F, true, sprint, jump, false, false);
-            test.sleepTicks(1);
+            test.waitTicks(1);
         }
         RealWorldSteps.drive = null;
     }
@@ -420,7 +421,7 @@ final class CameraRoute {
         while (Math.abs(Mth.wrapDegrees(yaw - now)) > 1.0F) {
             now = approach(now, yaw, 8.0F);
             RealWorldSteps.drive = new Drive(now, 0.0F, false, false, false, false, false);
-            test.sleepTicks(1);
+            test.waitTicks(1);
         }
         RealWorldSteps.drive = null;
     }
@@ -865,7 +866,7 @@ final class CameraRoute {
             return false;
         });
         if (!gliding) {
-            test.skip("camera route: the elytra would not open; the flying stretch is creative flight only");
+            test.fault("camera route: the elytra would not open; the flying stretch is creative flight only");
         }
         float yaw = test.onClient(() -> minecraft.player.getYRot());
         float pitch = 10.0F;
@@ -896,7 +897,7 @@ final class CameraRoute {
                 lastRocket = tick;
                 test.onClientRun(() -> minecraft.gameMode.useItem(minecraft.player, InteractionHand.MAIN_HAND));
             }
-            test.sleepTicks(1);
+            test.waitTicks(1);
         }
         RealWorldSteps.drive = null;
         heading[0] = yaw;
@@ -936,7 +937,7 @@ final class CameraRoute {
             yaw = approach(yaw, wantedYaw, 6.0F);
             pitch += Mth.clamp((dive ? 25.0F : climb ? -20.0F : 0.0F) - pitch, -3.0F, 3.0F);
             RealWorldSteps.drive = new Drive(yaw, pitch, true, true, climb, false, false);
-            test.sleepTicks(1);
+            test.waitTicks(1);
         }
         test.onClientRun(() -> minecraft.options.keyShift.setDown(false));
         RealWorldSteps.drive = null;
@@ -959,7 +960,7 @@ final class CameraRoute {
         test.command("ride @s mount @e[type=minecraft:boat,limit=1,sort=nearest]");
         RealWorldSteps.ticks(test, 10);
         if (!test.onClient(() -> minecraft.player.isPassenger())) {
-            test.skip("camera route: the recorder could not get into the boat");
+            test.fault("camera route: the recorder could not get into the boat");
         }
         RealWorldSteps.ticks(test, 20);
     }
@@ -975,7 +976,7 @@ final class CameraRoute {
                 while (now() < boatEnd) {
                     boolean left = (now() / 20) % 6 >= 4;
                     test.onClientRun(() -> minecraft.options.keyLeft.setDown(left));
-                    test.sleepTicks(5);
+                    test.waitTicks(5);
                 }
                 test.onClientRun(() -> minecraft.options.keyLeft.setDown(false));
                 RealWorldSteps.drive = null;
@@ -1019,7 +1020,7 @@ final class CameraRoute {
         test.command("ride @s mount @e[type=minecraft:minecart,limit=1,sort=nearest]");
         RealWorldSteps.ticks(test, 5);
         if (!test.onClient(() -> minecraft.player.isPassenger())) {
-            test.skip("camera route: the recorder could not get into the minecart");
+            test.fault("camera route: the recorder could not get into the minecart");
         }
         part(test, "vehicles", "minecart", () -> {
             test.command("data merge entity @e[type=minecraft:minecart,limit=1,sort=nearest] {Motion:[0.6d,0.0d,0.0d]}");
@@ -1038,7 +1039,7 @@ final class CameraRoute {
         RealWorldSteps.flying(test, false, 0.05F);
         RealWorldSteps.ticks(test, 5);
         if (!test.onClient(() -> minecraft.player.isPassenger())) {
-            test.skip("camera route: the recorder could not get on the horse");
+            test.fault("camera route: the recorder could not get on the horse");
         }
         Vec3 field = here(test);
         part(test, "vehicles", "horse", () -> walk(test, now() + VEHICLE, wandering(test, field, 50.0), true, 0, null));
@@ -1055,7 +1056,7 @@ final class CameraRoute {
                 try {
                     CraftSteps.buildBalloon(test, minecraft, ground.offset(2, 0, 2), false);
                 } catch (Throwable t) {
-                    test.skip("camera route: the hot air balloon could not be flown: " + t);
+                    test.fault("camera route: the hot air balloon could not be flown: " + t);
                 }
             });
         } else {

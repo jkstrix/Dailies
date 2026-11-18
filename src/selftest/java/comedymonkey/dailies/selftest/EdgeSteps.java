@@ -106,16 +106,16 @@ final class EdgeSteps {
         c("spawnpoint @s 0 " + Y + " 0");
         c("fill " + PIT_X + " -63 " + PIT_Z + " " + PIT_X + " -61 " + PIT_Z + " minecraft:powder_snow");
         c("tp @s 0.5 " + Y + " 0.5 0 0");
-        test.sleepTicks(40);
+        test.waitTicks(40);
 
         test.tool("recording_start", new JsonObject());
         Census.start(Census.Mode.LIVE);
         try {
-            test.sleepTicks(20);
+            test.waitTicks(20);
             stage(test, "powder snow", () -> powderSnow(test, minecraft));
             stage(test, "snowballs", () -> snowballs(test, minecraft));
             stage(test, "the void", () -> theVoid(test, minecraft));
-            test.sleepTicks(10);
+            test.waitTicks(10);
         } finally {
             Census.stop();
         }

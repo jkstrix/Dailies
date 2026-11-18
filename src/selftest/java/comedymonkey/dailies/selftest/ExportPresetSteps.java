@@ -461,10 +461,10 @@ final class ExportPresetSteps {
         check(test.onClient(() -> (Boolean) choose.invoke(null, "Editing master")), "the Editing master preset could not be chosen");
         String master = test.onClient(() -> (String) describe.invoke(null));
         check(master.contains("preset=Editing master modified=false size=1920x1080 container=mov codec=prores_ks"), "choosing the editing master did not fill the tab in: " + master);
-        test.sleepTicks(8);
+        test.waitTicks(8);
         shot(test, folder.resolve("self-test-export-tab-master.png"));
         test.onClientRun(() -> invoke(choose, "Shorts and Reels"));
-        test.sleepTicks(8);
+        test.waitTicks(8);
         shot(test, folder.resolve("self-test-export-tab.png"));
         String shorts = test.onClient(() -> (String) describe.invoke(null));
         check(shorts.contains("preset=Shorts and Reels modified=false size=1080x1920"), "choosing Shorts did not fill the tab in: " + shorts);

@@ -94,11 +94,11 @@ final class CraftSteps {
             test.command("summon minecraft:pig 17.5 -57 -5.5 {CustomName:'\"Stander\"'," + still + "}");
             // Blocks only travel with a bearing when they are glued to what it carries
             test.command("create glue 14 -58 -6 17 -57 -6");
-            test.sleepTicks(25);
+            test.waitTicks(25);
             boolean riderSeated = seated(test, minecraft, "Rider");
             // The recorder takes the second seat before the contraption is assembled: whoever is not aboard then is left behind
             test.command("tp @s 15.5 -56 -4.2 180 60");
-            test.sleepTicks(6);
+            test.waitTicks(6);
             boolean recorderSeated = sit(test, minecraft, new BlockPos(15, -57, -6));
             test.command("setblock 14 -60 -6 create:creative_motor[facing=up]");
             // A row of kinetics that turn nothing, in view of the bearing: what Flywheel draws as blocks (WatchingSteps.machines)
@@ -119,33 +119,34 @@ final class CraftSteps {
                 if (!assembled) {
                     // It sometimes does not take the first time. Putting the bearing down again makes it look once more
                     test.command("setblock 14 -59 -6 minecraft:air");
-                    test.sleepTicks(8);
+                    test.waitTicks(8);
                 }
             }
             SelfTest.check(assembled, "the bearing did not assemble its contraption in four tries");
             builtContraption = true;
             test.log("bearing contraption assembled, carrying a standing mob" + (riderSeated ? ", a mob in a Create seat" : "") + (recorderSeated ? ", the recorder in a Create seat" : ""));
+            // Create is installed, so a seat that cannot be taken is a fault of the run, not something missing (TEST-1)
             if (!riderSeated) {
-                test.skip("the mob did not sit in the Create seat on the contraption: a seated mob on a contraption was not tried");
+                test.fault("the mob did not sit in the Create seat on the contraption, so a seated mob on a contraption was not tried");
             }
             if (!recorderSeated) {
-                test.skip("the recorder could not take the Create seat on the contraption: a seated player on a contraption was not tried");
+                test.fault("the recorder could not take the Create seat on the contraption, so a seated player on a contraption was not tried");
             }
             contraptionNotesFrom = RecordingSteps.notes.size();
             // Seated first, as the arm turns
             for (int i = 0; i < 4; i++) {
-                test.sleepTicks(6);
+                test.waitTicks(6);
                 RecordingSteps.notes.add(test.onClient(() -> RecordingSteps.Note.take(minecraft)));
-                test.sleepTicks(4);
+                test.waitTicks(4);
             }
             // Then standing loose on the turning arm
             test.command("ride @s dismount");
-            test.sleepTicks(4);
+            test.waitTicks(4);
             test.command("tp @s 14.5 -57 -5.5");
             for (int i = 0; i < 4; i++) {
-                test.sleepTicks(6);
+                test.waitTicks(6);
                 RecordingSteps.notes.add(test.onClient(() -> RecordingSteps.Note.take(minecraft)));
-                test.sleepTicks(4);
+                test.waitTicks(4);
             }
         } else {
             test.skip("Create is not installed: no bearing contraption was built (MOD-1)");
@@ -160,9 +161,9 @@ final class CraftSteps {
             test.command("summon minecraft:pig 22.5 -48.2 -7.5 {CustomName:'\"Sailor\"'," + still + "}");
             test.command("create glue 20 -50 -8 23 -49 -5");
             test.command("tp @s 21.5 -49 -6.5");
-            test.sleepTicks(25);
+            test.waitTicks(25);
             if (!seated(test, minecraft, "Sailor")) {
-                test.skip("the mob did not sit in the Create seat on the platform: a seated mob on a physics object was not tried");
+                test.fault("the mob did not sit in the Create seat on the platform, so a seated mob on a physics object was not tried");
             }
             test.command("sable assemble area 20 -50 -8 23 -49 -5");
             test.waitFor(() -> crafts(minecraft) >= 1, 15, "the platform to become a physics object");
@@ -171,9 +172,9 @@ final class CraftSteps {
             platformNotesFrom = RecordingSteps.notes.size();
             // Note where everything is while it falls: these checks prove recorded motion, not just a resting place
             for (int i = 0; i < 5; i++) {
-                test.sleepTicks(4);
+                test.waitTicks(4);
                 RecordingSteps.notes.add(test.onClient(() -> RecordingSteps.Note.take(minecraft)));
-                test.sleepTicks(4);
+                test.waitTicks(4);
             }
 
             // A second slab, this time with the recorder sitting in a Create seat on it: a seated player on a physics object
@@ -182,21 +183,21 @@ final class CraftSteps {
             test.command("setblock 27 -49 -7 create:white_seat");
             test.command("create glue 26 -50 -8 29 -49 -5");
             test.command("tp @s 28.5 -49 -5.5 135 50");
-            test.sleepTicks(8);
+            test.waitTicks(8);
             boolean seated = sit(test, minecraft, new BlockPos(27, -49, -7));
             test.command("sable assemble area 26 -50 -8 29 -49 -5");
             test.waitFor(() -> crafts(minecraft) > before, 15, "the second platform to become a physics object");
             for (int i = 0; i < 5; i++) {
-                test.sleepTicks(4);
+                test.waitTicks(4);
                 RecordingSteps.notes.add(test.onClient(() -> RecordingSteps.Note.take(minecraft)));
-                test.sleepTicks(4);
+                test.waitTicks(4);
             }
             test.command("ride @s dismount");
-            test.sleepTicks(6);
+            test.waitTicks(6);
             if (seated) {
                 test.log("second physics platform assembled, carrying the recorder in a Create seat");
             } else {
-                test.skip("the recorder could not take the Create seat on the second platform: a seated player on a physics object was not tried");
+                test.fault("the recorder could not take the Create seat on the second platform, so a seated player on a physics object was not tried");
             }
 
             if (Host.get().isModLoaded("aeronautics")) {
@@ -226,7 +227,7 @@ final class CraftSteps {
         for (int attempt = 0; attempt < 3; attempt++) {
             test.onClientRun(() -> minecraft.gameMode.useItemOn(minecraft.player, net.minecraft.world.InteractionHand.OFF_HAND,
                 new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(seat), net.minecraft.core.Direction.UP, seat, false)));
-            test.sleepTicks(10);
+            test.waitTicks(10);
             if (test.onClient(() -> minecraft.player.isPassenger())) {
                 return true;
             }
@@ -262,7 +263,7 @@ final class CraftSteps {
             template.placeInWorld(level, origin, origin, new net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings(), level.random, 2);
             return new BlockPos(template.getSize());
         }).get();
-        test.sleepTicks(10);
+        test.waitTicks(10);
         BlockPos burner = minecraft.getSingleplayerServer().submit(() -> {
             for (BlockPos pos : BlockPos.betweenClosed(origin, origin.offset(size))) {
                 if (BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()).getPath().contains("burner")) {
@@ -292,10 +293,10 @@ final class CraftSteps {
         BlockPos seat = origin.offset(2, 2, 4);
         test.command("summon minecraft:pig " + (seat.getX() + 0.5) + " " + (seat.getY() + 0.8) + " " + (seat.getZ() + 0.5) + " {CustomName:'\"Aeronaut\"'," + still + "}");
         test.command("summon minecraft:pig " + (origin.getX() + 5.5) + " " + (origin.getY() + 2) + " " + (origin.getZ() + 5.5) + " {CustomName:'\"Ballast\"'," + still + "}");
-        test.sleepTicks(25);
+        test.waitTicks(25);
         boolean aeronautSeated = seated(test, minecraft, "Aeronaut");
         if (!aeronautSeated) {
-            test.skip("the mob did not sit in the seat of the balloon's basket: a seated mob on a flying craft was not tried");
+            test.fault("the mob did not sit in the seat of the balloon's basket, so a seated mob on a flying craft was not tried");
         }
         int before = crafts(minecraft);
         // The recorder steps into the basket first, as a player would to fly it. The game only counts a craft as the
@@ -305,11 +306,11 @@ final class CraftSteps {
         BlockPos aboard = minecraft.getSingleplayerServer().submit(() -> basketSpot(level, burner, seat, origin.offset(5, 2, 5))).get();
         if (aboard != null) {
             test.command("tp @s " + (aboard.getX() + 0.5) + " " + aboard.getY() + " " + (aboard.getZ() + 0.5));
-            test.sleepTicks(10);
+            test.waitTicks(10);
         } else {
             test.skip("no room was found in the balloon's basket for the recorder: it watched the balloon from beside it");
             test.command("tp @s " + (origin.getX() - 2.5) + " " + (origin.getY() + 1) + " " + (origin.getZ() - 2.5));
-            test.sleepTicks(10);
+            test.waitTicks(10);
         }
         // A region tight around the balloon, from the basket floor up: a loose one takes in whatever is nearby as a second
         // object, and the floor under the basket is dead weight
@@ -359,10 +360,10 @@ final class CraftSteps {
         double height = 0.0;
         long deadline = System.currentTimeMillis() + 60_000;
         while (height < 12.0 && System.currentTimeMillis() < deadline) {
-            test.sleepTicks(6);
+            test.waitTicks(6);
             RecordingSteps.Note note = test.onClient(() -> flightNote(minecraft));
             flightNotes.add(note);
-            test.sleepTicks(4);
+            test.waitTicks(4);
             height = test.onClient(() -> balloonBase(minecraft)) - ground;
             if (flightNotes.size() % 2 == 0) {
                 heights.append(String.format(" %d: %.1f;", note.tick(), height));
@@ -381,10 +382,10 @@ final class CraftSteps {
         double last = height;
         double lastRate = climbRate;
         for (int i = 0; i < 16; i++) {
-            test.sleepTicks(6);
+            test.waitTicks(6);
             RecordingSteps.Note note = test.onClient(() -> flightNote(minecraft));
             flightNotes.add(note);
-            test.sleepTicks(4);
+            test.waitTicks(4);
             double now = test.onClient(() -> balloonBase(minecraft)) - ground;
             lastRate = (now - last) * 2.0;
             last = now;
@@ -401,7 +402,7 @@ final class CraftSteps {
         if (goBack) {
             test.command(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f", wasAt.x, wasAt.y, wasAt.z));
         }
-        test.sleepTicks(30);
+        test.waitTicks(30);
     }
 
     /**

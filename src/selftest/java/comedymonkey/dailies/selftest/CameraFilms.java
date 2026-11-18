@@ -144,7 +144,7 @@ final class CameraFilms {
             Playback.jumpTo(start, true);
         });
         test.waitFor(() -> !Playback.jumping() && Playback.position() == start, 120, "the jump to the start of the " + place + " stretch");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         boolean placed = test.onClient(() -> placeViewer(minecraft, recorder));
         if (!placed) {
             test.log("camera films: the recorder is not in the world at the start of the " + place + " stretch; the viewer was left where it was");

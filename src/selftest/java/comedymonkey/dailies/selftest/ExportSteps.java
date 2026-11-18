@@ -22,6 +22,8 @@ import javax.imageio.ImageIO;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.deleteFolder;
+import static comedymonkey.dailies.selftest.SelfTestSupport.difference;
 
 /**
  * Chapter XIV step 4, "Edit and export": camera keyframes with undo and redo, numbered pictures whose frames are
@@ -63,7 +65,7 @@ final class ExportSteps {
 
         // The camera track moves the view while playing, and only then (EDIT-5)
         Vec3 parked = test.onClient(comedymonkey.dailies.playback.Viewer::position);
-        test.sleepTicks(5);
+        test.waitTicks(5);
         check(test.onClient(comedymonkey.dailies.playback.Viewer::position).distanceTo(parked) < 1.0e-6, "a camera track moved the view while the recording was paused");
         test.onClientRun(() -> {
             EditorSession.setFollowCamera(true);
@@ -109,7 +111,7 @@ final class ExportSteps {
 
         // Playback is exactly as it was (EXP-7)
         test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back after the export");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         check(Playback.position() == tickBefore && Playback.paused(), "after the export playback is at tick " + Playback.position() + (Playback.paused() ? "" : " and playing") + ", not paused at " + tickBefore);
         check(minecraft.getWindow().getWidth() == windowWidth, "the window was left at another size after the export: " + minecraft.getWindow().getWidth() + " wide, not " + windowWidth);
 
@@ -323,32 +325,6 @@ final class ExportSteps {
         }
         double mean = sum / count;
         return Math.sqrt(Math.max(0.0, squares / count - mean * mean));
-    }
-
-    /** The average difference between two pictures, per colour, on a scale of 0 to 255 */
-    private static double difference(BufferedImage a, BufferedImage b) {
-        double sum = 0;
-        int count = 0;
-        for (int y = 0; y < Math.min(a.getHeight(), b.getHeight()); y += 2) {
-            for (int x = 0; x < Math.min(a.getWidth(), b.getWidth()); x += 2) {
-                int p = a.getRGB(x, y);
-                int q = b.getRGB(x, y);
-                sum += Math.abs((p >> 16 & 0xFF) - (q >> 16 & 0xFF)) + Math.abs((p >> 8 & 0xFF) - (q >> 8 & 0xFF)) + Math.abs((p & 0xFF) - (q & 0xFF));
-                count += 3;
-            }
-        }
-        return sum / count;
-    }
-
-    private static void deleteFolder(Path folder) throws Exception {
-        if (Files.isDirectory(folder)) {
-            try (Stream<Path> files = Files.list(folder)) {
-                for (Path file : files.toList()) {
-                    Files.delete(file);
-                }
-            }
-            Files.delete(folder);
-        }
     }
 
 }

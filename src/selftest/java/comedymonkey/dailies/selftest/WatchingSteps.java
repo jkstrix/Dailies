@@ -129,13 +129,13 @@ final class WatchingSteps {
         expect(test, "start", "started");
         check(Recorder.get().state() == Recorder.State.RECORDING, "'/dailies start' did not start a recording");
         expect(test, "start", "already_recording");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         expect(test, "cancel", "cancel_asking");
         test.waitFor(comedymonkey.dailies.ui.Previews::asking, 10, "the question before a recording is thrown away");
         check(Recorder.get().state() != Recorder.State.IDLE, "'/dailies cancel' threw the recording away without asking");
         test.onClientRun(() -> comedymonkey.dailies.ui.Previews.answerAsk(true));
         test.waitFor(() -> Recorder.get().state() == Recorder.State.IDLE, 10, "the cancelled recording to stop");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         check(Recorder.unfinished().isEmpty(), "a recording cancelled by command left its file behind");
 
         // A stage of its own, away from where the other steps build: a pig, a beacon, a scoreboard, and room to walk
@@ -149,14 +149,14 @@ final class WatchingSteps {
         test.command("scoreboard objectives add dailies_watch dummy \"Watching\"");
         test.command("scoreboard objectives setdisplay sidebar dailies_watch");
         test.command("scoreboard players set @s dailies_watch 7");
-        test.sleepTicks(20);
+        test.waitTicks(20);
 
         expect(test, "start", "started");
-        test.sleepTicks(30);
+        test.waitTicks(30);
 
         // A marker with its colour, its position and its description; and one with nothing
         expect(test, "mark blue yes the well", "marked_described_here");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         expect(test, "mark no", "marked");
 
         // A moment by command and one by the key (the same code as the moments_event_add tool)
@@ -190,18 +190,18 @@ final class WatchingSteps {
         test.onClientRun(() -> minecraft.setScreen(null));
 
         // The recorder walks, so there is something to follow
-        test.sleepTicks(10);
+        test.waitTicks(10);
         walkStart = test.onClient(() -> Recorder.get().recordingTick());
         for (int step = 1; step <= 30; step++) {
             test.command("tp @s " + (X + step * 0.3) + " " + Y + " " + Z + " -90 10");
-            test.sleepTicks(2);
+            test.waitTicks(2);
         }
-        test.sleepTicks(10);
+        test.waitTicks(10);
         actionBar = test.onClient(() -> Recorder.get().recordingTick());
         test.command("title @s actionbar {\"text\":\"Dailies action bar\",\"color\":\"yellow\",\"bold\":true}");
-        test.sleepTicks(30);
+        test.waitTicks(30);
         walkEnd = test.onClient(() -> Recorder.get().recordingTick());
-        test.sleepTicks(20);
+        test.waitTicks(20);
 
         // Finish under a name, with no question asked
         List<Path> before = recordings();
@@ -236,10 +236,10 @@ final class WatchingSteps {
         test.command("fill 30 -60 14 44 -54 22 minecraft:air");
         test.command("fill 37 -60 37 39 -60 39 minecraft:air");
         test.command("scoreboard objectives remove dailies_watch");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         test.command("kill @e[type=minecraft:item]");
         test.command("tp @s 0.5 -60 0.5 0 0");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         test.log("a recording of " + manifest.totalTicks + " ticks was made, marked, paused, resumed and finished by /dailies");
     }
 
@@ -259,8 +259,7 @@ final class WatchingSteps {
     }
 
     private static void jump(SelfTest test, int tick) throws Exception {
-        test.onClientRun(() -> Playback.jumpTo(tick, true));
-        test.waitFor(() -> !Playback.jumping() && Playback.position() == tick, 60, "the jump to tick " + tick);
+        SelfTestSupport.jump(test, tick, 60);
         frames(test, 4);
     }
 
@@ -369,7 +368,7 @@ final class WatchingSteps {
         test.waitFor(() -> (Playback.loaded() && !Playback.jumping() && Playback.file() != null && recording.equals(Playback.file().file())) || Playback.lastError() != null, 90,
             "the recording made by command to open");
         check(Playback.lastError() == null, "the recording made by command did not open: " + Playback.lastError());
-        test.sleepTicks(10);
+        test.waitTicks(10);
         RecordingManifest manifest = Playback.manifest();
         UUID recorderId = UUID.fromString(manifest.recorderId);
         check(walkEnd > walkStart && walkEnd < Playback.total(), "the walk was noted at ticks " + walkStart + " to " + walkEnd + " of " + Playback.total());
@@ -411,19 +410,19 @@ final class WatchingSteps {
 
         // The chat never opens while watching: the chat key opens the editor and the command key does nothing
         test.onClientRun(() -> minecraft.setScreen(new net.minecraft.client.gui.screens.ChatScreen("/")));
-        test.sleepTicks(2);
+        test.waitTicks(2);
         check(minecraft.screen == null, "the command key opened a screen while watching: " + minecraft.screen);
         test.onClientRun(() -> minecraft.setScreen(new net.minecraft.client.gui.screens.ChatScreen("")));
         test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the chat key to open the editor while watching");
         test.onClientRun(() -> minecraft.screen.onClose());
-        test.sleepTicks(2);
+        test.waitTicks(2);
 
         // Escape gives Dailies' own menu in place of the game's pause menu, and Escape there goes back to watching
         test.onClientRun(() -> minecraft.pauseGame(false));
-        test.sleepTicks(2);
+        test.waitTicks(2);
         check(minecraft.screen instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape while watching brought up " + minecraft.screen + " rather than Dailies' menu");
         test.onClientRun(() -> minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE, 0, 0));
-        test.sleepTicks(2);
+        test.waitTicks(2);
         check(minecraft.screen == null, "Escape in Dailies' menu did not go back to watching: " + minecraft.screen);
     }
 
@@ -561,7 +560,7 @@ final class WatchingSteps {
             Playback.playTo(smartTick + 30);
         });
         test.waitFor(() -> Playback.paused() && Playback.position() == smartTick + 30, 30, "play under the Smart Camera");
-        Thread.sleep(300);
+        test.waitTicks(6);
         editor(test);
         test.onClientRun(() -> {
             List<PathPreview.Stretch> stretches = PathPreview.stretches();
@@ -595,7 +594,7 @@ final class WatchingSteps {
         Vec3 recorder = test.onClient(() -> minecraft.level.getPlayerByUUID(recorderId).position());
         // The pig, the beacon and the recorder all in the picture
         lookFrom(test, new Vec3(36.5, Y + 3.0, 25.0), new Vec3(37.5, Y, 36.0));
-        test.sleepTicks(10);
+        test.waitTicks(10);
         frames(test, 4);
         check(recorder.distanceTo(new Vec3(X + 9.0, Y, Z)) < 0.5, "the recorder is not where the walk ended: " + recorder);
 
@@ -1056,7 +1055,7 @@ final class WatchingSteps {
         check(Playback.lastError() == null, "the recording with the machines did not open: " + Playback.lastError());
         jump(test, RecordingSteps.notes.get(RecordingSteps.notes.size() / 2).tick());
         lookFrom(test, new Vec3(13.5, -56.0, -17.0), new Vec3(13.5, -59.0, -7.0));
-        test.sleepTicks(20);
+        test.waitTicks(20);
         frames(test, 8);
 
         int[] drawn = comedymonkey.dailies.compat.create.FlywheelLooks.drawn();
@@ -1137,9 +1136,9 @@ final class WatchingSteps {
             org.lwjgl.glfw.GLFW.glfwSetWindowSize(minecraft.getWindow().getWindow(), width, height);
             minecraft.options.guiScale().set(scale);
         });
-        test.sleepTicks(8);
+        test.waitTicks(8);
         test.onClientRun(minecraft::resizeDisplay);
-        test.sleepTicks(8);
+        test.waitTicks(8);
     }
 
     /**

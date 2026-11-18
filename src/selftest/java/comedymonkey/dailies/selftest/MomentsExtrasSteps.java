@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.array;
 
 /**
  * Plan 2.9 to 2.12 in a live world: voices left out (MOM-36, MOM-37), laughter and shouting (voice_burst), the
@@ -51,7 +52,7 @@ final class MomentsExtrasSteps {
     static void run(SelfTest test) throws Exception {
         test.waitFor(Moments::isTracking, 30, "a moments session in the new world");
         // Let the world draw a few frames, so a picture is of something
-        test.sleepTicks(40);
+        test.waitTicks(40);
         privacy(test);
         bursts(test);
         liveAndPictures(test);
@@ -250,7 +251,7 @@ final class MomentsExtrasSteps {
             test.tool("config_set", args("key", "momentsEventPictures", "value", false));
             try {
                 String quiet = test.tool("moments_event_add", args("label", "No picture", "type", "live_test")).getAsJsonObject("event").get("id").getAsString();
-                Thread.sleep(1500);
+                test.waitTicks(30);
                 Moments.storage().flush();
                 check(!Files.exists(Path.of(folder, "pictures", quiet + ".jpg")), "a picture was taken with momentsEventPictures off");
             } finally {
@@ -494,14 +495,6 @@ final class MomentsExtrasSteps {
         check(parts.length >= 2, "the server sent no status line for " + method + " " + path);
         byte[] rest = headEnd < 0 ? new byte[0] : java.util.Arrays.copyOfRange(all, headEnd + 4, all.length);
         return new RawReply(Integer.parseInt(parts[1]), rest);
-    }
-
-    private static JsonArray array(String... values) {
-        JsonArray array = new JsonArray();
-        for (String value : values) {
-            array.add(value);
-        }
-        return array;
     }
 
 }

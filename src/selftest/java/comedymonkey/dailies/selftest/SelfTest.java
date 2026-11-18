@@ -5,8 +5,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import comedymonkey.dailies.Host;
+import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.mcp.McpHttpServer;
 import net.minecraft.client.Minecraft;
+import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -19,17 +23,28 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The scripted run of specification chapter XIV. Switched on by the system property dailies.test.script, it waits
  * for the game to finish loading, works through its steps, writes PASSED or FAILED: reason to the log and to
- * dailies/test-result.txt, and closes the game. Steps are added here as each part of the mod is built.
+ * dailies/test-result.txt, with the number of checks skipped, and closes the game. Steps are added here as each part
+ * of the mod is built.
  */
 public final class SelfTest {
 
     public static final String PROPERTY = "dailies.test.script";
 
+    /**
+     * The mod ids the game must have loaded, comma-separated, set by the modded run (TEST-1): a mods folder that has
+     * lost one of them would otherwise only show as skips, and the run as passed
+     */
+    static final String EXPECTED_MODS = "dailies.test.expectMods";
+
     private static final int LOAD_TIMEOUT_SECONDS = 300;
+
+    /** Game ticks the client has run since the self test began, counted at the end of each: what waitTicks counts */
+    private static final AtomicLong CLIENT_TICKS = new AtomicLong();
 
     private final List<String> skipped = new ArrayList<>();
     private int port;
@@ -45,6 +60,7 @@ public final class SelfTest {
         if (!asked()) {
             return;
         }
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> CLIENT_TICKS.incrementAndGet());
         Thread thread = new Thread(() -> new SelfTest().run(), "Dailies-Self-Test");
         thread.setDaemon(true);
         thread.start();
@@ -54,6 +70,7 @@ public final class SelfTest {
         String result;
         try {
             this.waitForGame();
+            this.checkExpectedMods();
             if ("manual".equals(System.getProperty(PROPERTY))) {
                 ManualShots.run(this);
                 Host.LOGGER.info("DAILIES MANUAL PICTURES DONE");
@@ -85,13 +102,13 @@ public final class SelfTest {
             if (Boolean.getBoolean("dailies.test.realWorldOnly")) {
                 // Only the tour of generated terrain, for working on it: gradlew runTestClient -PdailiesFlags=dailies.test.realWorldOnly
                 RealWorldSteps.run(this);
-                this.finish("PASSED");
+                this.finish(this.verdict(), "the tour of generated terrain only");
                 return;
             }
             if (Boolean.getBoolean("dailies.test.cameraFilmsOnly")) {
                 // Only the camera films, for working on the cameras: -PdailiesFlags=dailies.test.cameraFilmsOnly (add dailies.test.cameraFilmsQuick for ten seconds a film)
                 CameraFilms.run(this, Boolean.getBoolean("dailies.test.cameraFilmsQuick"));
-                this.finish("PASSED");
+                this.finish(this.verdict(), "the camera films only");
                 return;
             }
             // The tour first and everything else after it, with the tour's verdict at the end: one long run that tells both
@@ -102,9 +119,11 @@ public final class SelfTest {
             }
             this.checkMcp();
             if (Boolean.getBoolean("dailies.test.bestiaryOnly")) {
-                // For working on the bestiary by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiaryOnly
+                // For working on the bestiary by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiaryOnly. Its
+                // verdict says only the bestiary was run, so a pass of this alone is never taken for a pass of the whole run
                 BestiarySteps.run(this);
-                throw new Failure("only the bestiary was run, and it passed");
+                this.finish(this.verdict(), "bestiary only");
+                return;
             }
             this.step("SettingsSteps.run", () -> SettingsSteps.run(this, this.port));
             this.step("WorldSteps.createWorld", () -> WorldSteps.createWorld(this));
@@ -180,12 +199,38 @@ public final class SelfTest {
             } else {
                 this.skip("the budgets were switched off for this run (dailies.test.skipBudgets)");
             }
-            result = this.failures.isEmpty() ? "PASSED" : "FAILED: " + this.failures.size() + " step(s): " + String.join(" || ", this.failures);
+            result = this.verdict();
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: a step failed", t);
             result = "FAILED: " + (t instanceof Failure ? t.getMessage() : t.toString());
         }
-        this.finish(result);
+        this.finish(result, null);
+    }
+
+    /** PASSED, or FAILED with every step that failed and why */
+    private String verdict() {
+        return this.failures.isEmpty() ? "PASSED" : "FAILED: " + this.failures.size() + " step(s): " + String.join(" || ", this.failures);
+    }
+
+    /**
+     * The modded run says which mods it must have (dailies.test.expectMods, from build.gradle). One that is missing
+     * fails the run at once: the steps for it would only skip, and a broken mods folder would pass
+     */
+    private void checkExpectedMods() {
+        String expected = System.getProperty(EXPECTED_MODS, "").trim();
+        if (expected.isEmpty()) {
+            return;
+        }
+        List<String> missing = new ArrayList<>();
+        for (String mod : expected.split(",")) {
+            String id = mod.trim();
+            if (!id.isEmpty() && !ModList.get().isLoaded(id)) {
+                missing.add(id);
+            }
+        }
+        check(missing.isEmpty(), "the game is missing mods the run is meant to have: " + String.join(", ", missing)
+            + " (" + EXPECTED_MODS + "; the jars come from dailies.modsFolder, by the names in dailies.testMods)");
+        this.log("every mod the run expects is loaded: " + expected);
     }
 
     /** The parts asked for by themselves, one flag each: dailies.test.addonOnly, trainsOnly, rendererOnly, edgesOnly, bestiaryOnly, realWorldOnly, cameraFilmsOnly */
@@ -230,24 +275,38 @@ public final class SelfTest {
         if (parts.contains("cameraFilms")) {
             this.step("CameraFilms.run", () -> CameraFilms.run(this, Boolean.getBoolean("dailies.test.cameraFilmsQuick")));
         }
-        this.finish(this.failures.isEmpty() ? "PASSED" : "FAILED: " + this.failures.size() + " step(s): " + String.join(" || ", this.failures));
+        this.finish(this.verdict(), "only " + String.join(", ", parts));
     }
 
     /** Steps that failed in this run, each with its reason; the run carries on past them so that one run finds them all */
     private final List<String> failures = new ArrayList<>();
 
-    private interface Step {
+    /** The step running now, with the part of it when it has parts: what a fault is written down under */
+    private String currentStep;
+
+    interface Step {
         void run() throws Exception;
     }
 
+    /** One named part of a long step, for {@link #parts} */
+    record Part(String name, Step body) {
+    }
+
+    static Part part(String name, Step body) {
+        return new Part(name, body);
+    }
+
     /** Runs one group of steps; a failure is written down and the run goes on with the next group */
-    private void step(String name, Step body) {
+    void step(String name, Step body) {
+        String outer = this.currentStep;
+        String full = outer == null ? name : outer + " > " + name;
+        this.currentStep = full;
         try {
             body.run();
         } catch (Throwable t) {
-            Host.LOGGER.error("Dailies self test: {} failed; carrying on with the next steps", name, t);
-            this.failures.add(name + ": " + (t instanceof Failure ? t.getMessage() : t.toString()));
-            Host.LOGGER.info("DAILIES TEST STEP FAILED: {}: {}", name, t instanceof Failure ? t.getMessage() : t.toString());
+            Host.LOGGER.error("Dailies self test: {} failed; carrying on with the next steps", full, t);
+            this.failures.add(full + ": " + (t instanceof Failure ? t.getMessage() : t.toString()));
+            Host.LOGGER.info("DAILIES TEST STEP FAILED: {}: {}", full, t instanceof Failure ? t.getMessage() : t.toString());
             try {
                 this.onClientRun(() -> {
                     Minecraft minecraft = Minecraft.getInstance();
@@ -258,16 +317,52 @@ public final class SelfTest {
             } catch (Throwable ignored) {
                 // The next step finds the game as it is
             }
+        } finally {
+            this.currentStep = outer;
         }
     }
 
-    private void finish(String result) {
+    /**
+     * The parts of one long step, in order, each run through {@link #step} so that a failure names the part it was in.
+     * Each part works on what the ones before it made, so after a failed part the rest are not run: they are named in
+     * the log instead, and the failure already written down stands for them
+     */
+    void parts(Part... parts) {
+        int failuresBefore = this.failures.size();
+        for (int i = 0; i < parts.length; i++) {
+            this.step(parts[i].name(), parts[i].body());
+            if (this.failures.size() > failuresBefore) {
+                for (int j = i + 1; j < parts.length; j++) {
+                    this.log("not run, as '" + parts[i].name() + "' failed: " + parts[j].name());
+                }
+                return;
+            }
+        }
+    }
+
+    /**
+     * A check that failed where the rest of the step is still worth running, such as a mob that would not take a Create
+     * seat with Create installed: written down as a failure of the run, and the step goes on. A skip is only for what is
+     * not there to try (TEST-4); something that is there and does not work is a failure
+     */
+    void fault(String what) {
+        String where = this.currentStep == null ? "" : this.currentStep + ": ";
+        this.failures.add(where + what);
+        Host.LOGGER.info("DAILIES TEST STEP FAILED: {}{}", where, what);
+    }
+
+    /**
+     * Writes the verdict, with how many checks were skipped and, for a run of only some parts, which: for example
+     * "PASSED (bestiary only, 3 skipped)". CI reads the line for PASSED and shows it whole
+     */
+    private void finish(String result, String only) {
         for (String line : this.skipped) {
             Host.LOGGER.info("DAILIES TEST skipped: {}", line);
         }
-        Host.LOGGER.info("DAILIES TEST {}", result);
+        String line = result + " (" + (only == null ? "" : only + ", ") + this.skipped.size() + " skipped)";
+        Host.LOGGER.info("DAILIES TEST {}", line);
         try {
-            Files.writeString(Host.get().dataDirectory().resolve("test-result.txt"), result + System.lineSeparator(), StandardCharsets.UTF_8);
+            Files.writeString(Host.get().dataDirectory().resolve("test-result.txt"), line + System.lineSeparator(), StandardCharsets.UTF_8);
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies self test: unable to write the result file", t);
         }
@@ -302,9 +397,9 @@ public final class SelfTest {
 
     /** The game has finished its loading screen and the MCP server is answering */
     private void waitForGame() throws Exception {
-        long deadline = System.currentTimeMillis() + LOAD_TIMEOUT_SECONDS * 1000L;
+        long deadline = System.nanoTime() + LOAD_TIMEOUT_SECONDS * 1_000_000_000L;
         boolean focusSet = false;
-        while (System.currentTimeMillis() < deadline) {
+        while (System.nanoTime() - deadline < 0) {
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft != null && minecraft.options != null && !focusSet) {
                 // The owner watches runs and types elsewhere, so losing focus must not pause the game
@@ -492,18 +587,53 @@ public final class SelfTest {
         });
     }
 
+    /** Waits until the condition holds, by the monotonic clock, which a change of the computer's time does not move */
     void waitFor(java.util.function.BooleanSupplier condition, int seconds, String what) throws Exception {
-        long deadline = System.currentTimeMillis() + seconds * 1000L;
+        long deadline = System.nanoTime() + seconds * 1_000_000_000L;
         while (!condition.getAsBoolean()) {
-            if (System.currentTimeMillis() > deadline) {
+            if (System.nanoTime() - deadline > 0) {
                 throw new Failure("gave up after " + seconds + " seconds waiting for " + what);
             }
-            Thread.sleep(50);
+            Thread.sleep(10);
         }
     }
 
-    void sleepTicks(int ticks) throws InterruptedException {
-        Thread.sleep(ticks * 50L);
+    /**
+     * Lets this many game ticks go by, counted as the client runs them, not guessed from the clock: on a busy machine
+     * fewer ticks pass in a second than twenty, and a check made after a fixed sleep would come too soon. While an
+     * export holds the game's clock the client runs no ticks of its own, so real time, fifty milliseconds a tick, stands
+     * in for them then. On the game's own thread no tick could pass while it waited, so there it can only sleep
+     */
+    void waitTicks(int ticks) throws Exception {
+        if (ticks <= 0) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft != null && minecraft.isSameThread()) {
+            Thread.sleep(ticks * 50L);
+            return;
+        }
+        long seen = CLIENT_TICKS.get();
+        double passed = 0.0;
+        long last = System.nanoTime();
+        // Generous: a tick under load can take many times its fifty milliseconds, and a world loading takes a while
+        int seconds = ticks / 5 + 60;
+        long deadline = last + seconds * 1_000_000_000L;
+        while (passed < ticks) {
+            Thread.sleep(5);
+            long now = System.nanoTime();
+            long counted = CLIENT_TICKS.get();
+            if (counted > seen) {
+                passed += counted - seen;
+                seen = counted;
+            } else if (Export.holdsClock()) {
+                passed += (now - last) / 50_000_000.0;
+            }
+            last = now;
+            if (now - deadline > 0) {
+                throw new Failure("gave up after " + seconds + " seconds waiting for " + ticks + " game ticks to pass (" + (int) passed + " did)");
+            }
+        }
     }
 
     /** Runs a command as the player, on the built-in server, and waits until it has run */
@@ -539,7 +669,10 @@ public final class SelfTest {
 
     // --- Outcomes ---
 
-    /** A check that needs an optional mod or service, which is not there (TEST-4) */
+    /**
+     * A check that needs an optional mod, service or part of the run, which is not there or not asked for (TEST-4), so it
+     * could not be tried. Not for something that is there and did not work: that is a {@link #fault} or a failed check
+     */
     void skip(String what) {
         this.skipped.add(what);
     }

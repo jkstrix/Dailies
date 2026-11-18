@@ -43,7 +43,7 @@ final class ManualShots {
             minecraft.options.guiScale().set(2);
             minecraft.resizeDisplay();
         });
-        test.sleepTicks(40);
+        test.waitTicks(40);
         shot(test, "01-title-screen");
 
         WorldSteps.createWorld(test);
@@ -53,15 +53,15 @@ final class ManualShots {
         test.command("setblock 6 -60 10 minecraft:campfire");
         attempt(test, "building the machines", () -> CraftSteps.build(test));
         test.command("tp @s 0.5 -60 0.5 -20 8");
-        test.sleepTicks(20);
+        test.waitTicks(20);
 
         test.tool("recording_start", none);
-        test.sleepTicks(12);
+        test.waitTicks(12);
         shot(test, "02-recording");
 
         attempt(test, "the pause menu", () -> {
             test.onClientRun(() -> minecraft.pauseGame(false));
-            test.sleepTicks(15);
+            test.waitTicks(15);
             shot(test, "03-pause-menu");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
@@ -81,40 +81,40 @@ final class ManualShots {
             if (step == 80) {
                 test.tool("recording_add_marker", args("color", "#33AAFF", "description", "Half way round"));
             }
-            Thread.sleep(45);
+            test.waitTicks(1);
         }
         voices.interrupt();
-        test.sleepTicks(30);
+        test.waitTicks(30);
         attempt(test, "clips for the timeline", () -> test.tool("moments_clips_generate", args("session", "current", "min_importance", 45, "summarize", false, "pre_roll", 0.6, "post_roll", 0.8)));
 
         attempt(test, "the name prompt", () -> {
             test.onClientRun(() -> Controls.finishRecording(null));
-            test.sleepTicks(15);
+            test.waitTicks(15);
             shot(test, "04-name-the-recording");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
         JsonObject saved = test.tool("recording_finish", args("name", "A walk round the fire"));
-        test.sleepTicks(20);
+        test.waitTicks(20);
 
         attempt(test, "the recordings list", () -> {
             test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
-            test.sleepTicks(50);
+            test.waitTicks(50);
             shot(test, "05-recordings-list");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
 
         test.tool("replay_open", args("path", saved.get("path").getAsString()));
         test.waitFor(() -> Playback.loaded() || Playback.lastError() != null, 90, "the recording to open");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         int total = Playback.total();
         PlaybackSteps.jump(test, total / 3);
         test.tool("camera_set", args("x", 6.5, "y", -52.0, "z", -2.0, "yaw", 0.0, "pitch", 32.0));
-        test.sleepTicks(30);
+        test.waitTicks(30);
         shot(test, "06-playback");
         attempt(test, "the machines", () -> {
             test.tool("camera_set", args("x", 21.0, "y", -53.0, "z", 4.0, "yaw", 165.0, "pitch", 22.0));
             test.tool("replay_play", none);
-            test.sleepTicks(30);
+            test.waitTicks(30);
             shot(test, "06b-machines");
             test.tool("replay_pause", none);
             PlaybackSteps.jump(test, total / 3);
@@ -131,7 +131,7 @@ final class ManualShots {
             shot(test, "07-editor-keyframes");
             attempt(test, "the timeline's moments", () -> {
                 comedymonkey.dailies.ui.MomentsLane.reloadNow();
-                test.sleepTicks(10);
+                test.waitTicks(10);
                 shot(test, "07f-editor-moments");
             });
             editorTab(test, 0, true);
@@ -142,26 +142,26 @@ final class ManualShots {
             shot(test, "07d-editor-export");
             // A dropdown of the export tab, open
             test.onClientRun(() -> comedymonkey.dailies.ui.Previews.editorDropdown(0));
-            test.sleepTicks(8);
+            test.waitTicks(8);
             shot(test, "07e-editor-dropdown");
             test.onClientRun(comedymonkey.dailies.ui.Previews::closeMenu);
             attempt(test, "the editor's rarer things", () -> {
                 // The "..." menu hanging from the bar: what is done to scenes, and forgetting the export range
                 test.onClientRun(comedymonkey.dailies.ui.Previews::editorMore);
-                test.sleepTicks(8);
+                test.waitTicks(8);
                 shot(test, "07h-editor-more-menu");
                 test.onClientRun(comedymonkey.dailies.ui.Previews::closeMenu);
             });
             attempt(test, "the editor folded away", () -> {
                 // Every panel folded: the cards to their titles, the inspector to its edge, the timeline to its ruler
                 test.onClientRun(() -> comedymonkey.dailies.ui.Previews.editorFolds(true, true, true, true));
-                test.sleepTicks(8);
+                test.waitTicks(8);
                 shot(test, "07g-editor-folded");
                 test.onClientRun(() -> comedymonkey.dailies.ui.Previews.editorFolds(false, false, false, false));
-                test.sleepTicks(3);
+                test.waitTicks(3);
             });
             test.onClientRun(Controls::openTimeline);
-            test.sleepTicks(5);
+            test.waitTicks(5);
             test.onClientRun(() -> {
                 if (minecraft.screen != null) {
                     minecraft.setScreen(null);
@@ -175,12 +175,12 @@ final class ManualShots {
             int start = total / 3;
             test.tool("smart_camera_add", args("tick", start, "mode", "chase", "distance", 5, "height", 2, "side_angle", 30, "screen_x", -0.333, "transition_seconds", 0));
             test.tool("replay_play", none);
-            test.sleepTicks(50);
+            test.waitTicks(50);
             shot(test, "08-smart-camera-chase");
             test.tool("replay_pause", none);
             test.tool("smart_camera_add", args("tick", Playback.position(), "mode", "orbit", "radius", 7, "height", 3, "transition_seconds", 0));
             test.tool("replay_play", none);
-            test.sleepTicks(40);
+            test.waitTicks(40);
             shot(test, "09-smart-camera-orbit");
             test.tool("replay_pause", none);
         });
@@ -246,7 +246,7 @@ final class ManualShots {
                 throw new IllegalStateException(e);
             }
         });
-        test.sleepTicks(25);
+        test.waitTicks(25);
     }
 
     private interface Stop {

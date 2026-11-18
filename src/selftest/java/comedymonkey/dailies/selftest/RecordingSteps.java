@@ -53,16 +53,16 @@ final class RecordingSteps {
 
         // Cancel leaves nothing behind (REC-1)
         test.tool("recording_start", none);
-        test.sleepTicks(30);
+        test.waitTicks(30);
         test.tool("recording_cancel", none);
-        test.sleepTicks(20);
+        test.waitTicks(20);
         check(Recorder.unfinished().isEmpty(), "a cancelled recording left its file behind");
 
         // A recording cut short, as a crash leaves it, is found and recovered (REC-6)
         test.tool("recording_start", none);
-        test.sleepTicks(80);
+        test.waitTicks(80);
         test.onClientRun(() -> Recorder.get().addMarker(0x55FF55, "before the crash", true));
-        test.sleepTicks(60);
+        test.waitTicks(60);
         test.onClientRun(() -> {
             // What a crash does: the writer stops and the file never gets its ending
             try {
@@ -73,7 +73,7 @@ final class RecordingSteps {
                 throw new IllegalStateException(e);
             }
         });
-        test.sleepTicks(20);
+        test.waitTicks(20);
         List<Path> unfinished = Recorder.unfinished();
         check(unfinished.size() == 1, "expected one unfinished recording after the pretend crash, found " + unfinished.size());
         check(RecordingFile.isUnfinished(unfinished.get(0)), "the crashed recording does not look unfinished");
@@ -96,25 +96,25 @@ final class RecordingSteps {
         // From here to the end of the recording, every tick on which the live player's body overlaps a block is noted
         BlockWatch.liveTicks.clear();
         BlockWatch.start();
-        test.sleepTicks(20);
+        test.waitTicks(20);
 
         test.command("summon minecraft:armor_stand 8.5 -60 6.5 {CustomName:'\"Mover\"',NoGravity:1b}");
         test.command("summon minecraft:pig 3 -60 3 {CustomName:'\"Hamlet\"',NoAI:1b}");
         test.command("setblock 2 -60 0 minecraft:gold_block");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         test.command("setblock 2 -60 0 minecraft:air destroy");
         // A kill by command is only ever found through the statistics, which are asked for every five seconds from
         // whenever the session began. Asked for every second, the kill is logged where it happened and not, as the
         // run's timing once had it, in the middle of the pause below, on a tick whose time is the resume's
         test.tool("config_set", args("key", "momentsStatsPollSeconds", "value", 1));
         test.command("summon minecraft:zombie 0 -60 4 {NoAI:1b,PersistenceRequired:1b}");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         test.command("damage @e[type=minecraft:zombie,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
         test.command("item replace entity @s weapon.mainhand with minecraft:diamond_sword");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         test.onClientRun(() -> minecraft.player.swing(InteractionHand.MAIN_HAND));
         test.command("tp @s 4.5 -60 0.5 90 10");
-        test.sleepTicks(10);
+        test.waitTicks(10);
 
         // A known piece of sound, as if from voice chat, close to the kill so that its clip takes it in (MOM-31)
         OwnerFeatureSteps.speak(test);
@@ -123,9 +123,9 @@ final class RecordingSteps {
         if (comedymonkey.dailies.Host.get().isModLoaded("dailies_companion")) {
             test.command("moment data @s test_event {answer:42} Hello from the server");
             test.command("summon minecraft:iron_golem 0 -60 9 {NoAI:1b,CustomName:'\"Stand-in boss\"',attributes:[{id:\"minecraft:generic.max_health\",base:200.0}],Health:200.0f}");
-            test.sleepTicks(10);
+            test.waitTicks(10);
             test.command("damage @e[type=minecraft:iron_golem,limit=1,sort=nearest] 500 minecraft:player_attack by @s");
-            test.sleepTicks(20);
+            test.waitTicks(20);
             OwnerFeatureSteps.companionUsed = true;
         } else {
             test.skip("the Dailies Companion is not installed: server-sent moments were not tried (SRV-1 to SRV-3)");
@@ -146,7 +146,7 @@ final class RecordingSteps {
         test.command("setblock 6 -60 3 minecraft:diamond_block");
         // A wall right beside the line the recorder is moved along: close enough to clip through if playback cut corners
         test.command("fill 4 -60 1 9 -59 1 minecraft:stone_bricks");
-        test.sleepTicks(40);
+        test.waitTicks(40);
         check(test.tool("dailies_status", none).getAsJsonObject("recording").get("tick").getAsInt() == tickAtPause, "the clock ran on while paused");
         test.tool("recording_resume", none);
 
@@ -158,10 +158,10 @@ final class RecordingSteps {
         for (int i = 0; i < segmentTicks * 2 / 20 + 3; i++) {
             test.command("tp @s " + (4.5 + (i % 5)) + " -60 0.5 " + (i * 20 % 360) + " 0");
             test.command("tp @e[type=minecraft:armor_stand,name=Mover,limit=1] " + (8.5 + (i % 4) * 1.5) + " -60 " + (6.5 + (i % 3)) + " " + (i * 45 % 360) + " 0");
-            test.sleepTicks(20);
+            test.waitTicks(20);
             notes.add(test.onClient(() -> Note.take(minecraft)));
             // Nothing else may happen on the tick a note belongs to
-            test.sleepTicks(4);
+            test.waitTicks(4);
         }
 
         // How far each thing travelled between the first and the last note, so it is plain what the position checks prove
@@ -184,7 +184,7 @@ final class RecordingSteps {
 
         // A moment late in the recording, far from the kill: the trimming steps cut the stretch it is in
         test.tool("moments_event_add", args("label", "Late moment", "type", "library_test"));
-        test.sleepTicks(10);
+        test.waitTicks(10);
 
         BlockWatch.stop();
         JsonObject finished = test.tool("recording_finish", args("name", "Self test"));

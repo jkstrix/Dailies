@@ -25,7 +25,7 @@ with Simple Voice Chat.
 | Folder | What it is |
 |---|---|
 | `design/` | The specification and the Create and Aeronautics note. The specification is the authority on behaviour. |
-| `src/` | The core of the mod: recording, the file format, playback, the editor, export, the interface, compatibility, the scripted test. Written for this project from the specification. |
+| `src/` | The core of the mod: recording, the file format, playback, the editor, export, the interface, compatibility; and in `src/selftest/` the scripted test, a mod of its own (`dailies_selftest`) that never goes into the Dailies jar. Written for this project from the specification. |
 | `reference/` | The owner's own code, compiled into the same mod: Moments, the Smart Camera, the MCP server and its tools, the moments page. It meets the core through one interface, `comedymonkey.dailies.Host`. |
 | `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README. |
 | `docs/manual/` | The user manual and its pictures. |
@@ -60,8 +60,14 @@ Java 21. The Gradle wrapper fetches everything else.
 | Build the companion (`companion/build/libs/`) | `gradlew build` in `companion/` |
 
 The scripted test drives the real game through its own MCP tools and prints `DAILIES TEST PASSED`, or
-`DAILIES TEST FAILED:` and the reason. Steps that could not run (a mod not installed, something that needs a second
-player) are listed as `DAILIES TEST skipped:`.
+`DAILIES TEST FAILED:` and the reason, with the number of checks skipped. Steps that could not run (a mod not
+installed, something that needs a second player) are listed as `DAILIES TEST skipped:`. Something that is there and
+does not work is a failure, not a skip. `runTestModded` also fails at once if a mod it expects is not loaded
+(`-Pdailies.testExpectMods` changes the list).
+
+The scripted test is its own jar, `build/libs/dailies-selftest-*.jar`, built by `gradlew selftestJar`. The dev runs
+(`runTestClient`, `runHandsOn`, `runKitShots`) load it from its classes; `runTestModded` and `runManualShots` get the
+jar in `run-modded/mods` from `installTestMods`. `runClient` and `runPlayModded` never have it.
 
 `runTestModded` copies the other mods from a game profile on the owner's machine. To use another folder holding those
 jars, pass `-Pdailies.modsFolder=<folder>`. The companion jar is taken from `companion/build/libs`, so build the

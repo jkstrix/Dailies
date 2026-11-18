@@ -27,6 +27,9 @@ import java.util.UUID;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.array;
+import static comedymonkey.dailies.selftest.SelfTestSupport.shorten;
+import static comedymonkey.dailies.selftest.SelfTest.part;
 
 /**
  * The plan's tests for combining and trimming recordings and for keeping moments working across them (FILE-9 to
@@ -39,18 +42,81 @@ final class LibrarySteps {
     private LibrarySteps() {
     }
 
-    static void run(SelfTest test) throws Exception {
-        Minecraft minecraft = Minecraft.getInstance();
-        JsonObject none = new JsonObject();
-        Path original = RecordingSteps.recording;
-        RecordingManifest originalManifest = RecordingFile.readManifest(original);
-        String originalId = originalManifest.id;
-        int total = originalManifest.totalTicks;
+    // What the parts of run() share: each part makes some of it for the parts after it
+    private static SelfTest test;
+    private static Minecraft minecraft;
+    private static JsonObject none;
+    private static Path original;
+    private static RecordingManifest originalManifest;
+    private static String originalId;
+    private static int total;
+    private static JsonObject listed;
+    private static String session;
+    private static JsonObject kill;
+    private static String killId;
+    private static int killTick;
+    private static JsonObject clip;
+    private static String clipId;
+    private static int clipStart;
+    private static int clipEnd;
+    private static LibraryIndex index;
+    private static int keepFrom;
+    private static int keepTo;
+    private static int cutFrom;
+    private static int cutTo;
+    private static JsonObject outside;
+    private static int outsideTick;
+    private static int afterCut;
+    private static int afterMiddleCut;
+    private static String originalAfterCut;
+    private static String originalAfterMiddleCut;
+    private static String aroundId;
+    private static Path aroundFile;
+    private static int aroundTicks;
+    private static String outsideId;
+    private static String throughId;
+    private static int removed;
+    private static Path secondFile;
+    private static String secondSession;
+    private static String secondEventId;
+    private static int secondTick;
+    private static String secondId;
+    private static RecordingManifest secondManifest;
+    private static String episodeId;
+    private static Path episodeFile;
 
-        // --- What the moments say, before anything is edited ---
-        JsonObject listed = test.tool("moments_events_query", args("session", "latest", "limit", 500));
-        String session = listed.get("session").getAsString();
-        JsonObject kill = null;
+    /** The edits one after another, each a named part, so a failure says which edit it was in (SelfTest.parts) */
+    static void run(SelfTest test) throws Exception {
+        LibrarySteps.test = test;
+        minecraft = Minecraft.getInstance();
+        none = new JsonObject();
+        original = RecordingSteps.recording;
+        originalManifest = RecordingFile.readManifest(original);
+        originalId = originalManifest.id;
+        total = originalManifest.totalTicks;
+        test.parts(
+            part("the moments before any edit", LibrarySteps::momentsBefore),
+            part("the time index (FILE-16)", LibrarySteps::timeIndex),
+            part("the ranges to cut", LibrarySteps::cutRanges),
+            part("trim around the kill (FILE-10)", LibrarySteps::trimAroundTheKill),
+            part("the kill cued in the trimmed recording", LibrarySteps::cueTheKill),
+            part("a moment in the removed stretch", LibrarySteps::cutMoment),
+            part("a trim among machines", LibrarySteps::machinesTrimmed),
+            part("a cut through the middle of a clip", LibrarySteps::cutThroughClip),
+            part("a second recording, from another world", LibrarySteps::secondRecording),
+            part("combine (FILE-9)", LibrarySteps::combine),
+            part("the original deleted", LibrarySteps::deleteOriginal),
+            part("the index lost and a recording renamed", LibrarySteps::indexLost),
+            part("moments found by their time", LibrarySteps::foundByTime),
+            part("resource packs through a trim and a combine", LibrarySteps::packsTrimmed)
+        );
+    }
+
+    /** What the moments say before anything is edited: the kill, and its clip in the original alone */
+    private static void momentsBefore() throws Exception {
+        listed = test.tool("moments_events_query", args("session", "latest", "limit", 500));
+        session = listed.get("session").getAsString();
+        kill = null;
         for (JsonElement element : listed.getAsJsonArray("events")) {
             JsonObject event = element.getAsJsonObject();
             if (event.get("type").getAsString().equals("mob_kill") && has(event, "replay_tick")) {
@@ -59,20 +125,22 @@ final class LibrarySteps {
             }
         }
         check(kill != null, "there is no kill with a recording tick to test with");
-        String killId = kill.get("id").getAsString();
-        int killTick = kill.get("replay_tick").getAsInt();
+        killId = kill.get("id").getAsString();
+        killTick = kill.get("replay_tick").getAsInt();
         check(originalId.equals(kill.get("replay_uuid").getAsString()), "the kill is not stamped with the scripted recording's id");
 
-        JsonObject clip = killClip(test, session);
-        String clipId = clip.get("id").getAsString();
-        int clipStart = clip.get("start_replay_tick").getAsInt();
-        int clipEnd = Math.min(total, clip.get("end_replay_tick").getAsInt());
+        clip = killClip(test, session);
+        clipId = clip.get("id").getAsString();
+        clipStart = clip.get("start_replay_tick").getAsInt();
+        clipEnd = Math.min(total, clip.get("end_replay_tick").getAsInt());
         check(clipEnd - clipStart >= 60, "the kill's clip is too short to cut through: ticks " + clipStart + " to " + clipEnd);
         JsonArray before = clip.getAsJsonArray("locations");
         check(before != null && before.size() == 1 && before.get(0).getAsJsonObject().get("original").getAsBoolean() && !before.get(0).getAsJsonObject().get("cut").getAsBoolean(),
             "before any edit a clip should be in its original recording and nowhere else: " + before);
+    }
 
-        // --- FILE-16: every tick has its real time and game time, read without playing ---
+    /** FILE-16: every tick has its real time and game time, read without playing; and the index of recordings lists the original */
+    private static void timeIndex() throws Exception {
         try (RecordingFile file = RecordingFile.open(original)) {
             check(file.hasTimes(), "the recording holds no time index");
             check(file.manifest().times.size() == file.segments().size(), "the description does not give every segment's first times: " + file.manifest().times.size() + " for "
@@ -156,17 +224,19 @@ final class LibrarySteps {
             check(file.manifest().realStart == first.realTime() && file.manifest().realEnd >= last.realTime() - 100, "the description's first and last real time are not the time index's");
             test.log("time index: tick " + killTick + " at real " + atKill.realTime() + " game " + atKill.gameTime() + "; " + file.manifest().times.size() + " segment start times in the header");
         }
-        LibraryIndex index = Library.index();
+        index = Library.index();
         check(Files.isRegularFile(index.indexFile()), "there is no index.json in the recordings folder");
         check(Files.readString(index.indexFile(), StandardCharsets.UTF_8).contains(originalId), "index.json does not list the scripted recording");
+    }
 
-        // --- The ranges ---
+    /** Where the cuts go, and the world the original has just after each */
+    private static void cutRanges() throws Exception {
         // Around the kill: from a little before its clip to a little after, neither end on the start of a segment
         int firstKept = Math.max(3, clipStart - 13);
-        int keepTo = Math.min(total - 5, clipEnd + 9);
+        keepTo = Math.min(total - 5, clipEnd + 9);
         // Through the middle of the clip: its middle third goes
-        int cutFrom = clipStart + (clipEnd - clipStart) / 3;
-        int cutTo = clipStart + 2 * (clipEnd - clipStart) / 3;
+        cutFrom = clipStart + (clipEnd - clipStart) / 3;
+        cutTo = clipStart + 2 * (clipEnd - clipStart) / 3;
         try (RecordingFile file = RecordingFile.open(original)) {
             while (!Assembler.needsSnapshot(file, firstKept)) {
                 firstKept++;
@@ -175,9 +245,9 @@ final class LibrarySteps {
                 cutTo++;
             }
         }
-        int keepFrom = firstKept;
+        keepFrom = firstKept;
         check(killTick >= keepFrom && killTick < keepTo, "the kill at tick " + killTick + " is not inside the range kept, " + keepFrom + " to " + keepTo);
-        JsonObject outside = null;
+        outside = null;
         for (JsonElement element : listed.getAsJsonArray("events")) {
             JsonObject event = element.getAsJsonObject();
             if (has(event, "replay_tick") && originalId.equals(event.get("replay_uuid").getAsString()) && event.get("replay_tick").getAsInt() > keepTo + 20) {
@@ -185,19 +255,21 @@ final class LibrarySteps {
             }
         }
         check(outside != null, "no moment was logged after tick " + (keepTo + 20) + " to stand for one in a removed stretch");
-        int outsideTick = outside.get("replay_tick").getAsInt();
-        int afterCut = keepFrom + 40;
-        int afterMiddleCut = Math.min(clipEnd - 2, cutTo + 20);
+        outsideTick = outside.get("replay_tick").getAsInt();
+        afterCut = keepFrom + 40;
+        afterMiddleCut = Math.min(clipEnd - 2, cutTo + 20);
 
         // The world as the original has it at two ticks, each just after where a cut will fall
         test.tool("replay_open", args("path", original.toString()));
         waitOpen(test, originalId, 0);
         PlaybackSteps.jump(test, afterCut);
-        String originalAfterCut = test.onClient(() -> PlaybackSteps.digest(minecraft));
+        originalAfterCut = test.onClient(() -> PlaybackSteps.digest(minecraft));
         PlaybackSteps.jump(test, afterMiddleCut);
-        String originalAfterMiddleCut = test.onClient(() -> PlaybackSteps.digest(minecraft));
+        originalAfterMiddleCut = test.onClient(() -> PlaybackSteps.digest(minecraft));
+    }
 
-        // --- Trim around the kill (FILE-10), with the recording open: it is played to the cut where it stands ---
+    /** FILE-10: a trim around the kill, made with the recording open */
+    private static void trimAroundTheKill() throws Exception {
         String refused = test.toolError("replay_trim", args("source", originalId, "keep", ranges(keepFrom, keepTo), "name", "Around the kill", "colour", "red"));
         check(refused.contains("colour"), "replay_trim did not refuse an unknown argument by name: " + refused);
         check(test.toolError("replay_trim", args("source", originalId, "name", "Nothing")).contains("keep"), "replay_trim without ranges did not say what it needs");
@@ -205,9 +277,9 @@ final class LibrarySteps {
             "a trim that keeps everything was not refused");
         JsonObject around = finish(test, test.tool("replay_trim", args("source", originalId, "keep", ranges(keepFrom, keepTo), "name", "Around the kill")));
         check(around.get("through_game").getAsBoolean(), "a trim whose cut is inside a segment did not say that it goes through the game");
-        String aroundId = around.get("recording_id").getAsString();
-        Path aroundFile = Path.of(around.get("path").getAsString());
-        int aroundTicks = keepTo - keepFrom;
+        aroundId = around.get("recording_id").getAsString();
+        aroundFile = Path.of(around.get("path").getAsString());
+        aroundTicks = keepTo - keepFrom;
         check(around.get("total_ticks").getAsInt() == aroundTicks, "the trimmed recording is " + around.get("total_ticks") + " ticks long, not the " + aroundTicks + " that were kept");
         test.waitFor(() -> Playback.loaded() && !Playback.jumping(), 60, "playback to settle after the trim");
         check(originalId.equals(Playback.recordingId()) && Playback.position() == afterMiddleCut, "the recording that was open is not open where it was after the trim (tick "
@@ -238,8 +310,10 @@ final class LibrarySteps {
         }
         check(Files.readString(index.indexFile(), StandardCharsets.UTF_8).contains(aroundId), "index.json does not list the trimmed recording");
         test.log("trimmed ticks " + keepFrom + " to " + keepTo + " of " + total + " into '" + aroundFile.getFileName() + "' through the game");
+    }
 
-        // --- Test 1: cue the kill in the trimmed recording ---
+    /** Test 1: the kill cues in the trimmed recording, whose world after the cut is the original's */
+    private static void cueTheKill() throws Exception {
         JsonObject cued = test.tool("moments_cue", args("session", session, "event_id", killId, "lead_seconds", 0, "recording_id", aroundId));
         check(cued.get("recording_id").getAsString().equals(aroundId) && cued.get("target_tick").getAsInt() == killTick - keepFrom, "the kill at tick " + killTick
             + " should be at tick " + (killTick - keepFrom) + " of the trimmed recording: " + shorten(cued.toString()));
@@ -267,13 +341,15 @@ final class LibrarySteps {
         PlaybackSteps.jump(test, 0);
         test.onClientRun(() -> Playback.playTo(afterCut - keepFrom));
         test.waitFor(() -> Playback.paused() && Playback.position() == afterCut - keepFrom, 60, "play from the start of the trimmed recording");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         differs = PlaybackSteps.difference(originalAfterCut, test.onClient(() -> PlaybackSteps.digest(minecraft)));
         check(differs.isEmpty(), "played from its first tick, the trimmed recording does not reach the world of tick " + afterCut + " of the original:\n" + differs);
         test.log("the kill cues at tick " + (killTick - keepFrom) + " of the trimmed recording; the world after the cut matches the original (" + originalAfterCut.lines().count() + " lines compared)");
+    }
 
-        // --- Test 2: a moment in the removed stretch says it was cut, and lists the original ---
-        String outsideId = outside.get("id").getAsString();
+    /** Test 2: a moment in the removed stretch says it was cut, and lists the original */
+    private static void cutMoment() throws Exception {
+        outsideId = outside.get("id").getAsString();
         String cutMessage = test.toolError("moments_cue", args("session", session, "event_id", outsideId, "lead_seconds", 0, "recording_id", aroundId));
         check(cutMessage.contains("CUT") && cutMessage.contains("cut from this recording") && cutMessage.contains("Self test") && cutMessage.contains(originalId),
             "cueing a moment that was cut did not say so and name the original: " + cutMessage);
@@ -285,15 +361,20 @@ final class LibrarySteps {
             && elsewhere.getAsJsonArray("locations").size() == 1, "a cue for a moment cut from the open recording did not say so and turn to the original: " + shorten(elsewhere.toString()));
         waitOpen(test, originalId, outsideTick);
         test.log("a moment at tick " + outsideTick + " reports: " + cutMessage);
+    }
 
+    /** A trim that cuts inside a segment with craft and contraptions in the world */
+    private static void machinesTrimmed() throws Exception {
         machines(test, minecraft, original, originalId, total);
+    }
 
-        // --- Test 3: a cut through the middle of a clip, made from the title screen ---
+    /** Test 3: a cut through the middle of a clip, made from the title screen */
+    private static void cutThroughClip() throws Exception {
         PlaybackSteps.close(test);
         JsonObject through = finish(test, test.tool("replay_trim", args("source", "Self test", "cut", ranges(cutFrom, cutTo), "name", "Cut through the clip")));
         check(through.get("through_game").getAsBoolean(), "the second trim should have gone through the game too");
-        String throughId = through.get("recording_id").getAsString();
-        int removed = cutTo - cutFrom;
+        throughId = through.get("recording_id").getAsString();
+        removed = cutTo - cutFrom;
         check(through.get("total_ticks").getAsInt() == total - removed, "cutting " + removed + " ticks left " + through.get("total_ticks") + " of " + total);
         test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the game to be put back at the title screen after the trim");
         RecordingManifest throughManifest = RecordingFile.readManifest(Path.of(through.get("path").getAsString()));
@@ -337,32 +418,36 @@ final class LibrarySteps {
         test.waitFor(() -> Playback.paused() && Playback.position() == piecesEnd, 90, "the clip to play across its cut");
         test.tool("replay_set_speed", args("tick_rate", 20));
         PlaybackSteps.jump(test, afterMiddleCut - removed);
-        differs = PlaybackSteps.difference(originalAfterMiddleCut, test.onClient(() -> PlaybackSteps.digest(minecraft)));
+        String differs = PlaybackSteps.difference(originalAfterMiddleCut, test.onClient(() -> PlaybackSteps.digest(minecraft)));
         check(differs.isEmpty(), "the world after the cut through the clip is not the world at tick " + afterMiddleCut + " of the original:\n" + differs);
         test.log("a clip cut from tick " + cutFrom + " to " + cutTo + " is flagged, with " + inThrough.get("removed_ticks") + " ticks removed, and plays as two pieces");
+    }
 
-        // --- A second recording, from another world ---
+    /** A second recording, from another world, for the combines */
+    private static void secondRecording() throws Exception {
         PlaybackSteps.close(test);
         WorldSteps.createWorld(test, "Dailies Test Two");
         test.tool("recording_start", none);
-        test.sleepTicks(20);
+        test.waitTicks(20);
         test.command("summon minecraft:cow 3 -60 3 {CustomName:'\"Second\"',NoAI:1b}");
-        test.sleepTicks(30);
+        test.waitTicks(30);
         JsonObject added = test.tool("moments_event_add", args("label", "Second world moment", "type", "library_test"));
-        test.sleepTicks(50);
+        test.waitTicks(50);
         JsonObject second = test.tool("recording_finish", args("name", "Second world"));
-        Path secondFile = Path.of(second.get("path").getAsString());
-        String secondSession = added.get("session").getAsString();
+        secondFile = Path.of(second.get("path").getAsString());
+        secondSession = added.get("session").getAsString();
         JsonObject secondEvent = added.getAsJsonObject("event");
-        String secondEventId = secondEvent.get("id").getAsString();
-        int secondTick = secondEvent.get("replay_tick").getAsInt();
-        String secondId = secondEvent.get("replay_uuid").getAsString();
+        secondEventId = secondEvent.get("id").getAsString();
+        secondTick = secondEvent.get("replay_tick").getAsInt();
+        secondId = secondEvent.get("replay_uuid").getAsString();
         check(!secondSession.equals(session), "the second world did not get a moments session of its own");
         WorldSteps.leaveWorld(test);
-        RecordingManifest secondManifest = RecordingFile.readManifest(secondFile);
+        secondManifest = RecordingFile.readManifest(secondFile);
         check(secondManifest.id.equals(secondId) && secondManifest.worldName.equals("Dailies Test Two"), "the second recording is not of the second world");
+    }
 
-        // --- Test 4: combine (FILE-9) ---
+    /** Test 4: combining (FILE-9), refused across game versions, told of different mods, and across two worlds */
+    private static void combine() throws Exception {
         Path foreign = Library.index().folder().resolve("Another version" + RecordingFile.EXTENSION);
         RecordingManifest foreignManifest = RecordingFile.readManifest(secondFile);
         foreignManifest.id = UUID.randomUUID().toString();
@@ -418,8 +503,8 @@ final class LibrarySteps {
 
         JsonObject combined = finish(test, test.tool("replay_combine", args("sources", array(aroundId, secondId), "name", "Episode")));
         check(!combined.get("through_game").getAsBoolean(), "a combine should never need the game");
-        String episodeId = combined.get("recording_id").getAsString();
-        Path episodeFile = Path.of(combined.get("path").getAsString());
+        episodeId = combined.get("recording_id").getAsString();
+        episodeFile = Path.of(combined.get("path").getAsString());
         check(combined.get("total_ticks").getAsInt() == aroundTicks + secondManifest.totalTicks, "combining added or lost time: " + combined.get("total_ticks") + " ticks from " + aroundTicks
             + " and " + secondManifest.totalTicks);
         check(combined.getAsJsonArray("notes").size() == 0, "two recordings made with the same mods were said to differ: " + combined.get("notes"));
@@ -446,14 +531,16 @@ final class LibrarySteps {
         check(named(test, minecraft, "Hamlet") == 1 && named(test, minecraft, "Second") == 0, "before the boundary the world is not the first recording's");
         test.onClientRun(() -> Playback.playTo(aroundTicks + 25));
         test.waitFor(() -> Playback.paused() && Playback.position() == aroundTicks + 25, 90, "play across the boundary between the two recordings");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         check(named(test, minecraft, "Second") == 1 && named(test, minecraft, "Hamlet") == 0, "playing across the boundary did not switch worlds");
         try (RecordingFile file = RecordingFile.open(episodeFile); RecordingFile source = RecordingFile.open(secondFile)) {
             check(file.timeAt(aroundTicks + secondTick).realTime() == source.timeAt(secondTick).realTime(), "the combined recording does not carry the second recording's times");
         }
         test.log("combined into '" + episodeFile.getFileName() + "': " + combined.get("total_ticks") + " ticks, boundary at " + aroundTicks + ", worlds switch there");
+    }
 
-        // --- Test 5: delete the original and cue again ---
+    /** Test 5: the original deleted, and the moments cued again */
+    private static void deleteOriginal() throws Exception {
         PlaybackSteps.close(test);
         Library.delete(original);
         check(!Files.exists(original), "the original was not deleted");
@@ -470,8 +557,10 @@ final class LibrarySteps {
             "a moment cut from the open recording should be found in the one other recording that still holds it: " + shorten(survivor.toString()));
         waitOpen(test, throughId, outsideTick - removed);
         test.log("with the original deleted, the kill cues in '" + episodeFile.getFileName() + "'");
+    }
 
-        // --- Test 6: the index is lost, and a recording is renamed outside the game ---
+    /** Test 6: the index is lost, and a recording is renamed outside the game */
+    private static void indexLost() throws Exception {
         PlaybackSteps.close(test);
         Files.delete(index.indexFile());
         Path renamed = aroundFile.resolveSibling("Renamed by hand" + RecordingFile.EXTENSION);
@@ -489,8 +578,10 @@ final class LibrarySteps {
         clip = killClip(test, session);
         check(clip.getAsJsonArray("locations").size() == 3 && location(clip, aroundId).get("file").getAsString().equals(renamed.getFileName().toString()), "the clip's locations do not follow the rename");
         test.log("index.json was rebuilt and the recording renamed by hand is still found by its id");
+    }
 
-        // --- Test 7: a moment that has lost its recording's id is found by its time ---
+    /** Test 7: a moment that has lost its recording's id is found by its time */
+    private static void foundByTime() throws Exception {
         PlaybackSteps.close(test);
         MomentsSession stored = Moments.storage().getSession(secondSession);
         check(stored != null && stored.update(MomentsSession.Kind.EVENTS, secondEventId, event -> {
@@ -518,7 +609,10 @@ final class LibrarySteps {
         JsonObject jobs = test.tool("replay_job_status", none);
         check(jobs.getAsJsonArray("jobs").size() >= 3, "replay_job_status does not list the jobs that ran: " + jobs);
         PlaybackSteps.close(test);
+    }
 
+    /** Resource packs through a trim and a combine (REC-19 with FILE-9 and FILE-10) */
+    private static void packsTrimmed() throws Exception {
         packs(test, minecraft, secondFile);
     }
 
@@ -806,7 +900,7 @@ final class LibrarySteps {
     private static void packAt(SelfTest test, Minecraft minecraft, int tick, boolean wanted, String where) throws Exception {
         test.onClientRun(() -> Playback.jumpTo(tick, true));
         test.waitFor(() -> !Playback.jumping() && Playback.position() == tick, 180, "the jump to tick " + tick + " (" + where + ")");
-        Thread.sleep(60);
+        test.waitTicks(1);
         test.waitFor(() -> !Playback.jumping(), 180, "the recording's resource packs to be loaded");
         boolean inForce = test.onClient(() -> ResourcePackSteps.packOn(minecraft));
         check(inForce == wanted, where + " (tick " + tick + ") the pack is " + (inForce ? "in force" : "not in force"));
@@ -844,14 +938,6 @@ final class LibrarySteps {
         JsonArray list = new JsonArray();
         list.add(pair);
         return list;
-    }
-
-    private static JsonArray array(String... values) {
-        JsonArray array = new JsonArray();
-        for (String value : values) {
-            array.add(value);
-        }
-        return array;
     }
 
     /** A recording of ten ticks with nothing in it, under the description given: for what combining says about descriptions */
@@ -894,7 +980,7 @@ final class LibrarySteps {
             "recording " + recordingId + " to be open at tick " + tick + " (open: " + Playback.recordingId() + " at " + Playback.position() + ")");
         check(Playback.lastError() == null, "playback failed: " + Playback.lastError());
         // A couple of drawn frames, so what is checked is what a person would see
-        Thread.sleep(80);
+        test.waitTicks(2);
     }
 
     private static int named(SelfTest test, Minecraft minecraft, String name) throws Exception {
@@ -920,10 +1006,6 @@ final class LibrarySteps {
             }
         }
         return ids;
-    }
-
-    private static String shorten(String text) {
-        return text.length() > 900 ? text.substring(0, 900) + "..." : text;
     }
 
 }

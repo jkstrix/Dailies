@@ -42,7 +42,7 @@ final class PlaybackSteps {
         test.waitFor(() -> Playback.loaded() || Playback.lastError() != null, 90, "the recording to open");
         check(Playback.lastError() == null, "the recording did not open: " + Playback.lastError());
         test.log("recording opened in " + (System.currentTimeMillis() - started) + " ms");
-        test.sleepTicks(10);
+        test.waitTicks(10);
 
         JsonObject status = test.tool("dailies_status", none).getAsJsonObject("playback");
         int total = status.get("total_ticks").getAsInt();
@@ -103,7 +103,7 @@ final class PlaybackSteps {
         test.tool("replay_set_speed", args("tick_rate", 100));
         test.onClientRun(() -> Playback.playTo(tick));
         test.waitFor(() -> Playback.paused() && Playback.position() == tick, 60, "play to reach tick " + tick);
-        test.sleepTicks(5);
+        test.waitTicks(5);
         String played = test.onClient(() -> digest(minecraft));
         if (lastDayTime != timeForward) {
             test.log("day time differs between jumping (" + timeForward + ") and playing (" + lastDayTime + ") at tick " + tick);
@@ -136,15 +136,15 @@ final class PlaybackSteps {
         // Transport (PLAY-10)
         int before = Playback.position();
         test.tool("replay_play", none);
-        test.sleepTicks(30);
+        test.waitTicks(30);
         JsonObject pausedState = test.tool("replay_pause", none);
         int advanced = pausedState.get("tick").getAsInt() - before;
         check(advanced >= 15 && advanced <= 45, "a second and a half of play moved " + advanced + " ticks");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         check(Playback.position() == pausedState.get("tick").getAsInt(), "the recording moved on while paused");
         test.tool("replay_set_speed", args("tick_rate", 2));
         test.tool("replay_play", none);
-        test.sleepTicks(40);
+        test.waitTicks(40);
         int slow = test.tool("replay_pause", none).get("tick").getAsInt() - pausedState.get("tick").getAsInt();
         check(slow >= 2 && slow <= 8, "two seconds at a tenth of normal speed moved " + slow + " ticks");
         test.tool("replay_set_speed", args("tick_rate", 20));
@@ -157,7 +157,7 @@ final class PlaybackSteps {
         jump(test, middle.tick());
         JsonObject camera = test.tool("camera_set", args("x", 1.5, "y", -55.0, "z", -3.25, "yaw", 30.0, "pitch", 15.0));
         check(Math.abs(camera.get("x").getAsDouble() - 1.5) < 1e-6 && Math.abs(camera.get("pitch").getAsDouble() - 15.0) < 1e-4, "camera_set did not set the camera: " + camera);
-        test.sleepTicks(5);
+        test.waitTicks(5);
         JsonObject held = test.tool("camera_get", none);
         check(Math.abs(held.get("y").getAsDouble() + 55.0) < 1e-6 && Math.abs(held.get("z").getAsDouble() + 3.25) < 1e-6, "the camera drifted while the recording was paused: " + held);
         JsonArray pigs = test.tool("replay_list_entities", args("type", "minecraft:pig")).getAsJsonArray("entities");
@@ -192,11 +192,10 @@ final class PlaybackSteps {
     /** Jumps and waits until the recording is paused at exactly that tick */
     static void jump(SelfTest test, int tick) throws Exception {
         long started = System.nanoTime();
-        test.onClientRun(() -> Playback.jumpTo(tick, true));
-        test.waitFor(() -> !Playback.jumping() && Playback.position() == tick, 60, "the jump to tick " + tick);
+        SelfTestSupport.jump(test, tick, 60);
         longestJumpMillis = Math.max(longestJumpMillis, (System.nanoTime() - started) / 1_000_000);
         // A couple of drawn frames, so what is checked is what a person would see
-        Thread.sleep(60);
+        test.waitTicks(2);
     }
 
     static long longestJumpMillis = 0;

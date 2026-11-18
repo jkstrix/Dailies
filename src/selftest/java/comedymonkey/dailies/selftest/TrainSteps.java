@@ -102,7 +102,7 @@ final class TrainSteps {
         c("gamerule sendCommandFeedback false");
         c("fill -14 -61 " + (TRACK_Z - 5) + " 82 -61 " + (TRACK_Z + 8) + " minecraft:smooth_stone");
         c("fill -12 " + Y + " " + TRACK_Z + " 80 " + Y + " " + TRACK_Z + " create:track[shape=xo]");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         // Each station looks at the track beside it. A station's direction is the way the train's body lies from it, the
         // train standing there with its front at the station: the west station points east (the train assembles east of
         // it and arrives travelling west), the east station west (the train arrives travelling east, its body behind it).
@@ -110,7 +110,7 @@ final class TrainSteps {
         // not plan: "No suitable path to the next Scheduled destination could be found"
         c("setblock " + WEST.getX() + " " + WEST.getY() + " " + WEST.getZ() + " create:track_station{TargetTrack:[I;0,0,-1],TargetDirection:1b}");
         c("setblock " + EAST.getX() + " " + EAST.getY() + " " + EAST.getZ() + " create:track_station{TargetTrack:[I;0,0,-1],TargetDirection:0b}");
-        test.sleepTicks(40);
+        test.waitTicks(40);
         test.log("trains: the stations as the server holds them: " + describeStation(minecraft, WEST) + " || " + describeStation(minecraft, EAST));
         name(WEST, "Dailies West");
         name(EAST, "Dailies East");
@@ -132,16 +132,16 @@ final class TrainSteps {
         c("create glue 8 " + (Y + 1) + " " + TRACK_Z + " 12 " + (Y + 3) + " " + TRACK_Z);
         // The recorder sits down before the train is assembled, and so is carried aboard
         c("tp @s " + (SEAT.getX() + 0.5) + " " + SEAT.getY() + " " + (SEAT.getZ() + 2.5) + " 180 50");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         boolean seated = CraftSteps.sit(test, minecraft, SEAT);
         if (!seated) {
             problems.add("the recorder could not take the seat on the train before it was assembled");
         }
         int trains = trainCount(minecraft);
         BestiarySteps.server("the train's assembly mode", (level, player) -> call(level.getBlockEntity(WEST), "enterAssemblyMode", new Class<?>[]{net.minecraft.server.level.ServerPlayer.class}, (Object) null));
-        test.sleepTicks(10);
+        test.waitTicks(10);
         BestiarySteps.server("the train's assembly", (level, player) -> call(level.getBlockEntity(WEST), "assemble", new Class<?>[]{UUID.class}, player.getUUID()));
-        test.sleepTicks(20);
+        test.waitTicks(20);
         if (trainCount(minecraft) <= trains) {
             String why = minecraft.getSingleplayerServer().submit(() -> {
                 try {
@@ -157,7 +157,7 @@ final class TrainSteps {
         // Out of assembly mode, as closing the station's screen does: a station still assembling is no destination, and
         // the train could not have been sent home ("No suitable path to the next Scheduled destination could be found")
         BestiarySteps.server("the west station out of assembly mode", (level, player) -> call(level.getBlockEntity(WEST), "exitAssemblyMode", new Class<?>[0]));
-        test.sleepTicks(40);
+        test.waitTicks(40);
         String drivers = conductors(minecraft);
         test.log("trains: the train's drivers as Create found them: " + drivers);
         if (!drivers.contains("forward=true") || !drivers.contains("backward=true")) {
@@ -167,10 +167,10 @@ final class TrainSteps {
         test.tool("recording_start", new JsonObject());
         Census.start(Census.Mode.LIVE);
         try {
-            test.sleepTicks(20);
+            test.waitTicks(20);
             stage(test, "the ride east", () -> rideEast(test, minecraft, seated));
             stage(test, "the train watched from the ground", () -> watchWest(test, minecraft));
-            test.sleepTicks(10);
+            test.waitTicks(10);
         } finally {
             Census.stop();
         }
@@ -269,7 +269,7 @@ final class TrainSteps {
             }
             if (attempt < 3) {
                 problems.remove(before);
-                BestiarySteps.test.sleepTicks(20);
+                BestiarySteps.test.waitTicks(20);
             }
         }
     }

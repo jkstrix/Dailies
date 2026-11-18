@@ -43,37 +43,38 @@ final class McpCraftSteps {
             test.skip("this version of McpCraft does not post " + CLIENT_EVENT + ", so its job board says nothing to other mods" + NOT_TRIED);
             return;
         }
+        // From here McpCraft is installed and new enough, so a job board that does not work is a fault, not a skip (TEST-1)
         try {
             IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
             if (server == null) {
-                test.skip("there is no built-in server to post a job on" + NOT_TRIED);
+                test.fault("there is no built-in server to post a job on" + NOT_TRIED);
                 return;
             }
             Board board = new Board();
             // Jobs belong to a map network, and a new world has none until one is made
             String problem = server.submit(board::open).get(30, TimeUnit.SECONDS);
             if (problem != null) {
-                test.skip("McpCraft's job board could not be opened (" + problem + ")" + NOT_TRIED);
+                test.fault("McpCraft's job board could not be opened (" + problem + ")" + NOT_TRIED);
                 return;
             }
             List<String> before = server.submit(board::jobs).get(30, TimeUnit.SECONDS);
             test.command("map job create custom 8 " + JOB_TITLE);
-            test.sleepTicks(10);
+            test.waitTicks(10);
             List<String> after = new ArrayList<>(server.submit(board::jobs).get(30, TimeUnit.SECONDS));
             after.removeAll(before);
             if (after.isEmpty()) {
-                test.skip("McpCraft posted no job for '/map job create custom'" + NOT_TRIED);
+                test.fault("McpCraft posted no job for '/map job create custom'" + NOT_TRIED);
                 return;
             }
             String id = after.get(after.size() - 1);
             test.command("map job claim " + id);
-            test.sleepTicks(10);
+            test.waitTicks(10);
             String claimed = server.submit(() -> board.status(id)).get(30, TimeUnit.SECONDS);
             test.command("map job done " + id);
-            test.sleepTicks(20);
+            test.waitTicks(20);
             String finished = server.submit(() -> board.status(id)).get(30, TimeUnit.SECONDS);
             if (!"claimed".equals(claimed) || !"done".equals(finished)) {
-                test.skip("McpCraft's job " + id + " was '" + claimed + "' after claiming and '" + finished + "' after finishing, not 'claimed' and 'done'" + NOT_TRIED);
+                test.fault("McpCraft's job " + id + " was '" + claimed + "' after claiming and '" + finished + "' after finishing, not 'claimed' and 'done'" + NOT_TRIED);
                 return;
             }
             jobId = id;
@@ -81,7 +82,7 @@ final class McpCraftSteps {
             test.log("McpCraft job " + id + " posted, claimed and finished");
         } catch (Throwable t) {
             Host.LOGGER.warn("Dailies self test: McpCraft's job board could not be driven", t);
-            test.skip("McpCraft's job board could not be driven (" + t + ")" + NOT_TRIED);
+            test.fault("McpCraft's job board could not be driven (" + t + ")" + NOT_TRIED);
         }
     }
 

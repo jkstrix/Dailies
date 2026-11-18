@@ -11,12 +11,9 @@ import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
 
-import java.io.IOException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
+
+import static comedymonkey.dailies.selftest.SelfTestSupport.deleteTree;
 
 /**
  * The test world: a fresh flat creative world, made the same way every run.
@@ -52,9 +49,9 @@ final class WorldSteps {
         test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
             120, "the test world to open");
         // Let the first chunks arrive and the player settle on the ground
-        test.sleepTicks(60);
+        test.waitTicks(60);
         test.command("tp @s 0.5 -60 0.5 0 0");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         test.log("test world ready");
     }
 
@@ -74,7 +71,7 @@ final class WorldSteps {
         });
         test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
             300, "the generated test world to open");
-        test.sleepTicks(60);
+        test.waitTicks(60);
         test.log("generated test world ready");
     }
 
@@ -88,25 +85,6 @@ final class WorldSteps {
             }
         });
         test.waitFor(() -> minecraft.level == null && !minecraft.isLocalServer(), 60, "the world to close");
-    }
-
-    private static void deleteTree(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                Files.delete(file);
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult postVisitDirectory(Path directory, IOException error) throws IOException {
-                Files.delete(directory);
-                return FileVisitResult.CONTINUE;
-            }
-        });
     }
 
 }

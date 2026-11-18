@@ -55,9 +55,9 @@ final class FrameTimes {
         return new Result(Arrays.stream(sorted).average().orElse(0), sorted[frames - 1], sorted[(int) (frames * 0.99)], frames);
     }
 
-    static Result measure(SelfTest test, int ticks) throws InterruptedException {
+    static Result measure(SelfTest test, int ticks) throws Exception {
         begin();
-        test.sleepTicks(ticks);
+        test.waitTicks(ticks);
         return end();
     }
 

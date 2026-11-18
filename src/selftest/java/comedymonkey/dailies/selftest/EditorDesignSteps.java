@@ -31,7 +31,7 @@ final class EditorDesignSteps {
             comedymonkey.dailies.ui.Controls.openTimeline();
         });
         test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor to open");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         Screen editor = minecraft.screen;
 
         List<String> problems = test.onClient(Previews::editorLayoutProblems);
@@ -41,13 +41,13 @@ final class EditorDesignSteps {
 
         // Folded, the panels give the view nearly all of the window, and still nothing overlaps
         test.onClientRun(() -> Previews.editorFolds(true, true, true, true));
-        test.sleepTicks(3);
+        test.waitTicks(3);
         problems = test.onClient(Previews::editorLayoutProblems);
         check(problems.isEmpty(), "the editor's layout with every panel folded: " + problems);
         double folded = test.onClient(Previews::editorViewShare);
         check(folded > open && folded >= 0.8, "folding every panel left the view " + Math.round(folded * 100) + "% of the window, against " + Math.round(open * 100) + "% open");
         test.onClientRun(() -> Previews.editorFolds(false, false, false, false));
-        test.sleepTicks(3);
+        test.waitTicks(3);
 
         // The "..." menu: the scenes and forgetting the range, and Escape closes only the menu
         check(test.onClient(Previews::editorMore), "the editor's \"...\" menu did not open");
@@ -76,14 +76,14 @@ final class EditorDesignSteps {
         test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
         check(test.onClient(Previews::focusedControl).isEmpty() && minecraft.screen == editor, "Escape did not take the ring away and only the ring");
         test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
-        test.sleepTicks(3);
+        test.waitTicks(3);
         check(minecraft.screen instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape with no ring and no menu did not bring up Dailies' menu: " + minecraft.screen);
         net.minecraft.client.gui.screens.Screen menu = minecraft.screen;
         test.onClientRun(() -> menu.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
         test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "Escape in Dailies' menu to put the editor back");
         // Left closed, as the steps after these expect
         test.onClientRun(() -> minecraft.screen.onClose());
-        test.sleepTicks(3);
+        test.waitTicks(3);
         test.log("editor design: laid out with no overlaps, view " + Math.round(open * 100) + "% open and " + Math.round(folded * 100)
                 + "% folded, \"...\" menu and Tab order work");
     }

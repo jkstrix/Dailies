@@ -64,7 +64,7 @@ final class BalloonSteps {
         PlaybackSteps.jump(test, Math.max(0, middle - 70));
         test.onClientRun(() -> Playback.playTo(middle));
         test.waitFor(() -> Playback.paused() && Playback.position() == middle && !Playback.jumping(), 60, "play to reach tick " + middle + " of the climb");
-        test.sleepTicks(3);
+        test.waitTicks(3);
         double[] played = test.onClient(() -> flight(minecraft));
         String detail = test.onClient(() -> CraftSteps.burnerDetail(minecraft));
         check(forward != null && back != null && played != null, "the balloon or its burner is missing at tick " + middle + " of its climb" + detail);
@@ -212,7 +212,7 @@ final class BalloonSteps {
         double yaw = Math.toDegrees(Math.atan2(-look.x, look.z));
         double pitch = Math.toDegrees(-Math.atan2(look.y, Math.sqrt(look.x * look.x + look.z * look.z)));
         test.tool("camera_set", args("x", from.x, "y", from.y, "z", from.z, "yaw", yaw, "pitch", pitch));
-        test.sleepTicks(10);
+        test.waitTicks(10);
         test.tool("export_screenshot", args("output_path", file.toString(), "width", 1280, "height", 720, "no_gui", true, "overwrite", true));
         test.waitFor(() -> !comedymonkey.dailies.export.Export.active() && Files.exists(file), 60, "the still of the balloon to be written");
         test.waitFor(() -> !Playback.jumping(), 30, "playback to settle after the still");

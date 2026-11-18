@@ -93,7 +93,7 @@ final class CensusPlayback {
                         PlaybackSteps.jump(test, still.tick());
                     }
                     test.onClientRun(() -> Viewer.set(still.x(), still.y(), still.z(), still.yaw(), still.pitch()));
-                    Thread.sleep(150);
+                    test.waitTicks(3);
                     Path picture = folder.resolve(still.name() + ".png");
                     test.tool("export_screenshot", args("output_path", picture.toString(), "width", 1280, "height", 720, "no_gui", true, "overwrite", true));
                     test.waitFor(() -> !Export.active(), 60, "the still " + still.name());

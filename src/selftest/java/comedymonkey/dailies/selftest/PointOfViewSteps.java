@@ -19,7 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -27,6 +26,8 @@ import java.util.stream.Stream;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.deleteTree;
+import static comedymonkey.dailies.selftest.SelfTestSupport.shorten;
 
 /**
  * Craft moments (plan 2.1) and several points of view (plan 2.6: FILE-15, PLAY-18, PLAY-19, EDIT-11).
@@ -131,11 +132,11 @@ final class PointOfViewSteps {
         // --- My recording, with a moment in it ---
         WorldSteps.createWorld(test, WORLD);
         test.tool("recording_start", none);
-        test.sleepTicks(20);
+        test.waitTicks(20);
         test.command("summon minecraft:cow 3 -60 3 {CustomName:'\"Witness\"',NoAI:1b}");
-        test.sleepTicks(40);
+        test.waitTicks(40);
         JsonObject added = test.tool("moments_event_add", args("label", "Seen by two", "type", "point_of_view_test"));
-        test.sleepTicks(80);
+        test.waitTicks(80);
         JsonObject finished = test.tool("recording_finish", args("name", "My view"));
         Path mine = Path.of(finished.get("path").getAsString());
         String session = added.get("session").getAsString();
@@ -280,21 +281,6 @@ final class PointOfViewSteps {
         Library.delete(theirs);
         Library.delete(mine);
         deleteTree(work);
-    }
-
-    private static String shorten(String text) {
-        return text.length() > 600 ? text.substring(0, 600) + "..." : text;
-    }
-
-    private static void deleteTree(Path root) throws java.io.IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (Stream<Path> walk = Files.walk(root)) {
-            for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
-        }
     }
 
 }

@@ -56,9 +56,9 @@ final class KitShots {
             GLFW.glfwSetWindowSize(minecraft.getWindow().getWindow(), width, height);
             minecraft.options.guiScale().set(scale);
         });
-        test.sleepTicks(8);
+        test.waitTicks(8);
         test.onClientRun(minecraft::resizeDisplay);
-        test.sleepTicks(8);
+        test.waitTicks(8);
     }
 
     private static Set<String> groups() {
@@ -82,7 +82,7 @@ final class KitShots {
             }
             screen.search("");
         });
-        test.sleepTicks(12);
+        test.waitTicks(12);
         return (SettingsScreen) minecraft.screen;
     }
 
@@ -98,7 +98,7 @@ final class KitShots {
         SettingsScreen screen = openSettings(test, false);
         ManualShots.shot(test, prefix + "-settings");
         test.onClientRun(() -> screen.search("marker colour"));
-        test.sleepTicks(6);
+        test.waitTicks(6);
         ManualShots.shot(test, prefix + "b-settings-search");
         test.onClientRun(() -> {
             screen.search("");
@@ -106,18 +106,18 @@ final class KitShots {
                 screen.fold(group, !group.equals("editor") && !group.equals("export"));
             }
         });
-        test.sleepTicks(8);
+        test.waitTicks(8);
         test.onClientRun(() -> {
             screen.reveal("defaultInterpolation");
             screen.choose("defaultInterpolation", null);
         });
-        test.sleepTicks(8);
+        test.waitTicks(8);
         ManualShots.shot(test, prefix + "c-settings-dropdown");
         test.onClientRun(() -> {
             Previews.closeMenu();
             minecraft.setScreen(behind);
         });
-        test.sleepTicks(4);
+        test.waitTicks(4);
     }
 
     static void run(SelfTest test) throws Exception {
@@ -128,56 +128,7 @@ final class KitShots {
 
         size(test, 1920, 1080, 2);
         attempt("the title screen", () -> ManualShots.shot(test, "01-title"));
-        attempt("the settings screen", () -> {
-            settings(test, "10");
-            SettingsScreen screen = openSettings(test, true);
-            ManualShots.shot(test, "10d-settings-first-group");
-            // The mouse on a setting: its row lights and its description shows
-            test.onClientRun(() -> {
-                int[] place = screen.where("snapshotSeconds");
-                Previews.pointAt(screen, place[0] + 40, place[1] + 6);
-            });
-            test.sleepTicks(4);
-            ManualShots.shot(test, "10e-settings-hover");
-            // A colour dropdown, and an address that is written wrong
-            test.onClientRun(() -> {
-                Previews.pointAt(screen, -1, -1);
-                screen.reveal("marker1Colour");
-                screen.choose("marker1Colour", null);
-            });
-            test.sleepTicks(8);
-            ManualShots.shot(test, "10f-settings-colours");
-            test.onClientRun(() -> {
-                Previews.closeMenu();
-                for (String group : groups()) {
-                    screen.fold(group, !group.equals("moments"));
-                }
-                screen.reveal("momentsOllamaUrl");
-                screen.test("momentsOllamaUrl", "http://127.0.0.1:9/");
-            });
-            test.sleepTicks(60);
-            ManualShots.shot(test, "10g-settings-address-test");
-            test.onClientRun(() -> screen.test("momentsWhisperUrl", "192.168.1.5:8000"));
-            test.sleepTicks(4);
-            ManualShots.shot(test, "10h-settings-address-wrong");
-            // The Tab key walks the controls: the ring shows where the keys are
-            test.onClientRun(() -> {
-                screen.abandon();
-                for (String group : groups()) {
-                    screen.fold(group, !group.equals("recording"));
-                }
-                screen.reveal("autoStart");
-                for (int press = 0; press < 7; press++) {
-                    screen.keyPressed(GLFW.GLFW_KEY_TAB, 0, 0);
-                }
-            });
-            test.sleepTicks(6);
-            ManualShots.shot(test, "10i-settings-focus");
-            test.onClientRun(() -> {
-                screen.abandon();
-                minecraft.setScreen(null);
-            });
-        });
+        attempt("the settings screen", () -> settingsShots(test));
         attempt("the settings screen at every size", () -> {
             for (int[] size : SIZES) {
                 for (int scale = 1; scale <= 3; scale++) {
@@ -187,7 +138,7 @@ final class KitShots {
                         screen.reveal("controlsLocation");
                         screen.choose("controlsLocation", null);
                     });
-                    test.sleepTicks(8);
+                    test.waitTicks(8);
                     ManualShots.shot(test, "20-settings-" + size[0] + "x" + size[1] + "-scale" + scale);
                     test.onClientRun(() -> {
                         Previews.closeMenu();
@@ -200,7 +151,7 @@ final class KitShots {
         size(test, 1920, 1080, 2);
         attempt("the recovery offer", () -> {
             test.onClientRun(() -> minecraft.setScreen(Previews.recovery(minecraft.screen)));
-            test.sleepTicks(8);
+            test.waitTicks(8);
             ManualShots.shot(test, "30-recovery");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
@@ -210,7 +161,7 @@ final class KitShots {
         test.command("fill -3 -61 8 9 -61 14 minecraft:smooth_quartz");
         test.command("setblock 6 -60 10 minecraft:campfire");
         test.command("tp @s 0.5 -60 0.5 -20 -25");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         test.tool("recording_start", none);
         for (int step = 0; step < 60; step++) {
             double angle = step / 60.0 * Math.PI * 2.0;
@@ -218,44 +169,44 @@ final class KitShots {
             if (step == 30) {
                 test.tool("recording_add_marker", args("color", "#33AAFF", "description", "Half way round"));
             }
-            Thread.sleep(45);
+            test.waitTicks(1);
         }
-        test.sleepTicks(10);
+        test.waitTicks(10);
         // Looking at the sky: the brightest thing a panel has to be read against
         attempt("the recording plate and a notice", () -> {
             test.onClientRun(() -> Notices.show(Component.literal("Recording paused")));
-            test.sleepTicks(8);
+            test.waitTicks(8);
             ManualShots.shot(test, "31-recording-notice");
         });
         attempt("the pause menu", () -> {
             test.onClientRun(() -> minecraft.pauseGame(false));
-            test.sleepTicks(10);
+            test.waitTicks(10);
             ManualShots.shot(test, "31b-pause-menu");
             test.onClientRun(() -> minecraft.setScreen(Previews.ask()));
-            test.sleepTicks(8);
+            test.waitTicks(8);
             ManualShots.shot(test, "31c-ask");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
         attempt("the name prompt", () -> {
             test.onClientRun(() -> minecraft.setScreen(Previews.name()));
-            test.sleepTicks(10);
+            test.waitTicks(10);
             ManualShots.shot(test, "32-name");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
         JsonObject saved = test.tool("recording_finish", args("name", "A walk round the fire"));
-        test.sleepTicks(10);
+        test.waitTicks(10);
         // A few more, so that the list is a list
         for (String name : List.of("The long tunnel under the mountain, take three, with the minecart that would not stop", "Dragon fight")) {
             test.tool("recording_start", none);
-            test.sleepTicks(25);
+            test.waitTicks(25);
             test.tool("recording_finish", args("name", name));
-            test.sleepTicks(10);
+            test.waitTicks(10);
         }
         attempt("the recordings list", () -> {
             test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
-            test.sleepTicks(40);
+            test.waitTicks(40);
             test.onClientRun(() -> minecraft.screen.mouseClicked(minecraft.screen.width / 2.0, 70.0, 0));
-            test.sleepTicks(4);
+            test.waitTicks(4);
             ManualShots.shot(test, "33-recordings");
             for (int[] size : SIZES) {
                 for (int scale = 1; scale <= 3; scale += 2) {
@@ -269,7 +220,7 @@ final class KitShots {
 
         test.tool("replay_open", args("path", saved.get("path").getAsString()));
         test.waitFor(() -> Playback.loaded() || Playback.lastError() != null, 90, "the recording to open");
-        test.sleepTicks(20);
+        test.waitTicks(20);
         int total = Playback.total();
         PlaybackSteps.jump(test, total / 3);
         test.tool("camera_set", args("x", 6.5, "y", -57.0, "z", 2.0, "yaw", 0.0, "pitch", -30.0));
@@ -280,7 +231,7 @@ final class KitShots {
                 }
                 Notices.show(Component.literal("Camera: free"));
             });
-            test.sleepTicks(10);
+            test.waitTicks(10);
             ManualShots.shot(test, "40-playback-bar");
         });
         attempt("the mod differences", () -> {
@@ -297,50 +248,11 @@ final class KitShots {
                     throw new IllegalStateException(e);
                 }
             });
-            test.sleepTicks(8);
+            test.waitTicks(8);
             ManualShots.shot(test, "41-mod-differences");
             test.onClientRun(() -> minecraft.setScreen(null));
         });
-        attempt("the editor", () -> {
-            int a = total / 3;
-            test.tool("keyframe_add_camera", args("tick", a, "x", 0.5, "y", -55.0, "z", 2.0, "yaw", -40.0, "pitch", -25.0));
-            test.tool("keyframe_add_camera", args("tick", a + 20, "x", 13.0, "y", -55.0, "z", 2.0, "yaw", 40.0, "pitch", -25.0));
-            test.tool("scene_set_export_range", args("start_tick", a, "end_tick", a + 20));
-            test.tool("camera_set", args("x", 6.5, "y", -57.0, "z", 2.0, "yaw", 0.0, "pitch", -30.0));
-            String[] tabs = {"keyframe", "looks", "export"};
-            for (int tab = 0; tab < 3; tab++) {
-                editor(test, tab);
-                if (tab == 2) {
-                    // The tab first asks the encoder what this machine can do, which takes a few seconds
-                    test.sleepTicks(100);
-                }
-                ManualShots.shot(test, "50-editor-" + tabs[tab]);
-                int which = tab;
-                boolean opened = test.onClient(() -> Previews.editorDropdown(which == 1 ? 1 : 0));
-                test.sleepTicks(8);
-                if (opened) {
-                    ManualShots.shot(test, "51-editor-" + tabs[tab] + "-dropdown");
-                }
-                test.onClientRun(Previews::closeMenu);
-            }
-            test.onClientRun(() -> Previews.exportMore(true));
-            test.sleepTicks(10);
-            ManualShots.shot(test, "50b-editor-export-more");
-            test.onClientRun(() -> Previews.exportMore(false));
-            for (int[] size : SIZES) {
-                for (int scale = 1; scale <= 3; scale++) {
-                    test.onClientRun(() -> minecraft.setScreen(null));
-                    size(test, size[0], size[1], scale);
-                    editor(test, 2);
-                    test.onClientRun(() -> Previews.editorDropdown(0));
-                    test.sleepTicks(8);
-                    ManualShots.shot(test, "52-editor-" + size[0] + "x" + size[1] + "-scale" + scale);
-                    test.onClientRun(Previews::closeMenu);
-                }
-            }
-            test.onClientRun(() -> minecraft.setScreen(null));
-            size(test, 1920, 1080, 2);
-        });
+        attempt("the editor", () -> editorShots(test, total));
         attempt("the export progress", () -> {
             editor(test, 2);
             Path frames = Host.get().dataDirectory().resolve("kit").resolve("frames");
@@ -360,6 +272,102 @@ final class KitShots {
         test.log("kit: pictures are in " + ManualShots.folder);
     }
 
+    /** The settings screen: its first group, a setting under the mouse, a colour dropdown, an address tested and the Tab ring */
+    private static void settingsShots(SelfTest test) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        settings(test, "10");
+        SettingsScreen screen = openSettings(test, true);
+        ManualShots.shot(test, "10d-settings-first-group");
+        // The mouse on a setting: its row lights and its description shows
+        test.onClientRun(() -> {
+            int[] place = screen.where("snapshotSeconds");
+            Previews.pointAt(screen, place[0] + 40, place[1] + 6);
+        });
+        test.waitTicks(4);
+        ManualShots.shot(test, "10e-settings-hover");
+        // A colour dropdown, and an address that is written wrong
+        test.onClientRun(() -> {
+            Previews.pointAt(screen, -1, -1);
+            screen.reveal("marker1Colour");
+            screen.choose("marker1Colour", null);
+        });
+        test.waitTicks(8);
+        ManualShots.shot(test, "10f-settings-colours");
+        test.onClientRun(() -> {
+            Previews.closeMenu();
+            for (String group : groups()) {
+                screen.fold(group, !group.equals("moments"));
+            }
+            screen.reveal("momentsOllamaUrl");
+            screen.test("momentsOllamaUrl", "http://127.0.0.1:9/");
+        });
+        test.waitTicks(60);
+        ManualShots.shot(test, "10g-settings-address-test");
+        test.onClientRun(() -> screen.test("momentsWhisperUrl", "192.168.1.5:8000"));
+        test.waitTicks(4);
+        ManualShots.shot(test, "10h-settings-address-wrong");
+        // The Tab key walks the controls: the ring shows where the keys are
+        test.onClientRun(() -> {
+            screen.abandon();
+            for (String group : groups()) {
+                screen.fold(group, !group.equals("recording"));
+            }
+            screen.reveal("autoStart");
+            for (int press = 0; press < 7; press++) {
+                screen.keyPressed(GLFW.GLFW_KEY_TAB, 0, 0);
+            }
+        });
+        test.waitTicks(6);
+        ManualShots.shot(test, "10i-settings-focus");
+        test.onClientRun(() -> {
+            screen.abandon();
+            minecraft.setScreen(null);
+        });
+    }
+
+    /** The editor with a short camera path: each tab and its dropdown, the export tab's extras, and the export tab at every size */
+    private static void editorShots(SelfTest test, int total) throws Exception {
+        Minecraft minecraft = Minecraft.getInstance();
+        int a = total / 3;
+        test.tool("keyframe_add_camera", args("tick", a, "x", 0.5, "y", -55.0, "z", 2.0, "yaw", -40.0, "pitch", -25.0));
+        test.tool("keyframe_add_camera", args("tick", a + 20, "x", 13.0, "y", -55.0, "z", 2.0, "yaw", 40.0, "pitch", -25.0));
+        test.tool("scene_set_export_range", args("start_tick", a, "end_tick", a + 20));
+        test.tool("camera_set", args("x", 6.5, "y", -57.0, "z", 2.0, "yaw", 0.0, "pitch", -30.0));
+        String[] tabs = {"keyframe", "looks", "export"};
+        for (int tab = 0; tab < 3; tab++) {
+            editor(test, tab);
+            if (tab == 2) {
+                // The tab first asks the encoder what this machine can do, which takes a few seconds
+                test.waitTicks(100);
+            }
+            ManualShots.shot(test, "50-editor-" + tabs[tab]);
+            int which = tab;
+            boolean opened = test.onClient(() -> Previews.editorDropdown(which == 1 ? 1 : 0));
+            test.waitTicks(8);
+            if (opened) {
+                ManualShots.shot(test, "51-editor-" + tabs[tab] + "-dropdown");
+            }
+            test.onClientRun(Previews::closeMenu);
+        }
+        test.onClientRun(() -> Previews.exportMore(true));
+        test.waitTicks(10);
+        ManualShots.shot(test, "50b-editor-export-more");
+        test.onClientRun(() -> Previews.exportMore(false));
+        for (int[] size : SIZES) {
+            for (int scale = 1; scale <= 3; scale++) {
+                test.onClientRun(() -> minecraft.setScreen(null));
+                size(test, size[0], size[1], scale);
+                editor(test, 2);
+                test.onClientRun(() -> Previews.editorDropdown(0));
+                test.waitTicks(8);
+                ManualShots.shot(test, "52-editor-" + size[0] + "x" + size[1] + "-scale" + scale);
+                test.onClientRun(Previews::closeMenu);
+            }
+        }
+        test.onClientRun(() -> minecraft.setScreen(null));
+        size(test, 1920, 1080, 2);
+    }
+
     private static void editor(SelfTest test, int tab) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
@@ -369,7 +377,7 @@ final class KitShots {
             Previews.editorTab(tab);
             Controls.openTimeline();
         });
-        test.sleepTicks(20);
+        test.waitTicks(20);
     }
 
 }

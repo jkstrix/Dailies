@@ -34,6 +34,7 @@ import java.util.UUID;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTest.part;
 
 /**
  * The library's screens and the bin (specification REC-5, REC-8 and REC-9, with the screens of FILE-9 and FILE-10).
@@ -56,29 +57,68 @@ final class LibraryScreenSteps {
     private LibraryScreenSteps() {
     }
 
+    // What the parts of run() share: each part makes some of it for the parts after it
+    private static SelfTest test;
+    private static Minecraft minecraft;
+    private static Path folder;
+    private static String castleId;
+    private static String netherId;
+    private static String farmId;
+    private static String editedId;
+    private static Path castle;
+    private static Path nether;
+    private static Path farm;
+    private static Path edited;
+    private static RecordingsScreen list;
+    private static Path combined;
+    private static RecordingsScreen storage;
+    private static Path keptFile;
+
+    /** The library's screens one part after another, each named, so a failure says which part it was in (SelfTest.parts) */
     static void run(SelfTest test) throws Exception {
-        Minecraft minecraft = Minecraft.getInstance();
+        LibraryScreenSteps.test = test;
+        minecraft = Minecraft.getInstance();
+        test.parts(
+            part("the recordings made for the list", LibraryScreenSteps::madeForTheList),
+            part("search and sort (REC-5)", LibraryScreenSteps::searchAndSort),
+            part("the pane of details", LibraryScreenSteps::details),
+            part("folders and stars", LibraryScreenSteps::foldersAndStars),
+            part("the bin, from the screen (REC-9)", LibraryScreenSteps::binFromTheScreen),
+            part("the bin, through the tools", LibraryScreenSteps::binThroughTheTools),
+            part("a scene through the bin", LibraryScreenSteps::sceneInTheBin),
+            part("the combine screen", LibraryScreenSteps::combineScreen),
+            part("storage (REC-8)", LibraryScreenSteps::storageView),
+            part("retention (REC-8)", LibraryScreenSteps::retention),
+            part("an item past its days", LibraryScreenSteps::expiredItem),
+            part("clearing up and emptying the bin", LibraryScreenSteps::emptyTheBin)
+        );
+    }
+
+    /** Small recordings with known names, worlds, players, dates and lengths, one of them in a folder and one edited */
+    private static void madeForTheList() throws Exception {
         check(!Playback.active() && Recorder.get().state() == Recorder.State.IDLE, "the library steps want nothing open and nothing being recorded");
-        Path folder = Recorder.folder();
+        folder = Recorder.folder();
         Files.createDirectories(folder.resolve(EPISODES));
-        String castleId = UUID.randomUUID().toString();
-        String netherId = UUID.randomUUID().toString();
-        String farmId = UUID.randomUUID().toString();
-        String editedId = UUID.randomUUID().toString();
-        Path castle = tiny(folder.resolve(CASTLE + RecordingFile.EXTENSION), castleId, CASTLE, "Kingdom", List.of("Steve", "Alex"), at(2026, 11, 17), 10, List.of());
-        Path nether = tiny(folder.resolve(EPISODES).resolve(NETHER + RecordingFile.EXTENSION), netherId, NETHER, "Kingdom", List.of("Steve"), at(2026, 10, 2), 40, List.of());
-        Path farm = tiny(folder.resolve(FARM + RecordingFile.EXTENSION), farmId, FARM, "Smallholding", List.of("Alex"), at(2025, 3, 9), 20, List.of());
-        Path edited = tiny(folder.resolve(EDITED + RecordingFile.EXTENSION), editedId, EDITED, "Kingdom + Smallholding", List.of("Steve", "Alex"), at(2026, 11, 18), 30,
+        castleId = UUID.randomUUID().toString();
+        netherId = UUID.randomUUID().toString();
+        farmId = UUID.randomUUID().toString();
+        editedId = UUID.randomUUID().toString();
+        castle = tiny(folder.resolve(CASTLE + RecordingFile.EXTENSION), castleId, CASTLE, "Kingdom", List.of("Steve", "Alex"), at(2026, 11, 17), 10, List.of());
+        nether = tiny(folder.resolve(EPISODES).resolve(NETHER + RecordingFile.EXTENSION), netherId, NETHER, "Kingdom", List.of("Steve"), at(2026, 10, 2), 40, List.of());
+        farm = tiny(folder.resolve(FARM + RecordingFile.EXTENSION), farmId, FARM, "Smallholding", List.of("Alex"), at(2025, 3, 9), 20, List.of());
+        edited = tiny(folder.resolve(EDITED + RecordingFile.EXTENSION), editedId, EDITED, "Kingdom + Smallholding", List.of("Steve", "Alex"), at(2026, 11, 18), 30,
             List.of(new Spans.Span(castleId, 0, 10, 0), new Spans.Span(farmId, 0, 20, 10)));
         for (Path file : List.of(castle, nether, farm, edited)) {
             Library.changed(file);
         }
         Library.index().foldersChanged();
         check(Library.index().folders().contains(EPISODES), "the index does not know the folder " + EPISODES + ": " + Library.index().folders());
+    }
 
-        // --- The list: search and sort (REC-5) ---
+    /** The list: search and sort (REC-5), a folder, and every control explained and uncrowded in each view */
+    private static void searchAndSort() throws Exception {
         test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
-        RecordingsScreen list = listScreen(test, minecraft);
+        list = listScreen(test, minecraft);
         test.waitFor(() -> !list.stillLooking() && list.namesShown().contains(FARM), 30, "the list to show the recordings made for it");
         expectNames(test, list, "library kingdom", "NEWEST", List.of(EDITED, CASTLE, NETHER));
         expectNames(test, list, "library smallholding", "NEWEST", List.of(EDITED, FARM));
@@ -99,7 +139,7 @@ final class LibraryScreenSteps {
         // Every control explains itself and none overlaps another, in each view
         for (String view : List.of("recordings", "bin", "storage")) {
             test.onClientRun(() -> list.showView(view));
-            test.sleepTicks(4);
+            test.waitTicks(4);
             List<String> missing = test.onClient(list::controlsWithoutTips);
             check(missing.isEmpty(), "controls of the " + view + " view without an explanation: " + missing);
             if (minecraft.getWindow().getGuiScaledWidth() >= 640) {
@@ -111,20 +151,24 @@ final class LibraryScreenSteps {
         }
         test.onClientRun(() -> list.showView("recordings"));
         test.waitFor(() -> !list.stillLooking(), 30, "the list to look again");
+    }
 
-        // --- The pane of details, with the spans of an edited recording ---
+    /** The pane of details, with the spans of an edited recording */
+    private static void details() throws Exception {
         test.onClientRun(() -> {
             list.setSearch("library");
             list.chooseByName(EDITED);
         });
         test.waitFor(list::detailsRead, 30, "the details of " + EDITED + " to be read");
-        test.sleepTicks(4);
+        test.waitTicks(4);
         List<String> details = test.onClient(list::detailsLines);
         check(details.stream().anyMatch(line -> line.contains("Kingdom + Smallholding")), "the details do not give the world: " + details);
         check(details.stream().anyMatch(line -> line.contains("Steve, Alex")), "the details do not give the players: " + details);
         check(details.stream().filter(line -> line.contains(CASTLE) || line.contains(FARM)).count() == 2, "the details do not give the two stretches it is made from: " + details);
+    }
 
-        // --- Folders and stars ---
+    /** Folders and stars: a starred recording moved, its folder renamed, and a folder deleted only when empty */
+    private static void foldersAndStars() throws Exception {
         Library.star(castleId, true);
         String season = Library.createFolder(LibraryQuery.TOP, "Library Season");
         Path moved = Library.moveInto(List.of(castle), season).get(0);
@@ -143,8 +187,10 @@ final class LibraryScreenSteps {
         castle = Library.moveInto(List.of(inRenamed), LibraryQuery.TOP).get(0);
         Library.deleteFolder(renamed);
         check(!Files.exists(folder.resolve(renamed)) && !Library.index().folders().contains(renamed), "the empty folder was not deleted");
+    }
 
-        // --- The bin, from the screen (REC-9) ---
+    /** The bin, from the screen (REC-9): deleted, and restored to where it was */
+    private static void binFromTheScreen() throws Exception {
         Path farmFile = farm;
         test.onClientRun(() -> {
             list.lookNow();
@@ -170,8 +216,10 @@ final class LibraryScreenSteps {
         test.waitFor(() -> Files.isRegularFile(farmFile) && !list.stillLooking(), 30, FARM + " to come back from the bin");
         check(farmFile.equals(Library.index().findById(farmId)), "the restored recording is not where it was");
         check(Library.index().locate(farmId, 5).stream().anyMatch(LibraryIndex.Hit::original), "a moment of the restored recording is not found in it again");
+    }
 
-        // --- The bin, through the tools ---
+    /** The bin, through the tools */
+    private static void binThroughTheTools() throws Exception {
         JsonObject deleted = test.tool("replay_delete", args("recording", NETHER));
         check(deleted.get("kind").getAsString().equals("recording") && !Files.exists(nether), "replay_delete did not move the recording to the bin: " + deleted);
         JsonObject binList = test.tool("replay_bin_list", new JsonObject());
@@ -186,8 +234,10 @@ final class LibraryScreenSteps {
         test.tool("replay_bin_restore", args("id", deleted.get("id").getAsString()));
         check(Files.isRegularFile(nether), "replay_bin_restore did not put the recording back in its folder");
         check(test.toolError("replay_bin_empty", args("confirm", false)).contains("confirm"), "emptying the bin without confirming was not refused");
+    }
 
-        // --- A scene removed in the editor goes to the bin and comes back ---
+    /** A scene removed in the editor goes to the bin and comes back, and the trim screen opens from the editor */
+    private static void sceneInTheBin() throws Exception {
         Path real = null;
         for (LibraryIndex.Entry entry : Library.list()) {
             if (!entry.name.startsWith("Library ") && entry.totalTicks >= 200 && !entry.isEdited()) {
@@ -200,8 +250,10 @@ final class LibraryScreenSteps {
         } else {
             sceneAndTrim(test, minecraft, real);
         }
+    }
 
-        // --- The combine screen ---
+    /** The combine screen: the oldest first, reordered, combined */
+    private static void combineScreen() throws Exception {
         test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
         RecordingsScreen again = listScreen(test, minecraft);
         test.waitFor(() -> !again.stillLooking() && again.namesShown().contains(FARM), 30, "the list to come back");
@@ -220,19 +272,21 @@ final class LibraryScreenSteps {
             combine.name("Library Combined");
         });
         check(test.onClient(combine::orderShown).equals(List.of(CASTLE, FARM)), "moving a recording up did not reorder the list");
-        test.sleepTicks(4);
+        test.waitTicks(4);
         LibraryJob job = test.onClient(combine::startNow);
         check(job != null, "the combine did not start");
         test.waitFor(() -> job.state() != LibraryJob.State.RUNNING, 120, "the combine to finish");
         check(job.state() == LibraryJob.State.DONE && job.resultTicks() == 30, "the combine did not make a recording of 30 ticks: " + job.state() + " " + job.error());
-        Path combined = job.result();
+        combined = job.result();
         RecordingManifest made = RecordingFile.readManifest(combined);
         check(made.markers.stream().anyMatch(marker -> RecordingManifest.Marker.BOUNDARY.equals(marker.kind) && marker.tick == 10), "the combined recording has no boundary at tick 10");
         test.onClientRun(combine::onClose);
+    }
 
-        // --- Storage (REC-8) ---
+    /** Storage (REC-8): the view, the tool, and the low-disk threshold */
+    private static void storageView() throws Exception {
         test.waitFor(() -> minecraft.screen instanceof RecordingsScreen, 10, "the list to come back after combining");
-        RecordingsScreen storage = (RecordingsScreen) minecraft.screen;
+        storage = (RecordingsScreen) minecraft.screen;
         test.onClientRun(() -> storage.showView("storage"));
         test.waitFor(() -> storage.storageShown() != null && !storage.stillLooking(), 60, "the storage view to measure");
         StorageReport report = test.onClient(storage::storageShown);
@@ -245,13 +299,15 @@ final class LibraryScreenSteps {
         check(free < 0 || free >= 100000L * Retention.GIGABYTE || DiskGuard.state(free) == Retention.Disk.LOW, "below the warning threshold the disk is not called low");
         test.tool("config_set", args("key", "diskWarnGigabytes", "value", 20));
         test.skip("pausing a recording when the disk is nearly full needs a recording in a world; the decision is unit tested (REC-8)");
+    }
 
-        // --- Retention: old recordings go to the bin unless starred (REC-8) ---
+    /** Retention: old recordings go to the bin unless starred (REC-8) */
+    private static void retention() throws Exception {
         long old = System.currentTimeMillis() - 10 * Bin.DAY_MILLIS;
         String oldId = UUID.randomUUID().toString();
         String keptId = UUID.randomUUID().toString();
         Path oldFile = tiny(folder.resolve("Library Old" + RecordingFile.EXTENSION), oldId, "Library Old", "Kingdom", List.of("Steve"), old, 10, List.of());
-        Path keptFile = tiny(folder.resolve("Library Old Starred" + RecordingFile.EXTENSION), keptId, "Library Old Starred", "Kingdom", List.of("Steve"), old, 10, List.of());
+        keptFile = tiny(folder.resolve("Library Old Starred" + RecordingFile.EXTENSION), keptId, "Library Old Starred", "Kingdom", List.of("Steve"), old, 10, List.of());
         Library.changed(oldFile);
         Library.changed(keptFile);
         Library.star(keptId, true);
@@ -263,14 +319,18 @@ final class LibraryScreenSteps {
         }
         check(!Files.exists(oldFile) && Library.bin().list().stream().anyMatch(item -> item.recordingId.equals(oldId)), "a recording older than retentionDays was not moved to the bin");
         check(Files.isRegularFile(keptFile), "a starred recording was moved to the bin by the retention rule");
+    }
 
-        // --- An item past its days goes for good at the next tidy ---
+    /** An item past its days goes for good at the next tidy */
+    private static void expiredItem() throws Exception {
         Bin.Item expiring = Library.delete(keptFile);
         Library.bin().find(expiring.id).binned -= (Library.binDays() + 1L) * Bin.DAY_MILLIS;
         Library.housekeeping();
         check(Library.bin().find(expiring.id) == null && !Files.exists(Library.bin().folder().resolve(expiring.id)), "an item older than binDays is still in the bin");
+    }
 
-        // --- Clear up, then empty the bin, which asks first ---
+    /** Clear up, then empty the bin, which asks first */
+    private static void emptyTheBin() throws Exception {
         for (Path file : List.of(castle, nether, farm, edited, combined)) {
             if (Files.exists(file)) {
                 Library.delete(file);
@@ -283,7 +343,7 @@ final class LibraryScreenSteps {
         test.onClientRun(() -> check(storage.press("empty_bin"), "Empty bin could not be pressed"));
         test.waitFor(Previews::asking, 10, "emptying the bin to ask first");
         test.onClientRun(() -> Previews.answerAsk(false));
-        test.sleepTicks(4);
+        test.waitTicks(4);
         check(!Library.bin().list().isEmpty(), "answering no still emptied the bin");
         test.waitFor(() -> minecraft.screen instanceof RecordingsScreen, 10, "the list to come back after the question");
         RecordingsScreen last = (RecordingsScreen) minecraft.screen;
@@ -330,7 +390,7 @@ final class LibraryScreenSteps {
         });
         kept = test.onClient(trim::kept);
         check(kept.size() == 2 && kept.get(0)[1] == 60 && kept.get(1)[0] == 80, "cutting a stretch from what is kept did not split it: " + describe(kept));
-        test.sleepTicks(20);
+        test.waitTicks(20);
         test.log("the trim timeline shows " + test.onClient(trim::momentsShown) + " moment marks and clip bands for the open recording");
         test.onClientRun(() -> minecraft.setScreen(null));
         test.tool("scene_set_export_range", args("clear", true));

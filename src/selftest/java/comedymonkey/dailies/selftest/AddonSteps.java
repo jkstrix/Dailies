@@ -119,12 +119,12 @@ final class AddonSteps {
         machines();
         boolean bot = tradeBot(test, minecraft);
         c("tp @s 22.5 -59 14.5 150 20");
-        test.sleepTicks(60);
+        test.waitTicks(60);
 
         test.tool("recording_start", new JsonObject());
         Census.start(Census.Mode.LIVE);
         try {
-            test.sleepTicks(20);
+            test.waitTicks(20);
             stage(test, "machines", () -> running(test));
             stage(test, "the Cuckoo Clock", () -> cuckoo(test));
             if (bot) {
@@ -136,7 +136,7 @@ final class AddonSteps {
             } else {
                 test.skip("Sable is not installed: the addon on a physics object was not tried");
             }
-            test.sleepTicks(10);
+            test.waitTicks(10);
         } finally {
             Census.stop();
         }
@@ -247,7 +247,7 @@ final class AddonSteps {
         c("setblock " + OUTPUT.getX() + " " + Y + " " + OUTPUT.getZ() + " minecraft:chest[facing=south]");
         // Fluid tanks are saved as {Fluid:{id,amount}}; an upgraded chest keeps each stack as {Slot,Count,Item}, since its stacks outgrow a byte
         // The turbine forms within a second; its tanks are filled once it has
-        Thread.sleep(2500);
+        BestiarySteps.test.waitTicks(50);
         c("data merge block 47 " + (Y + 1) + " " + (z + 1) + " {Lava:{Fluid:{id:\"minecraft:lava\",amount:16000}},Water:{Fluid:{id:\"minecraft:water\",amount:16000}}}");
 
         String kind = MOD;
@@ -342,11 +342,11 @@ final class AddonSteps {
         // A full charge, so that he sets off at once instead of winding up first
         c("tp @s " + (STATION.getX() + 0.5) + " " + Y + " " + (STATION.getZ() + 3.5) + " 180 40");
         c("item replace entity @s weapon.mainhand with " + MOD + "trade_bot[" + MOD + "trade_bot={charge:100000},custom_name='\"Trader\"']");
-        test.sleepTicks(10);
+        test.waitTicks(10);
         BlockPos ground = STATION.below();
         test.onClientRun(() -> minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
             new BlockHitResult(new Vec3(ground.getX() + 0.5, ground.getY() + 1.0, ground.getZ() + 0.5), Direction.UP, ground, false)));
-        test.sleepTicks(20);
+        test.waitTicks(20);
         boolean placed = test.onClient(() -> {
             BlockEntity station = minecraft.level.getBlockEntity(STATION);
             return station != null && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(station.getType()).toString().equals(MOD + "trade_bot");
@@ -358,7 +358,7 @@ final class AddonSteps {
         BlockPos in = INPUT.subtract(STATION), out = OUTPUT.subtract(STATION);
         c("data merge block " + STATION.getX() + " " + STATION.getY() + " " + STATION.getZ() + " {Energy:100000,Inputs:[[I;" + in.getX() + "," + in.getY() + "," + in.getZ()
             + "]],Output:[I;" + out.getX() + "," + out.getY() + "," + out.getZ() + "]}");
-        test.sleepTicks(25);
+        test.waitTicks(25);
         boolean seated = test.onClient(() -> {
             for (Entity entity : minecraft.level.entitiesForRendering()) {
                 if (entity.hasCustomName() && entity.getCustomName().getString().equals("Buyer")) {
@@ -410,7 +410,7 @@ final class AddonSteps {
             .need(blockEntity("trade_bot", "TradesToday:[1-9]"))
             .need(BestiarySteps.where(bot, "cheering after his trading", thing -> thing.state().contains("anim=expr_happy")))
             .note("his trading animation (the toss, the trade beat, the emerald) is all in one clip whose place, compared tick by tick, is clip=; he is drawn where his animation puts him, from data the server sends; what he carries is not sent, so there is no held item to compare");
-        test.sleepTicks(5);
+        test.waitTicks(5);
         // His own route logging, so that the log says what he did if he does not get there
         quietly("tradebot debug");
         boolean sent = false;

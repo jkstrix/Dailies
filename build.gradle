@@ -105,6 +105,10 @@ neoForge {
             loadedMods = []
             systemProperty 'dailies.test.script', 'auto'
             systemProperty 'dailies.test.segmentTicks', '40'
+            // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
+            // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
+            systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
+                'create,sable,aeronautics,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,dailies_companion,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -181,7 +185,20 @@ dependencies {
 }
 
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // Timings that say as much about the machine as the code; run by themselves with the task below
+        excludeTags 'benchmark'
+    }
+}
+
+tasks.register('benchmarks', Test) {
+    description = 'Runs the unit tests tagged as benchmarks (timings), which the test task leaves out'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'benchmark'
+    }
 }
 
 processResources {

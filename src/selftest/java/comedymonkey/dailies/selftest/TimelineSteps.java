@@ -19,6 +19,7 @@ import java.util.List;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.array;
 
 /**
  * Moments on the editor's timeline (EDIT-9) and scenes made from clips (plan 2.2): the scripted recording's kill,
@@ -230,14 +231,6 @@ final class TimelineSteps {
             }
         }
         throw new IllegalStateException("no clip holds the kill");
-    }
-
-    private static com.google.gson.JsonArray array(String... values) {
-        com.google.gson.JsonArray array = new com.google.gson.JsonArray();
-        for (String value : values) {
-            array.add(value);
-        }
-        return array;
     }
 
 }

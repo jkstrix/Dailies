@@ -48,6 +48,8 @@ import java.util.zip.ZipOutputStream;
 
 import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
+import static comedymonkey.dailies.selftest.SelfTestSupport.difference;
+import static comedymonkey.dailies.selftest.SelfTestSupport.emptyFolder;
 
 /**
  * Chapter XIV step 2b, "Server resource packs" (REC-19, PLAY-17). The scripted run has no dedicated server, so the
@@ -104,7 +106,7 @@ final class ResourcePackSteps {
         IntegratedServer server = minecraft.getSingleplayerServer();
         check(server != null, "there is no built-in server to push a resource pack from");
         // Packs written out by an earlier run would be counted as this one's
-        deleteFolder(PackPlayback.cacheFolder());
+        emptyFolder(PackPlayback.cacheFolder());
         ownPacks = test.onClient(() -> List.copyOf(minecraft.options.resourcePacks));
         ownSelected = test.onClient(() -> List.copyOf(minecraft.getResourcePackRepository().getSelectedIds()));
         check(!test.onClient(() -> on(minecraft, MARKER)), "the test pack is in force before it has been pushed");
@@ -143,7 +145,7 @@ final class ResourcePackSteps {
             // One the player says no to: never applied, live or in playback
             send(server, new ClientboundResourcePackPushPacket(declined, base + "/declined-pack.zip", sha1(declinedPack), false, Optional.empty()));
             answer(test, minecraft, false);
-            test.sleepTicks(20);
+            test.waitTicks(20);
             check(!test.onClient(() -> on(minecraft, DECLINED_MARKER)) && GamePacks.inForce().isEmpty(), "a declined pack was loaded all the same");
 
             // The same pack again, under another id: in force again, and its bytes are not stored twice
@@ -280,7 +282,7 @@ final class ResourcePackSteps {
         Path folder = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports");
         BufferedImage with = still(test, folder.resolve("self-test-pack-on.png"));
         test.tool("visuals_set", args("values", args("server_resource_packs", false)));
-        Thread.sleep(200);
+        test.waitTicks(4);
         settle(test);
         check(!test.onClient(() -> on(minecraft, MARKER)), "the scene's look setting did not turn the server's packs off");
         expect(test, minecraft, total, false, ++changes, "at the end with the look setting off");
@@ -289,7 +291,7 @@ final class ResourcePackSteps {
         double differ = difference(with, without);
         check(differ > 8.0, "a still exported with the server's pack and one without are the same picture (difference " + differ + "): exports do not use the packs as the scene says");
         test.tool("visuals_set", args("values", args("server_resource_packs", true)));
-        Thread.sleep(200);
+        test.waitTicks(4);
         settle(test);
         check(test.onClient(() -> on(minecraft, MARKER)), "turning the look setting back on did not bring the packs back");
         changes++;
@@ -298,7 +300,7 @@ final class ResourcePackSteps {
 
         // An export that runs through the pop: pictures before it have the pack, pictures after it do not
         Path frames = folder.resolve("self-test-pack-frames");
-        deleteFolder(frames);
+        emptyFolder(frames);
         test.tool("export_start", args("output_path", frames.toString(), "container", "png_sequence", "width", 320, "height", 180, "framerate", 20,
             "start_tick", popTick - 4, "end_tick", popTick + 4, "no_gui", true));
         test.waitFor(() -> !Export.active(), 300, "the export through the pop");
@@ -341,7 +343,7 @@ final class ResourcePackSteps {
     private static void expect(SelfTest test, Minecraft minecraft, int tick, boolean wanted, int changes, String where) throws Exception {
         test.onClientRun(() -> Playback.jumpTo(tick, true));
         test.waitFor(() -> !Playback.jumping() && Playback.position() == tick, 180, "the jump to tick " + tick + " (" + where + ")");
-        Thread.sleep(60);
+        test.waitTicks(1);
         settle(test);
         boolean inForce = test.onClient(() -> on(minecraft, MARKER));
         check(inForce == wanted, where + " (tick " + tick + ") the pack is " + (inForce ? "in force" : "not in force"));
@@ -396,7 +398,7 @@ final class ResourcePackSteps {
             stopMeasuring(measuring);
         }
         test.tool("recording_cancel", new JsonObject());
-        test.sleepTicks(10);
+        test.waitTicks(10);
         test.log("the game's font was live after each of " + reloads + " pack reloads and a burst, with text measured on another thread throughout");
     }
 
@@ -483,7 +485,7 @@ final class ResourcePackSteps {
 
     static void waitForReload(SelfTest test, Minecraft minecraft) throws Exception {
         test.waitFor(() -> minecraft.getOverlay() == null, 120, "the game to finish reloading its resources");
-        test.sleepTicks(5);
+        test.waitTicks(5);
     }
 
     private static void send(IntegratedServer server, Packet<?> packet) throws Exception {
@@ -559,31 +561,6 @@ final class ResourcePackSteps {
         }, "Dailies-Self-Test-Pack-Server");
         thread.setDaemon(true);
         thread.start();
-    }
-
-    /** The average difference between two pictures, per colour, on a scale of 0 to 255 */
-    private static double difference(BufferedImage a, BufferedImage b) {
-        double sum = 0;
-        int count = 0;
-        for (int y = 0; y < Math.min(a.getHeight(), b.getHeight()); y += 2) {
-            for (int x = 0; x < Math.min(a.getWidth(), b.getWidth()); x += 2) {
-                int p = a.getRGB(x, y);
-                int q = b.getRGB(x, y);
-                sum += Math.abs((p >> 16 & 0xFF) - (q >> 16 & 0xFF)) + Math.abs((p >> 8 & 0xFF) - (q >> 8 & 0xFF)) + Math.abs((p & 0xFF) - (q & 0xFF));
-                count += 3;
-            }
-        }
-        return sum / count;
-    }
-
-    private static void deleteFolder(Path folder) throws Exception {
-        if (Files.isDirectory(folder)) {
-            try (Stream<Path> files = Files.list(folder)) {
-                for (Path file : files.toList()) {
-                    Files.delete(file);
-                }
-            }
-        }
     }
 
 }
