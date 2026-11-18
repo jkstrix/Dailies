@@ -37,7 +37,7 @@ class RemoteAccessTest {
     void theDefaultListIsTheLocalNetworksAndNothingElse() throws Exception {
         AddressRules rules = AddressRules.parse(AddressRules.LOCAL_NETWORKS);
         assertTrue(rules.rejected().isEmpty());
-        for (String inside : List.of("10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.254", "192.168.188.50", "fd12:3456::1", "fe80::1")) {
+        for (String inside : List.of("10.0.0.1", "10.255.255.255", "172.16.0.1", "172.31.255.254", "192.168.1.50", "fd12:3456::1", "fe80::1")) {
             assertTrue(rules.allows(address(inside)), inside);
         }
         for (String outside : List.of("8.8.8.8", "172.15.255.255", "172.32.0.1", "192.169.0.1", "11.0.0.1", "2001:db8::1")) {

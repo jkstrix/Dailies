@@ -61,8 +61,8 @@ class ChecksTest {
 
     @Test
     void addressesThatAreWrittenProperly() {
-        assertEquals(Checks.AddressProblem.NONE, Checks.url("http://192.168.188.50:8000"));
-        assertEquals(Checks.AddressProblem.NONE, Checks.url("http://192.168.188.50:11434/"));
+        assertEquals(Checks.AddressProblem.NONE, Checks.url("http://192.168.1.50:8000"));
+        assertEquals(Checks.AddressProblem.NONE, Checks.url("http://192.168.1.50:11434/"));
         assertEquals(Checks.AddressProblem.NONE, Checks.url("https://whisper.example.org/v1/audio?x=1"));
         assertEquals(Checks.AddressProblem.NONE, Checks.url("HTTP://localhost"));
         assertEquals(Checks.AddressProblem.NONE, Checks.url("http://[::1]:8000/v1"));
@@ -79,7 +79,7 @@ class ChecksTest {
 
     @Test
     void addressesThatAreNot() {
-        assertEquals(Checks.AddressProblem.NO_SCHEME, Checks.url("192.168.188.50:8000"));
+        assertEquals(Checks.AddressProblem.NO_SCHEME, Checks.url("192.168.1.50:8000"));
         assertEquals(Checks.AddressProblem.NO_SCHEME, Checks.url("localhost"));
         assertEquals(Checks.AddressProblem.NOT_HTTP, Checks.url("ftp://example.org"));
         assertEquals(Checks.AddressProblem.NOT_HTTP, Checks.url("file:///C:/secrets"));
