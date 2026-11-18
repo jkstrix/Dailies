@@ -4,6 +4,7 @@ import comedymonkey.dailies.Host;
 import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
+import comedymonkey.dailies.file.SafePaths;
 import comedymonkey.dailies.packs.GamePacks;
 import comedymonkey.dailies.packs.PackLog;
 import comedymonkey.dailies.ui.Notices;
@@ -326,7 +327,11 @@ public final class PackPlayback implements GamePacks.Listener {
             clean(folder, keep);
             for (RecordingManifest.Pack pack : packs) {
                 try {
-                    Path target = folder.resolve(pack.sha256 + ".zip");
+                    // The manifest only lets in a hash, so this stays in the folder; checked again here, where it becomes a path
+                    Path target = SafePaths.matches(pack.sha256, SafePaths.SHA256) ? SafePaths.within(folder, pack.sha256 + ".zip") : null;
+                    if (target == null) {
+                        throw new IOException("The recording names a resource pack by something that is not its hash");
+                    }
                     // A file here is named by the hash of what is in it, so one of the right length is the right one
                     if (!Files.isRegularFile(target) || Files.size(target) != pack.size) {
                         file.extractFile(pack, target);

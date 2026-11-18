@@ -29,7 +29,9 @@ import java.util.Map;
  * second, and playing a recording with server resource packs reloads the game's resources as a matter of course.
  * <p>
  * So a lookup from any thread but the game's own no longer touches that field, or the table the reload is rewriting:
- * it is answered from a copy of the table taken when the last reload finished.
+ * it is answered from a copy of the table taken when the last reload finished. While a reload swaps the fonts that copy
+ * is emptied, as the old fonts in it are being closed, and such a lookup gets the game's missing font, which no reload
+ * closes: text measured off the game's thread in that moment may be a little out, and nothing crashes.
  */
 @Mixin(FontManager.class)
 public abstract class FontManagerMixin {
@@ -44,6 +46,11 @@ public abstract class FontManagerMixin {
 
     @Unique
     private volatile Map<ResourceLocation, FontSet> dailies$current = Map.of();
+
+    @Inject(method = "apply", at = @At("HEAD"))
+    private void dailies$applying(CallbackInfo ci) {
+        this.dailies$current = Map.of();
+    }
 
     @Inject(method = "apply", at = @At("TAIL"))
     private void dailies$applied(CallbackInfo ci) {

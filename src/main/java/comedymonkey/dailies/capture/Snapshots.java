@@ -379,6 +379,14 @@ public final class Snapshots {
         /** The name of the stored chunk a chunk was built from, while nothing has changed it since; else null */
         @org.jetbrains.annotations.Nullable byte[] storedChunk(long chunk);
 
+        /**
+         * The name of the stored light a snapshot put on top of that stored chunk, which a chunk whose light changed
+         * because a block next door did is given straight after it; null when the chunk has the stored chunk's own light
+         */
+        default @org.jetbrains.annotations.Nullable byte[] storedLight(long chunk) {
+            return null;
+        }
+
         /** The mod messages that came with an entity's spawn, each as a whole packet, or null */
         @org.jetbrains.annotations.Nullable List<byte[]> spawnExtras(int entityId);
 
@@ -735,6 +743,11 @@ public final class Snapshots {
             byte[] stored = chunk.getBlockEntities().isEmpty() ? playback.storedChunk(key) : null;
             if (stored != null) {
                 out.sharedRef(Records.SHARED_PACKET, stored);
+                byte[] light = playback.storedLight(key);
+                if (light != null) {
+                    // Its light as it is now, straight after it, as a live snapshot names such a chunk
+                    out.sharedRef(Records.SHARED_PACKET, light);
+                }
                 continue;
             }
             try {

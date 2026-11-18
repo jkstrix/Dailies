@@ -260,6 +260,7 @@ public final class Playback {
         requireLoaded();
         paused = true;
         pauseAfterJump = true;
+        PlaybackExtensions.stoppedAll();
     }
 
     /**
@@ -346,21 +347,17 @@ public final class Playback {
         strict = exact;
         if (target == position && !jumping() && !again) {
             paused = pauseAfterJump;
+            if (paused) {
+                PlaybackExtensions.stoppedAll();
+            }
             return;
         }
-        int index = feed.segmentIndexAt(target);
-        if (again) {
-            reloadIndex = index;
-        }
-        if (!quick && target - feed.segmentStart(index) < RUN_UP_TICKS && feed.continuesFromPrevious(index)) {
-            // Landing just after a snapshot: start from the one before, so that everything a game eases into place over a
-            // few ticks (a bearing's angle, a craft's smoothing, an entity's last steps) has settled, as it has in plain play
-            index--;
-        }
-        if (target < position || feed.segmentStart(index) > position) {
-            // Backwards, or far enough ahead that a later snapshot is the nearer start
-            reloadIndex = index;
-        }
+        // Whatever still sounds from the tick the recording is leaving (the last half second of a voice) is not heard
+        // over the tick it lands on
+        PlaybackExtensions.stoppedAll();
+        // Decided afresh from where the recording stands: a jump not yet carried out is replaced, and so is its choice.
+        // Kept, a skip forward to a later snapshot and straight back in one frame landed at that snapshot
+        reloadIndex = JumpStart.segment(target, position, quick, again, RUN_UP_TICKS, feed::segmentIndexAt, feed::segmentStart, feed::continuesFromPrevious);
         if (reloadIndex >= 0) {
             rough = quick;
         }
@@ -823,6 +820,7 @@ public final class Playback {
                 pauseAt = -1;
                 paused = true;
                 pauseAfterJump = true;
+                PlaybackExtensions.stoppedAll();
             }
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies: the recording could not be read past tick {}", position, t);
@@ -862,17 +860,30 @@ public final class Playback {
             tell(ON_CLOSING);
         }
         loaded = false;
+        // Each step on its own: one that fails must not leave the file open, and locked on Windows, behind it
         try {
             comedymonkey.dailies.editor.EditorSession.closing();
+        } catch (Exception e) {
+            Host.LOGGER.warn("Dailies: the editor could not be closed cleanly with the recording", e);
+        }
+        try {
             if (feed != null) {
                 feed.close();
             }
+        } catch (Exception e) {
+            Host.LOGGER.warn("Dailies: the playback world could not be closed cleanly", e);
+        }
+        try {
             if (file != null) {
                 file.close();
             }
-            comedymonkey.dailies.editor.PointOfView.forget(file);
         } catch (Exception e) {
             Host.LOGGER.warn("Dailies: the recording could not be closed cleanly", e);
+        }
+        try {
+            comedymonkey.dailies.editor.PointOfView.forget(file);
+        } catch (Exception e) {
+            Host.LOGGER.warn("Dailies: the recording's points of view could not be let go cleanly", e);
         }
         feed = null;
         file = null;

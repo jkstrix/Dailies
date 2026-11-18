@@ -272,6 +272,19 @@ public final class RecordingManifest {
             if (manifest.packs == null) {
                 manifest.packs = new ArrayList<>();
             }
+            for (Pack pack : manifest.packs) {
+                // Playback names the file it writes a pack out to by this hash, so a recording from elsewhere (a share
+                // pack) must not be able to make it a path: anything but the hash written as the recorder writes it is refused
+                if (pack == null || !SafePaths.matches(pack.sha256, SafePaths.SHA256)) {
+                    throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "The recording names a resource pack by something that is not its hash");
+                }
+                if (pack.key == null) {
+                    pack.key = "";
+                }
+                if (pack.pieces == null) {
+                    pack.pieces = new ArrayList<>();
+                }
+            }
             return manifest;
         } catch (JsonSyntaxException e) {
             throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "The recording's description cannot be read");
