@@ -31,6 +31,59 @@ Every task below follows these. Where a task once fell short of one, it has been
 
 ---
 
+## Status at v1.0 (checked against the code, 18 November 2026)
+
+**Done** means the spec row and the code are there, and usually a test too. **Partly** says what is missing. **Can't tell** means the work lives outside this repository (the earlier build, the carry-over script, McpCraft).
+
+| # | Status | What is missing |
+|---|---|---|
+| 0.1 | Can't tell | The carry-over script is not in this repository |
+| 0.2 | Done | Voice capture is `sound/VoiceChatPlugin` and `VoiceCapture`, in the core |
+| 0.3 | Done | As `compat/sable/SableCompat`, not `SableCrafts`; it has the four craft methods of 2.13 too |
+| 0.4 | Done | The five topics are spec rows: REC-19/PLAY-17, FILE-9, EDIT-8, REC-32, CMP-1 |
+| 0.5 | Can't tell | McpCraft's side is outside this repository; Dailies' check (`DailiesApi.isPlayback`) is here |
+| 0.6 | Can't tell | Outside this repository |
+| 1.1 | Done | |
+| 1.2 | Done | Combine, trim, their screens and tools, and FILE-11 to FILE-14 and FILE-16, all tested |
+| 1.3 | Partly | Queue, background worker and tools are done. `Host.queueExport` queues only scenes of the open recording, so jobs for other recordings or ranges cannot be queued. Because of that, 2.6's batch export is not queued (the hook in `PointOfViewTools`) |
+| 1.4 | Partly | The camera path preview is done. Missing: the "preview" button that plays a Smart Camera stretch at up to 20 times speed; EDIT-10 baking (no spec row, no code); and the solver's fast run |
+| 1.5 | Done | |
+| 1.6 | Done | |
+| 1.7 | Partly | Distant Horizons, looks, letterboxing, the recordings list, the bin and the player list are done. Missing: the chapter I line saying Medal.tv upload is deliberately left out |
+| 2.1 | Partly | Every event is detected, weighted and merged. Missing: the suggested cameras for craft and train events. No tests yet for `speed_record`, `craft_lost` in game, `contraption_assembled` or the train events |
+| 2.2 | Partly | Done apart from "clips made for Shorts suggest a closer chase" |
+| 2.3 | Done | |
+| 2.4 | Done | |
+| 2.5 | Done | |
+| 2.6 | Partly | Linking and switching are done. The same-stretch batch is listed, not queued (see 1.3) |
+| 2.7 | Not done | Group shots: the spec rows exist, but `SmartCameraSettings.target` is still one player. There is no two-shot, group framing, speaker favouring or drop-out |
+| 2.8 | Done | |
+| 2.9 | Done, differs | The sound labels (YAMNet, bundled, run locally) are switched by `momentsBurstLabels`, on by default, not by `momentsAiEnabled`. That is against principle 7 as written |
+| 2.10 | Done | |
+| 2.11 | Done | |
+| 2.12 | Done | |
+| 2.13 | Partly | `Host.Crafts` and any-entity targets are done. Missing: `craft:<id or name>` targets, whole-craft framing, the travel/nose/compass heading, hold-then-follow when the craft goes, crafts in the editor's target list, and the balloon test |
+| 2.14 | Done | |
+| 3.1 | Partly | The build script (`tools/ffmpeg/build.sh`) and its CI workflow cover every platform and GPU and are LGPL only, but they are not switched on. The jar still bundles the Bytedeco FFmpeg, which is Windows only and contains OpenH264. Still to update: EXP-8 ("Today: Windows only"), `THIRD-PARTY-NOTICES.md`, and the old licence files in `src/main/resources/licenses` |
+| 3.2 | Done | |
+| 3.3 | Done | |
+| 3.4 | Done | |
+| 3.5 | Done | Embeddium and Oculus are treated as aliases, as the chapter says |
+| 3.6 | Not done | Appendix B's interactions example is still illustrative, and has no `group_formed` record |
+| 3.7 | Done | The core still also accepts the old `moments_companion:*` channels |
+| 3.8 | Done | BUD-1 to BUD-8 are in the spec. BUD-2 is over budget in generated terrain (225 to 354 MB an hour, target 150). The second half of BUD-5, and BUD-8, are not measured |
+| 3.9 | Partly | Chapter XIV has steps for the new chapters; not every new requirement has been checked for a step of its own |
+| 3.10 | Done | |
+| 4.1 | Partly | `reference/` compiles with every build; the carry-over script is outside this repository |
+| 4.2 | Partly | Requirement ids are unique (185 rows). Not done: checking that test steps point at real ids; HTML and link validation |
+| 4.3 | Can't tell | Needs the earlier build |
+| 4.4 | Not done | A full read of both documents |
+| 4.5 | Not done | The reviewer's brief |
+| 4.6 | Not done | The review gate. The internal code review of 18 November is done; this is the outside review 4.5 briefs |
+| 4.7 | Done | |
+
+---
+
 ## Phase 0: from the earlier build
 
 These use source or behaviour that lives in the earlier build. Do them while that tree is still at hand.
