@@ -37,8 +37,6 @@ public final class CreateCompat {
     private final Map<UUID, Float> recorded = new HashMap<>();
     private final Map<UUID, Float> bearingsWritten = new HashMap<>();
     private final Map<UUID, Float> bearingsRecorded = new HashMap<>();
-    /** Each bearing's last recorded step, in degrees, and the playback position it was read at */
-    private final Map<UUID, float[]> bearingSteps = new HashMap<>();
     private boolean failed = false;
 
     private CreateCompat() {
@@ -62,7 +60,15 @@ public final class CreateCompat {
             Host.LOGGER.error("Dailies: this version of Create is not the one Dailies knows (6.0.10), so turning contraptions may be a little out of place just after a jump. Everything else works", t);
             return;
         }
-        Recorder.everyRecordedTick(compat::write);
+        // Written at the end of each tick before the recorder counts it, so that the record lands in the tick it
+        // describes: written after (as the recorder's own end-of-tick hooks are), it would be read a tick late, and a
+        // jump would put each contraption and bearing a tick of turning behind where the live game had it
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.HIGH,
+            (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> {
+                if (Recorder.get().state() == Recorder.State.RECORDING && !Minecraft.getInstance().isPaused()) {
+                    compat.write();
+                }
+            });
         PlaybackExtensions.register(EXTENSION, new PlaybackExtensions.Extension() {
             @Override
             public void play(byte[] data, int from, int length, boolean skipping) {
@@ -97,19 +103,14 @@ public final class CreateCompat {
             @Override
             public void play(byte[] data, int from, int length, boolean skipping) {
                 ByteBuffer in = ByteBuffer.wrap(data, from, length);
-                int at = comedymonkey.dailies.playback.Playback.position();
                 while (in.remaining() >= ENTRY_BYTES) {
-                    UUID id = new UUID(in.getLong(), in.getLong());
-                    float angle = in.getFloat();
-                    Float before = compat.bearingsRecorded.put(id, angle);
-                    compat.bearingSteps.put(id, new float[]{before == null ? 0.0F : net.minecraft.util.Mth.wrapDegrees(angle - before), at});
+                    compat.bearingsRecorded.put(new UUID(in.getLong(), in.getLong()), in.getFloat());
                 }
             }
 
             @Override
             public void reset() {
                 compat.bearingsRecorded.clear();
-                compat.bearingSteps.clear();
             }
 
             @Override
@@ -223,13 +224,6 @@ public final class CreateCompat {
                     // At its own recorded angle where the recording has it (older recordings do not), else at the contraption's
                     Float own = this.bearingsRecorded.get(entity.getUUID());
                     float bearingWanted = own != null ? own : wanted;
-                    // A recorded tick's angle is written once the tick has been counted, so it is read in the tick after
-                    // the one it describes: the freshest record, read in the tick before this one, is a tick old. A
-                    // bearing still turning then is moved on by its step; one whose angle stopped changing earlier stays
-                    float[] step = this.bearingSteps.get(entity.getUUID());
-                    if (own != null && step != null && (int) step[1] == comedymonkey.dailies.playback.Playback.position() - 1) {
-                        bearingWanted = ((own + step[0]) % 360.0F + 360.0F) % 360.0F;
-                    }
                     this.bearingAngle.setFloat(blockEntity, bearingWanted);
                     this.bearingPrevAngle.setFloat(blockEntity, bearingWanted);
                     this.bearingDiff.setFloat(blockEntity, 0.0F);

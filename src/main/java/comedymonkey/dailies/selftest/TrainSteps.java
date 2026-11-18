@@ -154,6 +154,9 @@ final class TrainSteps {
             BestiarySteps.report("TRAINS", "trains", Host.get().dataDirectory().resolve("trains"), new Census.Tally(), 0, 0, 0);
             return false;
         }
+        // Out of assembly mode, as closing the station's screen does: a station still assembling is no destination, and
+        // the train could not have been sent home ("No suitable path to the next Scheduled destination could be found")
+        BestiarySteps.server("the west station out of assembly mode", (level, player) -> call(level.getBlockEntity(WEST), "exitAssemblyMode", new Class<?>[0]));
         test.sleepTicks(40);
         String drivers = conductors(minecraft);
         test.log("trains: the train's drivers as Create found them: " + drivers);
