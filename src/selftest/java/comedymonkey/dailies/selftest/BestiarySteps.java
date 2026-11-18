@@ -61,7 +61,7 @@ final class BestiarySteps {
      * Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself.
      * 2: a stage closes after two quiet ticks, before the field is cleared, so that clearing it is not part of the item.
      */
-    static final int VERSION = 3;
+    static final int VERSION = 4;
 
     static SelfTest test;
     static Minecraft minecraft;

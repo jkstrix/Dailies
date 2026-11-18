@@ -64,6 +64,11 @@ final class Feed {
     private final Set<Long> loadedChunks = new HashSet<>();
     /** True while a snapshot is being read by {@link #load} */
     private boolean loading = false;
+
+    /** Whether a snapshot is being read now, with whatever happened on its own tick */
+    boolean loading() {
+        return this.loading;
+    }
     /** The world that was open when the snapshot began can be kept, if the snapshot turns out to be of the same place */
     private boolean mayRewind = false;
     /** The world has been kept, and emptied of everything that moves */

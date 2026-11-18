@@ -446,17 +446,21 @@ final class BestiaryStages {
         waitTicks(40);
         mark("orbs merged");
         waitTicks(30);
+        // Two blocks in front of the recorder, at the height they hover at: near enough to home in at once and be taken
+        // (five blocks off and below, none was ever taken)
         server("orbs to home on the recorder", (level, player) -> {
             for (int i = 0; i < 30; i++) {
-                level.addFreshEntity(new ExperienceOrb(level, 0.5 + (i % 5) * 0.3, -58.0, -1.5, 2));
+                level.addFreshEntity(new ExperienceOrb(level, player.getX() - 0.6 + (i % 5) * 0.3, player.getY() + 0.5, player.getZ() + 2.0, 2));
             }
         });
         waitTicks(5);
         mark("orbs homing");
         waitTicks(6);
         mark("orbs homing");
-        waitTicks(30);
+        waitTicks(50);
         mark("orbs collected");
+        server("what the recorder took", (level, player) -> test.log("bestiary: after the homing orbs the recorder has " + player.experienceLevel
+            + " levels and " + player.totalExperience + " points, at " + player.blockPosition() + ", " + player.gameMode.getGameModeForPlayer()));
         waitTicks(20);
         mark("orbs lying");
         waitTicks(6);

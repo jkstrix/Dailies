@@ -163,6 +163,12 @@ public final class Playback {
         return skipping;
     }
 
+    /** Whether the world is being put together from a snapshot now (on the client thread, as the snapshot's chunks arrive) */
+    public static boolean readingSnapshot() {
+        Feed reading = feed;
+        return loaded && reading != null && reading.loading();
+    }
+
     public static @Nullable String lastError() {
         return lastError;
     }

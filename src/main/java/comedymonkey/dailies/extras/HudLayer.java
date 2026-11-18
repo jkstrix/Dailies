@@ -92,6 +92,43 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         this.record = length == 0 || data[from] == 0 ? null : Arrays.copyOfRange(data, from, from + length);
         this.state = null;
         this.stale = this.record != null;
+        this.flashOnHealthLost();
+    }
+
+    /** The recorder's health in the HUD record before this one, or NaN after a reset: the first record only says where it starts */
+    private float lastHealth = Float.NaN;
+
+    /**
+     * The recorder's own game flashes its player red whenever its health goes down (LocalPlayer.hurtTo), even for a hit
+     * the server sends no damage event for: one that lands while the player is still briefly invulnerable takes only
+     * what it does beyond the hit before. Playback draws the recorder as another player, which flashes only on damage
+     * events, so a second breath of the dragon's that hurt the recorder showed no flash (the bestiary, 18 November). So
+     * a fall in the recorded health flashes the recorder as its own game did. Run in a jump's run-up too, so the flash
+     * stands where it would on landing
+     */
+    private void flashOnHealthLost() {
+        float health = Float.NaN;
+        if (this.record != null) {
+            HudState hud = this.current(Minecraft.getInstance());
+            health = hud == null ? Float.NaN : hud.health;
+        }
+        float before = this.lastHealth;
+        this.lastHealth = health;
+        if (Float.isNaN(before) || Float.isNaN(health) || health >= before) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        RecordingManifest manifest = Playback.manifest();
+        if (minecraft.level == null || manifest == null) {
+            return;
+        }
+        for (Player player : minecraft.level.players()) {
+            if (player.getUUID().toString().equalsIgnoreCase(manifest.recorderId)) {
+                player.hurtDuration = 10;
+                player.hurtTime = player.hurtDuration;
+                return;
+            }
+        }
     }
 
     /** The HUD as last recorded, so the part after a cut starts with it */
@@ -107,6 +144,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         this.record = null;
         this.state = null;
         this.stale = false;
+        this.lastHealth = Float.NaN;
     }
 
     /**
