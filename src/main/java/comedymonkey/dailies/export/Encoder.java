@@ -287,13 +287,18 @@ public final class Encoder {
             }
         }
         IOException last = null;
+        boolean split = Host.get().setting("exportSplitEncoding", true);
         for (Codecs.Choice choice : order) {
-            try {
-                // Tried already, but a card can still refuse the size or rate of this export: go on to the next
-                return new VideoSink(settings, scale, choice.encoder(), output, i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent));
-            } catch (IOException e) {
-                last = e;
-                Host.LOGGER.info("Dailies: encoder {} is not usable for this export ({}), trying the next", choice.encoder(), e.getMessage());
+            for (int mode : Codecs.splitModes(choice.encoder(), split)) {
+                try {
+                    // Tried already, but a card can still refuse the size or rate of this export, or a way of splitting
+                    // frames it has too few encoding units for: go on to the next
+                    return new VideoSink(settings, scale, choice.encoder(), mode, output, i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent));
+                } catch (IOException e) {
+                    last = e;
+                    Host.LOGGER.info("Dailies: encoder {}{} is not usable for this export ({}), trying the next", choice.encoder(),
+                        mode >= 0 ? " splitting frames (mode " + mode + ")" : "", e.getMessage());
+                }
             }
         }
         throw new IOException("None of the encoders for " + settings.videoCodec + " could encode this export: " + (last == null ? "" : last.getMessage()), last);
@@ -314,7 +319,7 @@ public final class Encoder {
         private final int width, height;
         private final Layout layout;
 
-        VideoSink(Export.Settings settings, int scale, String encoder, Path output, boolean i420) throws IOException {
+        VideoSink(Export.Settings settings, int scale, String encoder, int split, Path output, boolean i420) throws IOException {
             this.output = output;
             this.width = settings.width * scale;
             this.height = settings.height * scale;
@@ -328,7 +333,7 @@ public final class Encoder {
                 // graphics card come the right way up, in the format the encoder writes, and need nothing done to them
                 command.addAll(List.of("-vf", scale > 1 ? "vflip,scale=" + settings.width + ":" + settings.height + ":flags=lanczos" : "vflip"));
             }
-            command.addAll(Codecs.videoArguments(encoder, settings.bitrate, settings.transparent));
+            command.addAll(Codecs.videoArguments(encoder, settings.bitrate, settings.transparent, split));
             command.add("-an");
             if (settings.container.equals("mp4") || settings.container.equals("mov")) {
                 // A file cut short by a cancel must still play (EXP-6)

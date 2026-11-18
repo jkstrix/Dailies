@@ -119,6 +119,18 @@ class CodecsTest {
     }
 
     @Test
+    void nvidiaEncodersSplitFramesAcrossTheirUnits() {
+        assertEquals(List.of(3, 1, -1), Codecs.splitModes("av1_nvenc", true), "three strips first, then the driver's choice, then none");
+        assertEquals(List.of(3, 1, -1), Codecs.splitModes("hevc_nvenc", true));
+        assertEquals(List.of(-1), Codecs.splitModes("h264_nvenc", true), "H.264 cannot be split");
+        assertEquals(List.of(-1), Codecs.splitModes("libsvtav1", true));
+        assertEquals(List.of(-1), Codecs.splitModes("av1_nvenc", false), "the setting turns it off");
+        List<String> split = Codecs.videoArguments("av1_nvenc", 80_000_000L, false, 3);
+        assertEquals(List.of("-split_encode_mode", "3"), split.subList(split.size() - 2, split.size()));
+        assertFalse(Codecs.videoArguments("av1_nvenc", 80_000_000L, false, -1).contains("-split_encode_mode"));
+    }
+
+    @Test
     void bitratesAreReadAndWritten() {
         assertEquals(20_000_000L, Codecs.parseBitrate("20m"));
         assertEquals(800_000L, Codecs.parseBitrate(" 800K "));
