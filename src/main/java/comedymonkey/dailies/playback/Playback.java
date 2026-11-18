@@ -521,6 +521,8 @@ public final class Playback {
             if (comedymonkey.dailies.export.Export.active()) {
                 comedymonkey.dailies.export.Export.frameStart(minecraft);
             }
+            // The path preview plays a Smart Camera stretch by hand here, as an export does, once any jump has landed
+            comedymonkey.dailies.editor.StretchPreview.frameStart();
             if (!jumping() && !WHEN_LOADED.isEmpty()) {
                 List<Runnable> actions = new ArrayList<>(WHEN_LOADED);
                 WHEN_LOADED.clear();

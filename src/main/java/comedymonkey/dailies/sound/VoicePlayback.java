@@ -63,7 +63,8 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
 
     @Override
     public void play(byte[] data, int from, int length, boolean skipping) {
-        if (skipping || Playback.skipping()) {
+        // Nor while the path preview plays a stretch at twenty times its speed, unheard
+        if (skipping || Playback.skipping() || comedymonkey.dailies.editor.StretchPreview.running()) {
             return;
         }
         VoiceFormat.Frame frame = VoiceFormat.read(data, from, length);

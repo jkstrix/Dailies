@@ -95,6 +95,7 @@ public final class EditorSession {
     public static void closing() {
         SmartCameraDriver.forget();
         CameraSteps.forget();
+        StretchPreview.forget();
         // What is saved is always the recording's own state, never a plain one standing in for it
         EditHistory closingHistory = own();
         RecordingFile closingFile = file;

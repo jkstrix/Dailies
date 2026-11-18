@@ -80,6 +80,9 @@ final class TimelinePanel {
     private final Gadget.Push fold;
     private final Gadget.Push momentsSwitch;
     private final Gadget.Push addTrack;
+    /** Plays a Smart Camera stretch fast so that the path preview can draw it (EDIT-8); only there when the scene has a Smart Camera */
+    private final Gadget.Push preview;
+    private boolean previewShown = false;
 
     private Drag drag = Drag.NONE;
     private int dragFromTick;
@@ -125,6 +128,8 @@ final class TimelinePanel {
         this.momentsSwitch.lit(MomentsLane::shown).tip(Kit.t("moments.switch.tip"));
         this.addTrack = new Gadget.Push(Kit.t("track.add"), this::openAddMenu);
         this.addTrack.tip(Kit.t("track.add.tip"));
+        this.preview = new Gadget.Push(Kit.t("transport.preview"), PreviewProgress::begin);
+        this.preview.liveTip(PreviewProgress::tip).when(() -> PreviewProgress.stretchNow() != null);
     }
 
     void place(Font font, int newLeft, int newTop, int newRight, int newBottom) {
@@ -173,6 +178,17 @@ final class TimelinePanel {
         int switchWide = this.momentsSwitch.wantedWidth(font);
         this.momentsSwitch.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
         this.momentsSwitch.place(font, newRight - pad - 16 - EditorLayout.GAP - switchWide, y, switchWide, BAR);
+        // After who moves the camera, a group of its own: the Smart Camera's path, played fast to be drawn
+        this.previewShown = PreviewProgress.wanted();
+        this.preview.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
+        if (this.previewShown) {
+            x += GROUP_GAP - EditorLayout.GAP;
+            int wide = this.preview.wantedWidth(font);
+            this.preview.place(font, x, y, wide, BAR);
+            x += wide + EditorLayout.GAP;
+        } else {
+            this.preview.place(font, x, y, 0, 0);
+        }
         this.statusLeft = x + GROUP_GAP - EditorLayout.GAP;
         this.statusRight = this.momentsSwitch.x - GROUP_GAP;
         this.addTrack.clip(Integer.MIN_VALUE, Integer.MAX_VALUE);
@@ -200,6 +216,7 @@ final class TimelinePanel {
         for (Gadget gadget : this.transport) {
             gadget.collect(order);
         }
+        this.preview.collect(order);
         this.momentsSwitch.collect(order);
         this.fold.collect(order);
         this.addTrack.collect(order);
@@ -369,6 +386,9 @@ final class TimelinePanel {
         Kit.panel(graphics, this.left, this.top, this.right, this.bottom);
         for (Gadget gadget : this.transport) {
             gadget.draw(graphics, font, mouseX, mouseY);
+        }
+        if (this.previewShown) {
+            this.preview.draw(graphics, font, mouseX, mouseY);
         }
         this.fold.draw(graphics, font, mouseX, mouseY);
         this.momentsSwitch.draw(graphics, font, mouseX, mouseY);
@@ -635,6 +655,10 @@ final class TimelinePanel {
             if (hit != null) {
                 return hit;
             }
+        }
+        Gadget previewed = this.previewShown ? this.preview.press(mouseX, mouseY, button) : null;
+        if (previewed != null) {
+            return previewed;
         }
         Gadget folded = this.fold.press(mouseX, mouseY, button);
         if (folded != null) {
@@ -943,7 +967,10 @@ final class TimelinePanel {
                 return words;
             }
         }
-        Component words = this.fold.tipAt(mouseX, mouseY);
+        Component words = this.previewShown ? this.preview.tipAt(mouseX, mouseY) : null;
+        if (words == null) {
+            words = this.fold.tipAt(mouseX, mouseY);
+        }
         if (words == null) {
             words = this.momentsSwitch.tipAt(mouseX, mouseY);
         }

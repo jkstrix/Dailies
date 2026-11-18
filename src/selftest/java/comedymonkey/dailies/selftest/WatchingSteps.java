@@ -12,6 +12,8 @@ import comedymonkey.dailies.edit.Interpolation;
 import comedymonkey.dailies.edit.Keyframe;
 import comedymonkey.dailies.edit.KeyframeKind;
 import comedymonkey.dailies.editor.EditorSession;
+import comedymonkey.dailies.editor.StretchPreview;
+import comedymonkey.dailies.editor.StretchRun;
 import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
@@ -23,6 +25,7 @@ import comedymonkey.dailies.ui.MarkerRings;
 import comedymonkey.dailies.ui.Notices;
 import comedymonkey.dailies.ui.PathPreview;
 import comedymonkey.dailies.ui.PlayerList;
+import comedymonkey.dailies.ui.PreviewProgress;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -580,11 +583,53 @@ final class WatchingSteps {
             check(PathPreview.stretches().size() == 1 && PathPreview.stretches().get(0).stale(), "the Smart Camera's path is not marked stale after its keyframe changed");
             EditorSession.history().undo();
             check(!PathPreview.stretches().get(0).stale(), "the Smart Camera's path is still stale after the change was undone");
+        });
+        previewButton(test, minecraft, smartTrack, smartTick);
+        test.onClientRun(() -> {
             EditorSession.history().clearAllTracks();
             check(PathPreview.stretches().isEmpty() && PathPreview.marks().isEmpty(), "a path is left after every track was cleared");
             minecraft.setScreen(null);
         });
         frames(test, 4);
+    }
+
+    /**
+     * The path preview's "preview" button: a stale Smart Camera stretch is played to its end at up to twenty times its
+     * speed with the world left undrawn, its path is fresh and whole afterwards, and the playhead is back where it was
+     */
+    private static void previewButton(SelfTest test, Minecraft minecraft, int smartTrack, int smartTick) throws Exception {
+        int back = test.onClient(Playback::position);
+        check(test.onClient(Playback::paused), "the recording should stand still before the preview");
+        test.onClientRun(() -> {
+            Keyframe.SmartCamera keyframe = (Keyframe.SmartCamera) EditorSession.scene().track(smartTrack).at(smartTick);
+            JsonObject changed = keyframe.settings().deepCopy();
+            changed.addProperty("distance", 9.0);
+            EditorSession.history().setKeyframe(smartTrack, new Keyframe.SmartCamera(smartTick, Interpolation.HOLD, changed));
+            check(PathPreview.stretches().get(0).stale(), "the Smart Camera's path is not stale after its keyframe changed");
+        });
+        long withoutWorld = PreviewProgress.framesWithoutWorld();
+        long startedAt = System.nanoTime();
+        StretchRun.Stretch stretch = test.onClient(() -> StretchPreview.start(java.util.Set.of()));
+        check(stretch.track() == smartTrack && stretch.first() == smartTick && stretch.last() == Playback.total(),
+            "the preview chose " + stretch + " for the one Smart Camera keyframe, at tick " + smartTick + " of a recording of " + Playback.total());
+        test.waitFor(() -> !StretchPreview.running(), 30 + stretch.length() / 200, "the preview to play the stretch");
+        double seconds = (System.nanoTime() - startedAt) / 1.0e9;
+        editor(test);
+        test.onClientRun(() -> {
+            StretchRun run = StretchPreview.last();
+            check(run != null && run.finished(), "the preview did not play the whole stretch");
+            check(run.speed() <= StretchRun.FASTEST / 20.0 + 0.5 && stretch.length() / StretchRun.FASTEST <= seconds,
+                "the preview went faster than twenty times as recorded: " + run.speed() + " times, " + stretch.length() + " ticks in " + seconds + " s");
+            check(Playback.position() == back && Playback.paused(), "the playhead is not back where it was, standing still: tick " + Playback.position());
+            // Only while its progress plate stood in the editor's place
+            check(PreviewProgress.framesWithoutWorld() > withoutWorld, "the world was drawn all through the preview");
+            List<PathPreview.Stretch> stretches = PathPreview.stretches();
+            check(stretches.size() == 1 && stretches.get(0).smartCamera() && !stretches.get(0).stale(), "the previewed stretch is not drawn as one fresh path");
+            List<PathPreview.Point> points = stretches.get(0).points();
+            check(points.get(0).tick() <= smartTick + 1.01 && points.get(points.size() - 1).tick() >= stretch.last() - 1.01,
+                "the previewed path does not cover the stretch, " + stretch.first() + " to " + stretch.last() + ": " + points.get(0).tick() + " to " + points.get(points.size() - 1).tick());
+            EditorSession.history().undo();
+        });
     }
 
     // --- Chapter V: the looks that were added ---
