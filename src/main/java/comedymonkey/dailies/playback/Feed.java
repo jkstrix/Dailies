@@ -62,6 +62,8 @@ final class Feed {
      */
     private boolean softChunks = false;
     private int chunksSoft = 0;
+    /** The chunks the snapshot being read has left as the kept world had them, by chunk, with the stored chunk each is */
+    private final java.util.Map<Long, String> keptNow = new java.util.HashMap<>();
     /** Every chunk the world holds */
     private final Set<Long> loadedChunks = new HashSet<>();
     /** Which chunk each stored chunk is, learned the first time it is read */
@@ -200,6 +202,7 @@ final class Feed {
         this.chunksBuilt = 0;
         this.chunksLetGo = 0;
         this.chunksSoft = 0;
+        this.keptNow.clear();
         boolean plain = minecraft.level != null && this.plainWorld(minecraft) && this.plainSnapshot(segment);
         this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild") && (plain || !strict);
         this.skipChunks = this.mayRewind && plain;
@@ -539,6 +542,7 @@ final class Feed {
         if (this.skipChunks && stored.equals(this.cleanChunks.get(key)) && chunk.getBlockEntities().isEmpty()) {
             this.snapshotChunks.add(key);
             this.chunksKept++;
+            this.keptNow.put(key, stored);
             return true;
         }
         // For someone watching: blocks as they were drawn, so the chunk stays drawn and its block entities are told what
@@ -548,6 +552,7 @@ final class Feed {
             this.snapshotChunks.add(key);
             this.chunksKept++;
             this.chunksSoft++;
+            this.keptNow.put(key, stored);
             return true;
         }
         return false;
@@ -872,6 +877,28 @@ final class Feed {
     private void apply(Packet<? super ClientGamePacketListener> packet, Minecraft minecraft) {
         if (packet instanceof ClientboundLoginPacket login && this.keepWorld(login, minecraft)) {
             return;
+        }
+        if (this.loading && packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
+            // A snapshot gives a chunk whose blocks are as stored its new light straight after naming it. Where that chunk was
+            // left as the kept world had it, the light of any part of it the light does not speak of would stay as it was
+            // later in the recording: one place by flowing lava stayed a level too bright after a jump back. So the stored
+            // chunk is put in first, as a world built from nothing would have it, and its light goes on that
+            String kept = this.keptNow.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+            if (kept != null && this.session != null) {
+                this.chunksKept--;
+                try {
+                    byte[] chunk = this.file.shared(kept);
+                    String now = this.storedNow;
+                    this.storedNow = kept;
+                    try {
+                        this.packet(chunk, 0, chunk.length, minecraft);
+                    } finally {
+                        this.storedNow = now;
+                    }
+                } catch (IOException e) {
+                    this.warnOnce("putting back a chunk whose light the snapshot gives", e);
+                }
+            }
         }
         if (packet instanceof net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket removed) {
             // Items playback is letting fall out of the world go when their time is up, not when the server dropped them

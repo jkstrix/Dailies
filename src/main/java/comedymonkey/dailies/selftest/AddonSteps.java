@@ -370,8 +370,17 @@ final class AddonSteps {
         if (!seated) {
             problems.add("the farmer did not sit down on the Create seat: Trade Bot only sells to seated villagers");
         }
-        // The offers given at the summoning do not last: a farmer's own (potatoes for an emerald, an emerald for bread) were
-        // what Trade Bot saw, and none buys wheat. His one offer is set here, on the server, after he has sat down
+        wheatOffer();
+        c("item replace entity @s weapon.mainhand with minecraft:air");
+        return true;
+    }
+
+    /**
+     * The farmer's one offer, wheat for an emerald, set on the server. The offers given at the summoning do not last, and
+     * nor does this for long: a farmer takes up his trade again by the composter beside him and gets a farmer's own offers
+     * (potatoes for an emerald, an emerald for bread), none of which buys wheat. So it is set again before each run
+     */
+    private static void wheatOffer() throws Exception {
         BestiarySteps.server("the farmer's wheat offer", (level, player) -> {
             for (net.minecraft.world.entity.npc.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
                 net.minecraft.world.item.trading.MerchantOffers offers = new net.minecraft.world.item.trading.MerchantOffers();
@@ -380,8 +389,6 @@ final class AddonSteps {
                 villager.setOffers(offers);
             }
         });
-        c("item replace entity @s weapon.mainhand with minecraft:air");
-        return true;
     }
 
     private static void delivery(SelfTest test, Minecraft minecraft) throws Exception {
@@ -409,6 +416,7 @@ final class AddonSteps {
         boolean sent = false;
         String refusal = "";
         for (int attempt = 0; attempt < 5 && !sent; attempt++) {
+            wheatOffer();
             sent = c("tradebot trade");
             if (!sent) {
                 // Refused: he may still be winding up. The refusal is not a fault of playback, but it is logged
