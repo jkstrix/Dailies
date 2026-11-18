@@ -288,6 +288,8 @@ final class ParallelVideoSink implements FrameSink {
         final BlockingQueue<byte[]> full;
         final int capacity;
         int allocated = 0;
+        /** Frames handed to this encoder: one the export never reached has none, and its list says nothing true */
+        long sent = 0;
         final Thread feeder;
         volatile IOException failure = null;
 
@@ -390,6 +392,12 @@ final class ParallelVideoSink implements FrameSink {
         /** The files this encoder finished, as it listed them */
         List<Part> finishedParts() {
             List<Part> parts = new ArrayList<>();
+            if (this.sent == 0) {
+                // An export shorter than a round of chunks never reaches the later encoders. Their lists, if they wrote
+                // any, would be put at their first chunk's time by laneParts and break the join (seen in game: a sixty
+                // frame export "held -90 of its 60 frames", and fifteen frames were refused although all were there)
+                return parts;
+            }
             try {
                 for (String line : Files.readAllLines(ParallelVideoSink.this.folder.resolve(this.index + ".csv"), StandardCharsets.UTF_8)) {
                     Part part = parsePart(line);
@@ -429,6 +437,7 @@ final class ParallelVideoSink implements FrameSink {
         if (!lane.full.offer(buffer)) {
             throw new IllegalStateException("More frames were sent to an encoder than it has buffers");
         }
+        lane.sent++;
         this.frames++;
     }
 
@@ -454,7 +463,12 @@ final class ParallelVideoSink implements FrameSink {
         }
         List<Part> parts = new ArrayList<>();
         for (Lane lane : this.lanes) {
-            parts.addAll(lane.finishedParts());
+            for (Part part : lane.finishedParts()) {
+                // A file with no frames in it adds nothing to the video, and has no place in the order
+                if (part.end() - part.start() > 0.5 / this.framesPerSecond) {
+                    parts.add(part);
+                }
+            }
         }
         double from = this.offset / this.framesPerSecond;
         List<Part> order = joinOrder(parts, from, 0.5 / this.framesPerSecond);
