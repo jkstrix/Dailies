@@ -5,13 +5,11 @@ import javax.net.ssl.SSLContext;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -40,8 +38,6 @@ import java.util.List;
 public final class ServerCertificate {
 
     private static final String ALIAS = "dailies-mcp";
-    // The key file is protected by where it is, not by this: the game has to open it without asking anyone
-    private static final char[] PASSWORD = "dailies".toCharArray();
     private static final int YEARS = 10;
 
     private final PrivateKey key;
@@ -78,11 +74,17 @@ public final class ServerCertificate {
     }
 
     public SSLContext context() throws Exception {
+        // A store that only ever lives in memory, to hand the key to TLS: its password is never written anywhere
+        char[] inMemory = new char[16];
+        SecureRandom random = new SecureRandom();
+        for (int i = 0; i < inMemory.length; i++) {
+            inMemory[i] = (char) ('a' + random.nextInt(26));
+        }
         KeyStore store = KeyStore.getInstance("PKCS12");
         store.load(null, null);
-        store.setKeyEntry(ALIAS, this.key, PASSWORD, new Certificate[]{this.certificate});
+        store.setKeyEntry(ALIAS, this.key, inMemory, new Certificate[]{this.certificate});
         KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keys.init(store, PASSWORD);
+        keys.init(store, inMemory);
         SSLContext context = SSLContext.getInstance("TLS");
         context.init(keys.getKeyManagers(), null, null);
         return context;
@@ -109,18 +111,23 @@ public final class ServerCertificate {
      * The kept certificate, or a new one when there is none, it has run out, or it does not name an address it must.
      *
      * @param file where the certificate and its key are kept
+     * @param passwordFile where the password that locks the key is kept: in another folder than the key, see
+     *                     {@link KeyStorePassword}
      * @param mustName an address the certificate has to name, or null
      */
-    public static ServerCertificate loadOrCreate(Path file, List<String> dnsNames, List<InetAddress> addresses, InetAddress mustName) throws Exception {
+    public static ServerCertificate loadOrCreate(Path file, Path passwordFile, List<String> dnsNames, List<InetAddress> addresses, InetAddress mustName) throws Exception {
+        char[] password = KeyStorePassword.loadOrCreate(passwordFile);
         if (Files.isRegularFile(file)) {
             try (InputStream in = Files.newInputStream(file)) {
                 KeyStore store = KeyStore.getInstance("PKCS12");
-                store.load(in, PASSWORD);
-                ServerCertificate kept = new ServerCertificate((PrivateKey) store.getKey(ALIAS, PASSWORD), (X509Certificate) store.getCertificate(ALIAS));
+                // A key file locked with another password (an earlier one, or the word every copy once used) fails here
+                store.load(in, password);
+                ServerCertificate kept = new ServerCertificate((PrivateKey) store.getKey(ALIAS, password), (X509Certificate) store.getCertificate(ALIAS));
                 kept.certificate.checkValidity();
                 // One made as a certificate authority, as early ones were, is made again as a server's own
                 boolean authority = kept.certificate.getBasicConstraints() >= 0;
                 if (kept.key != null && !authority && (mustName == null || kept.names(mustName))) {
+                    KeyStorePassword.ownerOnly(file);
                     return kept;
                 }
             } catch (Exception e) {
@@ -130,13 +137,10 @@ public final class ServerCertificate {
         ServerCertificate made = create(dnsNames, addresses, Instant.now());
         KeyStore store = KeyStore.getInstance("PKCS12");
         store.load(null, null);
-        store.setKeyEntry(ALIAS, made.key, PASSWORD, new Certificate[]{made.certificate});
-        Files.createDirectories(file.getParent());
-        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
-        try (OutputStream out = Files.newOutputStream(temp)) {
-            store.store(out, PASSWORD);
-        }
-        Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        store.setKeyEntry(ALIAS, made.key, password, new Certificate[]{made.certificate});
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        store.store(bytes, password);
+        KeyStorePassword.writeOwnerOnly(file, bytes.toByteArray());
         return made;
     }
 

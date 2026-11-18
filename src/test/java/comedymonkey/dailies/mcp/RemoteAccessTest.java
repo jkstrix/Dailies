@@ -219,10 +219,11 @@ class RemoteAccessTest {
     void aCertificateIsMadeKeptAndNamesItsAddresses() throws Exception {
         Path folder = Files.createTempDirectory("dailies-cert");
         Path file = folder.resolve("mcp").resolve("certificate.p12");
+        Path password = folder.resolve("config").resolve("key.secret");
         InetAddress lan = address("192.168.1.10");
         List<InetAddress> addresses = List.of(address("127.0.0.1"), lan);
 
-        ServerCertificate first = ServerCertificate.loadOrCreate(file, List.of("localhost"), addresses, lan);
+        ServerCertificate first = ServerCertificate.loadOrCreate(file, password, List.of("localhost"), addresses, lan);
         assertTrue(Files.isRegularFile(file));
         assertTrue(first.fingerprint().matches("([0-9A-F]{2}:){31}[0-9A-F]{2}"), first.fingerprint());
         assertTrue(first.names(lan));
@@ -231,17 +232,17 @@ class RemoteAccessTest {
         assertEquals("CN=Dailies MCP", first.certificate().getSubjectX500Principal().getName());
 
         // Kept: the same fingerprint next time, so a client's pin goes on working
-        ServerCertificate again = ServerCertificate.loadOrCreate(file, List.of("localhost"), addresses, lan);
+        ServerCertificate again = ServerCertificate.loadOrCreate(file, password, List.of("localhost"), addresses, lan);
         assertEquals(first.fingerprint(), again.fingerprint());
 
         // Bound to an address it does not name: a new one, with a new fingerprint
         InetAddress other = address("10.0.0.7");
-        ServerCertificate moved = ServerCertificate.loadOrCreate(file, List.of("localhost"), List.of(address("127.0.0.1"), other), other);
+        ServerCertificate moved = ServerCertificate.loadOrCreate(file, password, List.of("localhost"), List.of(address("127.0.0.1"), other), other);
         assertNotEquals(first.fingerprint(), moved.fingerprint());
         assertTrue(moved.names(other));
 
         // Every interface: whatever is kept will do
-        assertEquals(moved.fingerprint(), ServerCertificate.loadOrCreate(file, List.of("localhost"), addresses, null).fingerprint());
+        assertEquals(moved.fingerprint(), ServerCertificate.loadOrCreate(file, password, List.of("localhost"), addresses, null).fingerprint());
     }
 
     @Test

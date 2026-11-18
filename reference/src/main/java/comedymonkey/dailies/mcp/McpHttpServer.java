@@ -141,7 +141,9 @@ public class McpHttpServer {
 
         if (enabled && instance == null) {
             Path certificate = Host.get().dataDirectory().resolve("mcp").resolve("certificate.p12");
-            McpHttpServer server = new McpHttpServer(wanted, Limits.NORMAL, new McpProtocol(), certificate);
+            // The key's password is kept in the game's config folder, away from Dailies' folder that can be copied or shared
+            Path password = Host.get().configDirectory().resolve("dailies-mcp-key.secret");
+            McpHttpServer server = new McpHttpServer(wanted, Limits.NORMAL, new McpProtocol(), certificate, password);
             try {
                 server.start();
                 instance = server;
@@ -177,6 +179,7 @@ public class McpHttpServer {
     private final Limits limits;
     private final Endpoint endpoint;
     private final Path certificateFile;
+    private final Path passwordFile;
     private ServerSocket serverSocket;
     /** With remote access on a single address: the listener at 127.0.0.1 that this computer's own clients go on using */
     private @Nullable ServerSocket loopbackSocket = null;
@@ -198,12 +201,15 @@ public class McpHttpServer {
 
     /**
      * @param certificateFile where the certificate for HTTPS is kept, used when the server listens beyond this computer
+     * @param passwordFile    where the password that locks the certificate's key is kept, in another folder than the
+     *                        certificate (see {@link KeyStorePassword})
      */
-    McpHttpServer(Config config, Limits limits, Endpoint endpoint, Path certificateFile) {
+    McpHttpServer(Config config, Limits limits, Endpoint endpoint, Path certificateFile, Path passwordFile) {
         this.config = config;
         this.limits = limits;
         this.endpoint = endpoint;
         this.certificateFile = certificateFile;
+        this.passwordFile = passwordFile;
     }
 
     /** The port listened on: the one asked for, unless that was 0 */
@@ -288,7 +294,7 @@ public class McpHttpServer {
         }
         this.guard = new TokenGuard(this.config.token);
 
-        this.certificate = ServerCertificate.loadOrCreate(this.certificateFile, names, own, wildcard ? null : address);
+        this.certificate = ServerCertificate.loadOrCreate(this.certificateFile, this.passwordFile, names, own, wildcard ? null : address);
         this.tls = this.certificate.context();
         // A plain listener: each connection says by its first byte whether it is HTTPS or this computer's plain HTTP
         this.serverSocket = new ServerSocket(this.config.port, 16, address);

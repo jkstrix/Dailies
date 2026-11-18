@@ -96,6 +96,8 @@ public final class Host {
     public interface Mod {
         /** The mod's own folder in the game directory, where "moments" lives */
         Path dataDirectory();
+        /** The game's config folder: where secrets are kept apart from Dailies' own folder, which can be copied or shared */
+        Path configDirectory();
         String modVersion();
         boolean isModLoaded(String modId);
 

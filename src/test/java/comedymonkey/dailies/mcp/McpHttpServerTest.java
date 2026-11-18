@@ -61,7 +61,7 @@ class McpHttpServerTest {
 
     private McpHttpServer local(McpHttpServer.Limits limits) throws Exception {
         McpHttpServer server = new McpHttpServer(new McpHttpServer.Config(0, "127.0.0.1", false, "", ""), limits, ENDPOINT,
-            Files.createTempDirectory("dailies-mcp").resolve("certificate.p12"));
+            Files.createTempDirectory("dailies-mcp").resolve("certificate.p12"), Files.createTempDirectory("dailies-config").resolve("key.secret"));
         server.start();
         this.servers.add(server);
         return server;
@@ -337,7 +337,8 @@ class McpHttpServerTest {
         }
         String token = TokenGuard.generate();
         Path certificate = Files.createTempDirectory("dailies-mcp").resolve("certificate.p12");
-        McpHttpServer server = new McpHttpServer(new McpHttpServer.Config(0, "127.0.0.2", true, token, ""), McpHttpServer.Limits.NORMAL, ENDPOINT, certificate);
+        McpHttpServer server = new McpHttpServer(new McpHttpServer.Config(0, "127.0.0.2", true, token, ""), McpHttpServer.Limits.NORMAL, ENDPOINT, certificate,
+            Files.createTempDirectory("dailies-config").resolve("key.secret"));
         server.start();
         this.servers.add(server);
         InetAddress bound = InetAddress.getByAddress(new byte[]{127, 0, 0, 2});

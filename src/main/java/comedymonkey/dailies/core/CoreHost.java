@@ -45,6 +45,11 @@ public final class CoreHost implements Host.Mod {
     }
 
     @Override
+    public Path configDirectory() {
+        return FMLPaths.CONFIGDIR.get();
+    }
+
+    @Override
     public String modVersion() {
         return this.container.getModInfo().getVersion().toString();
     }
