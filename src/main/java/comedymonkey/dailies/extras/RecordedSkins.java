@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.platform.NativeImage;
 import comedymonkey.dailies.Dailies;
 import comedymonkey.dailies.Host;
+import comedymonkey.dailies.file.BoundedReader;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.PlaybackExtensions;
 import net.minecraft.client.Minecraft;
@@ -14,7 +15,6 @@ import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -74,19 +74,20 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
     @Override
     public void play(byte[] data, int from, int length, boolean skipping) {
         try {
-            ByteBuffer in = ByteBuffer.wrap(data, from, length);
-            if (in.get() != SkinCapture.VERSION) {
+            // Every length in it is checked against what is there before room is made for it (a crafted file can claim gigabytes)
+            BoundedReader in = new BoundedReader(data, from, length);
+            if (in.readByte() != SkinCapture.VERSION) {
                 return;
             }
             this.recordingHoldsSkins = true;
-            UUID id = new UUID(in.getLong(), in.getLong());
+            UUID id = new UUID(in.readLong(), in.readLong());
             // Every snapshot repeats every player. One that says nothing new changes nothing
             int mark = Arrays.hashCode(Arrays.copyOfRange(data, from, from + length));
             Held before = this.held.get(id);
             if (before != null && before.mark() == mark) {
                 return;
             }
-            boolean slim = in.get() == 1;
+            boolean slim = in.readByte() == 1;
             List<ResourceLocation> textures = new ArrayList<>();
             ResourceLocation skin = this.register(id, "skin", in, textures);
             ResourceLocation cape = this.register(id, "cape", in, textures);
@@ -114,13 +115,12 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
     }
 
     /** Reads one picture and registers it as a texture. Null when the record holds none */
-    private @Nullable ResourceLocation register(UUID id, String kind, ByteBuffer in, List<ResourceLocation> textures) throws Exception {
-        int length = in.getInt();
+    private @Nullable ResourceLocation register(UUID id, String kind, BoundedReader in, List<ResourceLocation> textures) throws Exception {
+        int length = in.readInt();
         if (length <= 0) {
             return null;
         }
-        byte[] png = new byte[length];
-        in.get(png);
+        byte[] png = in.readBytes(length);
         ResourceLocation location = ResourceLocation.fromNamespaceAndPath(Dailies.ID, "recorded_skins/" + id + "/" + kind + "_" + this.counter++);
         Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(NativeImage.read(png)));
         textures.add(location);

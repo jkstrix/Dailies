@@ -254,7 +254,7 @@ class AssemblerTest {
     }
 
     @Test
-    void aRecordIsAFewBytesATick() {
+    void aRecordIsAFewBytesATick() throws RecordingFormatException {
         TimeIndex.Encoder encoder = new TimeIndex.Encoder();
         assertTrue(encoder.next(REAL_START, GAME_START).length <= 10);
         int most = 0;

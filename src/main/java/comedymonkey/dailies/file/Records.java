@@ -1,6 +1,5 @@
 package comedymonkey.dailies.file;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -118,13 +117,19 @@ public final class Records {
         }
     }
 
-    /** Walks the records of a segment */
+    /**
+     * Walks the records of a segment. A segment that is cut short or does not add up throws a
+     * {@link RecordingFormatException} at the record where it goes wrong; everything read before that is good
+     */
     public static final class Reader implements AutoCloseable {
 
         private final InputStream in;
         private int kind;
         private byte[] payload = new byte[0];
         private int length;
+        /** Where the name of a {@link #PAYLOAD} or {@link #EXTENSION} record starts and how long it is; -1 for other kinds */
+        private int nameStart = -1;
+        private int nameLength = 0;
 
         public Reader(InputStream in) {
             this.in = in;
@@ -137,22 +142,37 @@ public final class Records {
                 return false;
             }
             this.kind = this.varint(first);
-            this.length = this.varint(this.in.read());
-            if (this.length < 0) {
-                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "A record of the recording has an impossible length");
-            }
-            if (this.payload.length < this.length) {
-                this.payload = new byte[Math.max(this.length, this.payload.length * 2)];
-            }
+            this.length = BoundedReader.checkLength(this.varint(this.in.read()) & 0xFFFFFFFFL, BoundedReader.MAX_LENGTH);
             int done = 0;
             while (done < this.length) {
-                int read = this.in.read(this.payload, done, this.length - done);
+                if (done == this.payload.length) {
+                    // Room is made as the bytes actually arrive, so a length that lies cannot ask for more than the segment holds
+                    this.payload = Arrays.copyOf(this.payload, (int) Math.min(this.length, Math.max(64 * 1024L, this.payload.length * 2L)));
+                }
+                int read = this.in.read(this.payload, done, Math.min(this.length, this.payload.length) - done);
                 if (read < 0) {
-                    throw new EOFException("The segment ends in the middle of a record");
+                    throw cutShort();
                 }
                 done += read;
             }
+            this.check();
             return true;
+        }
+
+        /** What later calls take for granted about the record just read is checked once, here */
+        private void check() throws RecordingFormatException {
+            this.nameStart = -1;
+            this.nameLength = 0;
+            if (this.kind == PAYLOAD || this.kind == EXTENSION) {
+                BoundedReader name = new BoundedReader(this.payload, 0, this.length);
+                this.nameLength = name.length(name.readVarInt());
+                this.nameStart = name.position();
+            } else if (this.kind == TICK || this.kind == SNAPSHOT_BEGIN) {
+                BoundedReader number = new BoundedReader(this.payload, 0, this.length);
+                if (number.readVarInt() < 0 || number.remaining() != 0) {
+                    throw BoundedReader.damaged("A record of the recording holds a number that cannot be so");
+                }
+            }
         }
 
         public int kind() {
@@ -168,46 +188,33 @@ public final class Records {
             return this.length;
         }
 
-        /** The payload of a record written with {@link Writer#number} */
+        /** The payload of a record written with {@link Writer#number}. {@link #next} has checked it of a TICK or SNAPSHOT_BEGIN */
         public int number() {
             int value = 0;
             int shift = 0;
-            for (int i = 0; i < this.length; i++) {
+            for (int i = 0; i < this.length && shift < 35; i++) {
                 value |= (this.payload[i] & 0x7F) << shift;
                 shift += 7;
             }
             return value;
         }
 
-        /** The text at the start of a record written with {@link Writer#named} */
+        /** The text at the start of a record written with {@link Writer#named}: a {@link #PAYLOAD} or an {@link #EXTENSION} */
         public String name() {
-            return new String(this.payload, this.nameStart(), this.nameLength(), java.nio.charset.StandardCharsets.UTF_8);
+            this.requireName();
+            return new String(this.payload, this.nameStart, this.nameLength, java.nio.charset.StandardCharsets.UTF_8);
         }
 
         /** Where the bytes after the name start */
         public int bodyStart() {
-            return this.nameStart() + this.nameLength();
+            this.requireName();
+            return this.nameStart + this.nameLength;
         }
 
-        private int nameLength() {
-            int value = 0;
-            int shift = 0;
-            for (int i = 0; i < this.length; i++) {
-                value |= (this.payload[i] & 0x7F) << shift;
-                if ((this.payload[i] & 0x80) == 0) {
-                    break;
-                }
-                shift += 7;
+        private void requireName() {
+            if (this.nameStart < 0) {
+                throw new IllegalStateException("A record of kind " + this.kind + " has no name");
             }
-            return value;
-        }
-
-        private int nameStart() {
-            int i = 0;
-            while (i < this.length && (this.payload[i] & 0x80) != 0) {
-                i++;
-            }
-            return i + 1;
         }
 
         private int varint(int first) throws IOException {
@@ -216,18 +223,22 @@ public final class Records {
             int current = first;
             while (true) {
                 if (current < 0) {
-                    throw new EOFException("The segment ends in the middle of a record");
+                    throw cutShort();
                 }
                 value |= (current & 0x7F) << shift;
                 if ((current & 0x80) == 0) {
                     return value;
                 }
                 shift += 7;
-                if (shift > 35) {
-                    throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "A record of the recording has an impossible number");
+                if (shift >= 35) {
+                    throw BoundedReader.damaged("A record of the recording has an impossible number");
                 }
                 current = this.in.read();
             }
+        }
+
+        private static RecordingFormatException cutShort() {
+            return BoundedReader.damaged("The segment ends in the middle of a record");
         }
 
         @Override

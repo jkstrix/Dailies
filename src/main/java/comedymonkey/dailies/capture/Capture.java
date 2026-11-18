@@ -73,6 +73,11 @@ public final class Capture {
         return Recorder.get().state() != Recorder.State.IDLE;
     }
 
+    /** Whether a recording is writing what happens right now. Any thread */
+    public static boolean capturing() {
+        return Recorder.get().capturing();
+    }
+
     /** The game is about to apply this packet. Client thread */
     static void applied(Packet<?> packet, List<byte[]> frames) {
         try {

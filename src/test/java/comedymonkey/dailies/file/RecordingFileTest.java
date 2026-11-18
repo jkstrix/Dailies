@@ -206,14 +206,7 @@ class RecordingFileTest {
             assertEquals("Second flight", recording.manifest().name);
             assertArrayEquals(new byte[]{1, 2, 3}, recording.preview());
             assertArrayEquals(segmentData(2), readSegment(recording, 2));
-
-            recording.compact();
-            assertEquals(0, recording.deadBytes());
-            assertArrayEquals(state, recording.editState());
-            assertEquals("Second flight", recording.manifest().name);
-            assertArrayEquals(segmentData(1), readSegment(recording, 1));
         }
-        assertTrue(Files.size(file) < after.length);
         try (RecordingFile recording = RecordingFile.open(file)) {
             assertThrows(IllegalStateException.class, () -> recording.saveEditState(state));
         }

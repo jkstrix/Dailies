@@ -78,9 +78,15 @@ final class Container implements Closeable {
     static Container create(Path path) throws IOException {
         FileChannel channel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.READ, StandardOpenOption.WRITE);
         Container container = new Container(path, channel);
-        ByteBuffer preamble = ByteBuffer.allocate(PREAMBLE_BYTES);
-        preamble.put(MAGIC).putInt(VERSION).putInt(0).flip();
-        writeFully(channel, preamble, 0);
+        try {
+            ByteBuffer preamble = ByteBuffer.allocate(PREAMBLE_BYTES);
+            preamble.put(MAGIC).putInt(VERSION).putInt(0).flip();
+            writeFully(channel, preamble, 0);
+        } catch (IOException | RuntimeException e) {
+            // A channel left open keeps the file locked on Windows until the game closes. The file is new and ours, and empty
+            container.closeAndDelete();
+            throw e;
+        }
         container.end = PREAMBLE_BYTES;
         return container;
     }
@@ -332,6 +338,20 @@ final class Container implements Closeable {
     @Override
     public void close() throws IOException {
         this.channel.close();
+    }
+
+    /** Closes a file that never got going and deletes it: it holds nothing but the start of a recording */
+    void closeAndDelete() {
+        try {
+            this.channel.close();
+        } catch (IOException ignored) {
+            // Closing is all that can be tried; deleting below may still work
+        }
+        try {
+            java.nio.file.Files.deleteIfExists(this.path);
+        } catch (IOException ignored) {
+            // Nothing more can be done about it here
+        }
     }
 
     private static boolean readFully(FileChannel channel, ByteBuffer buffer, long position) throws IOException {

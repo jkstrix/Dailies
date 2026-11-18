@@ -290,8 +290,10 @@ public final class Snapshots {
             changed(event.getPos(), null);
             because(event.getPos(), "block events");
         } else if (packet instanceof ClientboundLightUpdatePacket light) {
-            CHUNKS.remove(ChunkPos.asLong(light.getX(), light.getZ()));
-            WHY.putIfAbsent(ChunkPos.asLong(light.getX(), light.getZ()), "light");
+            // New light and nothing else: the chunk's blocks are as stored, so it keeps its stored form and the next snapshot
+            // adds its light as it is then, as for a chunk whose neighbour changed. Forgetting it had the chunks the server
+            // sends light for, the ones round any change, described whole again
+            CHUNKS.computeIfPresent(ChunkPos.asLong(light.getX(), light.getZ()), (key, stored) -> stored.withLightChanged());
         } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
             CHUNKS.remove(ChunkPos.asLong(chunk.getX(), chunk.getZ()));
         } else if (packet instanceof ClientboundForgetLevelChunkPacket forgotten) {
@@ -636,7 +638,7 @@ public final class Snapshots {
                         fresh.add(lightPacket);
                         freshNames.add(lightName);
                         CHUNKS.put(key, new Stored(stored.name(), stored.asked(), stored.said(), false, lightName));
-                        REASONS.merge("only its light, from a block next door", 1, Integer::sum);
+                        REASONS.merge("only its light, from a block next door or a light packet", 1, Integer::sum);
                     } catch (Throwable t) {
                         warnOnce("chunk light", t);
                         out.sharedRef(Records.SHARED_PACKET, known);
@@ -648,7 +650,7 @@ public final class Snapshots {
                 REASONS.merge(why, 1, Integer::sum);
                 try {
                     java.util.concurrent.atomic.AtomicReference<byte[]> name = new java.util.concurrent.atomic.AtomicReference<>();
-                    fresh.add(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+                    fresh.add(ownHeightmaps(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null)));
                     freshNames.add(name);
                     CHUNKS.put(key, new Stored(name, true, said));
                     encoded++;
@@ -664,6 +666,23 @@ public final class Snapshots {
         CHUNKS.keySet().retainAll(present);
         lids.forEach(out::packet);
         return count;
+    }
+
+    /**
+     * The packet copies a chunk's blocks and light as it is made, but its heightmaps are the chunk's own arrays, which the
+     * game goes on changing. It is turned into bytes later, on the recorder's writer, so the heightmaps are copied here,
+     * on the game's thread, or the recording could hold them as they were some ticks on, or half changed (rain and snow
+     * falling in the wrong columns in playback). About forty numbers each
+     */
+    private static ClientboundLevelChunkWithLightPacket ownHeightmaps(ClientboundLevelChunkWithLightPacket packet) {
+        net.minecraft.nbt.CompoundTag heightmaps = packet.getChunkData().getHeightmaps();
+        for (String key : new ArrayList<>(heightmaps.getAllKeys())) {
+            net.minecraft.nbt.Tag tag = heightmaps.get(key);
+            if (tag != null) {
+                heightmaps.put(key, tag.copy());
+            }
+        }
+        return packet;
     }
 
     private static long cannotSay = 0;

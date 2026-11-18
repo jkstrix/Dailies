@@ -474,12 +474,17 @@ public final class Recorder {
             this.startWhenInWorld = false;
             this.start();
         }
-        if (this.state != State.RECORDING) {
+        if (this.state == State.IDLE) {
             return;
         }
+        // Looked at while paused too: a write that failed then would otherwise go unnoticed until recording went on, and
+        // the markers added meanwhile would be dropped without a word
         Throwable failure = this.spool.failure();
         if (failure != null) {
             this.fail(failure);
+            return;
+        }
+        if (this.state != State.RECORDING) {
             return;
         }
         ClientPacketListener listener = minecraft.getConnection();
@@ -662,6 +667,8 @@ public final class Recorder {
     }
 
     private final LiveOut live = new LiveOut();
+    /** Chunks the writer could not turn into bytes, in this game: only the first is logged. Writer thread */
+    private static int chunkFailures = 0;
 
     private final class LiveOut implements Out {
         public void packet(Packet<? super ClientGamePacketListener> packet) {
@@ -674,19 +681,24 @@ public final class Recorder {
             Recorder.this.part.record(kind, hash);
         }
 
-        /** Keeps a packet's bytes in the recording without writing it into the ticks: for a snapshot to name. @return its name */
-        byte[] stored(byte[] encoded) {
-            byte[] hash = sha256(encoded);
+        /**
+         * Keeps data in the recording without writing it into the ticks, once however often it is asked: a packet for a
+         * snapshot to name, say. Named here, and stored by the writer under that name without working it out again
+         *
+         * @return its name
+         */
+        byte[] stored(byte[] data) {
+            byte[] hash = RecordingWriter.hashOf(data);
             if (Recorder.this.sharedSent.add(HexFormat.of().formatHex(hash))) {
                 Recorder.this.spool.add(new Spool.Job() {
                     @Override
                     public void run(RecordingWriter writer) throws Exception {
-                        writer.putShared(encoded);
+                        writer.putShared(data, hash);
                     }
 
                     @Override
                     public long bytes() {
-                        return encoded.length;
+                        return data.length;
                     }
                 });
             }
@@ -695,21 +707,7 @@ public final class Recorder {
 
         /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
         public byte[] sharedPacket(byte[] encoded) {
-            byte[] hash = sha256(encoded);
-            String name = HexFormat.of().formatHex(hash);
-            if (Recorder.this.sharedSent.add(name)) {
-                Recorder.this.spool.add(new Spool.Job() {
-                    @Override
-                    public void run(RecordingWriter writer) throws Exception {
-                        writer.putShared(encoded);
-                    }
-
-                    @Override
-                    public long bytes() {
-                        return encoded.length;
-                    }
-                });
-            }
+            byte[] hash = this.stored(encoded);
             Recorder.this.flushTicks();
             Recorder.this.part.record(Records.SHARED_PACKET, hash);
             return hash;
@@ -734,12 +732,26 @@ public final class Recorder {
                     for (int i = 0; i < made.size(); i++) {
                         if (made.get(i) == null) {
                             // Already stored (a chunk whose light alone is written afresh): named again, in its place
-                            records.record(Records.SHARED_PACKET, naming.get(i).get());
+                            byte[] known = naming.get(i).get();
+                            if (known != null) {
+                                records.record(Records.SHARED_PACKET, known);
+                            }
                             continue;
                         }
-                        byte[] encoded = codec.encode(made.get(i));
-                        byte[] hash = sha256(encoded);
-                        writer.putShared(encoded);
+                        byte[] encoded;
+                        try {
+                            encoded = codec.encode(made.get(i));
+                        } catch (Throwable t) {
+                            // One chunk that cannot be turned into bytes (a mod's block entity changing as it was read, say)
+                            // is left out of this stored world rather than stop the recording. It keeps no name, so the next
+                            // snapshot describes it afresh
+                            if (chunkFailures++ == 0) {
+                                Host.LOGGER.warn("Dailies: a chunk could not be written into the recording and is left out of this stored world; the next has it. Said once", t);
+                            }
+                            continue;
+                        }
+                        byte[] hash = RecordingWriter.hashOf(encoded);
+                        writer.putShared(encoded, hash);
                         records.record(Records.SHARED_PACKET, hash);
                         naming.get(i).set(hash);
                     }
@@ -757,10 +769,7 @@ public final class Recorder {
 
         /** Data stored once and referred to by a record of the given kind */
         public void sharedRecord(int kind, byte[] data) {
-            byte[] hash = sha256(data);
-            if (Recorder.this.sharedSent.add(HexFormat.of().formatHex(hash))) {
-                Recorder.this.spool.add(writer -> writer.putShared(data));
-            }
+            byte[] hash = this.stored(data);
             Recorder.this.flushTicks();
             Recorder.this.part.record(kind, hash);
         }
@@ -788,14 +797,6 @@ public final class Recorder {
 
         public void bundleEnd() {
             Recorder.this.part.record(Records.BUNDLE_END);
-        }
-    }
-
-    private static byte[] sha256(byte[] data) {
-        try {
-            return java.security.MessageDigest.getInstance("SHA-256").digest(data);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
         }
     }
 
