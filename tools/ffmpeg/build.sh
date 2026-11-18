@@ -179,7 +179,7 @@ has() { case " ${FF_PLATFORM[*]} " in *" $1 "*) return 0 ;; *) return 1 ;; esac;
 cmake_build() {  # cmake_build <source dir> <extra cmake arguments...>
     local src="$1"; shift
     cmake -S "$src" -B "$src/_build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-        -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON "${CMAKE_PLATFORM[@]}" "$@"
+        -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON ${CMAKE_PLATFORM[@]+"${CMAKE_PLATFORM[@]}"} "$@"
     cmake --build "$src/_build" -j "$JOBS_N"
     cmake --install "$src/_build"
 }
@@ -192,8 +192,10 @@ build_zlib() {
 }
 
 build_opus() {
+    # Cross-built for Windows, the stack protector Opus turns on wants libssp, which a static MinGW link has not got, and
+    # FFmpeg's configure then finds no usable Opus ("opus not found using pkg-config")
     local src; src="$(unpack opus)"
-    (cd "$src" && ./configure ${HOST:+--host=$HOST} --prefix="$PREFIX" --disable-shared --enable-static --with-pic \
+    (cd "$src" && ./configure ${HOST:+--host=$HOST} ${HOST:+--disable-stack-protector} --prefix="$PREFIX" --disable-shared --enable-static --with-pic \
         --disable-doc --disable-extra-programs && make -j "$JOBS_N" && make install)
 }
 
@@ -220,7 +222,7 @@ build_libaom() {
         # libaom's own description of the mingw compilers, in place of the generic one
         extra=(-DCMAKE_TOOLCHAIN_FILE="$src/build/cmake/toolchains/x86_64-mingw-gcc.cmake")
     fi
-    cmake_build "$src" "${extra[@]}" -DENABLE_DOCS=0 -DENABLE_EXAMPLES=0 -DENABLE_TESTS=0 -DENABLE_TESTDATA=0 \
+    cmake_build "$src" ${extra[@]+"${extra[@]}"} -DENABLE_DOCS=0 -DENABLE_EXAMPLES=0 -DENABLE_TESTS=0 -DENABLE_TESTDATA=0 \
         -DENABLE_TOOLS=0 -DCONFIG_TUNE_VMAF=0 -DCONFIG_TUNE_BUTTERAUGLI=0
 }
 
@@ -268,8 +270,14 @@ build_ffmpeg() {
     for forbidden in --enable-gpl --enable-nonfree --enable-version3 --enable-libx264 --enable-libx265 --enable-libopenh264; do
         case " ${configure[*]} " in *" $forbidden "*) die "the configuration asks for $forbidden, which Dailies never ships" ;; esac
     done
+    if has --enable-amf; then
+        # AMF's screen capture source, which Dailies has no use for, includes a header that AMF 1.4.36 writes for C++
+        # only (extern "C" unguarded), so it cannot be compiled as C; the encoders need none of it
+        configure+=(--disable-filter=amf_capture)
+    fi
     printf '%s\n' "${configure[@]}" > "$BUILD/ffmpeg-configure.txt"
-    (cd "$src" && ./configure "${configure[@]}" && make -j "$JOBS_N" && make install)
+    # When configure refuses, the reason is in its log, not on the screen: the end of it is shown
+    (cd "$src" && { ./configure "${configure[@]}" || { tail -n 80 ffbuild/config.log; exit 1; }; } && make -j "$JOBS_N" && make install)
 }
 
 licences() {  # Each library's own licence files, from its own source, into out/licenses/<name>
