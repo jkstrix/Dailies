@@ -28,6 +28,8 @@ with Simple Voice Chat.
 | `reference/` | The owner's own code, compiled into the same mod: Moments, the Smart Camera, the MCP server and its tools, the moments page. It meets the core through one interface, `comedymonkey.dailies.Host`. |
 | `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README. |
 | `docs/manual/` | The user manual and its pictures. |
+| `docs/` | Also the internal code review of 18 November 2026, and the brief for an outside reviewer (`reviewer-brief.md`). |
+| `tools/` | `tools/ffmpeg/`: our own encoder build, not yet switched on. `tools/ci/`: the scripted run for CI, and `check_spec.py`, which checks the design documents. |
 | `run-test/`, `run-modded/` | Game folders the scripted tests run in. Not kept in git. |
 
 ## Where the work comes from
@@ -84,8 +86,11 @@ jar in `run-modded/mods` from `installTestMods`. `runClient` and `runPlayModded`
 jars, pass `-Pdailies.modsFolder=<folder>`. The companion jar is taken from `companion/build/libs`, so build the
 companion first.
 
-Video is encoded by a bundled FFmpeg (LGPL build). `THIRD-PARTY-NOTICES.md` lists what is bundled and under which
-licences.
+Video is encoded by a bundled FFmpeg, LGPL build. Today that is the JavaCPP Presets' build
+(`org.bytedeco:ffmpeg:8.1.2-1.5.14`), for Windows on 64-bit Intel or AMD processors only; it contains OpenH264, which
+Dailies never uses. `tools/ffmpeg/build.sh` is our own LGPL build for every platform, without OpenH264. It is written
+but not switched on: `-Pdailies.encoderSource=dailies` packs it instead. `THIRD-PARTY-NOTICES.md` lists what is
+bundled and under which licences.
 
 ## Licence
 

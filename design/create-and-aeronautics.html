@@ -289,7 +289,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 		</ol>
 		<div class="rules">
 			<div class="rule"><b>Result</b><span>Rotor blades spin, the seat stays on the craft, and a seated player moves and turns with it, including when they sat down before the craft was assembled.</span></div>
-			<div class="rule no"><b>Not solved: standing passengers</b><span>A player standing loose on a deck is carried by Sable's client-side logic in live play, not by packets. In playback their recorded world positions are a fraction of a tick behind the craft, and they trail about a block behind a fast climb. This is requirement MOD-4. The likely route is to express a standing passenger's recorded position relative to the craft, using the pose at the same tick, and place them from the craft's interpolated pose each frame.</span></div>
+			<div class="rule"><b>Standing passengers</b><span>A player standing loose on a deck is carried by Sable's client-side logic in live play, not by packets. In playback their recorded world positions are a fraction of a tick behind the craft, and without help they trail about a block behind a fast climb. This is requirement MOD-4. The fix: the recording also keeps where each player stands in the craft's own coordinates, and playback places them from the craft's pose, as drawn on every frame and tick by tick, so their walking is only what they walked. Someone off the deck for up to 10 ticks (a jump, a bump) still counts as aboard. Done in the core's <code>compat/sable/SableCompat</code>.</span></div>
 		</div>
 	</section>
 
@@ -351,7 +351,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 		<div class="fault">
 			<b>Seen</b><div>With a hot air balloon nearby and its burner lit, the game crashed at the end of every recording segment.</div>
 			<b>Cause</b><div>A snapshot builds chunk packets from the client's chunks, which asks each block entity for its update data. Vanilla only ever asks on a server. Aeronautics' burner (<code>aeronautics:adjustable_burner</code>) assumes so and fails with a class-cast error on a client, where its balloon is the client-side kind.</div>
-			<b class="fix">Fix</b><div>This is REC-22. Where a chunk packet gathers a block entity's update data on a client, catch any failure. Fall back to the block entity's plain save data without metadata; if that fails too, use an empty tag. Warn once per block entity type, saying its state may reset after a jump to a later part. Make the surrounding snapshot work null-safe as well, so one bad chunk is skipped.</div>
+			<b class="fix">Fix</b><div>This is REC-22. Where a chunk packet gathers a block entity's update data on a client, catch any failure. Fall back to the block entity's plain save data without metadata; if that fails too, use an empty tag. Warn once per block entity type, saying its state may reset after a jump to a later part. Make the surrounding snapshot work null-safe as well, so one bad chunk is skipped. For the burner and the steam vent the fallback is no longer the end of it: the core's <code>compat/aeronautics/AeronauticsCompat</code> gives the snapshot their own saved data (lit or not, signal, air) and the balloon figures the server last sent, under the names the block entity reads back, so a burner is as it was after a jump to any part of a flight.</div>
 		</div>
 
 		<div class="fault">
@@ -375,7 +375,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 	<!-- ============================================================ X -->
 	<section id="camera">
 		<div class="chapter"><span class="no">X</span><h2>What the Smart Camera needs</h2></div>
-		<p class="lede">The provided Smart Camera asks eight questions about craft through <code>Host.Crafts</code>. This is how each was answered. All of it sits behind one lazy set-up that looks the names up once and switches the whole feature off, with one log line, if any is missing.</p>
+		<p class="lede">The provided Smart Camera asks eight questions about craft through <code>Host.Crafts</code>. This is how each was answered. Four more, <code>crafts</code>, <code>craftById</code>, <code>craftId</code> and <code>craftForward</code>, give Moments and the camera each craft's lasting id, name, bounds and heading (chapter XV of the specification). All of it sits behind one lazy set-up that looks the names up once and switches the whole feature off, with one log line, if any is missing.</p>
 
 		<div class="tablebox"><table>
 			<thead><tr><th>Question</th><th>Answer</th></tr></thead>
@@ -406,7 +406,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<ul>
 					<li>A bearing contraption appears and turns, live and in playback.</li>
 					<li>A physics platform keeps its recorded position.</li>
-					<li>A hot air balloon climbed 82 blocks with a player aboard. At three points of the climb, each reached by a jump, playback had the balloon within 0.3 to 0.5 of a block of its live position.</li>
+					<li>A hot air balloon climbs and comes down with the player in its basket. At each noted tick, reached by a jump, playback has the balloon and everyone aboard where the live game had them, to within a third of a block plus one tick of travel for sampling, and the burner lit and out when it was, by a jump forward, a jump back and by play.</li>
+					<li>Standing passengers: the recorder and a mob standing loose on a falling platform stay on its deck to within a quarter of a block (MOD-4), and a mob seated on it moves with it.</li>
 					<li>Craft survive jumps forward across segments and jumps backward, with no duplicates.</li>
 					<li>The lit burner no longer breaks segment snapshots.</li>
 				</ul>
@@ -419,12 +420,10 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			</div>
 			<div class="card"><h3>Open</h3>
 				<ul>
-					<li><b>Standing passengers</b> trail the craft (chapter VI). In the balloon test the passenger was about 1.4 blocks low.</li>
 					<li><b>A dedicated server</b>, where UDP is a real path. Never tried.</li>
 					<li><b>Other players</b> riding a craft. Never tried.</li>
 					<li><b>Sitting down after</b> the craft is assembled. Never tried.</li>
 					<li><b>Glue entities</b> may show a stale position during forward play.</li>
-					<li><b>The burner's state</b> after a jump, since its snapshot data is the fallback.</li>
 					<li><b>Other Aeronautics parts</b>: levitite, propellers on planes, anything not in the two test craft.</li>
 				</ul>
 			</div>

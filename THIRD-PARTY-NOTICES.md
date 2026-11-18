@@ -8,7 +8,7 @@ in the `licenses` folder.
 
 A video encoder is packed in for **Windows on 64-bit Intel or AMD processors (windows-x86_64)** only, for now.
 On Linux and macOS, and on Windows on ARM, Dailies says so in the Export tab and exports numbered PNG pictures;
-everything else in the mod works the same. Encoders for the other platforms are to come from a build of our own
+everything else in the mod works the same. A build of our own for every platform is written but not yet packed in
 (see "Rebuilding" below).
 
 ## FFmpeg
@@ -66,7 +66,9 @@ The licence files were taken from each project's official repository in November
 versions built into the packaged FFmpeg may be a little older, and their copyright years with them.
 
 The hardware encoders (NVIDIA, Intel, and Windows Media Foundation) are part of the graphics driver or of Windows;
-Dailies carries only the open headers needed to call them.
+Dailies carries only the open headers needed to call them. This build has no AMD AMF, so an AMD card's H.264 and
+H.265 come through Media Foundation. The build is also configured with Vulkan (`--enable-vulkan`), which Dailies does
+not use.
 
 ## H.264 and H.265
 
@@ -83,8 +85,15 @@ machine before it is listed. Nothing is offered that the build does not contain 
 ## Rebuilding
 
 The LGPL asks that anyone can rebuild the encoder. Today the natives are the JavaCPP Presets' own, and their build
-script is at the address above. A build script of our own, for every platform, is planned and will be kept with
-this source.
+script is at the address above.
+
+A build of our own is written and kept with this source: `tools/ffmpeg/build.sh`, with every source pinned by its
+sha256 in `tools/ffmpeg/sources.lock`, and the workflow `.github/workflows/ffmpeg.yml` that runs it. It builds
+FFmpeg 8.1.2 for Windows (64-bit Intel or AMD), Linux (x86_64 and arm64) and macOS (Apple silicon and Intel), under
+the LGPL 2.1 or later, with the hardware encoders of every graphics vendor and without OpenH264, x264 or x265. It is
+**not switched on yet**: the jar packs the build above unless Dailies is built with
+`-Pdailies.encoderSource=dailies`. When it is switched on, this file changes with it, and that build's own licence
+texts and notices go into the jar under `licenses/ffmpeg-build`.
 
 
 ## YAMNet

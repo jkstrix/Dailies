@@ -1,6 +1,8 @@
 # The scripted run of chapter XIV on every change (specification TEST-5). It needs a real game window and a graphics
 # card, so it runs on a self-hosted Windows runner with a GPU (the owner's PC is enough), labelled "dailies-gpu".
 #
+# The runner needs Python 3 on its PATH, for tools/ci/check_spec.py, which checks the design documents first.
+#
 # Set on the runner or the repository:
 #   variable DAILIES_MODS_FOLDER   the folder the modded run copies Create, Sable, Aeronautics, Sodium, Iris and the
 #                                  rest from (read, never written). Without it the modded run is skipped.
@@ -35,6 +37,11 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The design documents first (plan item 4.2): requirement ids, links and well-formed HTML. Needs Python 3 on the
+      # runner's PATH; it uses nothing but the standard library
+      - name: Check the specification and the tech note
+        run: python tools/ci/check_spec.py
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
