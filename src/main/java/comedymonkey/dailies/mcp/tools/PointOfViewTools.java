@@ -9,6 +9,9 @@ import comedymonkey.dailies.edit.LinkedRecording;
 import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.editor.PointOfView;
+import comedymonkey.dailies.export.ExportQueue;
+import comedymonkey.dailies.export.QueueRunner;
+import comedymonkey.dailies.export.Worker;
 import comedymonkey.dailies.library.Library;
 import comedymonkey.dailies.library.Links;
 import comedymonkey.dailies.library.Sharing;
@@ -72,12 +75,14 @@ final class PointOfViewTools {
 
         registrar.add("export_points_of_view",
             "Export the same stretch from every point of view, as one batch: the open recording's stretch, and each linked recording's same stretch lined up by game time. "
-                + "Each job names its recording, its own ticks and the file it will write. The jobs go to the export queue when there is one.",
+                + "One job per point of view goes on the export queue, together: each names its recording, its own ticks and the file it will write, and is seen "
+                + "through the eyes of whoever made that recording (the camera rides along with them, with their HUD; no scene's keyframes or looks apply). "
+                + "export_queue_start runs them, in the background by default.",
             McpSchema.object()
                 .integer("start_tick", "First tick, in the open recording (default: the current scene's export range, or the whole recording)")
                 .integer("end_tick", "Last tick, in the open recording")
-                .string("preset", "The export preset for every job, from export_presets_list (default: the usual one)")
-                .string("output_folder", "The folder the videos go to (default: the usual export folder)"),
+                .string("preset", "The export preset for every job, from export_presets_list (default: the first one)")
+                .string("output_folder", "The folder the videos go to: an absolute path, or a folder inside dailies/exports (default: dailies/exports)"),
             McpTool.ThreadMode.HTTP, 120, PointOfViewTools::exportAll);
     }
 
@@ -246,6 +251,9 @@ final class PointOfViewTools {
 
     private static JsonElement exportAll(McpArgs args) throws Exception {
         CoreTools.allowOnly(args, "start_tick", "end_tick", "preset", "output_folder");
+        if (Worker.active()) {
+            throw new McpToolException("This is the background export game");
+        }
         String own = Playback.loaded() ? PointOfView.homeId() : null;
         if (own == null) {
             throw new McpToolException("No recording is open. Open the recording whose stretch is wanted with replay_open first");
@@ -270,34 +278,41 @@ final class PointOfViewTools {
         for (Host.PointOfView view : Links.pointsOfView(own, start, end)) {
             jobs.add(new Job(view.file(), view.recordingId(), view.recorder(), view.startTick(), view.endTick()));
         }
+        if (jobs.isEmpty()) {
+            throw new McpToolException("The open recording is not in the recordings folder, and no other player's recording holds ticks " + start + " to " + end);
+        }
+        // Every job is made before any goes on the queue, so a preset or a recording that is refused leaves no half batch
+        List<ExportQueue.Job> made = new ArrayList<>();
+        try {
+            for (Job job : jobs) {
+                String name = "Point of view - " + (job.recorder().isBlank() ? job.recordingId() : job.recorder()) + " - ticks " + job.startTick() + " to " + job.endTick();
+                made.add(QueueRunner.jobForRange(job.file(), job.startTick(), job.endTick(), preset, folder, name));
+            }
+        } catch (IllegalArgumentException e) {
+            throw new McpToolException(e.getMessage());
+        }
+        List<ExportQueue.Job> added = QueueRunner.addAll(made);
         JsonArray list = new JsonArray();
-        boolean queued = false;
-        for (Job job : jobs) {
-            String name = "Point of view - " + (job.recorder().isBlank() ? job.recordingId() : job.recorder()) + " - ticks " + job.startTick() + " to " + job.endTick();
+        for (ExportQueue.Job job : added) {
             JsonObject entry = new JsonObject();
-            entry.addProperty("recording_id", job.recordingId());
-            entry.addProperty("recorder", job.recorder());
-            entry.addProperty("path", job.file().toAbsolutePath().toString());
-            entry.addProperty("start_tick", job.startTick());
-            entry.addProperty("end_tick", job.endTick());
-            entry.addProperty("output_name", name);
-            if (preset != null) {
-                entry.addProperty("preset", preset);
+            entry.addProperty("job_id", job.id);
+            entry.addProperty("recording_id", job.recordingId);
+            entry.addProperty("recorder", job.recorder);
+            entry.addProperty("path", job.recording);
+            entry.addProperty("start_tick", job.startTick);
+            entry.addProperty("end_tick", job.endTick);
+            entry.addProperty("file", job.output);
+            if (job.preset != null) {
+                entry.addProperty("preset", job.preset);
             }
-            if (folder != null) {
-                entry.addProperty("output_folder", folder);
-            }
-            // HOOK(export queue, plan 1.3): once Host.Mod has queueExport, queue each job here: queued |= Host.get().queueExport(job.file(), job.startTick(), job.endTick(), preset, folder, name);
-            entry.addProperty("queued", false);
+            entry.addProperty("queued", true);
             list.add(entry);
         }
         JsonObject json = new JsonObject();
         json.add("jobs", list);
-        json.addProperty("queued", queued);
-        if (!queued) {
-            json.addProperty("note", "There is no export queue in this build yet, so the jobs are listed and not started. Export each by opening its recording, "
-                + "setting the scene's export range to its ticks and calling export_start");
-        }
+        json.addProperty("queued", true);
+        json.addProperty("note", "On the export queue, one job per point of view, each seen through its recorder's eyes. export_queue_start runs them; "
+            + "export_queue_list shows their progress");
         return json;
     }
 

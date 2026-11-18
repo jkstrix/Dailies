@@ -26,7 +26,8 @@ import java.util.concurrent.Executors;
  * Works through the export queue (specification EXP-10) in this game: in the game being played when the queue is
  * started here, or in the hidden worker game (EXP-13), which starts on it by itself. One job after another: open its
  * recording, make its scene current, export through {@link Export} as the editor would, and write how far it has got
- * to the queue file.
+ * to the queue file. A point of view job (PLAY-18's batch) has no scene: a plain one stands in for the recording's
+ * scenes, and the camera rides along with whoever made the recording, so the stretch is seen as they saw it.
  * <p>
  * The client thread only decides; reading and writing the queue file happens on a thread of its own, since the other
  * game may be holding the file's lock for a moment.
@@ -74,6 +75,9 @@ public final class QueueRunner {
     /** What the game was showing before the queue took over, to go back to afterwards */
     private static @Nullable Path returnTo = null;
     private static int returnScene = -1;
+    /** For a point of view job: the tick its playhead was sent to, or -1 before that; and whether the camera rides with the recorder */
+    private static int landingAt = -1;
+    private static boolean riding = false;
 
     // --- What the file says, for the tab and the tools (any thread) ---
     private static volatile ExportQueue view = new ExportQueue();
@@ -466,6 +470,11 @@ public final class QueueRunner {
             done++;
             failed++;
         }
+        try {
+            putBack();
+        } catch (Throwable again) {
+            Host.LOGGER.error("Dailies: the recording's own scenes could not be put back", again);
+        }
         waitingForFile = false;
         // Not back to what was being looked at: an export may still be finishing
         returnTo = null;
@@ -528,9 +537,12 @@ public final class QueueRunner {
         }
         stepSince = System.currentTimeMillis();
         step = Step.OPENING;
+        landingAt = -1;
         // Asked beside the opening of the recording, so the export never waits for it on this thread
         encoderReady = Encoder.bundled() ? Encoder.ready() : null;
-        if (Playback.loaded() && Playback.file() != null && Playback.file().file().toAbsolutePath().normalize().equals(recording.normalize())) {
+        // Already open, unless it is shown as another's point of view in a scene of theirs: the editor then holds theirs
+        if (Playback.loaded() && Playback.file() != null && Playback.file().file().toAbsolutePath().normalize().equals(recording.normalize())
+            && !comedymonkey.dailies.editor.PointOfView.away()) {
             return;
         }
         if (Worker.active()) {
@@ -564,6 +576,9 @@ public final class QueueRunner {
         if (encoder != null && !encoder.isDone()) {
             return;
         }
+        if (job.kind == ExportQueue.Kind.POINT_OF_VIEW && !throughTheirEyes(minecraft, job)) {
+            return;
+        }
         try {
             Export.Settings settings = prepare(job);
             if (Worker.active()) {
@@ -578,6 +593,58 @@ public final class QueueRunner {
             Worker.mute(minecraft, true);
             fail(job, e.getMessage() == null ? e.toString() : e.getMessage());
         }
+    }
+
+    /**
+     * Readies a point of view job, a frame at a time: a plain scene stands in for the recording's own, the playhead goes
+     * to the stretch's first tick, and once it has landed the camera rides along with the recorder, seeing through
+     * their eyes with their HUD, as they saw it while playing. The ride is held by the recorder's UUID, so it carries
+     * through the jumps the export makes. A recorder who is not in the world there leaves the camera where the
+     * recording put it, and the job says so. Client thread
+     *
+     * @return whether the job is ready to export
+     */
+    private static boolean throughTheirEyes(Minecraft minecraft, ExportQueue.Job job) {
+        if (landingAt < 0) {
+            EditorSession.standIn();
+            landingAt = Math.max(0, Math.min(Playback.total(), job.startTick));
+            Playback.jumpTo(landingAt, true);
+            return false;
+        }
+        if (Playback.jumping() || Playback.position() != landingAt) {
+            return false;
+        }
+        comedymonkey.dailies.file.RecordingManifest manifest = Playback.manifest();
+        net.minecraft.world.entity.player.Player recorder = null;
+        try {
+            if (manifest != null && minecraft.level != null && manifest.recorderId != null && !manifest.recorderId.isBlank()) {
+                recorder = minecraft.level.getPlayerByUUID(java.util.UUID.fromString(manifest.recorderId));
+            }
+        } catch (IllegalArgumentException unreadable) {
+            // A recording without a proper recorder id is filmed from where the camera is
+        }
+        if (recorder != null && recorder != minecraft.player) {
+            comedymonkey.dailies.playback.Viewer.ride(recorder);
+            riding = true;
+        } else {
+            job.note = "The recorder is not in the world at tick " + landingAt + ", so the camera stays where the recording put it";
+            Host.LOGGER.warn("Dailies: the queued export '{}': {}", job.title(), job.note);
+        }
+        return true;
+    }
+
+    /** After a point of view job: the recording's own scenes back, and the camera its own again. Client thread */
+    private static void putBack() {
+        landingAt = -1;
+        if (riding) {
+            riding = false;
+            try {
+                comedymonkey.dailies.playback.Viewer.ride(null);
+            } catch (RuntimeException e) {
+                Host.LOGGER.debug("Dailies: the camera could not leave the recorder", e);
+            }
+        }
+        EditorSession.putBack();
     }
 
     private static void exporting(Minecraft minecraft, long now) {
@@ -613,7 +680,8 @@ public final class QueueRunner {
         Worker.mute(minecraft, true);
         String error = Export.lastError();
         Path written = Export.lastOutput();
-        String note = joined(Export.lastNote(), Export.captionNote());
+        // What readying a point of view had to say comes first (see throughTheirEyes)
+        String note = joined(job.kind == ExportQueue.Kind.POINT_OF_VIEW ? job.note : null, joined(Export.lastNote(), Export.captionNote()));
         if (error != null) {
             finish(job, ExportQueue.State.FAILED, null, error, note);
         } else if (Export.lastCancelled()) {
@@ -636,6 +704,7 @@ public final class QueueRunner {
     }
 
     private static void finish(ExportQueue.Job job, ExportQueue.State state, @Nullable String written, @Nullable String error, @Nullable String note) {
+        putBack();
         done++;
         if (state != ExportQueue.State.DONE) {
             failed++;
@@ -785,16 +854,7 @@ public final class QueueRunner {
         if (index >= scenes.size()) {
             throw new IllegalArgumentException("There is no scene " + scene + ": the recording has " + scenes.size());
         }
-        String presetName = preset;
-        if (presetName == null || presetName.isBlank()) {
-            List<ExportPreset> all = Export.presets().all();
-            presetName = all.isEmpty() ? null : all.get(0).name();
-        } else if (Export.presets().find(presetName) == null) {
-            throw new IllegalArgumentException("There is no export preset called '" + presetName + "'. There are: "
-                + String.join(", ", Export.presets().all().stream().map(ExportPreset::name).toList()));
-        } else {
-            presetName = Export.presets().find(presetName).name();
-        }
+        String presetName = presetName(preset);
         comedymonkey.dailies.file.RecordingManifest manifest = Playback.manifest();
         ExportQueue.Job job = new ExportQueue.Job();
         job.recording = Playback.file().file().toAbsolutePath().toString();
@@ -807,11 +867,76 @@ public final class QueueRunner {
         Path path = Path.of(name);
         if (!path.isAbsolute()) {
             // A name only, so nothing in it can lead out of the exports folder
-            path = Minecraft.getInstance().gameDirectory.toPath().resolve("dailies").resolve("exports").resolve(NamePattern.safe(path.getFileName().toString()));
+            path = exportsFolder().resolve(NamePattern.safe(path.getFileName().toString()));
         }
         job.output = path.toAbsolutePath().toString();
         job.captionSpeakers = Host.get().setting("captionSpeakerNames", true);
         return job;
+    }
+
+    /**
+     * A job for a stretch of any recording seen through its recorder's eyes (PLAY-18's batch), not yet on the queue.
+     * The recording need not be open. Reads the recording's description: not for the client thread.
+     *
+     * @param recording the recording's file
+     * @param startTick the first tick, in the recording's own ticks
+     * @param endTick   the last tick; past the recording's end is its end
+     * @param preset    a preset's name, or null for the first
+     * @param folder    the folder to write to: absolute, or else inside the exports folder; null or empty for the exports folder
+     * @param name      the file's name, its ending put on when it runs; empty for one made of the recorder and the ticks
+     */
+    public static ExportQueue.Job jobForRange(Path recording, int startTick, int endTick, @Nullable String preset, @Nullable String folder, @Nullable String name)
+        throws IOException {
+        Path file = recording.toAbsolutePath();
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("There is no recording at " + file);
+        }
+        if (startTick < 0 || endTick <= startTick) {
+            throw new IllegalArgumentException("The stretch must start at tick 0 or later and end after it starts: it was ticks " + startTick + " to " + endTick);
+        }
+        comedymonkey.dailies.file.RecordingManifest manifest = comedymonkey.dailies.file.RecordingFile.readManifest(file);
+        if (manifest.totalTicks > 0 && startTick >= manifest.totalTicks) {
+            throw new IllegalArgumentException("The recording is " + manifest.totalTicks + " ticks long, so it holds nothing from tick " + startTick);
+        }
+        ExportQueue.Job job = new ExportQueue.Job();
+        job.kind = ExportQueue.Kind.POINT_OF_VIEW;
+        job.recording = file.toString();
+        job.recordingId = manifest.id == null ? "" : manifest.id;
+        job.recordingName = manifest.name == null ? "" : manifest.name;
+        job.recorder = manifest.recorderName == null ? "" : manifest.recorderName;
+        job.startTick = startTick;
+        job.endTick = manifest.totalTicks > 0 ? Math.min(endTick, manifest.totalTicks) : endTick;
+        job.preset = presetName(preset);
+        Path place = exportsFolder();
+        if (folder != null && !folder.isBlank()) {
+            Path given = Path.of(folder.trim());
+            place = given.isAbsolute() ? given : place.resolve(given);
+        }
+        String wanted = name == null || name.isBlank()
+            ? "Point of view - " + (job.recorder.isBlank() ? job.recordingName : job.recorder) + " - ticks " + job.startTick + " to " + job.endTick
+            : name.trim();
+        // A name only, so nothing in it can lead out of the folder
+        job.output = place.resolve(NamePattern.safe(Path.of(wanted).getFileName().toString())).toAbsolutePath().toString();
+        job.captionSpeakers = Host.get().setting("captionSpeakerNames", true);
+        return job;
+    }
+
+    /** A preset's name as the presets spell it, or the first preset's when none is given; a name no preset has is refused */
+    private static @Nullable String presetName(@Nullable String preset) {
+        if (preset == null || preset.isBlank()) {
+            List<ExportPreset> all = Export.presets().all();
+            return all.isEmpty() ? null : all.get(0).name();
+        }
+        ExportPreset found = Export.presets().find(preset);
+        if (found == null) {
+            throw new IllegalArgumentException("There is no export preset called '" + preset + "'. There are: "
+                + String.join(", ", Export.presets().all().stream().map(ExportPreset::name).toList()));
+        }
+        return found.name();
+    }
+
+    private static Path exportsFolder() {
+        return Minecraft.getInstance().gameDirectory.toPath().resolve("dailies").resolve("exports");
     }
 
     private static String defaultName(@Nullable String preset, String scene, String recording) {
@@ -833,6 +958,22 @@ public final class QueueRunner {
         return added;
     }
 
+    /**
+     * Puts several jobs on the queue in one change of its file, so a batch stays together in its order even while the
+     * other game adds jobs too, and is never left half added. Any thread; it writes the queue file
+     *
+     * @return the jobs as they went on, with their ids
+     */
+    public static List<ExportQueue.Job> addAll(List<ExportQueue.Job> jobs) throws Exception {
+        List<ExportQueue.Job> added = ExportQueue.update(file(), queue -> {
+            List<ExportQueue.Job> made = queue.addAll(jobs, System.currentTimeMillis()).stream().map(ExportQueue.Job::copy).toList();
+            view = queue;
+            return made;
+        });
+        viewAt = System.currentTimeMillis();
+        return added;
+    }
+
     // ------------------------------------------------------------------ A job's settings
 
     /**
@@ -840,22 +981,25 @@ public final class QueueRunner {
      * else its preset as it is now, fitted to what this computer can encode. Client thread, with its recording open.
      */
     static Export.Settings prepare(ExportQueue.Job job) throws Exception {
-        EditHistory history = EditorSession.history();
-        List<Scene> scenes = history.state().scenes();
-        int index = -1;
-        for (int i = 0; i < scenes.size(); i++) {
-            if (scenes.get(i).name().equalsIgnoreCase(job.scene)) {
-                index = i;
-                break;
+        // A point of view has no scene to choose: the plain one standing in is all there is (see throughTheirEyes)
+        if (job.kind == ExportQueue.Kind.SCENE) {
+            EditHistory history = EditorSession.history();
+            List<Scene> scenes = history.state().scenes();
+            int index = -1;
+            for (int i = 0; i < scenes.size(); i++) {
+                if (scenes.get(i).name().equalsIgnoreCase(job.scene)) {
+                    index = i;
+                    break;
+                }
             }
+            if (index < 0 && job.sceneIndex >= 0 && job.sceneIndex < scenes.size() && job.scene.isEmpty()) {
+                index = job.sceneIndex;
+            }
+            if (index < 0) {
+                throw new IllegalArgumentException("The recording has no scene called '" + job.scene + "' any more");
+            }
+            history.selectScene(index);
         }
-        if (index < 0 && job.sceneIndex >= 0 && job.sceneIndex < scenes.size() && job.scene.isEmpty()) {
-            index = job.sceneIndex;
-        }
-        if (index < 0) {
-            throw new IllegalArgumentException("The recording has no scene called '" + job.scene + "' any more");
-        }
-        history.selectScene(index);
 
         Export.Settings settings = new Export.Settings();
         settings.startTick = job.startTick;

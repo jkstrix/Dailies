@@ -60,17 +60,44 @@ public final class ExportQueue {
         }
     }
 
+    /** What a job exports */
+    public enum Kind {
+        /** A scene of its recording, with the scene's keyframes and looks */
+        SCENE,
+        /**
+         * A stretch of its recording seen through the eyes of whoever made it (PLAY-18's batch): the camera rides along
+         * with the recorder, and none of the recording's scenes plays a part, so a friend's recording needs no scene
+         * of its own and one's own recording is not filmed by a scene made for something else
+         */
+        POINT_OF_VIEW;
+
+        public String word() {
+            return this.name().toLowerCase(Locale.ROOT);
+        }
+
+        static Kind of(String word) {
+            try {
+                return Kind.valueOf(word.toUpperCase(Locale.ROOT));
+            } catch (RuntimeException e) {
+                return SCENE;
+            }
+        }
+    }
+
     /** One export. Plain fields, as the tools and the tab fill them in */
     public static final class Job {
         public String id = "";
+        public Kind kind = Kind.SCENE;
         /** The recording, as an absolute path, and its id and name for showing */
         public String recording = "";
         public String recordingId = "";
         public String recordingName = "";
-        /** The scene by name; by index only for a job added without a name */
+        /** Who made the recording, for showing a point of view job */
+        public String recorder = "";
+        /** The scene by name; by index only for a job added without a name. Empty for a point of view */
         public String scene = "";
         public int sceneIndex = -1;
-        /** -1 for the scene's own export range */
+        /** -1 for the scene's own export range. A point of view always has both, in its recording's own ticks */
         public int startTick = -1;
         public int endTick = -1;
         /** The preset the job was made with; null when its settings were set by hand */
@@ -118,9 +145,11 @@ public final class ExportQueue {
         public JsonObject toJson() {
             JsonObject json = new JsonObject();
             json.addProperty("id", this.id);
+            json.addProperty("kind", this.kind.word());
             json.addProperty("recording", this.recording);
             json.addProperty("recording_id", this.recordingId);
             json.addProperty("recording_name", this.recordingName);
+            json.addProperty("recorder", this.recorder);
             json.addProperty("scene", this.scene);
             json.addProperty("scene_index", this.sceneIndex);
             json.addProperty("start_tick", this.startTick);
@@ -159,9 +188,11 @@ public final class ExportQueue {
         public static Job fromJson(JsonObject json) {
             Job job = new Job();
             job.id = text(json, "id", "");
+            job.kind = Kind.of(text(json, "kind", "scene"));
             job.recording = text(json, "recording", "");
             job.recordingId = text(json, "recording_id", "");
             job.recordingName = text(json, "recording_name", "");
+            job.recorder = text(json, "recorder", "");
             job.scene = text(json, "scene", "");
             job.sceneIndex = (int) number(json, "scene_index", -1);
             job.startTick = (int) number(json, "start_tick", -1);
@@ -332,8 +363,9 @@ public final class ExportQueue {
         this.changed = true;
     }
 
-    /** Adds a job at the end, waiting. Gives it an id when it has none; returns it */
+    /** Adds a job at the end, waiting. Gives it an id when it has none; returns it. One {@link #check} refuses is not added */
     public Job add(Job job, long now) {
+        check(job);
         if (job.id.isEmpty() || this.job(job.id) != null) {
             String id;
             do {
@@ -346,6 +378,35 @@ public final class ExportQueue {
         this.jobs.add(job);
         this.touched();
         return job;
+    }
+
+    /**
+     * Adds several jobs at the end in their order, as one batch (PLAY-18's points of view): when one of them is
+     * refused, none is added. Returns them
+     */
+    public List<Job> addAll(List<Job> batch, long now) {
+        batch.forEach(ExportQueue::check);
+        List<Job> added = new ArrayList<>();
+        for (Job job : batch) {
+            added.add(this.add(job, now));
+        }
+        return added;
+    }
+
+    /**
+     * Refuses a job that could never run. A point of view job has no scene to take a range from, so one without a
+     * recording or a stretch is refused when it is added rather than failing when it runs
+     */
+    static void check(Job job) {
+        if (job.kind == Kind.POINT_OF_VIEW) {
+            if (job.recording.isBlank()) {
+                throw new IllegalArgumentException("A point of view job names no recording");
+            }
+            if (job.startTick < 0 || job.endTick <= job.startTick) {
+                throw new IllegalArgumentException("A point of view job needs a stretch whose last tick is after its first: it was given ticks "
+                    + job.startTick + " to " + job.endTick);
+            }
+        }
     }
 
     /** Removes a job. A running one has to be stopped first */
@@ -527,7 +588,7 @@ public final class ExportQueue {
 
     public JsonObject toJson() {
         JsonObject json = new JsonObject();
-        json.addProperty("version", 1);
+        json.addProperty("version", 2);
         json.addProperty("revision", this.revision);
         JsonArray list = new JsonArray();
         this.jobs.forEach(job -> list.add(job.toJson()));

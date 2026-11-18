@@ -45,7 +45,8 @@ final class ExportQueueTools {
             ExportQueueTools::add);
 
         registrar.add("export_queue_list",
-            "The export queue in its order: each job's id, file, recording, scene, preset, state (waiting, paused, running, done, failed, cancelled) and progress, "
+            "The export queue in its order: each job's id, kind (scene, or point_of_view for a stretch seen through its recorder's eyes, from export_points_of_view), "
+                + "file, recording, scene or recorder, preset, state (waiting, paused, running, done, failed, cancelled) and progress, "
                 + "and whether it is running in this game or in a background one.",
             McpSchema.object(), McpTool.ThreadMode.HTTP, 30, args -> {
                 CoreTools.allowOnly(args);
@@ -237,10 +238,16 @@ final class ExportQueueTools {
     private static JsonObject describe(ExportQueue.Job job) {
         JsonObject json = new JsonObject();
         json.addProperty("job_id", job.id);
+        json.addProperty("kind", job.kind.word());
         json.addProperty("file", job.output);
         json.addProperty("recording", job.recordingName.isEmpty() ? job.recording : job.recordingName);
         json.addProperty("recording_path", job.recording);
-        json.addProperty("scene", job.scene);
+        if (job.kind == ExportQueue.Kind.POINT_OF_VIEW) {
+            // No scene: seen through the recorder's eyes
+            json.addProperty("recorder", job.recorder);
+        } else {
+            json.addProperty("scene", job.scene);
+        }
         if (job.preset != null) {
             json.addProperty("preset", job.preset);
         }

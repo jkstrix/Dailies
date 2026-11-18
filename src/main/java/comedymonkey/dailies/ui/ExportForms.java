@@ -878,7 +878,15 @@ final class ExportForms {
         } else {
             state = Kit.t("export.queue.state." + job.state.word()).getString();
         }
-        return Kit.t("export.queue.job", job.title(), job.scene, state);
+        return Kit.t("export.queue.job", job.title(), what(job), state);
+    }
+
+    /** What a job exports, in a few words: its scene, or whose eyes a point of view is seen through */
+    private static String what(ExportQueue.Job job) {
+        if (job.kind == ExportQueue.Kind.POINT_OF_VIEW) {
+            return Kit.t("export.queue.point_of_view", job.recorder.isEmpty() ? job.recordingName : job.recorder).getString();
+        }
+        return job.scene;
     }
 
     private static Component jobTip(String id) {
@@ -887,6 +895,10 @@ final class ExportForms {
             return Kit.t("export.queue.job.tip_gone");
         }
         String why = job.error != null ? job.error : job.note != null ? job.note : "";
+        if (job.kind == ExportQueue.Kind.POINT_OF_VIEW) {
+            return Kit.t("export.queue.job.tip_point_of_view", job.title(), job.recordingName.isEmpty() ? job.recording : job.recordingName,
+                job.recorder.isEmpty() ? "-" : job.recorder, job.startTick, job.endTick, job.preset == null ? "-" : job.preset, why);
+        }
         return Kit.t("export.queue.job.tip", job.title(), job.recordingName.isEmpty() ? job.recording : job.recordingName, job.scene,
             job.preset == null ? "-" : job.preset, why);
     }

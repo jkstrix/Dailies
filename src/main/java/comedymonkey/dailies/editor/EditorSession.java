@@ -44,6 +44,8 @@ public final class EditorSession {
     }
 
     private static volatile EditHistory history = null;
+    /** The recording's own editing state while a plain one stands in for it (see {@link #standIn}), else null */
+    private static volatile @Nullable EditHistory setAside = null;
     private static RecordingFile file = null;
     /** The revision known to be on disk, set by the saver thread only once a save has gone through */
     private static final AtomicReference<Revision> saved = new AtomicReference<>(Revision.NONE);
@@ -83,6 +85,7 @@ public final class EditorSession {
         retryAt = 0;
         rollFromLooks = false;
         followCamera = true;
+        setAside = null;
         history = fresh;
         PointOfView.home(recording);
         PointOfView.prepare(fresh.scene());
@@ -92,8 +95,10 @@ public final class EditorSession {
     public static void closing() {
         SmartCameraDriver.forget();
         CameraSteps.forget();
-        EditHistory closingHistory = history;
+        // What is saved is always the recording's own state, never a plain one standing in for it
+        EditHistory closingHistory = own();
         RecordingFile closingFile = file;
+        setAside = null;
         history = null;
         file = null;
         // The background export game reads recordings and never writes to them (EXP-13)
@@ -130,6 +135,44 @@ public final class EditorSession {
         return history().scene();
     }
 
+    /**
+     * Puts a plain editing state in place of the recording's own for a while: one scene with no keyframes and the
+     * usual looks, never saved. A point of view export uses it (EXP-10, PLAY-18), so that the recording's scenes, their
+     * cameras and looks play no part in a stretch seen through the recorder's eyes, and nothing of them is changed or
+     * lost: the recording's own state is still the one saved meanwhile, and comes back with {@link #putBack}. The editor
+     * shows the plain scene meanwhile, as it shows whichever scene an export of the queue has made current. Client thread
+     */
+    public static void standIn() {
+        EditHistory current = history;
+        if (current == null) {
+            throw new IllegalStateException("No recording is open");
+        }
+        if (setAside != null) {
+            return;
+        }
+        setAside = current;
+        EditHistory plain = new EditHistory(new EditState());
+        history = plain;
+        PointOfView.prepare(plain.scene());
+    }
+
+    /** Puts the recording's own editing state back after {@link #standIn}. Nothing happens when none was set aside. Client thread */
+    public static void putBack() {
+        EditHistory own = setAside;
+        if (own == null) {
+            return;
+        }
+        setAside = null;
+        history = own;
+        PointOfView.prepare(own.scene());
+    }
+
+    /** The recording's own editing state, whether or not a plain one stands in for it; null when none is open */
+    private static @Nullable EditHistory own() {
+        EditHistory aside = setAside;
+        return aside != null ? aside : history;
+    }
+
     public static boolean followCamera() {
         return followCamera;
     }
@@ -157,7 +200,7 @@ public final class EditorSession {
 
     /** Once a frame: save what has changed, once it has been still for a moment */
     private static void autosave() {
-        EditHistory current = history;
+        EditHistory current = own();
         RecordingFile target = file;
         long now = System.currentTimeMillis();
         if (current == null || target == null || saved.get().of(current) || queued.of(current) || now - changedAt < SAVE_AFTER_MILLIS || now < retryAt
@@ -185,7 +228,7 @@ public final class EditorSession {
      * background export game reads scenes from the file (EXP-13). Client thread
      */
     public static void saveNow() {
-        EditHistory current = history;
+        EditHistory current = own();
         RecordingFile target = file;
         if (current == null || target == null || saved.get().of(current) || comedymonkey.dailies.export.Worker.active()) {
             return;

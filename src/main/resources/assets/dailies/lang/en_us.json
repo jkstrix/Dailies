@@ -969,6 +969,8 @@
   "dailies.editor.export.queue.job": "%s, %s: %s",
   "dailies.editor.export.queue.job.tip": "%s. Recording %s, scene %s, preset %s. %s",
   "dailies.editor.export.queue.job.tip_gone": "This job has left the queue",
+  "dailies.editor.export.queue.job.tip_point_of_view": "%s. Recording %s, seen through %s's eyes, ticks %s to %s, preset %s. %s",
+  "dailies.editor.export.queue.point_of_view": "%s's point of view",
   "dailies.editor.export.queue.state.waiting": "waiting",
   "dailies.editor.export.queue.state.paused": "held back",
   "dailies.editor.export.queue.state.running": "running",

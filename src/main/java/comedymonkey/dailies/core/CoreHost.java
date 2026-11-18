@@ -314,6 +314,12 @@ public final class CoreHost implements Host.Mod {
         return comedymonkey.dailies.export.QueueRunner.add(job).id;
     }
 
+    @Override
+    public String queueExport(Path recording, int startTick, int endTick, @Nullable String preset, @Nullable String folder, String name) throws Exception {
+        comedymonkey.dailies.export.ExportQueue.Job job = comedymonkey.dailies.export.QueueRunner.jobForRange(recording, startTick, endTick, preset, folder, name);
+        return comedymonkey.dailies.export.QueueRunner.add(job).id;
+    }
+
     private comedymonkey.dailies.edit.EditHistory openHistory() {
         if (!Playback.loaded() || !comedymonkey.dailies.editor.EditorSession.open()) {
             throw new IllegalStateException("No recording is open");
