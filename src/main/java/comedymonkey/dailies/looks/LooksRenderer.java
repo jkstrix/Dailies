@@ -264,6 +264,9 @@ public final class LooksRenderer {
                     forget();
                 }
                 comedymonkey.dailies.compat.create.FlywheelLooks.frame(false);
+                // Voice chat's own state and the viewer's own shaders setting go back once no scene is shown
+                comedymonkey.dailies.compat.voicechat.VoiceChatLook.frame(false);
+                comedymonkey.dailies.compat.iris.IrisShaders.apply(null);
                 return;
             }
             Minecraft minecraft = Minecraft.getInstance();
@@ -299,6 +302,8 @@ public final class LooksRenderer {
             particlesShown = now.showParticles;
             looks = now;
             comedymonkey.dailies.compat.create.FlywheelLooks.frame(true);
+            comedymonkey.dailies.compat.voicechat.VoiceChatLook.frame(now.voiceChat);
+            comedymonkey.dailies.compat.iris.IrisShaders.apply(now.shaders);
             BlockChanges.frame(minecraft, scene);
         } catch (Throwable t) {
             // For example the recording closing between two of the questions above

@@ -482,6 +482,8 @@ public final class Export {
             window.setWidth(wanted.width * scale);
             window.setHeight(wanted.height * scale);
             minecraft.resizeDisplay();
+            // The scene's shaders before its first frame is drawn, should the editor not have shown it that way yet
+            comedymonkey.dailies.compat.iris.IrisShaders.apply(scene.looks().shaders);
             if (!wanted.still) {
                 EditorSession.setExporting(true);
                 Playback.exportMode(true);

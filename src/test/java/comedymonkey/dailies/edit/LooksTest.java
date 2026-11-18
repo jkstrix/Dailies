@@ -31,10 +31,11 @@ class LooksTest {
                 "show_own_shadow", "show_scoreboard", "show_action_bar", "show_hotbar", "show_blocks", "show_entities", "show_players", "show_beacon_beams",
                 "hidden_entity_types", "hidden_particle_types",
                 "weather", "fog_mode", "fog_start", "fog_end", "fog_colour", "sky", "background_colour", "night_vision",
-                "server_resource_packs", "fov", "roll", "aspect_guide", "custom_aspect", "letterbox", "thirds_guide", "centre_guide", "void_spill", "head_bob")) {
+                "server_resource_packs", "fov", "roll", "aspect_guide", "custom_aspect", "letterbox", "thirds_guide", "centre_guide", "void_spill", "head_bob",
+                "voice_chat", "shaders")) {
             assertTrue(names.contains(name), name);
         }
-        assertEquals(36, names.size());
+        assertEquals(38, names.size());
     }
 
     @Test
@@ -51,6 +52,41 @@ class LooksTest {
         assertEquals(Looks.AspectGuide.OFF, looks.aspectGuide);
         assertEquals(0.0, looks.aspectRatio());
         assertTrue(looks.hiddenEntityTypes.isEmpty() && looks.entityOverrides().isEmpty());
+        // Voice chat's icons only when asked for, and the viewer's own shaders setting left alone
+        assertFalse(looks.voiceChat);
+        assertEquals(Looks.Shaders.AS_GAME, looks.shaders);
+    }
+
+    @Test
+    void voiceChatAndShadersAreSetByNameAndSurviveSavingAndLoading() {
+        Looks looks = new Looks();
+        assertEquals("false", looks.getText("voice_chat"));
+        assertEquals("\"as_game\"", looks.getText("shaders"));
+
+        looks.setAllText("{\"voice_chat\": true, \"shaders\": \"off\"}");
+        assertTrue(looks.voiceChat);
+        assertEquals(Looks.Shaders.OFF, looks.shaders);
+        Looks loaded = Looks.fromJsonText(looks.toJsonText());
+        assertTrue(loaded.voiceChat);
+        assertEquals(Looks.Shaders.OFF, loaded.shaders);
+        assertEquals(looks.toJsonText(), loaded.toJsonText());
+
+        looks.setAllText("{\"shaders\": \"ON\"}");
+        assertEquals(Looks.Shaders.ON, Looks.fromJsonText(looks.toJsonText()).shaders);
+
+        assertEquals("'shaders' must be one of as_game, on, off, got \"bright\"", refused(looks, "{\"shaders\": \"bright\"}"));
+        assertEquals("'voice_chat' must be true or false, got \"yes\"", refused(looks, "{\"voice_chat\": \"yes\"}"));
+        assertEquals(Looks.Shaders.ON, looks.shaders);
+
+        // A scene saved before these looks existed, or with a value this version does not know, gets the defaults
+        Looks old = Looks.fromJsonText("{\"night_vision\": true, \"shaders\": \"sepia\"}");
+        assertFalse(old.voiceChat);
+        assertEquals(Looks.Shaders.AS_GAME, old.shaders);
+        assertTrue(old.nightVision);
+
+        String described = looks.describeText();
+        assertTrue(described.contains("\"shaders\":{\"type\":\"enum\",\"value\":\"on\",\"values\":[\"as_game\",\"on\",\"off\"],"), described);
+        assertTrue(described.contains("\"voice_chat\":{\"type\":\"boolean\",\"value\":true,"), described);
     }
 
     @Test

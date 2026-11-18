@@ -40,7 +40,7 @@ final class LooksTools {
         "hide_team_prefix", "team prefixes cannot be hidden per entity",
         "hide_team_suffix", "team suffixes cannot be hidden per entity",
         "hide_below_name", "the text below a name cannot be hidden per entity",
-        "mute_voice", "Dailies does not record voice chat",
+        "mute_voice", "recorded voice chat cannot be muted per entity",
         "audio_source", "sound is always heard from the camera",
         "hide_all_spectators", "there is no setting that hides every spectator; hide them one by one with hide_during_export");
 
@@ -50,8 +50,8 @@ final class LooksTools {
     static void register(McpProtocol.Registrar registrar) {
         EditingTools.add(registrar, "visuals_get",
             "The current scene's looks, the settings that are not on the timeline: what is drawn (HUD, hotbar, scoreboard, action bar, chat, boss bars, titles, name tags, "
-                + "particles, held items, sky, and blocks, entities, players and beacon beams as a whole), weather, fog, night vision, whether the server's resource packs are used, "
-                + "field of view, roll, the frame shape (a guide, or with 'letterbox' the shape of the picture itself, which exports then come out in) and the framing guides. "
+                + "particles, held items, sky, and blocks, entities, players and beacon beams as a whole), Simple Voice Chat's icons and groups, weather, fog, night vision, whether the server's resource packs are used, "
+                + "Iris's shaders, field of view, roll, the frame shape (a guide, or with 'letterbox' the shape of the picture itself, which exports then come out in) and the framing guides. "
                 + "Each setting comes with its type, its value, what it allows and what it does.",
             McpSchema.object(), (args, history) -> {
                 JsonObject json = new JsonObject();

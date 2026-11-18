@@ -41,6 +41,14 @@ public final class Looks {
         CUSTOM
     }
 
+    /** Whether the scene is shown through Iris's shader pack */
+    public enum Shaders {
+        /** Left as the viewer's own game has it */
+        AS_GAME,
+        ON,
+        OFF
+    }
+
     /** The frame shape drawn over the view as a guide */
     public enum AspectGuide {
         OFF("off", 0.0),
@@ -94,6 +102,11 @@ public final class Looks {
     public boolean voidSpill = true;
     /** Watching through a player's eyes, the view sways as they walk, worked out from how they move */
     public boolean headBob = true;
+    /**
+     * What Simple Voice Chat showed while recording: the icons over players' heads (talking, muted, not connected, in
+     * a group) and the group display. Off unless turned on
+     */
+    public boolean voiceChat = false;
     /** Ids of entity types that are not drawn, for example "minecraft:bat" */
     public List<String> hiddenEntityTypes = new ArrayList<>();
     /** Ids of particle types that are not drawn, for example "minecraft:rain" */
@@ -115,6 +128,8 @@ public final class Looks {
     public boolean nightVision = false;
     /** The resource packs the server gave the recorder, as recorded (PLAY-17). Off shows the viewer's own packs alone */
     public boolean serverResourcePacks = true;
+    /** Iris's shader pack on or off for this scene, or the viewer's own setting */
+    public Shaders shaders = Shaders.AS_GAME;
 
     // The frame
     /** Field of view in degrees when no track sets it; 0 leaves the game's own alone */
@@ -529,6 +544,8 @@ public final class Looks {
                 looks -> looks.voidSpill, (looks, value) -> looks.voidSpill = value);
         toggle("head_bob", "Watching through a player's eyes, sway the view as they walk, worked out from how they move (needs the game's own View Bobbing on)",
                 looks -> looks.headBob, (looks, value) -> looks.headBob = value);
+        toggle("voice_chat", "Show what Simple Voice Chat showed while recording: the icons over players' heads (talking, muted, not connected, in a group) and the group display. Needs Simple Voice Chat",
+                looks -> looks.voiceChat, (looks, value) -> looks.voiceChat = value);
         list("hidden_entity_types", "Ids of entity types that are not drawn, for example [\"minecraft:bat\"]. An empty list draws them all",
                 looks -> looks.hiddenEntityTypes, (looks, value) -> looks.hiddenEntityTypes = value);
         list("hidden_particle_types", "Ids of particle types that are not drawn, for example [\"minecraft:rain\"]. An empty list draws them all",
@@ -549,6 +566,8 @@ public final class Looks {
 
         toggle("server_resource_packs", "Use the server's resource packs as they were when recorded. When off, only your own packs are used",
                 looks -> looks.serverResourcePacks, (looks, value) -> looks.serverResourcePacks = value);
+        choice("shaders", Shaders.values(), JsonFields::id, "Iris's shader pack: as_game leaves your own setting alone, on or off sets it for this scene. Needs Iris",
+                looks -> looks.shaders, (looks, value) -> looks.shaders = value);
 
         FIELDS.put("fov", new Field("fov", "number", "Field of view in degrees when no track sets it: 0 leaves the game's own alone, otherwise 1 to 170") {
             @Override
