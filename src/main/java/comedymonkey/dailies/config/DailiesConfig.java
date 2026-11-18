@@ -50,7 +50,7 @@ public final class DailiesConfig {
             choice("controlsLocation", Side.RIGHT, "The side of the pause menu the recording buttons sit on");
             bool("markDimensionChanges", true, "Drop a marker on every change of dimension");
             integer("recorderUpdatesPerSecond", 20, 1, 20, "How often your own player's movement is captured each second");
-            integer("snapshotSeconds", 5, 1, 1800, "How often a recording stores the whole world afresh. Going back in playback replays from the stored world before, so a shorter time makes going back quicker and the file a little larger");
+            integer("snapshotSeconds", 2, 1, 1800,"How often a recording stores the whole world afresh. Going back in playback replays from the stored world before, so a shorter time makes going back quicker and the file a little larger");
             bool("recordVoiceChat", true, "Capture the voice chat you hear, per speaker, so playback and exports have it (needs Simple Voice Chat)");
             for (int marker = 1; marker <= 4; marker++) {
                 text("marker" + marker + "Colour", "red", "Colour of marker key " + marker + ": red, orange, yellow, green, cyan, blue, purple, white, or a custom colour as #RRGGBB");

@@ -40,7 +40,7 @@ neoForge {
             client()
             gameDirectory = file('run-test')
             systemProperty 'dailies.test.script', 'auto'
-            systemProperty 'dailies.test.segmentTicks', '100'
+            systemProperty 'dailies.test.segmentTicks', '40'
             // Switches for trying things out, as for the modded run: gradlew runTestClient -PdailiesFlags=dailies.encoder.softwareOnly
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -77,7 +77,7 @@ neoForge {
             gameDirectory = file('run-modded')
             loadedMods = []
             systemProperty 'dailies.test.script', 'auto'
-            systemProperty 'dailies.test.segmentTicks', '100'
+            systemProperty 'dailies.test.segmentTicks', '40'
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }

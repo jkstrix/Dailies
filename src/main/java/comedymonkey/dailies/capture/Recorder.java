@@ -67,9 +67,12 @@ public final class Recorder {
     /**
      * The specification asked for five minutes (REC-20). Going back in playback starts from the stored world before, so
      * at five minutes a step back replays up to five minutes; the owner asked for going back to be quick however long
-     * the session, and five seconds is what the scripted tests have always run with.
+     * the session, and five seconds is what the scripted tests have always run with. Since 18 November two: dragging the
+     * playhead back replays up to the whole stretch since the stored world before, about a millisecond a tick, and at
+     * five seconds the worst step back of a drag took near two hundred milliseconds. Unchanged chunks are stored once and
+     * only named again, so a stored world costs little more than what has changed; what each costs is measured and logged.
      */
-    private static final int DEFAULT_SEGMENT_TICKS = 5 * 20;
+    private static final int DEFAULT_SEGMENT_TICKS = 2 * 20;
     private static final int PART_TICKS = 40;
     private static final int PART_BYTES = 1024 * 1024;
     private static final DateTimeFormatter NAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss");
@@ -215,7 +218,10 @@ public final class Recorder {
         this.players.clear();
         this.firstReal = 0;
         this.lastReal = 0;
-        this.segmentTicks = Math.max(20, Integer.getInteger("dailies.test.segmentTicks", Host.get().setting("snapshotSeconds", DEFAULT_SEGMENT_TICKS / 20) * 20));
+        this.worldsStored = 0;
+        this.storingNanos = 0L;
+        this.longestStoreNanos = 0L;
+        this.segmentTicks =Math.max(20, Integer.getInteger("dailies.test.segmentTicks", Host.get().setting("snapshotSeconds", DEFAULT_SEGMENT_TICKS / 20) * 20));
         this.tick = 0;
         this.id = manifest.id;
         this.waitingForSnapshot = true;
@@ -250,6 +256,22 @@ public final class Recorder {
         Notices.show(Component.translatable("dailies.notice.resumed"));
     }
 
+    // --- What storing the world cost the game, each time: it is done on the game's thread, between two frames ---
+    private int worldsStored = 0;
+    private long storingNanos = 0L;
+    private long longestStoreNanos = 0L;
+
+    private void storedWorld(long nanos) {
+        this.worldsStored++;
+        this.storingNanos += nanos;
+        this.longestStoreNanos = Math.max(this.longestStoreNanos, nanos);
+    }
+
+    /** Worlds stored in the recording being made, their average and longest cost on the game's thread in milliseconds */
+    public double[] storingCost() {
+        return new double[]{this.worldsStored, this.worldsStored == 0 ? 0.0 : this.storingNanos / 1e6 / this.worldsStored, this.longestStoreNanos / 1e6};
+    }
+
     /**
      * Ends the recording and saves it.
      *
@@ -263,6 +285,9 @@ public final class Recorder {
         if (this.state == State.RECORDING) {
             this.flushPart();
         }
+        double[] storing = this.storingCost();
+        Host.LOGGER.info(String.format(java.util.Locale.ROOT, "Dailies: the recording stored the world %d times, every %d ticks, taking the game %.2f ms each on average and %.2f ms at the longest",
+            (int) storing[0], this.segmentTicks, storing[1], storing[2]));
         String wanted = name == null || name.isBlank() ? this.manifest.name : name.trim();
         Path working = this.workingFile;
         Spool spool = this.spool;
@@ -465,7 +490,9 @@ public final class Recorder {
             this.own.forgetShown();
         }
         Snapshots.ownShown = this.own.shown();
+        long storing = System.nanoTime();
         Snapshots.write(this.live, minecraft, listener, this.codec);
+        this.storedWorld(System.nanoTime() - storing);
         // Where Distant Horizons keeps this world's far terrain, so playback can show it from a copy of its own. Asked
         // here, written into the manifest by the writer, whose it is
         java.util.Map<String, String> farTerrain = comedymonkey.dailies.compat.distanthorizons.DistantHorizonsCompat.liveFolders();
