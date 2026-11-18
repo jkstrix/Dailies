@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -36,6 +37,10 @@ class LibraryIndexTest {
 
     @TempDir
     Path folder;
+
+    /** Somewhere that is not the recordings folder */
+    @TempDir
+    Path elsewhere;
 
     /** A small recording of one segment with a time index: fifty milliseconds a tick from its start */
     private Path record(String file, String id, String world, int ticks, long realStart, long created, long edited, Spans.Span... spans) throws IOException {
@@ -315,6 +320,75 @@ class LibraryIndexTest {
         assertEquals(2300, joined.scene(1).exportEnd());
         assertEquals(0, joined.currentSceneIndex());
         assertNull(EditRemap.joined(Arrays.asList(null, null), List.of(10, 10), List.of("A", "B")));
+    }
+
+
+    @Test
+    void onlyARecordingInsideTheFolderIsNamedByAPath() throws IOException {
+        this.library();
+        LibraryIndex index = new LibraryIndex(this.folder);
+        Path a = this.folder.resolve("A.dailies");
+        assertEquals(a, index.fileNamed("A"));
+        assertEquals(a, index.fileNamed("A.dailies"));
+        assertEquals(a, index.fileNamed(a.toAbsolutePath().toString()));
+        assertTrue(index.holds(a));
+
+        // A recording outside the folder, by its absolute path and by a relative one that climbs out
+        Path outside = this.elsewhere.resolve("Stranger.dailies");
+        Files.writeString(outside, "a file of someone else's", StandardCharsets.UTF_8);
+        assertNull(index.fileNamed(outside.toAbsolutePath().toString()));
+        assertNull(index.fileNamed(outside.toAbsolutePath().toString().replace(".dailies", "")));
+        assertNull(index.fileNamed(this.folder.toAbsolutePath().relativize(outside.toAbsolutePath()).toString()));
+        assertNull(index.fileNamed("../Stranger.dailies"));
+        assertFalse(index.holds(outside));
+        assertFalse(index.holds(this.folder.resolve("../Stranger.dailies")));
+
+        // A file in the folder that is not a recording, and the folder itself
+        Files.writeString(this.folder.resolve("notes.txt"), "not a recording", StandardCharsets.UTF_8);
+        assertNull(index.fileNamed("notes.txt"));
+        assertFalse(index.holds(this.folder.resolve("notes.txt")));
+        assertFalse(index.holds(this.folder));
+        assertNull(index.fileNamed(""));
+        assertNull(index.fileNamed(null));
+        assertNull(index.fileNamed("Nobody"));
+    }
+
+    @Test
+    void aDamagedFileIsNotReadAgainNorTheIndexWrittenAtEveryLook() throws IOException {
+        this.library();
+        Path broken = this.folder.resolve("Broken.dailies");
+        Files.writeString(broken, "this was cut short by a crash", StandardCharsets.UTF_8);
+        LibraryIndex index = new LibraryIndex(this.folder);
+        index.refresh(true);
+        assertEquals(3, index.list().size());
+        assertTrue(Files.exists(index.indexFile()));
+
+        FileTime longAgo = FileTime.fromMillis(1_000_000_000_000L);
+        Files.setLastModifiedTime(index.indexFile(), longAgo);
+        index.refresh(true);
+        index.refresh(true);
+        assertEquals(longAgo, Files.getLastModifiedTime(index.indexFile()), "the index was written again though nothing had changed");
+        assertEquals(3, index.list().size());
+
+        // Once the file is a real recording, it is read
+        Files.delete(broken);
+        this.record("Broken", "R", "Home", 50, REAL, REAL, 0);
+        index.refresh(true);
+        assertEquals(4, index.list().size());
+        assertTrue(Files.readString(index.indexFile(), StandardCharsets.UTF_8).contains("Broken.dailies"));
+    }
+
+    @Test
+    void aRecordingDeletedByHandIsNotOfferedThoughTheFolderWasLookedAtAMomentAgo() throws IOException {
+        this.library();
+        LibraryIndex index = new LibraryIndex(this.folder);
+        assertEquals(List.of("B@50", "Episode@650"), names(index.locate("B", 50)));
+        assertTrue(index.locate("nobody", 5).isEmpty());
+        // The look at the folder for the moment nobody holds was just now, so this one may not look again: it still
+        // never points at a file that is gone
+        Files.delete(this.folder.resolve("B.dailies"));
+        assertEquals(List.of("Episode@650"), names(index.locate("B", 50)));
+        assertEquals(1, index.locateClip("B", 0, 100).size());
     }
 
 }

@@ -5,10 +5,13 @@ import com.google.gson.GsonBuilder;
 import comedymonkey.dailies.file.Spans;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,6 +20,10 @@ import java.util.List;
  * recordings folder. The retention rule that moves old recordings to the bin spares any recording that holds footage
  * a video was made from, and this is how it knows. Stored by original and tick, as moments are (FILE-11), so a
  * recording trimmed or combined from an exported one is known to hold the exported stretch too. Thread safe.
+ * <p>
+ * Two games write it: the one being played, and the background export game (EXP-13), which notes its own exports. So
+ * an export is added while holding a lock on a file beside it, to the list as it is on disk at that moment, and the
+ * list is read again whenever the file has changed since it was last read; neither game undoes the other's.
  */
 public final class ExportLog {
 
@@ -57,19 +64,37 @@ public final class ExportLog {
         List<Exported> exports = new ArrayList<>();
     }
 
+    /** One lock per file inside this process, since a file lock cannot be taken twice by the same one */
+    private static final Object IN_PROCESS = new Object();
+
     private final Path file;
     private final List<Exported> exports = new ArrayList<>();
-    private boolean loaded = false;
+    /** The size and modified time of the file as it was last read or written; -1 before then and while there is none */
+    private long readSize = -1;
+    private long readModified = -1;
 
     public ExportLog(Path folder) {
         this.file = folder.resolve(FILE_NAME);
     }
 
+    /** {size, modified time} of the file now; {-1, -1} when there is none */
+    private long[] stamp() {
+        try {
+            return new long[]{Files.size(this.file), Files.getLastModifiedTime(this.file).toMillis()};
+        } catch (IOException | RuntimeException none) {
+            return new long[]{-1, -1};
+        }
+    }
+
+    /** Reads the file, unless it is just as it was when last read or written */
     private void load() {
-        if (this.loaded) {
+        long[] stamp = this.stamp();
+        if (stamp[0] == this.readSize && stamp[1] == this.readModified) {
             return;
         }
-        this.loaded = true;
+        this.readSize = stamp[0];
+        this.readModified = stamp[1];
+        this.exports.clear();
         if (!Files.isRegularFile(this.file)) {
             return;
         }
@@ -100,7 +125,20 @@ public final class ExportLog {
      * @param to        the tick after the last
      */
     public synchronized void add(String recordingId, String world, String output, long size, long when, List<Spans.Span> sourceMap, int from, int to) throws IOException {
-        this.load();
+        Files.createDirectories(this.file.getParent());
+        Path lockFile = this.file.resolveSibling(FILE_NAME + ".lock");
+        synchronized (IN_PROCESS) {
+            try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                 FileLock ignored = channel.lock()) {
+                // Read afresh, whatever is remembered: the other game may have added one a moment ago
+                this.readSize = -2;
+                this.load();
+                this.addNow(recordingId, world, output, size, when, sourceMap, from, to);
+            }
+        }
+    }
+
+    private void addNow(String recordingId, String world, String output, long size, long when, List<Spans.Span> sourceMap, int from, int to) throws IOException {
         Exported exported = new Exported();
         exported.recordingId = recordingId;
         exported.world = world == null ? "" : world;
@@ -121,10 +159,12 @@ public final class ExportLog {
         }
         Stored stored = new Stored();
         stored.exports = new ArrayList<>(this.exports);
-        Files.createDirectories(this.file.getParent());
         Path temporary = this.file.resolveSibling(FILE_NAME + ".writing");
         Files.writeString(temporary, GSON.toJson(stored), StandardCharsets.UTF_8);
         Files.move(temporary, this.file, StandardCopyOption.REPLACE_EXISTING);
+        long[] stamp = this.stamp();
+        this.readSize = stamp[0];
+        this.readModified = stamp[1];
     }
 
     /** Whether a recording holds any footage that went into a video */

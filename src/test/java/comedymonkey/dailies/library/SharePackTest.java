@@ -101,4 +101,29 @@ class SharePackTest {
         assertThrows(IOException.class, () -> SharePack.info(notAPack));
     }
 
+
+    @Test
+    void aPackWithMoreFilesOrBytesThanAllowedIsRefused() throws IOException {
+        Path pack = this.folder.resolve("many" + SharePack.EXTENSION);
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(pack))) {
+            zip.putNextEntry(new ZipEntry(SharePack.INFO));
+            zip.write("{}".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry(SharePack.RECORDING));
+            zip.write(new byte[5000]);
+            zip.closeEntry();
+            for (int i = 0; i < 10; i++) {
+                zip.putNextEntry(new ZipEntry("moments/s/audio/" + i + ".wav"));
+                zip.write(new byte[]{1});
+                zip.closeEntry();
+            }
+        }
+        assertThrows(IOException.class, () -> SharePack.unpack(pack, this.folder.resolve("a"), 1_000_000, 5));
+        assertThrows(IOException.class, () -> SharePack.unpack(pack, this.folder.resolve("b"), 4000, 1000));
+        // Within both, it unpacks
+        SharePack.unpack(pack, this.folder.resolve("c"), 1_000_000, 1000);
+        assertTrue(Files.isRegularFile(this.folder.resolve("c").resolve(SharePack.RECORDING)));
+        assertEquals(1, Files.size(this.folder.resolve("c/moments/s/audio/9.wav")));
+    }
+
 }

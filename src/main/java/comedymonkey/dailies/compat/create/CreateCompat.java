@@ -131,6 +131,22 @@ public final class CreateCompat {
         return field;
     }
 
+    /**
+     * A buffer with room for one more angle: a new one, or the one given grown to twice its size when it is full. Every
+     * changed angle is stored, however many contraptions are turning, and only then counted as written
+     */
+    static ByteBuffer room(@org.jetbrains.annotations.Nullable ByteBuffer out) {
+        if (out == null) {
+            return ByteBuffer.allocate(64 * ENTRY_BYTES);
+        }
+        if (out.remaining() >= ENTRY_BYTES) {
+            return out;
+        }
+        ByteBuffer bigger = ByteBuffer.allocate(Math.max(out.capacity() * 2, out.position() + ENTRY_BYTES));
+        bigger.put(out.array(), 0, out.position());
+        return bigger;
+    }
+
     /** At the end of every recorded tick: the angle of each turning contraption whose angle has changed */
     private void write() {
         if (this.failed) {
@@ -151,13 +167,9 @@ public final class CreateCompat {
                 if (before != null && before == now) {
                     continue;
                 }
+                out = room(out);
+                out.putLong(entity.getUUID().getMostSignificantBits()).putLong(entity.getUUID().getLeastSignificantBits()).putFloat(now);
                 this.lastWritten.put(entity.getUUID(), now);
-                if (out == null) {
-                    out = ByteBuffer.allocate(64 * ENTRY_BYTES);
-                }
-                if (out.remaining() >= ENTRY_BYTES) {
-                    out.putLong(entity.getUUID().getMostSignificantBits()).putLong(entity.getUUID().getLeastSignificantBits()).putFloat(now);
-                }
             }
             if (out != null) {
                 Recorder.get().writeExtension(EXTENSION, java.util.Arrays.copyOf(out.array(), out.position()));
@@ -178,13 +190,9 @@ public final class CreateCompat {
                 if (before != null && before == now) {
                     continue;
                 }
+                bearings = room(bearings);
+                bearings.putLong(entity.getUUID().getMostSignificantBits()).putLong(entity.getUUID().getLeastSignificantBits()).putFloat(now);
                 this.bearingsWritten.put(entity.getUUID(), now);
-                if (bearings == null) {
-                    bearings = ByteBuffer.allocate(64 * ENTRY_BYTES);
-                }
-                if (bearings.remaining() >= ENTRY_BYTES) {
-                    bearings.putLong(entity.getUUID().getMostSignificantBits()).putLong(entity.getUUID().getLeastSignificantBits()).putFloat(now);
-                }
             }
             if (bearings != null) {
                 Recorder.get().writeExtension(BEARINGS, java.util.Arrays.copyOf(bearings.array(), bearings.position()));

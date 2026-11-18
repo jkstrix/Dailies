@@ -4,23 +4,29 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
+import comedymonkey.dailies.file.SafePaths;
 import comedymonkey.dailies.file.Spans;
 import comedymonkey.dailies.file.TimeIndex;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitOption;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * The index of the recordings folder (specification FILE-12): {@code index.json}, which lists every recording's id,
@@ -40,6 +46,12 @@ public final class LibraryIndex {
     private static final int DEPTH = 4;
     /** Looking at the folder again sooner than this after the last look is skipped, unless asked for outright */
     private static final long LOOK_EVERY_MILLIS = 400;
+    /**
+     * A question about a moment that finds no recording looks at the folder again at once, in case a file was put there
+     * by hand a moment ago; but not sooner than this after the last time a question did, so that a list of moments
+     * asked about one after another (most of them cut, say) costs one look and not one each
+     */
+    private static final long MISSING_LOOK_EVERY_MILLIS = 1000;
     /** A real time counts as inside a recording when a tick of it is no further from it than this */
     public static final long TIME_TOLERANCE_MILLIS = 1500;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
@@ -112,6 +124,16 @@ public final class LibraryIndex {
     private final Set<String> folders = new java.util.TreeSet<>();
     private boolean loaded = false;
     private long lastLook = 0;
+    private long lastMissingLook = 0;
+    /**
+     * Files that end like a recording but could not be read, by relative file, with the size and modified time they had
+     * then. One is read again only once it has changed, not at every look
+     */
+    private final Map<String, long[]> unreadable = new HashMap<>();
+
+    /** A recording's file as a look at the folder found it */
+    private record Seen(Path file, long size, long modified) {
+    }
 
     public LibraryIndex(Path folder) {
         this.folder = folder;
@@ -131,6 +153,53 @@ public final class LibraryIndex {
 
     private Path absolute(Entry entry) {
         return this.folder.resolve(entry.file);
+    }
+
+    /**
+     * Whether a path is a recording's file in this folder: it ends in {@code .dailies} and, made absolute and
+     * normalised, lies inside the folder. Whatever deletes, moves, bins or writes to a recording asks this first, so a
+     * path from outside (a tool's arguments, say) can never reach any other file
+     */
+    public boolean holds(Path file) {
+        Path name = file.getFileName();
+        return name != null && name.toString().endsWith(RecordingFile.EXTENSION) && SafePaths.inside(this.folder, file);
+    }
+
+    /**
+     * The recording's file that text names as a path: absolute, or relative to the folder, with or without its
+     * extension. Null when there is no such recording in the folder, or the path would lead outside it. Does not look
+     * at the index, so a recording's name or id is not found here
+     */
+    public @Nullable Path fileNamed(@Nullable String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        List<Path> candidates = new ArrayList<>();
+        try {
+            Path given = Path.of(text);
+            if (given.isAbsolute()) {
+                candidates.add(given.normalize());
+                candidates.add(Path.of(text + RecordingFile.EXTENSION).normalize());
+            }
+        } catch (InvalidPathException notAPath) {
+            return null;
+        }
+        if (candidates.isEmpty()) {
+            Path relative = SafePaths.within(this.folder, text);
+            Path withExtension = SafePaths.within(this.folder, text + RecordingFile.EXTENSION);
+            if (relative != null) {
+                candidates.add(relative);
+            }
+            if (withExtension != null) {
+                candidates.add(withExtension);
+            }
+        }
+        for (Path candidate : candidates) {
+            if (this.holds(candidate) && Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private void load() {
@@ -258,17 +327,9 @@ public final class LibraryIndex {
         boolean changed = indexMissing;
         Set<String> present = new HashSet<>();
         if (Files.isDirectory(this.folder)) {
-            List<Path> files;
             Set<String> found = new java.util.TreeSet<>();
-            try (Stream<Path> walk = Files.walk(this.folder, DEPTH)) {
-                List<Path> all = walk.toList();
-                files = all.stream().filter(path -> path.getFileName().toString().endsWith(RecordingFile.EXTENSION) && Files.isRegularFile(path)).toList();
-                for (Path path : all) {
-                    if (!path.equals(this.folder) && Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
-                        found.add(this.relative(path));
-                    }
-                }
-            } catch (IOException | RuntimeException e) {
+            List<Seen> files = this.look(found);
+            if (files == null) {
                 return;
             }
             if (!found.equals(this.folders)) {
@@ -276,30 +337,95 @@ public final class LibraryIndex {
                 this.folders.addAll(found);
                 changed = true;
             }
-            for (Path file : files) {
-                String relative = this.relative(file);
+            Set<String> seen = new HashSet<>();
+            for (Seen file : files) {
+                String relative = this.relative(file.file());
+                seen.add(relative);
                 Entry known = this.entries.get(relative);
-                try {
-                    if (known != null && known.size == Files.size(file) && known.modified == Files.getLastModifiedTime(file).toMillis()) {
-                        present.add(relative);
-                        continue;
-                    }
-                } catch (IOException gone) {
+                if (known != null && known.size == file.size() && known.modified == file.modified()) {
+                    present.add(relative);
                     continue;
                 }
-                Entry fresh = read(file, relative);
-                changed = true;
+                long[] failed = this.unreadable.get(relative);
+                if (known == null && failed != null && failed[0] == file.size() && failed[1] == file.modified()) {
+                    // Could not be read last time and has not changed since: still left out, and nothing to write down
+                    continue;
+                }
+                Entry fresh = read(file.file(), relative);
                 if (fresh != null) {
+                    this.unreadable.remove(relative);
                     this.entries.put(relative, fresh);
                     present.add(relative);
+                    changed = true;
+                } else {
+                    // Left out; when it was known before, forgetting it below is the change
+                    this.unreadable.put(relative, new long[]{file.size(), file.modified()});
                 }
             }
+            this.unreadable.keySet().retainAll(seen);
         }
         changed |= this.entries.keySet().retainAll(present);
         if (changed) {
             this.save();
         }
         this.lastLook = System.currentTimeMillis();
+    }
+
+    /**
+     * What is in the folder now, down to {@link #DEPTH}: every recording's file with its size and modified time, and
+     * into {@code found} every sub-folder not named with a leading dot. A sub-folder that cannot be read is passed over
+     * and the rest is still looked at. Null when the folder itself cannot be read
+     */
+    private @Nullable List<Seen> look(Set<String> found) {
+        Path root = this.folder;
+        List<Seen> files = new ArrayList<>();
+        boolean[] rootUnreadable = {false};
+        try {
+            Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), DEPTH, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+                    if (!directory.equals(root)) {
+                        this.folder(directory);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                    if (attributes.isDirectory()) {
+                        // A folder as deep as recordings are looked for: listed, not looked into
+                        this.folder(file);
+                    } else if (attributes.isRegularFile() && file.getFileName().toString().endsWith(RecordingFile.EXTENSION)) {
+                        files.add(new Seen(file, attributes.size(), attributes.lastModifiedTime().toMillis()));
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException problem) {
+                    if (file.equals(root)) {
+                        rootUnreadable[0] = true;
+                        return FileVisitResult.TERMINATE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path directory, @Nullable IOException problem) {
+                    // A folder that could be read only in part: what was found in it stands
+                    return FileVisitResult.CONTINUE;
+                }
+
+                private void folder(Path directory) {
+                    if (!directory.getFileName().toString().startsWith(".")) {
+                        found.add(LibraryIndex.this.relative(directory));
+                    }
+                }
+            });
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+        return rootUnreadable[0] ? null : files;
     }
 
     /** A recording was saved, made, renamed or moved to this file by the mod itself: read it now */
@@ -385,12 +511,23 @@ public final class LibraryIndex {
     public synchronized List<Hit> locate(String id, int tick) {
         this.refresh();
         List<Hit> hits = this.locateNow(id, tick);
-        if (hits.isEmpty() || hits.stream().anyMatch(hit -> !Files.isRegularFile(hit.file()))) {
+        if ((hits.isEmpty() || hits.stream().anyMatch(hit -> !Files.isRegularFile(hit.file()))) && this.mayLookForMissing()) {
             // Before saying it is nowhere, or pointing at a file that has just gone: look at the folder as it is this instant
             this.refresh(true);
             hits = this.locateNow(id, tick);
         }
+        hits.removeIf(hit -> !Files.isRegularFile(hit.file()));
         return hits;
+    }
+
+    /** Whether a question that found nothing may look at the folder again now ({@link #MISSING_LOOK_EVERY_MILLIS}) */
+    private boolean mayLookForMissing() {
+        long now = System.currentTimeMillis();
+        if (now - this.lastMissingLook < MISSING_LOOK_EVERY_MILLIS) {
+            return false;
+        }
+        this.lastMissingLook = now;
+        return true;
     }
 
     private List<Hit> locateNow(String id, int tick) {
@@ -416,10 +553,11 @@ public final class LibraryIndex {
     public synchronized List<ClipHit> locateClip(String id, int from, int to) {
         this.refresh();
         List<ClipHit> hits = this.locateClipNow(id, from, to);
-        if (hits.isEmpty() || hits.stream().anyMatch(hit -> !Files.isRegularFile(hit.file()))) {
+        if ((hits.isEmpty() || hits.stream().anyMatch(hit -> !Files.isRegularFile(hit.file()))) && this.mayLookForMissing()) {
             this.refresh(true);
             hits = this.locateClipNow(id, from, to);
         }
+        hits.removeIf(hit -> !Files.isRegularFile(hit.file()));
         return hits;
     }
 

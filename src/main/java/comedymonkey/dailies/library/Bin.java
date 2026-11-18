@@ -196,6 +196,11 @@ public final class Bin {
         if (kind == Kind.SCENE) {
             throw new IllegalArgumentException("A scene is put in the bin with putScene");
         }
+        if (!comedymonkey.dailies.file.SafePaths.inside(this.dataDirectory, original) || comedymonkey.dailies.file.SafePaths.inside(this.folder, original)) {
+            // Only what Dailies keeps goes in the bin: what came from anywhere else could never be put back, and would
+            // be deleted for good when its days ran out
+            throw new IllegalArgumentException("Only a file or folder Dailies keeps can be put in the bin, not " + original.getFileName());
+        }
         if (!Files.exists(original)) {
             throw new IOException("There is nothing at " + original.getFileName() + " to put in the bin");
         }
@@ -284,7 +289,8 @@ public final class Bin {
     }
 
     /**
-     * Deletes for good everything that has been in the bin for longer than it keeps things.
+     * Deletes for good everything that has been in the bin for longer than it keeps things. Should one item not
+     * delete, those deleted before it are still taken off the list, and the rest stay for next time.
      *
      * @return what was deleted
      */
@@ -292,28 +298,40 @@ public final class Bin {
         this.load();
         long now = this.clock.getAsLong();
         List<Item> gone = new ArrayList<>();
-        for (Item item : new ArrayList<>(this.items)) {
-            if (now >= item.expires(days)) {
-                gone.add(item);
-                this.items.remove(item);
-                deleteTree(this.folder.resolve(item.id));
+        try {
+            for (Item item : new ArrayList<>(this.items)) {
+                if (now >= item.expires(days)) {
+                    deleteTree(this.folder.resolve(item.id));
+                    this.items.remove(item);
+                    gone.add(item);
+                }
             }
-        }
-        if (!gone.isEmpty()) {
-            this.save();
+        } finally {
+            if (!gone.isEmpty()) {
+                this.save();
+            }
         }
         return gone;
     }
 
-    /** Deletes everything in the bin for good. Whoever calls this has asked the person first */
+    /**
+     * Deletes everything in the bin for good. Whoever calls this has asked the person first. Should one item not
+     * delete, those deleted before it are still taken off the list, and it and the rest stay in the bin.
+     */
     public synchronized int empty() throws IOException {
         this.load();
-        int count = this.items.size();
-        for (Item item : this.items) {
-            deleteTree(this.folder.resolve(item.id));
+        int count = 0;
+        try {
+            for (Item item : new ArrayList<>(this.items)) {
+                deleteTree(this.folder.resolve(item.id));
+                this.items.remove(item);
+                count++;
+            }
+        } finally {
+            if (count > 0) {
+                this.save();
+            }
         }
-        this.items.clear();
-        this.save();
         return count;
     }
 
