@@ -17,6 +17,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import com.google.gson.JsonObject;
+import comedymonkey.dailies.compat.iris.IrisShaders;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.BlockHitResult;
@@ -363,7 +365,15 @@ public final class EditorScreen extends Screen {
         }).when(() -> EditorState.history().canRedo());
         this.group(this.topRight, undo, redo);
 
-        this.more = Gadget.Push.icon(Kit.Icon.DOTS, Kit.t("more.tip"), this::openMoreMenu);
+        // Iris's shaders on or off at a click: the scene's shaders look, so it can be undone and an export does the same.
+        // Only there when Iris is
+        if (IrisShaders.available()) {
+            this.group(this.topRight, new Gadget.Push(() -> Kit.t(shadersShown() ? "shaders.on" : "shaders.off"), EditorScreen::switchShaders)
+                .lit(EditorScreen::shadersShown)
+                .tip(Kit.t("shaders.tip")));
+        }
+
+        this.more =Gadget.Push.icon(Kit.Icon.DOTS, Kit.t("more.tip"), this::openMoreMenu);
         this.more.lit(() -> Menu.openFor(this.more));
         this.group(this.topRight,
                 new Gadget.Push(Component.translatable("dailies.ui.pause.moments"), Controls::openMomentsPage).tip(Component.translatable("dailies.ui.moments.tip")),
@@ -374,6 +384,26 @@ public final class EditorScreen extends Screen {
         }
         for (List<Gadget> group : this.topRight) {
             this.top.addAll(group);
+        }
+    }
+
+    /** Whether the scene shows shaders: as its look says, or as Iris has them when the look leaves it to the game */
+    private static boolean shadersShown() {
+        return switch (EditorState.scene().looks().shaders) {
+            case ON -> true;
+            case OFF -> false;
+            case AS_GAME -> Boolean.TRUE.equals(IrisShaders.enabledNow());
+        };
+    }
+
+    /** The shaders button: the scene's shaders look set to the other of on and off, as one step to undo */
+    private static void switchShaders() {
+        JsonObject values = new JsonObject();
+        values.addProperty("shaders", shadersShown() ? "off" : "on");
+        try {
+            EditorState.history().setLooks(values);
+        } catch (IllegalArgumentException | IllegalStateException refused) {
+            EditorState.say(Component.literal(String.valueOf(refused.getMessage())));
         }
     }
 

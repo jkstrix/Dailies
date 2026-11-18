@@ -41,6 +41,18 @@ public final class IrisShaders {
         return ready();
     }
 
+    /** Whether Iris has its shaders on at this moment; null without Iris or when it cannot be asked. Client thread */
+    public static @Nullable Boolean enabledNow() {
+        if (!ready()) {
+            return null;
+        }
+        try {
+            return (Boolean) enabled.invoke(config);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /**
      * Once per drawn frame, and when an export starts: the scene's choice, or null when no scene is being shown.
      * Switches Iris only when the choice differs from what it has. Client thread, between frames
