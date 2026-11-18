@@ -76,7 +76,8 @@ final class EdgeSteps {
                 // What the recorder dropped dying in the void is left to scatter and fall in playback, for the fun of it
                 test.log("edges: items seen falling out of the world in playback, counted a tick each: " + Census.voidSpilled);
             }
-            if (Census.voidSpilled == 0) {
+            // With the Corpse mod nothing falls loose in the void: the corpse holds it all, and there is nothing to spill
+            if (Census.voidSpilled == 0 && !Host.get().isModLoaded("corpse")) {
                 throw new IllegalStateException("edges: what the recorder dropped dying in the void was never seen scattering and falling in playback");
             }
         } finally {
