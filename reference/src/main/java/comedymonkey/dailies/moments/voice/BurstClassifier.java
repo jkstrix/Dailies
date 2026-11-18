@@ -9,7 +9,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>
  * An implementation runs on the player's own computer, with no server. It is called on a worker thread of its own,
  * with a few seconds of audio around a burst or a stretch the transcription filter found to be no words, only while
- * momentsBurstLabels is on, and never during playback or an export. Install one with
+ * both momentsAiEnabled and momentsBurstLabels are on, and never during playback or an export. Install one with
  * {@code Moments.setBurstClassifier}.
  */
 @FunctionalInterface

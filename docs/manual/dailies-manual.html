@@ -716,7 +716,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 					<li>Who you were with: meetings and groups forming, changing and breaking up.</li>
 					<li>Markers, and moments from the moment key or <code>/dailies moment</code>.</li>
 					<li><b>Craft and contraptions:</b> a craft assembled, first boarded, its first flight, altitude and speed records, a craft lost, a Create contraption assembled, and trains leaving and arriving (from the companion).</li>
-					<li><b>Voice bursts:</b> laughter or shouting, found by loudness alone. Two people going loud together make one bigger moment. This needs no AI.</li>
+					<li><b>Voice bursts:</b> laughter or shouting, found by loudness alone. Two people going loud together make one bigger moment. This needs no AI. With "Use AI Services" and "Name Laughter and Shouting" both on, a small sound model bundled with Dailies also names each burst laughter, cheering, screaming or shouting, on your computer, and laughter makes the better clip.</li>
 					<li>Who spoke and when, from Simple Voice Chat. Dailies never opens your microphone itself.</li>
 					<li>Events sent by the server through the companion.</li>
 				</ul>
@@ -841,7 +841,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>Run the MCP Server, Port</td><td>On, 25595</td><td>The MCP server and the moments page.</td></tr>
 				<tr><td>Listen On</td><td>127.0.0.1</td><td>Leave it alone to keep the server on this computer. See <a href="#mcp">the MCP server</a>.</td></tr>
 				<tr><td>Log Moments</td><td>On</td><td>Keeps the log of what happens while you play.</td></tr>
-				<tr><td>Use AI Services</td><td><b>Off</b></td><td>The one switch for transcription and model-written summaries. Off, nothing is sent anywhere.</td></tr>
+				<tr><td>Use AI Services</td><td><b>Off</b></td><td>The one switch for everything that uses a model: transcription, model-written summaries and naming laughter and shouting. Off, nothing is sent anywhere and no model runs.</td></tr>
+				<tr><td>Name Laughter and Shouting</td><td>On</td><td>Names each voice burst with the sound model bundled with Dailies, on your computer. Only while Use AI Services is on as well.</td></tr>
 				<tr><td>Transcription Server, Summary Server</td><td>The owner's own machines</td><td>Where voice audio and clip text go with AI on. Empty keeps that one off.</td></tr>
 				<tr><td>Voices Left Out</td><td>Empty</td><td>Players whose voice never reaches Moments or the transcription server.</td></tr>
 				<tr><td>Ignored Events</td><td>Empty</td><td>Kinds of event hidden from every list and clip, such as <code>block_mined</code>. <code>*</code> matches anything.</td></tr>

@@ -72,8 +72,69 @@ final class PointOfViewSteps {
         });
     }
 
-    /** After the balloon flight in the recording steps: the game logged it, merged with the companion's report when there is one */
+    /**
+     * After the machines and the balloon flight in the recording steps (CraftSteps): the game logged them, merged with the
+     * companion's report when there is one. Each kind is skipped, with a line, only when the mod it needs is not installed
+     */
     static void craftMoments(SelfTest test) throws Exception {
+        contraptionMoment(test);
+        lostMoment(test);
+        balloonMoments(test);
+    }
+
+    /** The bearing's arm, assembled with the recorder sitting on it: contraption_assembled, which only the game reports */
+    private static void contraptionMoment(SelfTest test) throws Exception {
+        if (!Host.get().isModLoaded("create") || !CraftSteps.builtContraption) {
+            test.skip("contraption moments: no contraption was assembled in this run (Create is not installed)");
+            return;
+        }
+        JsonArray assembled = events(test, "contraption_assembled");
+        boolean found = false;
+        for (JsonElement element : assembled) {
+            JsonObject event = element.getAsJsonObject();
+            if (event.has("subject") && event.get("subject").getAsString().contains("contraption")) {
+                found = true;
+            }
+        }
+        check(found, "the bearing's arm, assembled with the recorder sitting on it, was not logged as contraption_assembled: " + shorten(assembled.toString()));
+        test.log("craft moments: the bearing's contraption was logged as assembled");
+    }
+
+    /** The slab taken out of the world while it fell beside the recorder: craft_lost, from the game and the companion as one event */
+    private static void lostMoment(SelfTest test) throws Exception {
+        if (!Host.get().isModLoaded("sable") || !CraftSteps.builtPlatform) {
+            test.skip("craft moments: no craft was lost in this run (Sable is not installed), so craft_lost was not tried");
+            return;
+        }
+        // A slab that could not be removed in time is already a fault of the staging, with what happened
+        if (CraftSteps.lostCraft == null) {
+            return;
+        }
+        String slab = CraftSteps.lostCraft.toString();
+        JsonArray lost = events(test, "craft_lost");
+        JsonObject ours = null;
+        int forSlab = 0;
+        for (JsonElement element : lost) {
+            JsonObject metadata = element.getAsJsonObject().getAsJsonObject("metadata");
+            if (metadata != null && metadata.has("craft_id") && metadata.get("craft_id").getAsString().equals(slab)) {
+                ours = element.getAsJsonObject();
+                forSlab++;
+            }
+        }
+        check(ours != null, "the slab removed while it fell was not logged as craft_lost (" + CraftSteps.lostDetail + "): " + shorten(lost.toString()));
+        check(forSlab == 1, "the slab's loss was logged " + forSlab + " times, where both sources should make one event");
+        String sources = ours.getAsJsonObject("metadata").get("sources").toString();
+        check(sources.contains("game"), "the game did not see the slab vanish while it fell (" + CraftSteps.lostDetail + "): sources " + sources);
+        if (Host.get().isModLoaded("dailies_companion")) {
+            check(sources.contains("server"), "the companion's report of the slab's loss was not merged into the game's: sources " + sources);
+        } else {
+            test.skip("craft moments: the companion is not installed in this game, so craft_lost came from the game alone (both sources merged is unit tested)");
+        }
+        test.log("craft moments: the slab removed while it fell was logged as lost (sources " + sources + "; " + CraftSteps.lostDetail + ")");
+    }
+
+    /** The balloon: assembled, boarded, flown for the first time, an altitude record on the climb and a speed record when pushed */
+    private static void balloonMoments(SelfTest test) throws Exception {
         if (!Host.get().isModLoaded("sable") || !CraftSteps.builtBalloon) {
             test.skip("craft moments: no balloon was flown in this run (Sable is not installed, or the balloon was not built)");
             return;
@@ -101,7 +162,11 @@ final class PointOfViewSteps {
         check(hasFor(events(test, "craft_first_flight"), balloon), "the balloon's first flight was not logged as craft_first_flight");
         check(events(test, "altitude_record").size() > 0, "climbing in the balloon did not log an altitude record");
         check(hasFor(events(test, "craft_boarded"), balloon), "standing in the balloon's basket was not logged as craft_boarded");
-        test.log("craft moments: the balloon was assembled (sources " + sources + "), boarded, flew for the first time and set an altitude record");
+        check(CraftSteps.pushedForSpeed, "the balloon was not pushed along for a speed record");
+        JsonArray speeds = events(test, "speed_record");
+        check(hasFor(speeds, balloon), "pushing the balloon along with the recorder aboard did not log a speed record for it (" + CraftSteps.speedDetail + "): " + shorten(speeds.toString()));
+        test.log("craft moments: the balloon was assembled (sources " + sources + "), boarded, flew for the first time and set an altitude record and a speed record ("
+            + CraftSteps.speedDetail + ")");
     }
 
     private static JsonArray events(SelfTest test, String type) throws Exception {

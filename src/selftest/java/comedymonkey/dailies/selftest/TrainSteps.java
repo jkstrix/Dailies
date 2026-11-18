@@ -1,5 +1,6 @@
 package comedymonkey.dailies.selftest;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.playback.Playback;
@@ -16,6 +17,8 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,11 +44,15 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
  * compared with the live game by play, by jump and by jump back ({@link CensusPlayback}): the carriages where they were
  * (the census's tolerance for moving things), the recorder in the seat, the train standing at each station; and in
  * play, that the bogeys' wheels turn. The train has no doors. Differences are reported under TRAINS.
+ * <p>
+ * With the Dailies Companion on the server, the ride east is also two moments (plan 2.1): train_departed from the west
+ * station and train_arrived at the east one. Moments are only logged while the train really runs, so they are looked
+ * for while staging and kept in the fixture's notes, and a run that plays the fixture back checks what was found then.
  */
 final class TrainSteps {
 
     /** Goes up whenever the staging changes, so that a fixture staged before is staged and recorded again by itself */
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
 
 
     static final String WORLD = "Dailies Trains";
@@ -59,6 +66,9 @@ final class TrainSteps {
     private static final String DRIVER_BOT = "comedymonkeysaddons:helper_bot";
     private static final String DRIVER_BURNER = "create:blaze_burner";
     private static int movingTick = -1;
+    /** Whether the companion was there when the fixture was staged, and the train moments logged then: "type|station|train id" */
+    private static boolean companionStaged = false;
+    private static List<String> trainMoments = new ArrayList<>();
 
     private TrainSteps() {
     }
@@ -84,15 +94,25 @@ final class TrainSteps {
         }
         CensusPlayback.begin(test);
         movingTick = -1;
+        companionStaged = false;
+        trainMoments = new ArrayList<>();
         try {
             Census.EXTRAS.add(TrainSteps::describe);
             Path recording = folder.resolve("Trains.dailies");
             // Played back from the recording kept by an earlier run when it still stands for this code (StagedFixtures)
-            boolean staged = StagedFixtures.recordOrReuse(test, "trains", VERSION, folder, recording, () -> record(test, minecraft, recording),
-                out -> out.name("moving").json.value(movingTick), in -> movingTick = in.name("moving").integer());
+            boolean staged = StagedFixtures.recordOrReuse(test, "trains", VERSION, folder, recording, () -> record(test, minecraft, recording), out -> {
+                out.name("moving").json.value(movingTick);
+                out.name("companion").json.value(companionStaged);
+                out.name("train moments").strings(trainMoments);
+            }, in -> {
+                movingTick = in.name("moving").integer();
+                companionStaged = in.name("companion").truth();
+                trainMoments = new ArrayList<>(in.name("train moments").strings());
+            });
             if (!staged) {
                 return;
             }
+            checkTrainMoments(test);
             test.skip("the train has no sliding doors: doors in playback were not tried");
             CensusPlayback.compare(test, recording, folder, "TRAINS", "trains", tally -> wheels(test, minecraft, tally));
         } finally {
@@ -181,6 +201,7 @@ final class TrainSteps {
         } finally {
             Census.stop();
         }
+        findTrainMoments(test);
         JsonObject finished = test.tool("recording_finish", args("name", "Trains"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);
         BestiarySteps.weigh();
@@ -296,7 +317,9 @@ final class TrainSteps {
         if (!arrived) {
             problems.add("the train did not reach the east station within thirty seconds");
         }
-        waitTicks(10);
+        // A second at the station before the recorder gets off: the companion looks at the trains every half second, and
+        // only reports an arrival to someone still aboard
+        waitTicks(20);
         at = mark("the train standing at the east station");
         still("trains-at-east", at, 56.5, -56.0, 37.5, 60.5, -58.0, 30.5, false);
     }
@@ -325,6 +348,60 @@ final class TrainSteps {
         waitTicks(10);
         int at = mark("the train standing at the west station");
         still("trains-at-west", at, 8.5, -56.0, 37.5, 4.5, -58.0, 30.5, false);
+    }
+
+    // --- Its moments (plan 2.1) ---
+
+    /**
+     * While staging: the train moments this ride logged, from the companion on the server. Nothing on the way back west:
+     * the recorder is on the ground then, and the companion only tells players aboard
+     */
+    private static void findTrainMoments(SelfTest test) throws Exception {
+        companionStaged = Host.get().isModLoaded("dailies_companion");
+        if (!companionStaged) {
+            return;
+        }
+        // The arrival was long ago by now; a few seconds more for anything still on its way from the server
+        long deadline = System.currentTimeMillis() + 5_000;
+        do {
+            trainMoments = new ArrayList<>();
+            for (String type : new String[]{"train_departed", "train_arrived"}) {
+                for (JsonElement element : test.tool("moments_events_query", args("session", "current", "type", type, "limit", 50)).getAsJsonArray("events")) {
+                    JsonObject metadata = element.getAsJsonObject().getAsJsonObject("metadata");
+                    String station = metadata != null && metadata.has("station") ? metadata.get("station").getAsString() : "";
+                    String train = metadata != null && metadata.has("train_id") ? metadata.get("train_id").getAsString() : "";
+                    trainMoments.add(type + "|" + station + "|" + train);
+                }
+            }
+            if (trainMoments.size() >= 2) {
+                break;
+            }
+            Thread.sleep(250);
+        } while (System.currentTimeMillis() < deadline);
+        test.log("trains: moments logged while staging: " + trainMoments);
+    }
+
+    /** On every run, staged or played back: the moments found while staging, one departure from the west station and one arrival east */
+    private static void checkTrainMoments(SelfTest test) {
+        if (!Host.get().isModLoaded("dailies_companion")) {
+            test.skip("the Dailies Companion is not installed: train_departed and train_arrived, which come from the server, were not tried");
+            return;
+        }
+        if (!companionStaged) {
+            test.fault("the trains fixture was staged without the Dailies Companion, so it holds no train moments to check: stage it again with dailies.test.recordTours");
+            return;
+        }
+        List<String> departed = trainMoments.stream().filter(moment -> moment.startsWith("train_departed|")).toList();
+        List<String> arrived = trainMoments.stream().filter(moment -> moment.startsWith("train_arrived|")).toList();
+        if (departed.size() != 1 || !departed.get(0).startsWith("train_departed|Dailies West|")) {
+            test.fault("the ride east was not logged as one train_departed from Dailies West: " + trainMoments);
+        } else if (arrived.size() != 1 || !arrived.get(0).startsWith("train_arrived|Dailies East|")) {
+            test.fault("the ride east was not logged as one train_arrived at Dailies East: " + trainMoments);
+        } else if (!departed.get(0).substring(departed.get(0).lastIndexOf('|')).equals(arrived.get(0).substring(arrived.get(0).lastIndexOf('|')))) {
+            test.fault("the train that departed is not the one that arrived: " + trainMoments);
+        } else {
+            test.log("trains: the ride east was logged as train_departed from Dailies West and train_arrived at Dailies East");
+        }
     }
 
     // --- The train, on the server ---

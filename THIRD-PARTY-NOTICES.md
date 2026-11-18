@@ -99,8 +99,8 @@ texts and notices go into the jar under `licenses/ffmpeg-build`.
 ## YAMNet
 
 - **What:** the trained weights of YAMNet, Google's sound event classifier, which Moments uses to name a burst of
-  noise in voice chat as laughter, cheering, screaming or shouting (setting `momentsBurstLabels`). It runs inside
-  Dailies, in Java, on the player's own computer; no audio leaves it.
+  noise in voice chat as laughter, cheering, screaming or shouting (settings `momentsAiEnabled` and `momentsBurstLabels`,
+  both needed). It runs inside Dailies, in Java, on the player's own computer; no audio leaves it.
 - **Source:** `yamnet.h5` from https://storage.googleapis.com/audioset/yamnet.h5, as linked from
   https://github.com/tensorflow/models/tree/master/research/audioset/yamnet
 - **Changed:** yes. The weights were converted to Dailies' own file, `assets/dailies/models/yamnet.bin`, with batch

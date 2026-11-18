@@ -113,6 +113,3 @@ One optional NeoForge channel, `dailies_companion:event`, version `1`, server to
 type (up to 64 characters), the label (up to 256) and a JSON object (up to 32,767). When the companion is also in the
 player's own game, it posts each message it receives on the NeoForge event bus as
 `comedymonkey.dailiescompanion.MomentClientEvent`.
-
-The mod was called Moments Companion (`moments_companion`) before version 0.2. A server and its players must be on the
-same side of the rename: Dailies listens on the new channel only.
