@@ -186,7 +186,8 @@ public final class EditorScreen extends Screen {
 
     /**
      * Once a frame. Puts the editor back after the game has taken it away for a jump, puts the progress display in
-     * its place while a video is exported, and says how the export went when it is over.
+     * its place while a video is exported or the path preview plays a Smart Camera stretch, and says how the export went
+     * when it is over.
      */
     private static void watch() {
         if (!wanted) {
@@ -211,7 +212,14 @@ public final class EditorScreen extends Screen {
                 }
                 return;
             }
-            if ((screen == null || screen instanceof ExportProgress) && !Playback.jumping()) {
+            if (comedymonkey.dailies.editor.StretchPreview.running()) {
+                // The path preview plays a Smart Camera stretch with the world undrawn: its plate stands in the editor's place
+                if (screen == null || screen instanceof EditorScreen) {
+                    show(minecraft, new PreviewProgress());
+                }
+                return;
+            }
+            if ((screen == null || screen instanceof ExportProgress || screen instanceof PreviewProgress) && !Playback.jumping()) {
                 show(minecraft, new EditorScreen());
                 screen = minecraft.screen;
                 if (pointerKept) {

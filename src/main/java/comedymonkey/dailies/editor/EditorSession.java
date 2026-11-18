@@ -92,6 +92,7 @@ public final class EditorSession {
     public static void closing() {
         SmartCameraDriver.forget();
         CameraSteps.forget();
+        StretchPreview.forget();
         EditHistory closingHistory = history;
         RecordingFile closingFile = file;
         history = null;
