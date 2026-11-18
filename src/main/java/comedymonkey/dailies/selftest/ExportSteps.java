@@ -1,6 +1,7 @@
 package comedymonkey.dailies.selftest;
 
 import com.google.gson.JsonObject;
+import comedymonkey.dailies.Host;
 import comedymonkey.dailies.edit.EditHistory;
 import comedymonkey.dailies.edit.Interpolation;
 import comedymonkey.dailies.edit.Keyframe;
@@ -23,8 +24,10 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
 import static comedymonkey.dailies.selftest.SelfTest.check;
 
 /**
- * Chapter XIV step 4, "Edit and export": camera keyframes with undo and redo, an export whose frames are counted,
- * measured and looked at, a still, and a check that playback is left as it was.
+ * Chapter XIV step 4, "Edit and export": camera keyframes with undo and redo, numbered pictures whose frames are
+ * counted, measured and looked at, a still, a check that playback is left as it was, and one video for each of H.264,
+ * H.265 and AV1 (the AV1 with sound). The owner asked for one export of each kind and no more, so each export carries
+ * every check of its kind; VP9, ProRes, DNxHR and separate sound tracks are in {@link ExportPresetSteps}.
  */
 final class ExportSteps {
 
@@ -71,13 +74,15 @@ final class ExportSteps {
         check(Math.abs(driven.y - (recorder.y + 3)) < 0.01 && Math.abs(driven.z - (recorder.z - 6)) < 0.01 && driven.x > recorder.x - 6 && driven.x < recorder.x + 6,
             "the camera did not follow its track while playing: it is at " + driven);
 
-        // Export two seconds as numbered pictures (EXP-1, EXP-2, EXP-4)
+        // Export two seconds as numbered pictures (EXP-1, EXP-2, EXP-4), at the video's size so that the video below can
+        // be held against them
         PlaybackSteps.jump(test, from + 3);
         int tickBefore = Playback.position();
+        int windowWidth = minecraft.getWindow().getWidth();
         Path folder = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test-frames");
         deleteFolder(folder);
         long started = System.currentTimeMillis();
-        test.tool("export_start", args("output_path", folder.toString(), "container", "png_sequence", "width", 640, "height", 360, "framerate", 30,
+        test.tool("export_start", args("output_path", folder.toString(), "container", "png_sequence", "width", 1920, "height", 1080, "framerate", 30,
             "start_tick", from, "end_tick", to, "no_gui", true));
         check(test.toolError("export_start", args("output_path", folder.toString(), "container", "png_sequence")).contains("already running"), "a second export was not refused");
         test.waitFor(() -> !Export.active(), 240, "the picture sequence to export");
@@ -89,34 +94,24 @@ final class ExportSteps {
         }
         int expected = (int) Math.round((to - from) / 20.0 * 30.0);
         check(frames.size() == expected, "exporting " + (to - from) + " ticks at 30 frames a second wrote " + frames.size() + " pictures, not " + expected);
+        check(done.has("timings") && done.get("timings").getAsString().contains("over " + expected + " frames"), "the export did not say where its time went: " + done);
         BufferedImage first = ImageIO.read(frames.get(0).toFile());
         BufferedImage last = ImageIO.read(frames.get(frames.size() - 1).toFile());
         BufferedImage second = ImageIO.read(frames.get(1).toFile());
-        check(first.getWidth() == 640 && first.getHeight() == 360, "the pictures are " + first.getWidth() + "x" + first.getHeight() + ", not 640x360");
+        check(first.getWidth() == 1920 && first.getHeight() == 1080, "the pictures are " + first.getWidth() + "x" + first.getHeight() + ", not 1920x1080");
         check(spread(first) > 12.0 && spread(last) > 12.0, "an exported picture is blank or nearly one colour");
         double moved = difference(first, last);
         double step = difference(first, second);
         check(moved > 4.0, "the first and last pictures are almost the same (" + moved + "): the camera did not move through the export");
         check(step < moved, "neighbouring frames differ more than the whole shot does: the frames are scrambled");
-        test.log("exported " + frames.size() + " frames of 640x360 in " + (System.currentTimeMillis() - started) + " ms; first to last differ by "
+        test.log("exported " + frames.size() + " frames of 1920x1080 in " + (System.currentTimeMillis() - started) + " ms; first to last differ by "
             + String.format("%.1f", moved) + ", neighbours by " + String.format("%.1f", step));
 
         // Playback is exactly as it was (EXP-7)
         test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back after the export");
         test.sleepTicks(5);
         check(Playback.position() == tickBefore && Playback.paused(), "after the export playback is at tick " + Playback.position() + (Playback.paused() ? "" : " and playing") + ", not paused at " + tickBefore);
-        check(minecraft.getWindow().getWidth() != 640, "the window was left at the export's size");
-
-        // The same frame again is the same picture: frames belong to moments of the recording, not to the clock (EXP-2)
-        Path again = folder.resolveSibling("self-test-again");
-        deleteFolder(again);
-        test.tool("export_start", args("output_path", again.toString(), "container", "png_sequence", "width", 640, "height", 360, "framerate", 30,
-            "start_tick", from, "end_tick", from + 8, "no_gui", true));
-        test.waitFor(() -> !Export.active(), 120, "the second export");
-        test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
-        BufferedImage repeat = ImageIO.read(again.resolve(frames.get(5).getFileName()).toFile());
-        double drift = difference(ImageIO.read(frames.get(5).toFile()), repeat);
-        check(drift < 1.5, "frame 5 came out differently the second time (difference " + drift + ")");
+        check(minecraft.getWindow().getWidth() == windowWidth, "the window was left at another size after the export: " + minecraft.getWindow().getWidth() + " wide, not " + windowWidth);
 
         // A still, larger than the window (EXP-4)
         Path still = folder.resolveSibling("self-test-still.png");
@@ -127,16 +122,22 @@ final class ExportSteps {
         check(picture != null && picture.getWidth() == 2560 && picture.getHeight() == 1440 && spread(picture) > 12.0, "the still is missing, the wrong size or blank");
 
         if (!Encoder.bundled()) {
-            test.skip("this build has no video encoder packed in: exporting a video file was not tried (EXP-1 containers and codecs, EXP-8)");
+            test.skip("this build has no video encoder packed in: exporting a video file was not tried (EXP-1 containers and codecs, EXP-8), nor BUD-6 measured");
         } else {
-            video(test, minecraft, from, to);
+            // Picture 7 is a quarter of a second in, which is frame 14 of a video at sixty frames a second
+            video(test, minecraft, from, ImageIO.read(frames.get(7).toFile()));
             otherFormats(test, minecraft, from);
-            sound(test, minecraft, from);
         }
     }
 
-    /** Two seconds of video: the file must hold the right number of frames, of the right size and length, that are real pictures */
-    private static void video(SelfTest test, Minecraft minecraft, int from, int to) throws Exception {
+    /**
+     * The one H.264 export: three and a half seconds of 1080p60. The file must hold every frame, of the right size and
+     * length, with times that run on unbroken: on an NVIDIA card three encoders make it side by side, a second each in
+     * turn, and their parts are joined, so four chunks give every encoder one and the first a second. A frame from it
+     * must show what the same moment exported as pictures shows, which proves both the conversion on the graphics card
+     * and that frames belong to moments of the recording, not to the clock (EXP-2). How fast it went is BUD-6's measure.
+     */
+    private static void video(SelfTest test, Minecraft minecraft, int from, BufferedImage reference) throws Exception {
         java.util.Map<String, List<String>> offered = Encoder.offered();
         test.log("the packed encoder offers " + offered);
         // H.264 comes from hardware encoders only (decided by the owner): a machine without one exports what stands in for it
@@ -145,58 +146,118 @@ final class ExportSteps {
         check(pick.codec() != null, "this machine can encode no video at all: " + offered);
         check(offered.containsKey("h264") == !pick.fellBack(), "H.264 is offered and was not chosen, or the other way round: " + offered);
         String codec = pick.codec();
-        String label = comedymonkey.dailies.export.Codecs.forCodec(working, codec).get(0).label();
-        test.log(pick.fellBack() ? "this machine has no hardware H.264 encoder: the video checks use " + label + " instead" : "the video checks use " + label);
+        comedymonkey.dailies.export.Codecs.Choice choice = comedymonkey.dailies.export.Codecs.forCodec(working, codec).get(0);
+        test.log(pick.fellBack() ? "this machine has no hardware H.264 encoder: the video checks use " + choice.label() + " instead" : "the video checks use " + choice.label());
+        int to = from + 70;
+        int expected = (int) Math.round((to - from) / 20.0 * 60.0);
         Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test." + pick.container());
         Files.deleteIfExists(file);
-        long started = System.currentTimeMillis();
-        test.tool("export_start", args("output_path", file.toString(), "container", pick.container(), "video_codec", codec, "width", 1920, "height", 1080, "framerate", 30,
-            "start_tick", from, "end_tick", to, "no_gui", true, "bitrate", "8m"));
+        long started = System.nanoTime();
+        test.tool("export_start", args("output_path", file.toString(), "container", pick.container(), "video_codec", codec, "width", 1920, "height", 1080, "framerate", 60,
+            "start_tick", from, "end_tick", to, "no_gui", true, "bitrate", "20m"));
         test.waitFor(() -> !Export.active(), 300, "the video to export");
+        double took = (System.nanoTime() - started) / 1.0e9;
         JsonObject done = test.tool("export_status", new JsonObject());
         check(!done.has("last_error"), "the video export failed: " + done);
         test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
         check(Files.exists(file) && Files.size(file) > 20_000, "the video file is missing or nearly empty");
+        String timings = done.has("timings") ? done.get("timings").getAsString() : "";
+        if (Host.get().setting("exportGpuColour", true)) {
+            check(timings.contains("converted on the graphics card"), "the video was not converted on the graphics card: " + timings);
+        }
 
         // Ask the encoder's own inspector what is in the file
         Path probe = Encoder.inspector();
         String told = run(probe.toString(), "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
             "stream=codec_name,width,height,nb_read_frames,r_frame_rate:format=duration", "-of", "default=noprint_wrappers=1", file.toString());
-        int expected = (int) Math.round((to - from) / 20.0 * 30.0);
         check(told.contains("codec_name=" + comedymonkey.dailies.export.Codecs.probeName(codec)), "the video is not " + codec + ": " + told);
         check(told.contains("width=1920") && told.contains("height=1080"), "the video is not 1920x1080: " + told);
+        check(told.contains("r_frame_rate=60/1"), "the video is not at 60 frames a second: " + told);
         check(told.contains("nb_read_frames=" + expected), "the video does not hold " + expected + " frames: " + told);
         double seconds = Double.parseDouble(told.lines().filter(line -> line.startsWith("duration=")).findFirst().orElse("duration=0").substring(9));
         check(Math.abs(seconds - (to - from) / 20.0) < 0.1, "the video is " + seconds + " seconds long, not " + (to - from) / 20.0);
 
-        // Pull a frame back out of the video and look at it
+        // Every frame a sixtieth of a second after the one before: parts joined in the wrong order, twice or with a gap
+        // would show here. Where the keyframes fall says whether encoders side by side made it (one a second)
+        String frameList = run(probe.toString(), "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=key_frame,best_effort_timestamp_time",
+            "-of", "compact=p=0", file.toString());
+        List<Double> times = new java.util.ArrayList<>();
+        List<Integer> keyframes = new java.util.ArrayList<>();
+        for (String line : frameList.lines().map(String::trim).filter(line -> line.contains("best_effort_timestamp_time=")).toList()) {
+            double time = Double.NaN;
+            boolean key = false;
+            for (String field : line.split("\\|")) {
+                if (field.startsWith("best_effort_timestamp_time=")) {
+                    time = Double.parseDouble(field.substring(field.indexOf('=') + 1));
+                } else if (field.equals("key_frame=1")) {
+                    key = true;
+                }
+            }
+            if (key) {
+                keyframes.add(times.size());
+            }
+            times.add(time);
+        }
+        check(times.size() == expected, "the inspector lists " + times.size() + " frames, not " + expected);
+        check(Math.abs(times.get(0)) < 0.02, "the video's first frame is at " + times.get(0) + " s, not at the start");
+        for (int i = 1; i < times.size(); i++) {
+            double gap = times.get(i) - times.get(i - 1);
+            check(Math.abs(gap - 1.0 / 60.0) < 0.004, "frame " + i + " comes " + String.format(java.util.Locale.ROOT, "%.4f", gap) + " s after the one before, not a sixtieth of a second: the video's parts do not run on unbroken");
+        }
+
+        // Pull frame 14 back out of the video and hold it against picture 7 of the numbered pictures: upside down, with
+        // its colour planes muddled or of another moment, it would differ by tens of levels
         Path frame = file.resolveSibling("self-test-video-frame.png");
         Files.deleteIfExists(frame);
-        run(Encoder.programPath().toString(), "-v", "error", "-y", "-i", file.toString(), "-vf", "select=eq(n\\,30)", "-frames:v", "1", frame.toString());
+        run(Encoder.programPath().toString(), "-v", "error", "-y", "-i", file.toString(), "-vf", "select=eq(n\\,14)", "-frames:v", "1", frame.toString());
         BufferedImage picture = ImageIO.read(frame.toFile());
         check(picture != null && picture.getWidth() == 1920 && spread(picture) > 12.0, "a frame taken back out of the video is missing or blank");
         // Upright: the sky is above the grass
         int top = picture.getRGB(960, 40) & 0xFF;
         int bottom = picture.getRGB(960, 1040) & 0xFF;
         check(top > bottom, "the video is upside down or scrambled: blue at the top is " + top + " and at the bottom " + bottom);
-        test.log("exported " + expected + " frames of 1920x1080 " + label + " in " + (System.currentTimeMillis() - started) + " ms, " + Files.size(file) / 1024 + " KB; the file reports "
-            + told.replace('\n', ' ').trim());
+        double against = difference(picture, reference);
+        check(against < 8.0, "frame 14 of the video differs from the same moment exported as a picture by " + String.format(java.util.Locale.ROOT, "%.2f", against) + " a colour");
+        test.log("exported " + expected + " frames of 1920x1080 " + choice.label() + " in " + String.format(java.util.Locale.ROOT, "%.1f", took) + " s, " + Files.size(file) / 1024
+            + " KB; keyframes at frames " + keyframes + "; frame 14 against its picture " + String.format(java.util.Locale.ROOT, "%.2f", against) + " of 255; the file reports "
+            + told.replace('\n', ' ').trim() + "; " + timings);
+
+        if (pick.fellBack()) {
+            test.skip("this machine has no hardware H.264 encoder: BUD-6, which is for hardware encoders, was not measured");
+        } else {
+            double video = (to - from) / 20.0;
+            BudgetSteps.measured("BUD-6", "export speed, 1080p60 H.264 on hardware, against real time", video / took, 1.0, false, "x",
+                String.format(java.util.Locale.ROOT, "%.1f s of video in %.1f s with %s, the scripted recording's video export (ExportSteps), the waits for terrain and the encoder's start included",
+                    video, took, choice.encoder()));
+        }
     }
 
-    /** The other codecs and containers of EXP-1, each for half a second: the file must exist and hold the codec asked for */
+    /**
+     * H.265 in MKV and AV1 in MP4, the AV1 with the game's sound in stereo (EXP-3): each file must hold the codec asked
+     * for and every frame, and the sound must be as long as the picture. On an NVIDIA card both are split across its
+     * encoding units. VP9, ProRes and DNxHR are exported by the presets' steps.
+     */
     private static void otherFormats(SelfTest test, Minecraft minecraft, int from) throws Exception {
         java.util.Map<String, List<String>> offered = Encoder.offered();
-        String[][] wanted = {{"h265", "mkv", "hevc"}, {"av1", "mp4", "av1"}, {"vp9", "webm", "vp9"}, {"h264", "mov", "h264"}};
+        String[][] wanted = {{"h265", "mkv", "hevc"}, {"av1", "mp4", "av1"}};
         StringBuilder worked = new StringBuilder();
         for (String[] format : wanted) {
+            boolean sound = format[0].equals("av1");
             if (!offered.containsKey(format[0])) {
-                test.skip("the packed encoder has nothing for " + format[0] + " on this machine: " + format[0] + " in " + format[1] + " was not tried");
+                test.skip("the packed encoder has nothing for " + format[0] + " on this machine: " + format[0] + " in " + format[1] + " was not tried" + (sound ? ", nor sound in exports (EXP-3)" : ""));
                 continue;
             }
+            int ticks = sound ? 20 : 10;
+            int frames = ticks * 30 / 20;
             Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test-" + format[0] + "." + format[1]);
             Files.deleteIfExists(file);
-            test.tool("export_start", args("output_path", file.toString(), "container", format[1], "video_codec", format[0], "width", 640, "height", 360, "framerate", 30,
-                "start_tick", from, "end_tick", from + 10, "no_gui", true, "bitrate", "2m"));
+            JsonObject arguments = args("output_path", file.toString(), "container", format[1], "video_codec", format[0], "width", 640, "height", 360, "framerate", 30,
+                "start_tick", from, "end_tick", from + ticks, "no_gui", true, "bitrate", "2m");
+            if (sound) {
+                arguments.addProperty("record_audio", true);
+                arguments.addProperty("stereo_audio", true);
+            }
+            test.tool("export_start", arguments);
             test.waitFor(() -> !Export.active(), 300, "the " + format[0] + " export");
             JsonObject done = test.tool("export_status", new JsonObject());
             test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
@@ -208,27 +269,22 @@ final class ExportSteps {
             String told = run(Encoder.inspector().toString(), "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries", "stream=codec_name,nb_read_frames",
                 "-of", "default=noprint_wrappers=1", file.toString());
             check(told.contains("codec_name=" + format[2]), "the " + format[1] + " file does not hold " + format[0] + ": " + told);
-            check(told.contains("nb_read_frames=15"), "half a second of " + format[0] + " at 30 frames a second does not hold 15 frames: " + told);
-            worked.append(' ').append(format[0]).append(" in ").append(format[1]).append(';');
+            check(told.contains("nb_read_frames=" + frames), ticks + " ticks of " + format[0] + " at 30 frames a second does not hold " + frames + " frames: " + told);
+            worked.append(' ').append(format[0]).append(" in ").append(format[1]);
+            if (sound) {
+                worked.append(soundIn(test, file, done, ticks / 20.0));
+            }
+            worked.append(';');
         }
         test.log("also exported and checked:" + worked);
     }
 
-    /** One second of video with the game's sound in it: the file must hold a sound stream as long as its picture (EXP-3) */
-    private static void sound(SelfTest test, Minecraft minecraft, int from) throws Exception {
-        Path file = minecraft.gameDirectory.toPath().resolve("dailies").resolve("exports").resolve("self-test-sound.mp4");
-        Files.deleteIfExists(file);
-        // No codec named: the fastest this machine has, which is hardware H.264 where there is any
-        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "width", 640, "height", 360, "framerate", 30,
-            "start_tick", from, "end_tick", from + 20, "no_gui", true, "bitrate", "2m", "record_audio", true, "stereo_audio", true));
-        test.waitFor(() -> !Export.active(), 300, "the export with sound");
-        JsonObject done = test.tool("export_status", new JsonObject());
-        test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back");
-        check(!done.has("last_error"), "the export with sound failed: " + done);
+    /** The sound of a video exported with it: a stereo AAC stream as long as the picture (EXP-3); says what it found */
+    private static String soundIn(SelfTest test, Path file, JsonObject done, double length) throws Exception {
         String note = done.has("sound") ? done.get("sound").getAsString() : "";
         if (note.startsWith("no sound")) {
             test.skip("the game's sound could not be captured on this machine (" + note + "): sound in exports was not checked (EXP-3)");
-            return;
+            return ", without sound (" + note + ")";
         }
         String told = run(Encoder.inspector().toString(), "-v", "error", "-show_entries", "stream=codec_type,codec_name,channels,duration", "-of", "default=noprint_wrappers=1", file.toString());
         check(told.contains("codec_type=audio") && told.contains("codec_name=aac"), "the file has no AAC sound stream: " + told);
@@ -236,13 +292,13 @@ final class ExportSteps {
         double longest = 0, shortest = 99;
         for (String line : told.lines().toList()) {
             if (line.startsWith("duration=")) {
-                double seconds = Double.parseDouble(line.substring(9));
+                double seconds = Double.parseDouble(line.trim().substring(9));
                 longest = Math.max(longest, seconds);
                 shortest = Math.min(shortest, seconds);
             }
         }
-        check(longest - shortest < 0.08 && Math.abs(longest - 1.0) < 0.1, "sound and picture are not the same length: " + told);
-        test.log("exported one second with sound (" + note + "); the file reports " + told.replace('\n', ' ').trim());
+        check(longest - shortest < 0.08 && Math.abs(longest - length) < 0.1, "sound and picture are not the same length: " + told);
+        return ", with sound (" + note + "; " + told.replace('\n', ' ').trim() + ")";
     }
 
     private static String run(String... command) throws Exception {

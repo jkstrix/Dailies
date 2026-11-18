@@ -55,7 +55,7 @@ final class QueueSteps {
         theList(test, from, to);
         hostAddsAJob(test);
         if (Encoder.bundled()) {
-            runInThisGame(test, exports, from, to, recordingBefore, sceneBefore);
+            runInThisGame(test, exports, from, recordingBefore, sceneBefore);
         } else {
             test.skip("this build has no video encoder for " + Encoder.platform() + ": the queue was not run (EXP-10)");
         }
@@ -128,15 +128,16 @@ final class QueueSteps {
 
     // ------------------------------------------------------------------ EXP-10 run here, EXP-11 files
 
-    /** Two short jobs run one after another in this game, with caption files, and the game is put back as it was */
-    private static void runInThisGame(SelfTest test, Path exports, int from, int to, String recordingBefore, int sceneBefore) throws Exception {
-        for (String name : List.of("self-test queue a", "self-test queue b")) {
-            for (String ending : List.of(".mp4", ".srt", ".vtt", ".webm", ".mkv")) {
-                Files.deleteIfExists(exports.resolve(name + ending));
-            }
+    /**
+     * One short job run in this game, which is also the one export with captions, as files beside it and drawn into
+     * the picture, and the game is put back as it was. The owner asked for one export of each kind, so the queue runs
+     * a single job and its order is checked on the list alone.
+     */
+    private static void runInThisGame(SelfTest test, Path exports, int from, String recordingBefore, int sceneBefore) throws Exception {
+        for (String ending : List.of(".mp4", ".srt", ".vtt", ".webm", ".mkv")) {
+            Files.deleteIfExists(exports.resolve("self-test queue" + ending));
         }
-        String a = test.tool("export_queue_add", args("preset", "Smallest", "output_path", "self-test queue a", "start_tick", from, "end_tick", to)).get("job_id").getAsString();
-        String b = test.tool("export_queue_add", args("preset", "Smallest", "output_path", "self-test queue b", "start_tick", from, "end_tick", to,
+        String id = test.tool("export_queue_add", args("preset", "Smallest", "output_path", "self-test queue", "start_tick", from, "end_tick", from + 20,
             "caption_files", "both", "burn_captions", true)).get("job_id").getAsString();
 
         // In a world the queue would have to leave it; here a recording is open, so it runs at once
@@ -145,29 +146,25 @@ final class QueueSteps {
         test.waitFor(() -> {
             try {
                 ExportQueue queue = ExportQueue.read(QueueRunner.file());
-                return queue.job(a) != null && queue.job(b) != null && queue.job(a).state.ended() && queue.job(b).state.ended();
+                return queue.job(id) != null && queue.job(id).state.ended();
             } catch (Exception e) {
                 return false;
             }
-        }, 600, "the two queued exports to finish");
+        }, 600, "the queued export to finish");
         test.waitFor(() -> !QueueRunner.runningHere() && !Export.active(), 60, "the queue to stop running");
 
         JsonObject listed = test.tool("export_queue_list", new JsonObject());
-        check(stateOf(listed, a).equals("done"), "the first queued export did not finish: " + listed);
-        check(stateOf(listed, b).equals("done"), "the second queued export did not finish: " + listed);
+        check(stateOf(listed, id).equals("done"), "the queued export did not finish: " + listed);
         ExportQueue queue = ExportQueue.read(QueueRunner.file());
-        Path videoA = Path.of(queue.job(a).written);
-        Path videoB = Path.of(queue.job(b).written);
-        check(Files.size(videoA) > 0 && Files.size(videoB) > 0, "a queued export wrote nothing: " + videoA + ", " + videoB);
-        check(queue.job(a).startedAt <= queue.job(b).startedAt && queue.job(a).finishedAt <= queue.job(b).startedAt + 1000,
-            "the queued exports did not run one after another");
-        check(queue.job(b).framesTotal > 0 && queue.job(b).framesDone == queue.job(b).framesTotal, "the queue did not keep the job's progress: "
-            + queue.job(b).framesDone + " of " + queue.job(b).framesTotal);
+        Path video = Path.of(queue.job(id).written);
+        check(Files.size(video) > 0, "the queued export wrote nothing: " + video);
+        check(queue.job(id).framesTotal > 0 && queue.job(id).framesDone == queue.job(id).framesTotal, "the queue did not keep the job's progress: "
+            + queue.job(id).framesDone + " of " + queue.job(id).framesTotal);
 
         // EXP-11: the caption files are beside the video and are proper files, empty or not
-        String stem = videoB.getFileName().toString().replaceAll("\\.[^.]+$", "");
-        Path srt = videoB.resolveSibling(stem + ".srt");
-        Path vtt = videoB.resolveSibling(stem + ".vtt");
+        String stem = video.getFileName().toString().replaceAll("\\.[^.]+$", "");
+        Path srt = video.resolveSibling(stem + ".srt");
+        Path vtt = video.resolveSibling(stem + ".vtt");
         test.waitFor(() -> Files.exists(srt) && Files.exists(vtt), 30, "the caption files to be written");
         check(Files.readString(vtt, StandardCharsets.UTF_8).startsWith("WEBVTT"), "the WebVTT file does not begin as one must");
         String srtText = Files.readString(srt, StandardCharsets.UTF_8);
@@ -184,9 +181,8 @@ final class QueueSteps {
 
         // Clearing the finished jobs empties the queue
         JsonObject cleared = test.tool("export_queue_remove", args("ended", true));
-        check(cleared.get("removed_count").getAsInt() >= 2 && ids(cleared).isEmpty(), "clearing the finished jobs left some: " + cleared);
-        Files.deleteIfExists(videoA);
-        Files.deleteIfExists(videoB);
+        check(cleared.get("removed_count").getAsInt() >= 1 && ids(cleared).isEmpty(), "clearing the finished jobs left some: " + cleared);
+        Files.deleteIfExists(video);
         Files.deleteIfExists(srt);
         Files.deleteIfExists(vtt);
     }
@@ -210,7 +206,7 @@ final class QueueSteps {
             return;
         }
         RecordingSteps.Note middle = RecordingSteps.notes.get(RecordingSteps.notes.size() / 2);
-        String job = test.tool("export_queue_add", args("preset", "Smallest", "output_path", "self-test worker", "start_tick", middle.tick() - 20, "end_tick", middle.tick() + 20))
+        String job = test.tool("export_queue_add", args("preset", "Smallest", "output_path", "self-test worker", "start_tick", middle.tick() - 20, "end_tick", middle.tick()))
             .get("job_id").getAsString();
         JsonObject started = test.tool("export_queue_start", args("background", true));
         check(started.get("background_running").getAsBoolean(), "the background worker did not start: " + started);

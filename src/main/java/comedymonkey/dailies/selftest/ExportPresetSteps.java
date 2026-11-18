@@ -38,7 +38,9 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
 
 /**
  * What an export can produce: the honest codec list (EXP-1), the export presets and what they fall back to
- * (EXP-14), editing masters, and sound kept apart on tracks of its own that add up to the mix (EXP-12). Runs while
+ * (EXP-14), editing masters, and sound kept apart on tracks of its own that add up to the mix (EXP-12). One export
+ * each of VP9 (from a preset), AV1 made in software, DNxHR and ProRes (the editing master, with its sound tracks),
+ * since the owner asked for one export of each kind; the other codecs are exported in {@link ExportSteps}. Runs while
  * the recording of the earlier steps is open in playback.
  */
 final class ExportPresetSteps {
@@ -63,11 +65,10 @@ final class ExportPresetSteps {
 
         List<Codecs.Choice> working = codecList(test);
         presetsAreKept(test);
-        builtInPresets(test, folder, from, working);
-        everyEncoder(test, folder, from, working);
+        presetExport(test, folder, from, working);
         withoutHardware(test, folder, from);
         otherMaster(test, folder, from);
-        separateTracks(test, folder, from);
+        editingMaster(test, folder, from);
         theTab(test, folder);
     }
 
@@ -154,71 +155,38 @@ final class ExportPresetSteps {
         test.log("presets: listed, added, changed, renamed, removed and reset; kept in " + file.getFileName());
     }
 
-    /** Each built-in preset exports a short range, and the file is what the preset says, or the preset says what it fell back to */
-    private static void builtInPresets(SelfTest test, Path folder, int from, List<Codecs.Choice> working) throws Exception {
-        for (ExportPreset preset : ExportPresets.builtIn()) {
-            if (preset.builtIn().equals("editing_master")) {
-                // Exported with voices and music in separateTracks(), where its sound tracks are looked at too
-                continue;
-            }
-            Codecs.Pick expected = Codecs.pick(preset.codecs(), preset.container(), working);
-            int ticks = preset.framesPerSecond() >= 60.0 ? 5 : 10;
-            Path file = folder.resolve("self-test-preset-" + preset.builtIn() + "." + expected.container());
+    /**
+     * The one VP9 export, made from a preset of the test's own: a WebM file of the codec the preset names, or of what
+     * it says it fell back to; what is given beside the preset (the size) wins over it; and a range longer than the
+     * preset is meant for is warned about and exported all the same.
+     */
+    private static void presetExport(SelfTest test, Path folder, int from, List<Codecs.Choice> working) throws Exception {
+        JsonArray vp9 = new JsonArray();
+        vp9.add("vp9");
+        test.tool("export_presets_set", args("name", "Self test short", "width", 320, "height", 180, "framerate", 30, "container", "webm", "video_codecs", vp9,
+            "record_audio", false, "max_seconds", 1));
+        try {
+            Codecs.Pick expected = Codecs.pick(List.of("vp9"), "webm", working);
+            Path file = folder.resolve("self-test-vp9." + expected.container());
             Files.deleteIfExists(file);
-            JsonObject started = test.tool("export_start", args("output_path", file.toString(), "preset", preset.name(), "start_tick", from, "end_tick", from + ticks, "no_gui", true, "overwrite", true));
-            check(started.get("preset").getAsString().equals(preset.name()) && started.get("video_codec").getAsString().equals(expected.codec())
-                && started.get("container").getAsString().equals(expected.container()), "the preset " + preset.name() + " did not start as expected: " + started);
-            JsonObject done = finish(test, preset.name());
-            boolean fellBack = expected.fellBack() || !expected.codec().equals(preset.codecs().get(0));
+            JsonObject started = test.tool("export_start", args("output_path", file.toString(), "preset", "Self test short", "width", 640, "height", 360,
+                "start_tick", from, "end_tick", from + 30, "no_gui", true, "overwrite", true));
+            check(started.get("preset").getAsString().equals("Self test short") && started.get("video_codec").getAsString().equals(expected.codec())
+                && started.get("container").getAsString().equals(expected.container()), "the VP9 preset did not start as expected: " + started);
+            check(started.has("warning") && started.get("warning").getAsString().contains("1.5"), "a range of 1.5 seconds in a preset for 1 second was not warned about: " + started);
+            JsonObject done = finish(test, "the VP9 preset");
             if (expected.words(working) != null) {
-                check(done.has("note") && done.get("note").getAsString().equals(expected.words(working)), "the preset " + preset.name() + " fell back without saying so: " + done);
+                check(done.has("note") && done.get("note").getAsString().equals(expected.words(working)), "the VP9 preset fell back without saying so: " + done);
             }
             String told = probe("v:0", "stream=codec_name,width,height,r_frame_rate,nb_read_frames", file);
-            int frames = (int) Math.round(ticks / 20.0 * preset.framesPerSecond());
-            check(told.contains("codec_name=" + Codecs.probeName(expected.codec())), preset.name() + " did not write " + expected.codec() + ": " + told);
-            check(told.contains("width=" + preset.width() + "\n") || told.contains("width=" + preset.width() + "\r"), preset.name() + " is not " + preset.width() + " wide: " + told);
-            check(told.contains("height=" + preset.height()), preset.name() + " is not " + preset.height() + " high: " + told);
-            check(told.contains("r_frame_rate=" + (int) preset.framesPerSecond() + "/1"), preset.name() + " is not at " + preset.framesPerSecond() + " frames a second: " + told);
-            check(told.contains("nb_read_frames=" + frames), preset.name() + " does not hold " + frames + " frames: " + told);
-            String note = done.has("sound") ? done.get("sound").getAsString() : "";
-            if (!note.startsWith("no sound")) {
-                String sound = probe("a", "stream=codec_name,channels", file);
-                check(sound.contains("codec_name=aac") && sound.contains("channels=2"), preset.name() + " has no stereo AAC sound: " + sound);
-            }
-            test.log("preset " + preset.name() + ": " + told.replaceAll("\\s+", " ").trim() + (fellBack ? "; second choice or fallback taken: " + expected.codec() : "; first choice")
-                + (done.has("note") ? " (" + done.get("note").getAsString() + ")" : ""));
+            check(told.contains("codec_name=" + Codecs.probeName(expected.codec())), "the VP9 preset did not write " + expected.codec() + ": " + told);
+            check(told.replaceAll("\\s+", " ").contains("width=640 height=360"), "what is given beside a preset does not win over it: " + told);
+            check(told.contains("r_frame_rate=30/1") && told.contains("nb_read_frames=45"), "the VP9 preset's file is not 45 frames at 30 a second: " + told);
+            test.log("VP9 from a preset: " + told.replaceAll("\\s+", " ").trim() + (expected.fellBack() ? "; fell back to " + expected.codec() : "")
+                + "; warned: " + started.get("warning").getAsString());
+        } finally {
+            test.tool("export_presets_remove", args("name", "Self test short"));
         }
-        // A range longer than a preset is meant for is warned about, and exported all the same
-        test.tool("export_presets_set", args("name", "Self test short", "width", 640, "height", 360, "framerate", 30, "record_audio", false, "max_seconds", 1));
-        Path file = folder.resolve("self-test-preset-too-long.mp4");
-        Files.deleteIfExists(file);
-        JsonObject started = test.tool("export_start", args("output_path", file.toString(), "preset", "Self test short", "start_tick", from, "end_tick", from + 30, "no_gui", true, "overwrite", true));
-        check(started.has("warning") && started.get("warning").getAsString().contains("1.5"), "a range of 1.5 seconds in a preset for 1 second was not warned about: " + started);
-        finish(test, "the over-long preset export");
-        test.tool("export_presets_remove", args("name", "Self test short"));
-        check(!test.tool("export_start", args("output_path", file.toString(), "preset", "Shorts and Reels", "width", 360, "height", 640, "start_tick", from, "end_tick", from + 5,
-            "record_audio", false, "no_gui", true, "overwrite", true)).has("warning"), "a quarter of a second was warned about as too long for Shorts");
-        finish(test, "the small Shorts export");
-        check(probe("v:0", "stream=width,height", file).replaceAll("\\s+", " ").contains("width=360 height=640"), "what is given beside a preset does not win over it");
-    }
-
-    /** Every encoder the list offers makes a file the inspector accepts: being on the list is a promise that it works */
-    private static void everyEncoder(SelfTest test, Path folder, int from, List<Codecs.Choice> working) throws Exception {
-        StringBuilder made = new StringBuilder();
-        for (Codecs.Choice choice : working) {
-            String container = Codecs.containerFor(choice.codec(), "mp4");
-            Path file = folder.resolve("self-test-encoder-" + choice.encoder() + "." + container);
-            Files.deleteIfExists(file);
-            test.tool("export_start", args("output_path", file.toString(), "container", container, "video_codec", choice.codec(), "encoder", choice.encoder(), "width", 640, "height", 360,
-                "framerate", 30, "start_tick", from, "end_tick", from + 10, "no_gui", true, "bitrate", "2m", "overwrite", true));
-            finish(test, "the export with " + choice.encoder());
-            String told = probe("v:0", "stream=codec_name,width,height,nb_read_frames", file);
-            check(told.contains("codec_name=" + Codecs.probeName(choice.codec())) && told.contains("width=640") && told.contains("height=360") && told.contains("nb_read_frames=15"),
-                choice.encoder() + " is on the codec list and did not write 15 frames of 640x360 " + choice.codec() + ": " + told);
-            check(Files.size(file) > 2000, choice.encoder() + " wrote a file that is nearly empty");
-            made.append(' ').append(choice.encoder()).append(" (").append(Files.size(file) / 1024).append(" KB);");
-        }
-        test.log("every encoder on the list wrote a file the inspector accepts:" + made);
     }
 
     /** What a machine without any hardware encoder gets: no H.264, a preset that says what it used instead, and a file of that codec */
@@ -240,14 +208,13 @@ final class ExportPresetSteps {
             String refused = test.toolError("export_start", args("output_path", file.toString(), "video_codec", "h264", "width", 640, "height", 360, "start_tick", from, "end_tick", from + 5, "overwrite", true));
             check(refused.contains("hardware") && refused.contains("av1"), "asking for H.264 without a hardware encoder was not answered with the reason and what there is: " + refused);
 
-            // "YouTube 1080p60" wants H.264 or AV1: AV1 is its own second choice, so nothing needs saying
-            JsonObject started = test.tool("export_start", args("output_path", file.toString(), "preset", "YouTube 1080p60", "width", 640, "height", 360, "start_tick", from, "end_tick", from + 5,
-                "record_audio", false, "no_gui", true, "overwrite", true));
-            check(started.get("video_codec").getAsString().equals("av1"), "without hardware the YouTube preset did not go to AV1: " + started);
-            finish(test, "the YouTube preset without hardware");
-            check(probe("v:0", "stream=codec_name", file).contains("codec_name=av1"), "the file written without hardware is not AV1");
+            // "YouTube 1080p60" wants H.264 or AV1: AV1 is its own second choice, so nothing needs saying. Asked of the
+            // preset rather than exported, since the export below already writes software AV1
+            JsonObject youTube = test.tool("export_presets_get", args("name", "YouTube 1080p60"));
+            check(youTube.has("uses_here") && youTube.get("uses_here").getAsString().contains("AV1") && !youTube.has("note"),
+                "without hardware the YouTube preset does not go to AV1 without a word: " + youTube);
 
-            // A preset that wants only H.264 has to fall back, and says so
+            // A preset that wants only H.264 has to fall back, and says so: the one export of AV1 made in software
             JsonArray only = new JsonArray();
             only.add("h264");
             test.tool("export_presets_set", args("name", "Self test h264", "width", 640, "height", 360, "framerate", 30, "video_codecs", only, "record_audio", false));
@@ -256,7 +223,7 @@ final class ExportPresetSteps {
                 "a preset that cannot have its codec does not say what it will use: " + described);
             Path fallen = folder.resolve("self-test-fallback.mp4");
             Files.deleteIfExists(fallen);
-            started = test.tool("export_start", args("output_path", fallen.toString(), "preset", "Self test h264", "start_tick", from, "end_tick", from + 10, "no_gui", true, "overwrite", true));
+            JsonObject started = test.tool("export_start", args("output_path", fallen.toString(), "preset", "Self test h264", "start_tick", from, "end_tick", from + 10, "no_gui", true, "overwrite", true));
             check(started.get("video_codec").getAsString().equals("av1") && started.has("note") && started.get("note").getAsString().contains("H.264"),
                 "a preset for H.264 alone did not fall back to AV1 and say so: " + started);
             JsonObject done = finish(test, "the preset that falls back");
@@ -278,7 +245,7 @@ final class ExportPresetSteps {
 
     // ------------------------------------------------------------------ Masters
 
-    /** DNxHR HQ in MOV; ProRes is exported as the "Editing master" preset with its sound tracks */
+    /** The one DNxHR export, HQ in MOV; ProRes is exported as the "Editing master" preset with its sound tracks */
     private static void otherMaster(SelfTest test, Path folder, int from) throws Exception {
         Path file = folder.resolve("self-test-dnxhr.mov");
         Files.deleteIfExists(file);
@@ -295,10 +262,11 @@ final class ExportPresetSteps {
     // ------------------------------------------------------------------ EXP-12
 
     /**
-     * Sound kept apart: the game, two speakers and an audio keyframe, as WAV files and as named tracks inside MKV and
-     * MOV, all the same length, adding up to the mix sample for sample.
+     * The one ProRes export, which is also the one with sound kept apart: the "Editing master" preset, with the game,
+     * two speakers and an audio keyframe as WAV files and as named tracks inside the MOV, all the same length, adding up
+     * to the mix sample for sample.
      */
-    private static void separateTracks(SelfTest test, Path folder, int from) throws Exception {
+    private static void editingMaster(SelfTest test, Path folder, int from) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         // Music: a second of a 440 Hz tone at 44.1 kHz mono, so it has to be brought to the export's rate and channels
         Path tone = folder.resolve("self-test-tone.wav");
@@ -341,12 +309,19 @@ final class ExportPresetSteps {
         NeoForge.EVENT_BUS.addListener(speak);
         try {
             String strangerName = "Speaker " + stranger.toString().substring(0, 8);
-            // MKV, uncompressed so the samples can be compared, tracks inside and WAV files beside
-            Path mkv = folder.resolve("self-test-tracks.mkv");
-            Files.deleteIfExists(mkv);
-            test.tool("export_start", args("output_path", mkv.toString(), "container", "mkv", "width", 640, "height", 360, "framerate", 30, "start_tick", from, "end_tick", from + 20,
-                "no_gui", true, "record_audio", true, "audio_codec", "pcm", "separate_audio", "both", "overwrite", true));
-            JsonObject done = finish(test, "the export with separate tracks in MKV");
+            check(test.toolError("export_start", args("output_path", folder.resolve("self-test-refused-tracks.mp4").toString(), "separate_audio", "both", "width", 640, "height", 360,
+                "overwrite", true)).contains("without sound"), "separate tracks without sound were not refused");
+
+            // The "Editing master" preset: ProRes 422 HQ in MOV, uncompressed sound, both forms of separate tracks
+            Path mov = folder.resolve("self-test-preset-editing_master.mov");
+            Files.deleteIfExists(mov);
+            JsonObject started = test.tool("export_start", args("output_path", mov.toString(), "preset", "Editing master", "start_tick", from, "end_tick", from + 10, "no_gui", true, "overwrite", true));
+            check(started.get("video_codec").getAsString().equals("prores") && started.get("container").getAsString().equals("mov"), "the editing master did not start as ProRes in MOV: " + started);
+            JsonObject done = finish(test, "the editing master");
+            String told = probe("v:0", "stream=codec_name,profile,width,height,r_frame_rate,nb_read_frames", mov);
+            check(told.contains("codec_name=prores") && told.contains("profile=HQ") && told.contains("width=1920") && told.contains("height=1080") && told.contains("r_frame_rate=60/1")
+                && told.contains("nb_read_frames=30"), "the editing master is not 30 frames of 1920x1080 ProRes 422 HQ at 60 a second: " + told);
+            test.log("editing master: " + told.replaceAll("\\s+", " ").trim());
             String note = done.has("sound") ? done.get("sound").getAsString() : "";
             if (note.startsWith("no sound")) {
                 test.skip("the game's sound could not be captured on this machine (" + note + "): separate sound tracks were not checked (EXP-12)");
@@ -355,41 +330,8 @@ final class ExportPresetSteps {
             List<String> expected = new ArrayList<>(List.of("Mix", "Game", recorderName == null ? "Speaker " + recorder.toString().substring(0, 8) : recorderName, strangerName, "Music"));
             List<String> titles = new ArrayList<>();
             done.getAsJsonArray("audio_tracks").forEach(title -> titles.add(title.getAsString()));
-            check(titles.equals(expected), "the tracks inside the MKV are " + titles + ", not " + expected + " (" + note + ")");
-            checkTracks(test, mkv, "title", expected, done, 2, RATE, musicTick - from);
-
-            // The "Editing master" preset: ProRes 422 HQ in MOV, uncompressed sound, both forms of separate tracks
-            Path mov = folder.resolve("self-test-preset-editing_master.mov");
-            Files.deleteIfExists(mov);
-            JsonObject started = test.tool("export_start", args("output_path", mov.toString(), "preset", "Editing master", "start_tick", from, "end_tick", from + 10, "no_gui", true, "overwrite", true));
-            check(started.get("video_codec").getAsString().equals("prores") && started.get("container").getAsString().equals("mov"), "the editing master did not start as ProRes in MOV: " + started);
-            done = finish(test, "the editing master");
-            String told = probe("v:0", "stream=codec_name,profile,width,height,r_frame_rate,nb_read_frames", mov);
-            check(told.contains("codec_name=prores") && told.contains("profile=HQ") && told.contains("width=1920") && told.contains("height=1080") && told.contains("r_frame_rate=60/1")
-                && told.contains("nb_read_frames=30"), "the editing master is not 30 frames of 1920x1080 ProRes 422 HQ at 60 a second: " + told);
+            check(titles.equals(expected), "the tracks inside the editing master are " + titles + ", not " + expected + " (" + note + ")");
             checkTracks(test, mov, "name", expected, done, 2, RATE / 2, musicTick - from);
-            test.log("editing master: " + told.replaceAll("\\s+", " ").trim());
-
-            // Mono: every track has one channel and they still add up
-            Path mono = folder.resolve("self-test-tracks-mono.mkv");
-            Files.deleteIfExists(mono);
-            test.tool("export_start", args("output_path", mono.toString(), "container", "mkv", "width", 640, "height", 360, "framerate", 30, "start_tick", from, "end_tick", from + 10,
-                "no_gui", true, "record_audio", true, "stereo_audio", false, "audio_codec", "pcm", "separate_audio", "tracks", "overwrite", true));
-            done = finish(test, "the mono export with separate tracks");
-            check(!done.has("audio_files"), "WAV files were written when only tracks inside the file were asked for: " + done);
-            checkTracks(test, mono, "title", expected, done, 1, RATE / 2, musicTick - from);
-
-            // MP4 is not given separate tracks: asked for them, the WAV files are written instead, and the note says so
-            Path mp4 = folder.resolve("self-test-tracks.mp4");
-            Files.deleteIfExists(mp4);
-            test.tool("export_start", args("output_path", mp4.toString(), "container", "mp4", "width", 640, "height", 360, "framerate", 30, "start_tick", from, "end_tick", from + 10,
-                "no_gui", true, "record_audio", true, "separate_audio", "tracks", "overwrite", true));
-            done = finish(test, "the MP4 export with separate tracks");
-            check(done.has("audio_files") && done.getAsJsonArray("audio_files").size() == 4 && !done.has("audio_tracks") && done.get("sound").getAsString().contains("WAV"),
-                "an MP4 asked for separate tracks did not write WAV files and say so: " + done);
-            check(probe("a", "stream=codec_name", mp4).lines().filter(line -> line.startsWith("codec_name=")).count() == 1, "the MP4 does not hold exactly one sound track");
-            check(test.toolError("export_start", args("output_path", mp4.toString(), "separate_audio", "both", "width", 640, "height", 360, "overwrite", true)).contains("without sound"),
-                "separate tracks without sound were not refused");
         } finally {
             NeoForge.EVENT_BUS.unregister(speak);
             // The scene is left as the earlier steps made it

@@ -3,9 +3,6 @@ package comedymonkey.dailies.selftest;
 import com.google.gson.JsonObject;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
-import comedymonkey.dailies.export.Codecs;
-import comedymonkey.dailies.export.Encoder;
-import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
@@ -33,9 +30,10 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  * other programs, and other test games on the same graphics card, make timings noisy.
  * <p>
  * Where another step already takes a measure it is used as well: the tour of generated terrain (RealWorldSteps, when
- * asked for) reports through {@link #measured}, and the jumps and craft offsets of PlaybackSteps are read at the end.
- * The rest is measured here, in a flat world of its own made at the end of the run: recording's cost a frame,
- * Moments' cost a tick, what a minute of recording fills, opening, jumping and exporting.
+ * asked for) and the export speed (ExportSteps' H.264 export, BUD-6) report through {@link #measured}, and the jumps
+ * and craft offsets of PlaybackSteps are read at the end. The rest is measured here, in a flat world of its own made
+ * at the end of the run: recording's cost a frame, Moments' cost a tick, what a minute of recording fills, opening and
+ * jumping.
  * <p>
  * BUD-8 (the Smart Camera) is the owner's to measure, with the Smart Camera's own steps, and is only listed here.
  */
@@ -255,7 +253,8 @@ final class BudgetSteps {
         }
     }
 
-    // --- BUD-4, BUD-3 and BUD-6: opening, jumping and exporting
+    // --- BUD-4 and BUD-3: opening and jumping. BUD-6, the speed of an export, is measured by ExportSteps on its one
+    // H.264 export rather than by an export of its own here
 
     private static void playback(SelfTest test, Path recording) throws Exception {
         int before = frames;
@@ -301,8 +300,6 @@ final class BudgetSteps {
         if (longestWithin > 0) {
             measured("BUD-3", "a jump inside one segment", longestWithin, 500, true, "ms", "the budgets' recording, hops between the ends of each segment");
         }
-
-        export(test, total);
     }
 
     /** Jumps, and says how long until the recording stood at exactly that tick */
@@ -318,33 +315,6 @@ final class BudgetSteps {
         long took = (System.nanoTime() - started) / 1_000_000;
         Thread.sleep(60);
         return took;
-    }
-
-    private static void export(SelfTest test, int total) throws Exception {
-        if (!Encoder.bundled()) {
-            test.skip("this build has no video encoder packed in: BUD-6, the speed of an export, was not measured");
-            return;
-        }
-        Codecs.Choice hardware = Encoder.choices().stream().filter(choice -> choice.codec().equals("h264") && choice.hardware()).findFirst().orElse(null);
-        if (hardware == null) {
-            test.skip("this machine has no hardware H.264 encoder: BUD-6, which is for hardware encoders, was not measured");
-            return;
-        }
-        int from = Math.max(0, total / 2 - 50);
-        int to = Math.min(total, from + 100);
-        Path file = Host.get().dataDirectory().resolve("budgets").resolve("export-speed.mp4");
-        Files.deleteIfExists(file);
-        long started = System.nanoTime();
-        test.tool("export_start", args("output_path", file.toString(), "container", "mp4", "video_codec", "h264", "encoder", hardware.encoder(), "width", 1920, "height", 1080,
-            "framerate", 60, "start_tick", from, "end_tick", to, "no_gui", true, "bitrate", "20m"));
-        test.waitFor(() -> !Export.active(), 300, "the export for BUD-6");
-        double seconds = (System.nanoTime() - started) / 1.0e9;
-        JsonObject done = test.tool("export_status", new JsonObject());
-        check(!done.has("last_error"), "the export for BUD-6 failed: " + done);
-        test.waitFor(() -> !Playback.jumping(), 30, "playback to be put back after the export for BUD-6");
-        double video = (to - from) / 20.0;
-        measured("BUD-6", "export speed, 1080p60 H.264 on hardware, against real time", video / seconds, 1.0, false, "x",
-            String.format(Locale.ROOT, "%.1f s of video in %.1f s with %s, the waits for terrain and the encoder's start included", video, seconds, hardware.encoder()));
     }
 
     // --- Measures other steps have already taken

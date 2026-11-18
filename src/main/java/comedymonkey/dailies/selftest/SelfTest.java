@@ -126,7 +126,6 @@ public final class SelfTest {
             this.step("SettingsSteps.editorDropdown", () -> SettingsSteps.editorDropdown(this));
             this.step("EditorDesignSteps.run", () -> EditorDesignSteps.run(this));
             this.step("ExportPresetSteps.run", () -> ExportPresetSteps.run(this));
-            this.step("ExportSpeedSteps.run", () -> ExportSpeedSteps.run(this));
             // With the recording that has the machines in it still open: Flywheel's contraption, Iris's clock, Distant Horizons
             this.step("RendererSteps.run", () -> RendererSteps.run(this));
             this.step("QueueSteps.run", () -> QueueSteps.run(this));
