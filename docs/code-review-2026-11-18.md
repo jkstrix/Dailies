@@ -36,10 +36,10 @@ The owner asked for every finding to be fixed. All of them were, on master, exce
 - `gradlew test`: 648 tests pass, none skipped.
 - The first game runs (`runTestClient`, `runTestModded`) failed four steps. Three were self test checks the fixes had made stale: snapshots now also share a chunk's light on its own (`cc91d5b`); waits count the game's ticks (`2e69491`), so slowed playback must be timed by the clock; and library tools take only recordings inside the folder (`7a76b24`), so the pack recording is copied in. The runs also found two real faults: a player's own recordings of other worlds were linked as points of view (PLAY-18 says different players), and items dropped in the void were sometimes not left to fall in playback. All five are fixed in `5f98255`.
 - The full run (`runTestModded` with the bestiary, generated terrain and camera films, 1 hour) passed every one of those, and failed six steps:
-  - **Points of view:** the export batch still sometimes misses the friend's recording in the modded game. The check now prints what the links held.
-  - **Trains:** a jump back puts the train 1.41 blocks from the live game.
+  - **Points of view:** the export batch still sometimes misses the friend's recording in the modded game. Cause: since `521071e`, a snapshot that stores chunks afresh flushes the part that begins its segment before the segment's times are taken, so that segment carried the previous segment's times, or the previous recording's. Fixed in `19271d0`. Not yet run in a game.
+  - **Trains:** a jump back puts the train 1.41 blocks from the live game. Earlier runs of the same code had it at 0.14, so it depends on timing. A train rebuilt from a snapshot starts at a standstill, because Create's add-train message carries no speed. That may explain it, but it is not proved, so nothing is changed yet.
   - **Bestiary:** 32 items wrong and 5 not staged. It was 33 before the review.
-  - **Camera films:** 15 hard faults. The walk into the Nether also timed out after 40 seconds.
+  - **Camera films:** 15 hard faults. The walk into the Nether also timed out after 40 seconds. That timeout passed in every earlier run and the log does not say why it failed; the step now reports the player, the portal and the server's view when it gives up (`19271d0`).
   - **BUD-2:** recording size is 354 MB an hour (target 150) in the village on foot.
 
 ---
