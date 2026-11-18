@@ -63,9 +63,8 @@ public final class CameraSteps {
 
     static void forget() {
         TETHERS.clear();
-        PANEL_BLEND.clear();
-        panelPosition = Integer.MIN_VALUE;
-        panelTick = Double.NaN;
+        Viewer.panel().forgetSteps();
+        panelInExport = false;
         steppedTrack = null;
         steppedPosition = Integer.MIN_VALUE;
     }
@@ -89,6 +88,13 @@ public final class CameraSteps {
 
     /** After every game tick: when the recording stands on a tick the cameras have not been stepped for, step them */
     private static void tick() {
+        boolean exporting = comedymonkey.dailies.export.Export.holdsClock();
+        if (exporting != panelInExport) {
+            // Each export follows afresh: the steps of the last one (or of a follow begun before it) do not lead on
+            // to this one's first, even when it begins on the very tick the last one ended
+            panelInExport = exporting;
+            Viewer.panel().forgetSteps();
+        }
         if (!EditorSession.open() || !Playback.loaded() || Playback.jumping() || Playback.skipping()) {
             return;
         }
@@ -103,8 +109,7 @@ public final class CameraSteps {
             Track track = Evaluator.cameraDriver(scene, tick);
             if (track == null) {
                 steppedTrack = null;
-                if (Viewer.following() != null && comedymonkey.dailies.export.Export.holdsClock() && position != panelPosition) {
-                    panelPosition = position;
+                if (Viewer.following() != null && exporting && Viewer.panel().steppedTick() != tick) {
                     panel(minecraft, tick);
                 }
                 return;
@@ -128,17 +133,15 @@ public final class CameraSteps {
 
     // ------------------------------------------------------------------ The players panel's Follow, in an export
 
-    private static final PoseBlend PANEL_BLEND = new PoseBlend();
-    private static int panelPosition = Integer.MIN_VALUE;
-    private static double panelTick = Double.NaN;
+    /** Whether the last tick looked at was in an export, so the first tick of the next export is known */
+    private static boolean panelInExport = false;
 
     private static void panel(Minecraft minecraft, double tick) {
         Entity entity = minecraft.level.getPlayerByUUID(Viewer.following());
         if (entity == null || entity == minecraft.player) {
+            // Tried again on the next tick or frame, until the player is back in the world
             return;
         }
-        double dt = Double.isNaN(panelTick) ? -1.0 : (tick - panelTick) / 20.0;
-        panelTick = tick;
         Vec3 feet = entity.position();
         Vec eyes = new Vec(feet.x, feet.y + entity.getEyeHeight(), feet.z);
         double fov = Viewer.fov() > 0.0 ? Viewer.fov() : minecraft.options.fov().get();
@@ -146,15 +149,13 @@ public final class CameraSteps {
         // Where the person left the camera, the first time; after that only the follow moves it
         Vec3 viewer = Viewer.position();
         Vec camera = Viewer.panel().placed() == null ? new Vec(viewer.x, viewer.y + EYE_HEIGHT, viewer.z) : null;
-        TetherSolver.Result result = Viewer.panel().step(new LevelCameraWorld(minecraft.level, null), eyes, camera, entity.getYRot(), entity.getEyeHeight(),
-            entity.getBbHeight(), entity.getBbWidth(), fov, aspect, dt);
-        Vec eye = result.eye();
-        PANEL_BLEND.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), 0.0, false, result.cut()));
+        Viewer.panel().stepTick(tick, new LevelCameraWorld(minecraft.level, null), eyes, camera, entity.getYRot(), entity.getEyeHeight(), entity.getBbHeight(),
+            entity.getBbWidth(), fov, aspect);
     }
 
     /** Where the players panel's Follow puts the view for an export frame at this tick, or null when not stepped near it */
     public static @Nullable PoseBlend.Pose panelPose(double frameTick) {
-        return PANEL_BLEND.at(PointOfView.sceneTime(frameTick));
+        return Viewer.panel().poseAt(PointOfView.sceneTime(frameTick));
     }
 
     // ------------------------------------------------------------------ Follow entity

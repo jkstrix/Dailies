@@ -138,6 +138,38 @@ final class Filming {
         return frames;
     }
 
+    /**
+     * Films the players panel's Follow from tick {@code start} to {@code end} exactly as an export does: each frame
+     * brings the recording to the tick after the time it shows, the follow is stepped by the tick through its own steps
+     * ({@link PanelFollow#stepTick}), and the frame is drawn from {@link PanelFollow#poseAt} at its time; each cut is a
+     * new shot. The follow is left as the film leaves it, so a next film can begin where this one ended.
+     *
+     * @param left where the person left the camera, for a follow that has not placed it yet
+     */
+    static List<FilmFrame> filmPanel(CameraWorld world, IntFunction<SubjectSample> path, int start, int end, PanelFollow follow, Vec left) {
+        List<FilmFrame> frames = new ArrayList<>();
+        int count = (int) Math.round((end - start) / 20.0 * FPS);
+        for (int frame = 0; frame < count; frame++) {
+            double time = start + frame * 20.0 / FPS;
+            int whole = (int) Math.floor(time + 1.0e-9);
+            int position = whole + 1;
+            if (follow.steppedTick() != position) {
+                SubjectSample subject = path.apply(position);
+                Vec eyes = subject.feet().add(0.0, 1.62, 0.0);
+                follow.stepTick(position, world, eyes, follow.placed() == null ? left : null, subject.bodyYaw(), 1.62, 1.8, 0.6, FOV, ASPECT);
+            }
+            PoseBlend.Pose pose = follow.poseAt(time);
+            Vec feet = path.apply(whole).feet().lerp(path.apply(position).feet(), time - whole);
+            FilmFrame noted = note(world, frame, time, pose, feet, path.apply(position).bodyYaw());
+            noted.aimX = feet.x();
+            noted.aimY = feet.y() + 1.62;
+            noted.aimZ = feet.z();
+            noted.shot = follow.cuts();
+            frames.add(noted);
+        }
+        return frames;
+    }
+
     private static FilmFrame note(CameraWorld world, int frame, double time, PoseBlend.Pose pose, Vec feet, double bodyYaw) {
         FilmFrame noted = new FilmFrame();
         noted.frame = frame;

@@ -17,11 +17,51 @@ public final class PanelFollow {
     private Vec offset = null;
     private Vec placed = null;
     private int cuts = 0;
+    /** In an export: the steps taken once per tick of the recording, which the frames are drawn between */
+    private final PoseBlend blend = new PoseBlend();
+    private double steppedTick = Double.NaN;
 
     public void reset() {
         this.offset = null;
         this.placed = null;
         this.tether.reset();
+        this.forgetSteps();
+    }
+
+    /**
+     * Forgets the steps taken by the tick, so the next one starts afresh. They belong to one follow in one export: kept
+     * on into the next (a film that begins on the tick the one before it ended), the first frames would be drawn from
+     * a blend with where the camera was in the last export, swinging over to where it is now.
+     */
+    public void forgetSteps() {
+        this.blend.clear();
+        this.steppedTick = Double.NaN;
+    }
+
+    /** The tick the last step by the tick was for, or NaN when there has been none since the steps were forgotten */
+    public double steppedTick() {
+        return this.steppedTick;
+    }
+
+    /**
+     * One step for a tick of the recording, as an export takes them; the frames between are drawn from
+     * {@link #poseAt}. The first step since the steps were forgotten starts afresh, as do a jump back and a long gap.
+     *
+     * @param tick the recording tick the step is for
+     */
+    public TetherSolver.Result stepTick(double tick, CameraWorld world, Vec eyes, Vec camera, double bodyYaw, double eyeHeight, double height, double width,
+                                        double fov, double aspect) {
+        double dt = Double.isNaN(this.steppedTick) ? -1.0 : (tick - this.steppedTick) / 20.0;
+        this.steppedTick = tick;
+        TetherSolver.Result result = this.step(world, eyes, camera, bodyYaw, eyeHeight, height, width, fov, aspect, dt);
+        Vec eye = result.eye();
+        this.blend.push(new PoseBlend.Pose(tick, eye.x(), eye.y(), eye.z(), result.yaw(), result.pitch(), 0.0, false, result.cut()));
+        return result;
+    }
+
+    /** Where the steps by the tick put the camera for a frame at this tick, or null when none was taken near it */
+    public PoseBlend.Pose poseAt(double tick) {
+        return this.blend.at(tick);
     }
 
     /** How many times this camera has cut: when it changes, a new shot begins */
