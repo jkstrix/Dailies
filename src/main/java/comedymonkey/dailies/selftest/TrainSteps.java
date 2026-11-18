@@ -103,10 +103,13 @@ final class TrainSteps {
         c("fill -14 -61 " + (TRACK_Z - 5) + " 82 -61 " + (TRACK_Z + 8) + " minecraft:smooth_stone");
         c("fill -12 " + Y + " " + TRACK_Z + " 80 " + Y + " " + TRACK_Z + " create:track[shape=xo]");
         test.sleepTicks(20);
-        // Each station looks at the track beside it, facing east, so that a train assembles eastwards from it
-        for (BlockPos station : new BlockPos[]{WEST, EAST}) {
-            c("setblock " + station.getX() + " " + station.getY() + " " + station.getZ() + " create:track_station{TargetTrack:[I;0,0,-1],TargetDirection:1b}");
-        }
+        // Each station looks at the track beside it. A station's direction is the way the train's body lies from it, the
+        // train standing there with its front at the station: the west station points east (the train assembles east of
+        // it and arrives travelling west), the east station west (the train arrives travelling east, its body behind it).
+        // Both pointing east, the train could reach the east station only by passing it and reversing, which Create does
+        // not plan: "No suitable path to the next Scheduled destination could be found"
+        c("setblock " + WEST.getX() + " " + WEST.getY() + " " + WEST.getZ() + " create:track_station{TargetTrack:[I;0,0,-1],TargetDirection:1b}");
+        c("setblock " + EAST.getX() + " " + EAST.getY() + " " + EAST.getZ() + " create:track_station{TargetTrack:[I;0,0,-1],TargetDirection:0b}");
         test.sleepTicks(40);
         test.log("trains: the stations as the server holds them: " + describeStation(minecraft, WEST) + " || " + describeStation(minecraft, EAST));
         name(WEST, "Dailies West");
