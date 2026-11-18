@@ -1418,13 +1418,52 @@ final class RealWorldSteps {
 
     // --- 7. The player's own play in survival
 
+    /** What the parts of the survival stretch share: the game, and the yard on the laboratory floor they all happen in */
+    private static final class Yard {
+        final SelfTest test;
+        final Minecraft minecraft;
+        final IntegratedServer server;
+        final BlockPos lab;
+        final int x;
+        final int y;
+        final int z;
+
+        Yard(SelfTest test, BlockPos lab) {
+            this.test = test;
+            this.minecraft = Minecraft.getInstance();
+            this.server = this.minecraft.getSingleplayerServer();
+            this.lab = lab;
+            this.x = lab.getX();
+            this.y = lab.getY();
+            this.z = lab.getZ();
+        }
+    }
+
+    /**
+     * The survival stretch, in parts that follow one another in the same yard. A part that fails stops the stretch, and
+     * {@link #part} puts the game back as it was (creative, no HUD in the notes, no screen open)
+     */
     private static void survival(SelfTest test, BlockPos lab) throws Exception {
-        Minecraft minecraft = Minecraft.getInstance();
-        IntegratedServer server = minecraft.getSingleplayerServer();
-        int x = lab.getX();
-        int y = lab.getY();
-        int z = lab.getZ();
-        // A clear yard on the laboratory floor
+        Yard yard = new Yard(test, lab);
+        clearTheYard(yard);
+        mineALog(yard);
+        placePlanks(yard);
+        hungerAndAMeal(yard);
+        handEmptiedOnASnapshot(yard);
+        fall(yard);
+        drown(yard);
+        zombieBlow(yard);
+        experience(yard);
+        furnaceAndCraftingTable(yard);
+        sleepThroughTheNight(yard);
+        deathAndRespawn(yard);
+        backToCreative(yard);
+    }
+
+    /** A clear yard on the laboratory floor, and the recorder standing in it in survival */
+    private static void clearTheYard(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        int x = yard.x, y = yard.y, z = yard.z;
         command(test, "fill %d %d %d %d %d %d minecraft:air", x - 2, y, z - 4, x + 9, y + 6, z + 3);
         test.command("time set 4000");
         test.command("weather clear");
@@ -1433,15 +1472,20 @@ final class RealWorldSteps {
         flying(test, false, 0.05F);
         goTo(test, x + 3.5, y, z + 0.5, 180, 0);
         command(test, "spawnpoint @s %d %d %d", x + 3, y, z);
-        regions.add(new Region("yard", lab.offset(-3, -2, -5), lab.offset(10, 6, 4), false));
+        regions.add(new Region("yard", yard.lab.offset(-3, -2, -5), yard.lab.offset(10, 6, 4), false));
         noteHud = true;
         test.command("gamemode survival");
         test.command("give @s minecraft:cooked_beef 8");
         test.command("give @s minecraft:oak_planks 16");
         ticks(test, 20);
         note(test, "standing in the yard");
+    }
 
-        // Mining a block with the bare hand: the cracks spread over it for a second and a half
+    /** Mining a block with the bare hand: the cracks spread over it for a second and a half */
+    private static void mineALog(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        Minecraft minecraft = yard.minecraft;
+        int x = yard.x, y = yard.y, z = yard.z;
         BlockPos target = new BlockPos(x + 3, y + 1, z - 2);
         command(test, "fill %d %d %d %d %d %d minecraft:oak_log", target.getX(), y, target.getZ(), target.getX(), y + 1, target.getZ());
         askers.put("cracks in the block being mined", new Asker(Asker.CRACKS, target));
@@ -1477,8 +1521,12 @@ final class RealWorldSteps {
             test.skip("the script could not mine by holding the attack key (the game window may be in the background): cracks on the recorder's own block were not checked");
         }
         test.log("real world: mining took " + (Recorder.get().recordingTick() - swingsBefore) + " more ticks after the note; the cracks were then at stage " + stage + " of 9");
+    }
 
-        // Placing blocks
+    /** Placing blocks */
+    private static void placePlanks(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        int x = yard.x, y = yard.y, z = yard.z;
         test.command("item replace entity @s weapon.mainhand with minecraft:oak_planks 16");
         ticks(test, 5);
         for (int i = 0; i < 3; i++) {
@@ -1487,8 +1535,12 @@ final class RealWorldSteps {
         }
         ticks(test, 8);
         note(test, "three planks placed");
+    }
 
-        // Hunger, then a meal
+    /** Hunger, then a meal */
+    private static void hungerAndAMeal(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        IntegratedServer server = yard.server;
         onServer(() -> {
             ServerPlayer player = server.getPlayerList().getPlayers().get(0);
             player.getFoodData().setFoodLevel(8);
@@ -1509,9 +1561,14 @@ final class RealWorldSteps {
             test.skip("the script could not eat by holding the use key: the recorder's eating in playback was not checked");
         }
         test.log("real world: hunger went " + (eating.hud == null ? "?" : eating.hud[3]) + " to " + (fed.hud == null ? "?" : fed.hud[3]));
+    }
 
-        // What is in the hand, and the HUD, changing on the very tick a snapshot is taken. A snapshot holds the change, but
-        // plain play never reads a snapshot it runs past, so the change has to be in the ticks as well
+    /**
+     * What is in the hand, and the HUD, changing on the very tick a snapshot is taken. A snapshot holds the change, but
+     * plain play never reads a snapshot it runs past, so the change has to be in the ticks as well
+     */
+    private static void handEmptiedOnASnapshot(Yard yard) throws Exception {
+        SelfTest test = yard.test;
         int hits = 0;
         for (int attempt = 0; attempt < 5; attempt++) {
             test.command("item replace entity @s weapon.mainhand with minecraft:stick");
@@ -1539,16 +1596,24 @@ final class RealWorldSteps {
         }
         test.command("item replace entity @s weapon.mainhand with minecraft:cooked_beef 2");
         ticks(test, 10);
+    }
 
-        // A fall
-        command(test, "tp @s %.2f %d %.2f", x + 3.5, y + 9, z + 0.5);
+    /** A fall */
+    private static void fall(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        command(test, "tp @s %.2f %d %.2f", yard.x + 3.5, yard.y + 9, yard.z + 0.5);
         ticks(test, 6);
         note(test, "falling");
         ticks(test, 30);
         WorldProbe fallen = note(test, "landed, hurt");
         test.log("real world: health after the fall " + (fallen.hud == null ? "?" : fallen.hud[0]));
+    }
 
-        // Running out of air at the bottom of a well
+    /** Running out of air at the bottom of a well */
+    private static void drown(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        IntegratedServer server = yard.server;
+        int x = yard.x, y = yard.y, z = yard.z;
         command(test, "fill %d %d %d %d %d %d minecraft:glass", x - 1, y, z - 1, x + 1, y + 3, z + 1);
         command(test, "fill %d %d %d %d %d %d minecraft:water", x, y, z, x, y + 2, z);
         command(test, "tp @s %.2f %d %.2f", x + 0.5, y, z + 0.5);
@@ -1564,10 +1629,14 @@ final class RealWorldSteps {
         test.log("real world: air " + (drowning.hud == null ? "?" : drowning.hud[4]) + ", health " + (drowning.hud == null ? "?" : drowning.hud[0]) + " while drowning");
         command(test, "tp @s %.2f %d %.2f 180 0", x + 3.5, y, z + 0.5);
         command(test, "fill %d %d %d %d %d %d minecraft:air", x - 1, y, z - 1, x + 1, y + 3, z + 1);
+    }
 
-        // A zombie that can stand the sun, close enough to hit
+    /** A zombie that can stand the sun, close enough to hit */
+    private static void zombieBlow(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        Minecraft minecraft = yard.minecraft;
         test.command("effect give @s minecraft:instant_health 1 3");
-        command(test, "summon minecraft:zombie %d %d %d {CustomName:'\"Biter\"',PersistenceRequired:1b,ArmorItems:[{},{},{},{id:\"minecraft:leather_helmet\",count:1}]}", x + 2, y, z - 2);
+        command(test, "summon minecraft:zombie %d %d %d {CustomName:'\"Biter\"',PersistenceRequired:1b,ArmorItems:[{},{},{},{id:\"minecraft:leather_helmet\",count:1}]}", yard.x + 2, yard.y, yard.z - 2);
         float[] healthBefore = {20};
         test.onClientRun(() -> healthBefore[0] = minecraft.player.getHealth());
         try {
@@ -1579,14 +1648,22 @@ final class RealWorldSteps {
         note(test, "bitten");
         test.command("kill @e[type=minecraft:zombie,distance=..24]");
         ticks(test, 30);
+    }
 
-        // Experience
+    /** Experience */
+    private static void experience(Yard yard) throws Exception {
+        SelfTest test = yard.test;
         test.command("experience add @s 37 points");
         ticks(test, 10);
         WorldProbe wiser = note(test, "with experience");
         test.log("real world: experience level " + (wiser.hud == null ? "?" : wiser.hud[6]) + " progress " + (wiser.hud == null ? "?" : wiser.hud[7]));
+    }
 
-        // A furnace lit and a crafting table looked at: their screens are the recorder's own business, the blocks are not
+    /** A furnace lit and a crafting table looked at: their screens are the recorder's own business, the blocks are not */
+    private static void furnaceAndCraftingTable(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        Minecraft minecraft = yard.minecraft;
+        int x = yard.x, y = yard.y, z = yard.z;
         BlockPos furnace = new BlockPos(x + 6, y, z + 2);
         command(test, "setblock %d %d %d minecraft:furnace[facing=north]", furnace.getX(), y, furnace.getZ());
         command(test, "setblock %d %d %d minecraft:crafting_table", furnace.getX() + 1, y, furnace.getZ());
@@ -1608,8 +1685,13 @@ final class RealWorldSteps {
         ticks(test, 10);
         note(test, "the furnace burning by itself");
         test.log("real world: live screens were '" + crafting.screen + "' at the crafting table and '" + smelting.screen + "' at the furnace");
+    }
 
-        // A bed, and the night slept through
+    /** A bed, and the night slept through */
+    private static void sleepThroughTheNight(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        Minecraft minecraft = yard.minecraft;
+        int x = yard.x, y = yard.y, z = yard.z;
         BlockPos bed = new BlockPos(x + 1, y, z + 2);
         command(test, "setblock %d %d %d minecraft:red_bed[facing=east,part=foot]", bed.getX(), y, bed.getZ());
         command(test, "setblock %d %d %d minecraft:red_bed[facing=east,part=head]", bed.getX() + 1, y, bed.getZ());
@@ -1631,8 +1713,12 @@ final class RealWorldSteps {
         ticks(test, 20);
         WorldProbe woken = note(test, "woken in the morning");
         test.log("real world: time of day asleep " + asleep.dayTime % 24000 + ", on waking " + woken.dayTime % 24000);
+    }
 
-        // Death, the things dropped, and the respawn
+    /** Death, the things dropped, and the respawn */
+    private static void deathAndRespawn(Yard yard) throws Exception {
+        SelfTest test = yard.test;
+        Minecraft minecraft = yard.minecraft;
         test.command("give @s minecraft:diamond 3");
         ticks(test, 10);
         test.command("damage @s 1000 minecraft:generic");
@@ -1653,6 +1739,11 @@ final class RealWorldSteps {
         note(test, "respawned");
         ticks(test, 110);
         note(test, "a while after respawning");
+    }
+
+    /** Back to creative, and the HUD left out of the notes again */
+    private static void backToCreative(Yard yard) throws Exception {
+        SelfTest test = yard.test;
         test.command("gamemode creative");
         noteHud = false;
         ticks(test, 10);

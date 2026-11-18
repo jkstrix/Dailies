@@ -471,7 +471,43 @@ final class BestiaryStages {
 
     private static int podium = 64;
 
+    /**
+     * What the parts of The End share: the trip's own item, the height of the exit portal, the pillar that is taken down
+     * and rebuilt, and where the recorder and the camera stand to watch it
+     */
+    private static final class EndTrip {
+        BestiarySteps.Item travel;
+        /** The height of the exit portal */
+        int y;
+        /** The pillar's middle, its top and its radius */
+        int sx, sz, sh, sr;
+        /** Half way up the pillar, where it is cut */
+        int half;
+        /** Which way the recorder faces the pillar */
+        float yaw;
+        /** Where the camera for the pictures of the pillar stands */
+        double cx, cz;
+    }
+
+    /**
+     * The End, in parts that follow one another: each works on what the one before left (the dragon, the pillar). A part
+     * that fails stops the stage, and {@link #stage} brings the recorder back to the overworld
+     */
     private static void theEnd() throws Exception {
+        EndTrip end = new EndTrip();
+        end.travel = endItems();
+        arriveInTheEnd(end);
+        crystalWithABeam(end);
+        dragonFireballs(end);
+        perchedBreath(end);
+        dragonDeath(end);
+        pillarHalfRemoved(end);
+        respawn(end);
+        backToTheOverworld();
+    }
+
+    /** What The End is to show, and the item for the trip itself */
+    private static BestiarySteps.Item endItems() {
         BestiarySteps.Item travel = item("The End: the trip there and back (a change of dimension inside the recording)").owns("dimension")
             .need(seen("the live game in The End", census -> census.dimension.equals(END)));
         item("Dragon: the one there from the start, its parts and phases").owns("minecraft:ender_dragon").need(present("minecraft:ender_dragon", 1))
@@ -496,7 +532,11 @@ final class BestiaryStages {
             .need(where("minecraft:end_crystal", "with a beam to a pillar", thing -> thing.state().contains("d8=some(") && !thing.state().contains("y=128")));
         item("End pillar: rebuilt by the respawn").owns("blocks").need(blockChange("air -> obsidian")).need(blockChange("-> bedrock"));
         item("Dragon: the summoned one and its boss bar").owns("minecraft:ender_dragon", "boss bar").need(present("minecraft:ender_dragon", 2));
+        return travel;
+    }
 
+    /** Into The End, to the dragon there from the start; finds the exit portal and the pillar to take down, and watches both */
+    private static void arriveInTheEnd(EndTrip end) throws Exception {
         c("execute in minecraft:the_end run tp @s 0.5 90 18.5 180 30");
         test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().location().toString().equals(END), 120, "the recorder to arrive in The End");
         fly();
@@ -517,18 +557,25 @@ final class BestiaryStages {
             spike[3] = chosen.getRadius();
             spike[4] = chosen.isGuarded() ? 1 : 0;
         });
-        int y = podium;
-        int sx = spike[0], sz = spike[1], sh = spike[2], sr = spike[3];
-        test.log("bestiary: exit portal at height " + y + "; pillar at " + sx + " " + sz + ", top " + sh + ", radius " + sr + (spike[4] == 1 ? ", caged" : ""));
+        end.y = podium;
+        end.sx = spike[0];
+        end.sz = spike[1];
+        end.sh = spike[2];
+        end.sr = spike[3];
+        int y = end.y;
+        test.log("bestiary: exit portal at height " + y + "; pillar at " + end.sx + " " + end.sz + ", top " + end.sh + ", radius " + end.sr + (spike[4] == 1 ? ", caged" : ""));
         c("tp @s 0.5 " + (y + 14) + " 18.5 180 30");
         fly();
         waitTicks(5);
         Census.watch(END, tick() + 2, -9, y - 6, -9, 9, y + 12, 9);
-        Census.watch(END, tick() + 2, sx - 10, 50, sz - 10, sx + 10, sh + 12, sz + 10);
+        Census.watch(END, tick() + 2, end.sx - 10, 50, end.sz - 10, end.sx + 10, end.sh + 12, end.sz + 10);
         waitTicks(25);
         still("end-arrival", mark("in The End"), 0.5, y + 14, 22.5, 0.5, y + 6, 0.5, false);
+    }
 
-        // A crystal with a beam of its own, then destroyed
+    /** A crystal with a beam of its own, then destroyed */
+    private static void crystalWithABeam(EndTrip end) throws Exception {
+        int y = end.y;
         server("a crystal with a beam", (level, player) -> {
             EndCrystal crystal = new EndCrystal(level, 8.5, y + 7.0, 8.5);
             crystal.setBeamTarget(new BlockPos(0, y + 30, 0));
@@ -544,8 +591,11 @@ final class BestiaryStages {
         mark("crystal destroyed");
         waitTicks(15);
         mark("after the crystal");
+    }
 
-        // The fireball shot in flight
+    /** The fireball the dragon shoots, in flight, and the clouds where fireballs land */
+    private static void dragonFireballs(EndTrip end) throws Exception {
+        int y = end.y;
         c("tp @e[type=minecraft:ender_dragon,limit=1] 0 " + (y + 30) + " -30");
         waitTicks(5);
         server("the dragon strafing the recorder", (level, player) -> {
@@ -569,8 +619,11 @@ final class BestiaryStages {
         mark("second dragon fireball falling");
         waitTicks(60);
         still("dragon-cloud-landed", mark("clouds, sixty ticks on (the radius has grown)"), 2.5, y + 12, 24.5, 6.5, y + 1, 13.5, true);
+    }
 
-        // Perched on the portal, breathing
+    /** Perched on the portal, breathing: the recorder stands in the breath, is hurt by it and bottles some, then goes back up */
+    private static void perchedBreath(EndTrip end) throws Exception {
+        int y = end.y;
         c("tp @e[type=minecraft:ender_dragon,limit=1] 0 " + (y + 9) + " 0");
         c("data merge entity @e[type=minecraft:ender_dragon,limit=1] {DragonPhase:3}");
         int until = tick() + 160;
@@ -635,8 +688,11 @@ final class BestiaryStages {
         fly();
         waitTicks(12);
         mark("recorder back in the air");
+    }
 
-        // Death, from flight: it flies to the portal, rises and comes apart
+    /** Death, from flight: it flies to the portal, rises and comes apart, and the exit portal opens */
+    private static void dragonDeath(EndTrip end) throws Exception {
+        int y = end.y;
         c("data merge entity @e[type=minecraft:ender_dragon,limit=1] {DragonPhase:0}");
         waitTicks(3);
         c("damage @e[type=minecraft:ender_dragon,limit=1] 4000 minecraft:player_attack by @s");
@@ -659,15 +715,21 @@ final class BestiaryStages {
         still("end-portal-open", mark("dragon gone, portal open"), 4.5, y + 12, 14.5, 0.5, y + 2, 0.5, false);
         waitTicks(40);
         mark("after the dragon");
+    }
 
-        // A pillar with its top half taken away
+    /** A pillar with its top half taken away, watched from about thirty blocks */
+    private static void pillarHalfRemoved(EndTrip end) throws Exception {
+        int sx = end.sx, sz = end.sz, sh = end.sh, sr = end.sr;
         double scale = 1.0 - 30.0 / Math.sqrt(sx * sx + sz * sz);
         double rx = sx * scale + 0.5, rz = sz * scale + 0.5;
-        float yaw = (float) Math.toDegrees(Math.atan2(-(sx - rx), sz - rz));
-        int half = (62 + sh) / 2;
+        end.yaw = (float) Math.toDegrees(Math.atan2(-(sx - rx), sz - rz));
+        end.half = (62 + sh) / 2;
+        int half = end.half;
         // The camera for the pictures stands back from the recorder, who would otherwise fill them
-        double cx = sx * (scale - 0.2) + 0.5, cz = sz * (scale - 0.2) + 0.5;
-        c(String.format(java.util.Locale.ROOT, "tp @s %.2f %d %.2f %.1f 5", rx, half + 6, rz, yaw));
+        end.cx = sx * (scale - 0.2) + 0.5;
+        end.cz = sz * (scale - 0.2) + 0.5;
+        double cx = end.cx, cz = end.cz;
+        c(String.format(java.util.Locale.ROOT, "tp @s %.2f %d %.2f %.1f 5", rx, half + 6, rz, end.yaw));
         fly();
         test.log(String.format("bestiary: the recorder stands %.0f blocks from the pillar's middle, %.0f from the portal", Math.sqrt((sx - rx) * (sx - rx) + (sz - rz) * (sz - rz)), Math.sqrt(rx * rx + rz * rz)));
         waitTicks(30);
@@ -678,8 +740,14 @@ final class BestiaryStages {
         waitTicks(12);
         still("pillar-half-removed", mark("pillar half removed"), cx, half + 12, cz, sx, half + 4, sz, false);
         waitTicks(10);
+    }
 
-        // The respawn, started as placing the fourth crystal starts it
+    /** The respawn, started as placing the fourth crystal starts it: the beams, the pillar rebuilt, the summoned dragon */
+    private static void respawn(EndTrip end) throws Exception {
+        int y = end.y;
+        int sx = end.sx, sz = end.sz, sh = end.sh;
+        int half = end.half;
+        double cx = end.cx, cz = end.cz;
         boolean started = server("starting the respawn", (level, player) -> {
             EndDragonFight fight = level.getDragonFight();
             BlockPos portal = (BlockPos) secret(fight, EndDragonFight.class, "portalLocation");
@@ -707,7 +775,7 @@ final class BestiaryStages {
         marks.merge(rebuilt - 12, "pillar still broken, beams on it", (a, b) -> a + ", " + b);
         waitTicks(3);
         still("pillar-rebuilt", mark("pillar rebuilt"), cx, half + 12, cz, sx, half + 4, sz, false);
-        stills.add(new BestiarySteps.Still("pillar-beam-before-rebuild", rebuilt - 3, cx, half + 12, cz, yaw, 5.0F, false));
+        stills.add(new BestiarySteps.Still("pillar-beam-before-rebuild", rebuilt - 3, cx, half + 12, cz, end.yaw, 5.0F, false));
         Census.keyTicks.add(rebuilt - 3);
         marks.merge(rebuilt - 3, "pillar about to come back", (a, b) -> a + ", " + b);
         waitTicks(40);
@@ -728,8 +796,11 @@ final class BestiaryStages {
         still("dragon-summoned", mark("the summoned dragon"), 0.5, y + 30, 40.5, 0.5, y + 60, 0.5, false);
         waitTicks(50);
         mark("the summoned dragon flying");
-        travel.note = "pillar " + sx + " " + sz + " watched from about 30 blocks";
+        end.travel.note = "pillar " + sx + " " + sz + " watched from about 30 blocks";
+    }
 
+    /** Back to the overworld, as the end of the trip there and back */
+    private static void backToTheOverworld() throws Exception {
         c("execute in minecraft:overworld run tp @s 0.5 -57 -6.5 0 20");
         test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().location().toString().equals(OVERWORLD), 120, "the recorder to come back to the overworld");
         fly();
