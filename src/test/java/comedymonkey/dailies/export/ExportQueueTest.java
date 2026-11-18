@@ -198,4 +198,75 @@ class ExportQueueTest {
         assertEquals(20, ExportQueue.read(file).jobs().size());
     }
 
+    private static ExportQueue.Job pointOfView(String recording, int start, int end, String output) {
+        ExportQueue.Job job = new ExportQueue.Job();
+        job.kind = ExportQueue.Kind.POINT_OF_VIEW;
+        job.recording = recording;
+        job.recorder = "Alex";
+        job.startTick = start;
+        job.endTick = end;
+        job.preset = "YouTube 1080p60";
+        job.output = output;
+        return job;
+    }
+
+    @Test
+    void aPointOfViewJobKeepsItsRecordingStretchAndRecorderInTheFile(@TempDir Path folder) throws Exception {
+        Path file = folder.resolve("export-queue.json");
+        String id = ExportQueue.update(file, queue -> queue.add(pointOfView("/recordings/alex.dailies", 120, 480, "/out/Point of view - Alex"), 3).id);
+        ExportQueue.Job job = ExportQueue.read(file).job(id);
+        assertEquals(ExportQueue.Kind.POINT_OF_VIEW, job.kind);
+        assertEquals("/recordings/alex.dailies", job.recording);
+        assertEquals("Alex", job.recorder);
+        assertEquals(120, job.startTick);
+        assertEquals(480, job.endTick);
+        assertEquals("", job.scene, "a point of view has no scene");
+        assertTrue(Files.readString(file).contains("\"kind\": \"point_of_view\""));
+    }
+
+    @Test
+    void aJobWithoutAKindIsASceneJob() {
+        com.google.gson.JsonObject json = job("a.mp4").toJson();
+        json.remove("kind");
+        assertEquals(ExportQueue.Kind.SCENE, ExportQueue.Job.fromJson(json).kind);
+        json.addProperty("kind", "something else");
+        assertEquals(ExportQueue.Kind.SCENE, ExportQueue.Job.fromJson(json).kind);
+        assertEquals("scene", job("a.mp4").toJson().get("kind").getAsString());
+    }
+
+    @Test
+    void aPointOfViewJobWithoutARecordingOrAStretchIsRefused() {
+        ExportQueue queue = new ExportQueue();
+        assertThrows(IllegalArgumentException.class, () -> queue.add(pointOfView("", 0, 100, "a"), 1), "no recording");
+        assertThrows(IllegalArgumentException.class, () -> queue.add(pointOfView("/r.dailies", -1, -1, "a"), 1), "no stretch");
+        assertThrows(IllegalArgumentException.class, () -> queue.add(pointOfView("/r.dailies", 100, 100, "a"), 1), "an empty stretch");
+        assertThrows(IllegalArgumentException.class, () -> queue.add(pointOfView("/r.dailies", 200, 100, "a"), 1), "a stretch backwards");
+        assertTrue(queue.jobs().isEmpty());
+        // A scene job may leave its range to the scene
+        queue.add(job("scene.mp4"), 1);
+        assertEquals(1, queue.jobs().size());
+    }
+
+    @Test
+    void aBatchGoesOnTogetherInItsOrderOrNotAtAll(@TempDir Path folder) throws Exception {
+        Path file = folder.resolve("export-queue.json");
+        String before = ExportQueue.update(file, queue -> queue.add(job("before.mp4"), 1).id);
+        List<String> batch = ExportQueue.update(file, queue -> queue.addAll(List.of(
+            pointOfView("/recordings/mine.dailies", 20, 80, "mine"),
+            pointOfView("/recordings/alex.dailies", 1020, 1080, "alex")), 2).stream().map(job -> job.id).toList());
+        ExportQueue read = ExportQueue.read(file);
+        assertEquals(List.of(before, batch.get(0), batch.get(1)), read.jobs().stream().map(job -> job.id).toList());
+        assertEquals(before, read.next().id, "the batch waits behind the jobs before it");
+        assertEquals(ExportQueue.State.WAITING, read.job(batch.get(1)).state);
+
+        // One job of the batch refused: none of it goes on, and the file is not changed
+        long revision = read.revision();
+        assertThrows(IllegalArgumentException.class, () -> ExportQueue.update(file, queue -> queue.addAll(List.of(
+            pointOfView("/recordings/mine.dailies", 20, 80, "mine again"),
+            pointOfView("/recordings/alex.dailies", 80, 20, "alex backwards")), 3)));
+        ExportQueue after = ExportQueue.read(file);
+        assertEquals(3, after.jobs().size());
+        assertEquals(revision, after.revision());
+    }
+
 }

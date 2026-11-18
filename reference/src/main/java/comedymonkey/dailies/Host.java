@@ -179,6 +179,22 @@ public final class Host {
          * @return the id of the job
          */
         String queueExport(int scene, @Nullable String preset, String file) throws Exception;
+        /**
+         * Put an export of a stretch of any recording on the export queue (EXP-10), seen through the eyes of whoever
+         * made it: the camera rides along with the recorder and none of the recording's scenes plays a part, as
+         * PLAY-18's batch of points of view wants. The recording need not be open. Reads the recording's description:
+         * not for the client thread.
+         *
+         * @param recording the recording's file
+         * @param startTick the first tick, in that recording's own ticks
+         * @param endTick   the last tick, after the first
+         * @param preset    the name of an export preset, or null for the first one
+         * @param folder    the folder to write to (absolute, or inside the exports folder), or null for the exports folder
+         * @param name      the file's name; its ending is the preset's, and a name already taken gets a number when the
+         *                  job runs. Empty for one made of the recorder's name and the ticks
+         * @return the id of the job
+         */
+        String queueExport(Path recording, int startTick, int endTick, @Nullable String preset, @Nullable String folder, String name) throws Exception;
 
         // --- Several points of view (PLAY-18) ---
 

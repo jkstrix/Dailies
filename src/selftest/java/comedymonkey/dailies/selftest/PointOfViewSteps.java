@@ -246,8 +246,32 @@ final class PointOfViewSteps {
             check(job.getAsJsonObject().get("start_tick").getAsInt() == 20 && job.getAsJsonObject().get("end_tick").getAsInt() == 80,
                 "a point of view's stretch is not lined up with mine: " + job);
         }
-        if (!batch.get("queued").getAsBoolean()) {
-            test.skip("export_points_of_view: there is no export queue in this build, so the batch was listed and not started");
+        // The batch is on the export queue, one point of view job each, in the recording's own ticks; it is not run here,
+        // the owner having asked for one export of each kind (QueueSteps runs one), and is taken off again at once so the
+        // steps after this one find the queue as it was
+        check(batch.get("queued").getAsBoolean(), "export_points_of_view did not put the batch on the export queue: " + batch);
+        List<String> queuedIds = new ArrayList<>();
+        for (JsonElement job : jobs) {
+            check(job.getAsJsonObject().has("job_id"), "a point of view in the batch has no job on the queue: " + job);
+            queuedIds.add(job.getAsJsonObject().get("job_id").getAsString());
+        }
+        JsonArray onQueue = test.tool("export_queue_list", new JsonObject()).getAsJsonArray("jobs");
+        for (String id : queuedIds) {
+            JsonObject found = null;
+            for (JsonElement entry : onQueue) {
+                if (entry.getAsJsonObject().get("job_id").getAsString().equals(id)) {
+                    found = entry.getAsJsonObject();
+                }
+            }
+            check(found != null, "the job " + id + " of the batch is not on the export queue: " + shorten(onQueue.toString()));
+            check(found.get("kind").getAsString().equals("point_of_view") && found.get("state").getAsString().equals("waiting")
+                && found.get("start_tick").getAsInt() == 20 && found.get("end_tick").getAsInt() == 80,
+                "a job of the batch is not a waiting point of view of ticks 20 to 80: " + found);
+            test.tool("export_queue_remove", args("job_id", id));
+        }
+        JsonArray left = test.tool("export_queue_list", new JsonObject()).getAsJsonArray("jobs");
+        for (String id : queuedIds) {
+            check(!left.toString().contains(id), "the batch's job " + id + " is still on the export queue after it was removed");
         }
 
         // --- PLAY-19, EDIT-11: a scene that switches point of view by a cut ---
@@ -275,7 +299,7 @@ final class PointOfViewSteps {
             "the scene was lost across the cut: the editor should still be editing my recording, with the friend's linked; " + whatIsLinked(test, mineId, friendId));
         test.waitFor(() -> mineId.equals(PointOfView.shownId()) && Playback.loaded() && !Playback.jumping(), 60, "the cut back to my recording at tick 110");
         test.tool("replay_pause", none);
-        test.log("points of view: shared, imported as " + FRIEND + "'s, linked by game time, listed on the page and in the export batch, and cut to and back in a scene");
+        test.log("points of view: shared, imported as " + FRIEND + "'s, linked by game time, listed on the page, queued as a batch of points of view, and cut to and back in a scene");
 
         // Tidied away, so that steps after this one count the recordings they made
         PlaybackSteps.close(test);
