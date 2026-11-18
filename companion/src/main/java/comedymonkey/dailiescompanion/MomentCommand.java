@@ -48,6 +48,11 @@ final class MomentCommand {
 			if (j.isJsonObject())
 				data = j.getAsJsonObject();
 		}
+		if (!DailiesCompanion.fits(data)) {
+			c.getSource().sendFailure(Component.literal("The data of moment '" + type + "' is too long: a moment carries at most "
+				+ MomentPayload.MAX_JSON + " characters of JSON. Nothing was sent"));
+			return 0;
+		}
 		int sent = 0;
 		for (ServerPlayer p : players)
 			if (DailiesCompanion.send(p, type, label, data))

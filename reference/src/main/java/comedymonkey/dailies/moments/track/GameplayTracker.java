@@ -626,20 +626,39 @@ public class GameplayTracker {
         }
     }
 
+    /** Events a server may send: so many a second, and a few more at once (a craft and a train setting off together) */
+    private static final int SERVER_EVENTS_PER_SECOND = 5;
+    private static final int SERVER_EVENTS_AT_ONCE = 20;
+    /** How much of the data sent with a server's event is kept, in characters of JSON */
+    private static final int MAX_SERVER_DATA_CHARS = 8 * 1024;
+    private final EventBudget serverEvents = new EventBudget(SERVER_EVENTS_PER_SECOND, SERVER_EVENTS_AT_ONCE, System.currentTimeMillis());
+    private long serverFloodSaidAt = 0;
+
     /**
      * A custom event sent by the server (Dailies Companion). Stored like one added over MCP, except that the first
-     * event of each server-chosen type in this world is flagged as a first.
+     * event of each server-chosen type in this world is flagged as a first. Past {@link #SERVER_EVENTS_PER_SECOND} a
+     * second the events are left out, and null is returned.
      */
-    public synchronized JsonObject addServerEvent(String customType, String label, @Nullable JsonObject data) {
+    public synchronized @Nullable JsonObject addServerEvent(String customType, String label, @Nullable JsonObject data) {
+        long now = System.currentTimeMillis();
+        if (!this.serverEvents.take(now)) {
+            // Said once a minute at most, with how many have gone, so a flood cannot fill the log either
+            if (now - this.serverFloodSaidAt > 60_000) {
+                this.serverFloodSaidAt = now;
+                comedymonkey.dailies.Host.LOGGER.warn("Moments: the server sends more events than {} a second; {} were left out so far", SERVER_EVENTS_PER_SECOND, this.serverEvents.dropped());
+            }
+            return null;
+        }
+        JsonObject kept = data == null ? null : EventBudget.kept(data, MAX_SERVER_DATA_CHARS);
         if (customType != null && CraftRules.SERVER_TYPES.contains(customType)) {
             // The companion's craft and train events are moments of their own type, merged with what the game saw (plan 2.1)
-            return this.crafts.onServerEvent(customType, label, data);
+            return this.crafts.onServerEvent(customType, label, kept);
         }
         String subject = customType == null || customType.isBlank() ? "server_event" : customType;
         return this.emit("custom", subject, false, event -> {
             JsonObject metadata = MJson.meta(event);
-            if (data != null) {
-                for (Map.Entry<String, JsonElement> entry : data.entrySet()) {
+            if (kept != null) {
+                for (Map.Entry<String, JsonElement> entry : kept.entrySet()) {
                     metadata.add(entry.getKey(), entry.getValue());
                 }
             }

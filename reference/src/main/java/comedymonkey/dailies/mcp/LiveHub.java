@@ -22,6 +22,7 @@ public final class LiveHub {
     public static final class Listener {
         private final LinkedBlockingQueue<String> queue = new LinkedBlockingQueue<>(QUEUE_LENGTH);
         private volatile boolean dropped = false;
+        private @Nullable Runnable whenDropped = null;
 
         /** The next message, already in event-stream form, or null when none came in time */
         public @Nullable String next(long timeout, TimeUnit unit) throws InterruptedException {
@@ -31,6 +32,37 @@ public final class LiveHub {
         /** True once the listener fell too far behind and was let go */
         public boolean dropped() {
             return this.dropped;
+        }
+
+        /**
+         * What to do the moment the listener is let go, such as closing its connection: a page that stopped reading
+         * leaves its thread stuck writing to it, and only closing the connection frees that thread. Runs at once when
+         * the listener was let go already. It runs on the thread that published, so it must be quick.
+         */
+        public void whenDropped(Runnable action) {
+            boolean now;
+            synchronized (this) {
+                this.whenDropped = action;
+                now = this.dropped;
+            }
+            if (now) {
+                action.run();
+            }
+        }
+
+        private void drop() {
+            Runnable action;
+            synchronized (this) {
+                this.dropped = true;
+                action = this.whenDropped;
+            }
+            if (action != null) {
+                try {
+                    action.run();
+                } catch (RuntimeException ignored) {
+                    // Publishing never fails because a listener could not be let go tidily
+                }
+            }
         }
     }
 
@@ -68,8 +100,8 @@ public final class LiveHub {
         String message = "event: " + event + "\ndata: " + json.replace("\r", "").replace("\n", " ") + "\n\n";
         for (Listener listener : LISTENERS) {
             if (!listener.queue.offer(message)) {
-                listener.dropped = true;
                 LISTENERS.remove(listener);
+                listener.drop();
             }
         }
     }

@@ -35,6 +35,9 @@ public final class DailiesConfig {
         BOTTOM, MIDDLE, TOP
     }
 
+    /** The shortest token remote access accepts when one is typed in; the one the mod makes is 43 characters */
+    public static final int MCP_TOKEN_MIN_LENGTH = 24;
+
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
     private static final Map<String, Setting<?>> SETTINGS = new LinkedHashMap<>();
     private static String group = "";
@@ -99,7 +102,7 @@ public final class DailiesConfig {
             bool("mcpEnabled", true, "Run the MCP server, which also serves the moments page. It listens on this computer only, unless Listen On is changed");
             integer("mcpPort", 25595, 1024, 65535, "The port the MCP server listens on");
             text("mcpBind", "127.0.0.1", "The address the MCP server listens on. 127.0.0.1 keeps it on this computer, as it always was. One of this computer's own network addresses, or 0.0.0.0 for all of them, lets other machines reach it: to them it speaks HTTPS, wants the token on every request and only answers the allowed clients. This computer goes on using http://127.0.0.1 with no token");
-            text("mcpToken", "", "The token another machine must send over HTTPS as 'Authorization: Bearer <token>'. Made by the mod the first time remote access is switched on; clear it to have a new one made. Anyone who has it can drive the game, so treat it as a password");
+            secret("mcpToken", MCP_TOKEN_MIN_LENGTH, "The token another machine must send over HTTPS as 'Authorization: Bearer <token>'. Made by the mod the first time remote access is switched on; clear it to have a new one made. Anyone who has it can drive the game, so treat it as a password. One set by hand must be at least " + MCP_TOKEN_MIN_LENGTH + " characters");
             text("mcpAllowedClients", comedymonkey.dailies.mcp.AddressRules.LOCAL_NETWORKS, "The machines that may reach the MCP server when it listens beyond this computer: addresses or ranges such as 192.168.1.20 or 192.168.1.0/24, separated by commas. The default is the private local-network ranges. This computer itself is always allowed");
             text("mcpCertificateFingerprint", "", "The SHA-256 fingerprint of the certificate the MCP server shows to other machines, for a client to pin. Filled in by the mod when remote access is switched on; changing it here has no effect");
         });
@@ -109,11 +112,11 @@ public final class DailiesConfig {
             integer("momentsStatsPollSeconds", 5, 0, 600, "How often the game's statistics are asked for, to confirm kills. 0 turns it off");
             bool("momentsBurstLabels", true, "Listen to each burst of noise in voice chat and name it laughter, cheering, screaming or shouting, so laughter can make the better clip. A small sound model bundled with the mod does this on this computer: no AI service is used and nothing is sent anywhere");
             bool("momentsAiEnabled", false, "The one switch for everything that talks to an AI service: transcription and model-written summaries. While off, nothing is sent anywhere. While on, the voice audio Moments captures, other players' included, is sent to the transcription server set below");
-            text("momentsWhisperUrl", "http://192.168.188.50:8000", "Address of an OpenAI-compatible transcription server. With AI on, this is where voice audio is sent. Empty keeps transcription off");
+            text("momentsWhisperUrl", "", "Address of an OpenAI-compatible transcription server. With AI on, this is where voice audio is sent. Empty keeps transcription off");
             text("momentsWhisperModel", "Systran/faster-whisper-large-v3", "The transcription model to ask for");
             text("momentsWhisperLanguage", "en", "Language of the speech. Empty means detect it");
             bool("momentsTranscribeLive", true, "Transcribe voice segments as they are made, not only when asked");
-            text("momentsOllamaUrl", "http://192.168.188.50:11434", "Address of an Ollama server for clip titles and summaries. Empty keeps them off");
+            text("momentsOllamaUrl", "", "Address of an Ollama server for clip titles and summaries. Empty keeps them off");
             text("momentsOllamaModel", "gemma4:e4b", "The model that writes clip titles and summaries");
             bool("momentsSummarizeClips", true, "Ask the model for a better title and summary of each clip");
             decimal("momentsProximityRadius", 10.0, 1.0, 256.0, "Players within this many blocks of each other count as together");
@@ -180,6 +183,11 @@ public final class DailiesConfig {
 
     private static Setting<String> text(String name, String fallback, String comment) {
         return add(new Setting<>(name, group, Setting.Kind.TEXT, fallback, comment, null, null, BUILDER.comment(comment).define(name, fallback)));
+    }
+
+    /** A text setting that is a password, see {@link Setting#secret()} */
+    private static Setting<String> secret(String name, int minLength, String comment) {
+        return text(name, "", comment).secret(minLength);
     }
 
     private static <E extends Enum<E>> Setting<E> choice(String name, E fallback, String comment) {

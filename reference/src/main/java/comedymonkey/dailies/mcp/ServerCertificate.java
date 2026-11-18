@@ -118,7 +118,9 @@ public final class ServerCertificate {
                 store.load(in, PASSWORD);
                 ServerCertificate kept = new ServerCertificate((PrivateKey) store.getKey(ALIAS, PASSWORD), (X509Certificate) store.getCertificate(ALIAS));
                 kept.certificate.checkValidity();
-                if (kept.key != null && (mustName == null || kept.names(mustName))) {
+                // One made as a certificate authority, as early ones were, is made again as a server's own
+                boolean authority = kept.certificate.getBasicConstraints() >= 0;
+                if (kept.key != null && !authority && (mustName == null || kept.names(mustName))) {
                     return kept;
                 }
             } catch (Exception e) {
@@ -171,11 +173,19 @@ public final class ServerCertificate {
         for (InetAddress address : addresses) {
             alternatives.writeBytes(tag(0x87, address.getAddress()));
         }
+        byte[] critical = {0x01, 0x01, (byte) 0xFF};
+        // digitalSignature, and for RSA keyEncipherment too, as older TLS uses an RSA key that way
+        byte[] keyUsage = signing.endsWith("RSA") ? new byte[]{0x03, 0x02, 0x05, (byte) 0xA0} : new byte[]{0x03, 0x02, 0x07, (byte) 0x80};
         byte[] extensions = sequence(
             // subjectAltName: the names and addresses the server answers to
             sequence(oid(0x55, 0x1D, 0x11), tag(0x04, sequence(alternatives.toByteArray()))),
-            // basicConstraints, critical, CA: lets the certificate be trusted as its own issuer
-            sequence(oid(0x55, 0x1D, 0x13), new byte[]{0x01, 0x01, (byte) 0xFF}, tag(0x04, sequence(new byte[]{0x01, 0x01, (byte) 0xFF}))));
+            // basicConstraints, critical, empty: not a certificate authority. Someone who trusts it trusts this server and
+            // nothing else, since it can sign no other certificate
+            sequence(oid(0x55, 0x1D, 0x13), critical, tag(0x04, sequence())),
+            // keyUsage, critical
+            sequence(oid(0x55, 0x1D, 0x0F), critical, tag(0x04, keyUsage)),
+            // extKeyUsage: for a TLS server only
+            sequence(oid(0x55, 0x1D, 0x25), tag(0x04, sequence(oid(0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x01)))));
 
         byte[] serial = new byte[16];
         new SecureRandom().nextBytes(serial);

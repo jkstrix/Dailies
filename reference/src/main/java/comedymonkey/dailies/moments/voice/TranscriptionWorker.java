@@ -114,8 +114,8 @@ public class TranscriptionWorker {
     /** @return false when the Whisper server could not be reached, in which case the job should be retried later */
     private boolean process(Job job) throws InterruptedException {
         MomentsSession session = this.storage.getSession(job.sessionId());
-        if (session == null) {
-            return true;
+        if (session == null || comedymonkey.dailies.moments.storage.MomentsShare.theirs(session)) {
+            return true; // a friend's session is never sent to this player's transcription server
         }
         if (!MomentsConfig.whisperConfigured()) {
             return true; // the server was removed from the config while this was waiting
@@ -136,9 +136,14 @@ public class TranscriptionWorker {
             this.fail(session, job, "Record has no audio file", true);
             return true;
         }
+        Path path = audioPath(session.dir, audioFile);
+        if (path == null) {
+            // The record may have come from someone else's shared session: nothing outside this session's audio is sent
+            this.fail(session, job, "The audio file is not one of this session's own: " + audioFile, true);
+            return true;
+        }
         // The WAV is written by the storage thread, make sure it got there
         this.storage.flush();
-        Path path = session.dir.resolve(audioFile);
         byte[] audio;
         try {
             audio = Files.readAllBytes(path);
@@ -199,6 +204,23 @@ public class TranscriptionWorker {
             Host.LOGGER.warn("Moments: could not listen to the non-speech of {}: {}", audioFile, e.toString());
         }
         return true;
+    }
+
+    /** The only audio a dialogue record can name: a WAV in the session's audio folder, as storeSegments writes them */
+    private static final java.util.regex.Pattern AUDIO_FILE = java.util.regex.Pattern.compile("audio/[A-Za-z0-9_-]{1,120}\\.wav");
+
+    /**
+     * The audio file a dialogue record names, inside its session's folder, or null when the name is anything but one
+     * of the session's own WAVs (an absolute path, a share on another computer, a way out with "..").
+     */
+    static @org.jetbrains.annotations.Nullable Path audioPath(Path sessionDir, String audioFile) {
+        String name = audioFile.replace('\\', '/');
+        if (!AUDIO_FILE.matcher(name).matches()) {
+            return null;
+        }
+        Path folder = sessionDir.toAbsolutePath().normalize();
+        Path file = folder.resolve(name).normalize();
+        return file.startsWith(folder.resolve("audio")) ? file : null;
     }
 
     /** The longest stretch of a non-speech segment the sound classifier hears; a burst is over well within it */
