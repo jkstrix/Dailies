@@ -41,6 +41,12 @@ The owner asked for every finding to be fixed. All of them were, on master, exce
   - **Bestiary:** 32 items wrong and 5 not staged. It was 33 before the review.
   - **Camera films:** 15 hard faults. The walk into the Nether also timed out after 40 seconds. That timeout passed in every earlier run and the log does not say why it failed; the step now reports the player, the portal and the server's view when it gives up (`19271d0`).
   - **BUD-2:** recording size is 354 MB an hour (target 150) in the village on foot.
+- Evening runs, after `19271d0` to `b692432`:
+  - The full modded run of the normal steps passes, along with the bestiary at **106 of 106**. Points of view, trains, edges and the addon all pass.
+  - The bestiary had lost 32 items to five stages that waited for tick 85 or 70 of a segment. The scripted runs use 40-tick segments, so those waits never ended (`c7c7eff`).
+  - Two playback faults were found and fixed (`124a34a`). A beacon put back from a snapshot lost its level, because the game saves it but never reads it back. The recorder showed no hurt flash for a hit that comes with no damage event.
+  - The export test's upright check now uses bands instead of single pixels (`b692432`).
+  - The tour and the camera films were not run this evening. Still open: the camera films' faults and the Nether walk, and BUD-2.
 
 ---
 
