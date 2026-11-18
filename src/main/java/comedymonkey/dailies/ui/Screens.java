@@ -14,6 +14,7 @@ import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -46,6 +47,7 @@ public final class Screens {
     public static void init() {
         // Last, so that the buttons other mods add to the same screens are there to be kept clear of
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, Screens::screenBuilt);
+        NeoForge.EVENT_BUS.addListener(Screens::screenOpening);
         // Explanations in the editor are drawn by the game; they are given the house colours here
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderTooltipEvent.Color event) -> {
             if (Minecraft.getInstance().screen instanceof EditorScreen) {
@@ -65,6 +67,36 @@ public final class Screens {
             }
         } catch (RuntimeException | LinkageError e) {
             Host.LOGGER.error("Dailies: its buttons could not be added to a screen", e);
+        }
+    }
+
+    /**
+     * While a recording is watched, two of the game's screens are swapped for Dailies' own. The pause menu becomes
+     * {@link PlaybackMenu}, which has only Dailies' buttons on it. The chat never opens: the viewer cannot talk into a
+     * recording, so the chat key opens the editor instead, as the timeline key does, and the command key does nothing.
+     * Both keys come here, whether or not the playback keys saw them first, since the game handles its own keys on its
+     * tick and the playback keys are read on the frame after.
+     */
+    private static void screenOpening(ScreenEvent.Opening event) {
+        try {
+            if (!Playback.active()) {
+                return;
+            }
+            boolean exporting = comedymonkey.dailies.export.Export.active();
+            Screen next = event.getNewScreen();
+            if (next instanceof ChatScreen chat) {
+                String initial = ((comedymonkey.dailies.mixin.access.ChatScreenAccess) chat).dailies$initial();
+                boolean chatKey = initial == null || initial.isEmpty();
+                if (chatKey && event.getCurrentScreen() == null && Playback.loaded() && !exporting) {
+                    event.setNewScreen(EditorScreen.opening());
+                } else {
+                    event.setCanceled(true);
+                }
+            } else if (next instanceof PauseScreen pause && pause.showsPauseMenu() && !exporting) {
+                event.setNewScreen(new PlaybackMenu(event.getCurrentScreen() instanceof EditorScreen));
+            }
+        } catch (RuntimeException | LinkageError e) {
+            Host.LOGGER.error("Dailies: a screen could not be swapped for its own while watching", e);
         }
     }
 
