@@ -61,7 +61,7 @@ final class BestiarySteps {
      * Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself.
      * 2: a stage closes after two quiet ticks, before the field is cleared, so that clearing it is not part of the item.
      */
-    static final int VERSION = 2;
+    static final int VERSION = 3;
 
     static SelfTest test;
     static Minecraft minecraft;
@@ -275,9 +275,31 @@ final class BestiarySteps {
         }
     }
 
-    /** Waits until the recording is so many ticks into a segment, so that what follows is caught in flight by the next stored world */
+    /** Waits until the recording is so many ticks into a segment: just after a stored world, so that it knows nothing of what follows */
     static void untilPhase(int wanted) throws Exception {
+        int length = segmentTicks();
+        check(wanted < length, "the recording is never " + wanted + " ticks into a segment of " + length);
         test.waitFor(() -> phase() == wanted || phase() == wanted + 1, 30, "the recording to be " + wanted + " ticks into a segment");
+    }
+
+    /**
+     * Waits until the next stored world is so many ticks away, so that what follows is caught in flight by it. Worked
+     * out from the segment length the run records with: the scripted runs store the world every two seconds
+     * (dailies.test.segmentTicks), not every five, and a wait for a fixed tick of a five-second segment never ended
+     */
+    static void ticksBeforeStoredWorld(int before) throws Exception {
+        int length = segmentTicks();
+        check(before < length, "a stored world is never " + before + " ticks away in segments of " + length);
+        untilPhase(length - before);
+    }
+
+    /** How long the recording's segments are, in ticks */
+    static int segmentTicks() {
+        try {
+            return (Integer) secret(Recorder.get(), Recorder.class, "segmentTicks");
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("the recorder's segment length could not be read", e);
+        }
     }
 
     static String named(String name) {

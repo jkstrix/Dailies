@@ -353,7 +353,7 @@ final class BestiaryStages {
         mark("deflected fireball landed");
         // One fireball slowed to a crawl, launched fifteen ticks before a stored world is written, and looked at seventy
         // ticks after it: a jump there starts from that stored world, with the fireball already in the air
-        untilPhase(85);
+        ticksBeforeStoredWorld(15);
         c("summon minecraft:fireball -4.5 -55 10.5 {Motion:[0.0,0.0,0.05],acceleration_power:0.004,ExplosionPower:1b}");
         server("the blaze's burning state", (level, player) -> {
             java.lang.reflect.Method charged = Blaze.class.getDeclaredMethod("setCharged", boolean.class);
@@ -865,7 +865,7 @@ final class BestiaryStages {
         waitTicks(10);
         mark("before the projectiles");
         // Slow things first, and fifteen ticks before a stored world, so that one is written with them in the air
-        untilPhase(85);
+        ticksBeforeStoredWorld(15);
         server("a shulker bullet", (level, player) -> level.addFreshEntity(new ShulkerBullet(level, (LivingEntity) called(level, "bullet shulker"), called(level, "bullet target"), Direction.Axis.Y)));
         server("a guardian's beam", (level, player) -> {
             java.lang.reflect.Method target = Guardian.class.getDeclaredMethod("setActiveAttackTarget", int.class);
@@ -990,7 +990,7 @@ final class BestiaryStages {
         waitTicks(12);
         mark("fixtures placed");
         // The displays start a long change fifteen ticks before a stored world, so later jumps land inside it
-        untilPhase(85);
+        ticksBeforeStoredWorld(15);
         c("execute as @e[tag=shown] run data merge entity @s {start_interpolation:0,interpolation_duration:200,transformation:{translation:[0f,3f,0f],scale:[2f,2f,2f],left_rotation:[0f,0f,0f,1f],right_rotation:[0f,0.7071f,0f,0.7071f]}}");
         waitTicks(40);
         still("fixtures", mark("fixtures, displays a fifth of the way"), 0.5, -55, 2.5, 0.5, -59, 20.5, false);
@@ -1024,7 +1024,7 @@ final class BestiaryStages {
         c("summon minecraft:villager 4.5 -60 8.5 {NoAI:1b,VillagerData:{profession:\"minecraft:none\",level:1,type:\"minecraft:plains\"}," + named("villager") + "}");
         waitTicks(8);
         mark("mobs placed");
-        untilPhase(70);
+        ticksBeforeStoredWorld(30);
         server("a warden rising", (level, player) -> {
             Warden warden = EntityType.WARDEN.create(level);
             warden.moveTo(12.5, -60.0, 20.5, 180.0F, 0.0F);
@@ -1225,7 +1225,7 @@ final class BestiaryStages {
 
         // Everything is set going at once, fifteen ticks before a stored world, and left for long enough that later jumps
         // land well after it with only a stored world to go by
-        untilPhase(85);
+        ticksBeforeStoredWorld(15);
         c("setblock -21 -60 12 minecraft:redstone_block");
         c("setblock -12 -60 11 minecraft:redstone_block");
         c("setblock -4 -60 11 minecraft:redstone_block");
