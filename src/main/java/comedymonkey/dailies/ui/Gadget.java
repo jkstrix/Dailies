@@ -63,6 +63,15 @@ abstract class Gadget {
     }
 
     /**
+     * Whether a control is this one or one it is made of, whether or not it can be reached now: folded away, unusable
+     * and out of sight count too. Every control that holds others answers for them, so that a form can tell whether
+     * the box being typed into is one of its own.
+     */
+    boolean holds(Gadget control) {
+        return control == this;
+    }
+
+    /**
      * A key went down while the keys act on this control.
      *
      * @return whether the key was meant for it
@@ -888,6 +897,11 @@ abstract class Gadget {
         }
 
         @Override
+        boolean holds(Gadget other) {
+            return other == this || this.control.holds(other);
+        }
+
+        @Override
         Gadget when(BooleanSupplier condition) {
             this.control.when(condition);
             return super.when(condition);
@@ -953,6 +967,19 @@ abstract class Gadget {
         @Override
         void collect(List<Gadget> order) {
             this.parts.forEach(part -> part.collect(order));
+        }
+
+        @Override
+        boolean holds(Gadget other) {
+            if (other == this) {
+                return true;
+            }
+            for (Gadget part : this.parts) {
+                if (part.holds(other)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
@@ -1090,6 +1117,19 @@ abstract class Gadget {
             if (this.open.getAsBoolean()) {
                 this.rows.forEach(row -> row.collect(order));
             }
+        }
+
+        @Override
+        boolean holds(Gadget other) {
+            if (other == this) {
+                return true;
+            }
+            for (Gadget row : this.rows) {
+                if (row.holds(other)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override

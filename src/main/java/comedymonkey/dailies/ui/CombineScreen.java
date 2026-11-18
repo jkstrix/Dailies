@@ -517,6 +517,11 @@ public final class CombineScreen extends KitScreen {
             this.down.collect(order);
             this.remove.collect(order);
         }
+
+        @Override
+        boolean holds(Gadget control) {
+            return control == this || control == this.up || control == this.down || control == this.remove;
+        }
     }
 
     /** Where one recording ends and the next begins, with the next one's preview: the world there is rebuilt from its start */

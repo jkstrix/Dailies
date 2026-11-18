@@ -356,9 +356,17 @@ public final class Controls {
         return opened[0];
     }
 
-    /** Says something to the person: in the editor when it is open, where its top bar would cover a notice, else as a notice */
+    /**
+     * Says something to the person: in the editor when it is open, where its top bar would cover a notice, else as a
+     * notice. Any thread: from any other it is passed to the client thread, which alone reads what the editor shows
+     */
     static void tell(Component words) {
-        EditorState.say(words);
+        Minecraft game = Minecraft.getInstance();
+        if (game.isSameThread()) {
+            EditorState.say(words);
+        } else {
+            game.execute(() -> EditorState.say(words));
+        }
     }
 
     private static void watching(FileWork action) {

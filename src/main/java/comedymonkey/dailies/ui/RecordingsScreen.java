@@ -26,7 +26,6 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -80,7 +79,11 @@ public final class RecordingsScreen extends KitScreen {
     private boolean starredOnly = false;
     private List<LibraryIndex.Entry> shown = List.of();
     /** The recordings chosen, by file relative to the recordings folder, in the order they were chosen */
-    private final LinkedHashSet<String> chosen = new LinkedHashSet<>();
+    private final RevisedSet<String> chosen = new RevisedSet<>();
+    /** The entries chosen, as last worked out, and what from: the buttons ask for them many times a frame */
+    private List<LibraryIndex.Entry> chosenFound = List.of();
+    private long chosenFoundAt = -1;
+    private List<LibraryIndex.Entry> chosenFoundIn = List.of();
     private @Nullable String anchor = null;
     private @Nullable String chosenBin = null;
 
@@ -90,9 +93,6 @@ public final class RecordingsScreen extends KitScreen {
     private LibraryBits.@Nullable Picture detailsPicture = null;
     private int detailsLook = 0;
     private String detailsBuiltFor = "";
-
-    /** Settings changed here and on their way to the file, so the boxes show them meanwhile */
-    private final Map<String, Object> pending = new HashMap<>();
 
     private final Form rows = new Form();
     private final Form side = new Form();
@@ -393,10 +393,16 @@ public final class RecordingsScreen extends KitScreen {
                 if (this.search.isBlank() && !LibraryQuery.ALL.equals(this.folder)) {
                     if (!LibraryQuery.TOP.equals(this.folder)) {
                         int slash = this.folder.lastIndexOf('/');
-                        this.rows.add(new FolderRow(slash < 0 ? LibraryQuery.TOP : this.folder.substring(0, slash), true));
+                        this.rows.add(new FolderRow(slash < 0 ? LibraryQuery.TOP : this.folder.substring(0, slash), true, 0));
                     }
-                    for (String child : LibraryQuery.childrenOf(this.folderList, this.folder)) {
-                        this.rows.add(new FolderRow(child, false));
+                    List<String> children = LibraryQuery.childrenOf(this.folderList, this.folder);
+                    if (!children.isEmpty()) {
+                        List<String> holding = new ArrayList<>(this.all.size());
+                        this.all.forEach(entry -> holding.add(LibraryQuery.folderOf(entry)));
+                        Map<String, Integer> counts = FolderCounts.of(holding);
+                        for (String child : children) {
+                            this.rows.add(new FolderRow(child, false, counts.getOrDefault(child, 0)));
+                        }
                     }
                 }
                 Set<String> still = new java.util.HashSet<>();
@@ -472,17 +478,23 @@ public final class RecordingsScreen extends KitScreen {
         }));
     }
 
+    /** The recordings chosen that are on show, in the order of the list. Worked out again only when either has changed */
     private List<LibraryIndex.Entry> chosenEntries() {
         if (this.view != View.RECORDINGS || this.chosen.isEmpty()) {
             return List.of();
         }
-        List<LibraryIndex.Entry> list = new ArrayList<>();
-        for (LibraryIndex.Entry entry : this.shown) {
-            if (this.chosen.contains(entry.file)) {
-                list.add(entry);
+        if (this.chosenFoundAt != this.chosen.revision() || this.chosenFoundIn != this.shown) {
+            List<LibraryIndex.Entry> list = new ArrayList<>();
+            for (LibraryIndex.Entry entry : this.shown) {
+                if (this.chosen.contains(entry.file)) {
+                    list.add(entry);
+                }
             }
+            this.chosenFound = List.copyOf(list);
+            this.chosenFoundAt = this.chosen.revision();
+            this.chosenFoundIn = this.shown;
         }
-        return list;
+        return this.chosenFound;
     }
 
     private @Nullable Bin.Item chosenBinItem() {
@@ -552,7 +564,8 @@ public final class RecordingsScreen extends KitScreen {
                 }
             }
             case BIN -> wanted = "bin:" + this.chosenBin + ":" + this.binItems.size();
-            default -> wanted = "storage:" + (this.report == null ? 0 : this.report.hashCode()) + ":" + this.pending.size();
+            // Not built afresh when a setting is saved, which would take the keys away from the box they moved on to
+            default -> wanted = "storage:" + (this.report == null ? 0 : this.report.hashCode());
         }
         if (wanted.equals(this.detailsBuiltFor)) {
             return;
@@ -718,7 +731,7 @@ public final class RecordingsScreen extends KitScreen {
     }
 
     private Object settingNow(String name, Object fallback) {
-        Object waiting = this.pending.get(name);
+        Object waiting = SettingsWriter.pending(name);
         return waiting != null ? waiting : Host.get().setting(name, fallback);
     }
 
@@ -740,18 +753,16 @@ public final class RecordingsScreen extends KitScreen {
     }
 
     private void saveSetting(String name, Object value) {
-        this.pending.put(name, value);
-        Minecraft game = Minecraft.getInstance();
-        CompletableFuture.runAsync(() -> Host.get().saveSetting(name, value), Util.ioPool()).whenComplete((nothing, error) -> game.execute(() -> {
-            this.pending.remove(name, value);
-            if (error != null) {
-                Throwable cause = error.getCause() != null ? error.getCause() : error;
-                Notices.show(Component.translatable("dailies.ui.notice.refused", String.valueOf(cause.getMessage())));
+        SettingsWriter.save(name, value, trouble -> {
+            if (trouble != null) {
+                Notices.show(Component.translatable("dailies.ui.notice.refused", String.valueOf(trouble.getMessage())));
             }
             if (this.view == View.STORAGE) {
-                this.rebuildRows();
+                // The list says how full the disk may get before a warning; the settings beside it are left as they are
+                this.rows.clear();
+                this.buildStorage();
             }
-        }));
+        });
     }
 
     // ------------------------------------------------------------------ What the buttons do
@@ -1058,6 +1069,8 @@ public final class RecordingsScreen extends KitScreen {
     @Override
     public void removed() {
         super.removed();
+        // A preview still being read is not wanted now: its picture would be made after this and never let go of
+        this.detailsLook++;
         if (this.detailsPicture != null) {
             this.detailsPicture.close();
             this.detailsPicture = null;
@@ -1363,27 +1376,19 @@ public final class RecordingsScreen extends KitScreen {
 
         private final String folder;
         private final boolean up;
+        /** How many recordings it holds, those in folders inside it included */
+        private final int count;
         private long clickedAt = 0;
 
-        FolderRow(String folder, boolean up) {
+        FolderRow(String folder, boolean up, int count) {
             this.folder = folder;
             this.up = up;
+            this.count = count;
         }
 
         @Override
         int heightFor(Font font, int forWidth) {
             return 18;
-        }
-
-        private int count() {
-            int count = 0;
-            for (LibraryIndex.Entry entry : RecordingsScreen.this.all) {
-                String in = LibraryQuery.folderOf(entry);
-                if (in.equals(this.folder) || in.startsWith(this.folder + "/")) {
-                    count++;
-                }
-            }
-            return count;
         }
 
         @Override
@@ -1398,7 +1403,7 @@ public final class RecordingsScreen extends KitScreen {
                 LibraryBits.folder(graphics, this.x + 14, this.y + this.height / 2, hovered ? Controls.BRASS_BRIGHT : Controls.BRASS);
             }
             String words = this.up ? t("folder.up", folderName(this.folder)).getString() : this.folder.substring(this.folder.lastIndexOf('/') + 1);
-            String count = this.up ? "" : t("folder.holds", this.count()).getString();
+            String count = this.up ? "" : t("folder.holds", this.count).getString();
             int countWidth = font.width(count);
             Kit.text(graphics, font, Kit.clip(font, words, this.width - 40 - countWidth), this.x + 28, this.y + 5, this.up ? Controls.PARCHMENT_DIM : Controls.PARCHMENT);
             if (!count.isEmpty()) {

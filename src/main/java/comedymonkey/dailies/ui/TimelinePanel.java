@@ -535,9 +535,13 @@ final class TimelinePanel {
         int middle = y + LANE / 2;
         List<Keyframe> keyframes = track.keyframes();
         int plain = track.enabled() ? Controls.BRASS_BRIGHT : 0xFF6A5A3A;
+        // Only those that can be seen are drawn, a diamond reaching a few pixels either side of its tick
+        double margin = 6.0 * EditorState.viewSpan / Math.max(1, this.laneWidth);
+        int[] visible = VisibleRange.of(keyframes.size(), k -> keyframes.get(k).tick(), EditorState.viewStart - margin,
+                EditorState.viewStart + EditorState.viewSpan + margin);
         if (track.kind() == KeyframeKind.TIMELAPSE) {
-            // The two ends of a timelapse belong together
-            for (int k = 0; k + 1 < keyframes.size(); k += 2) {
+            // The two ends of a timelapse belong together; a pair is drawn when any of it is on screen
+            for (int k = Math.max(0, (visible[0] - 1) & ~1); k + 1 < keyframes.size() && k < visible[1]; k += 2) {
                 int from = (int) Math.round(this.across(keyframes.get(k).tick()));
                 int to = (int) Math.round(this.across(keyframes.get(k + 1).tick()));
                 graphics.fill(from, middle - 1, to + 1, middle + 2, track.enabled() ? Controls.BRASS : 0xFF4A3F2A);
@@ -548,7 +552,8 @@ final class TimelinePanel {
             int to = (int) Math.round(this.across(keyframes.get(keyframes.size() - 1).tick()));
             graphics.fill(from, middle, to + 1, middle + 1, track.enabled() ? 0x80D4B25A : 0x606A5A3A);
         }
-        for (Keyframe keyframe : keyframes) {
+        for (int k = visible[0]; k < visible[1]; k++) {
+            Keyframe keyframe = keyframes.get(k);
             KeyframeRef ref = new KeyframeRef(index, keyframe.tick());
             boolean selected = EditorState.selection.contains(ref);
             boolean hovered = ref.equals(under);
@@ -827,7 +832,7 @@ final class TimelinePanel {
                 if (offset != 0 && !EditorState.selection.isEmpty()) {
                     Set<KeyframeRef> moving = new LinkedHashSet<>(EditorState.selection);
                     // One step to undo, however many keyframes moved
-                    history.beginGroup("Move " + moving.size() + (moving.size() == 1 ? " keyframe" : " keyframes"));
+                    history.beginGroup(Kit.t(moving.size() == 1 ? "move.step_one" : "move.step", moving.size()).getString());
                     try {
                         history.moveKeyframes(moving, offset);
                     } finally {

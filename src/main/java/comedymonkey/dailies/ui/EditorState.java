@@ -17,8 +17,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -51,7 +49,8 @@ final class EditorState {
 
     private static @Nullable String recording = null;
 
-    static final Set<KeyframeRef> selection = new LinkedHashSet<>();
+    /** Counts its changes, so the screen can tell when the selection has changed */
+    static final RevisedSet<KeyframeRef> selection = new RevisedSet<>();
     static @Nullable KeyframeClipboard clipboard = null;
     static int tab = TAB_KEYFRAME;
     static boolean sideFolded = false;
@@ -256,13 +255,10 @@ final class EditorState {
 
     // ------------------------------------------------------------------ Settings
 
-    /** Settings changed here a moment ago whose saving is still under way */
-    private static final Map<String, Object> SAVING = new ConcurrentHashMap<>();
-
-    /** A setting of the mod, as it will be once anything changed here has been saved */
+    /** A setting of the mod, as it will be once anything changed a moment ago has been saved */
     @SuppressWarnings("unchecked")
     static <V> V setting(String name, V fallback) {
-        Object pending = SAVING.get(name);
+        Object pending = SettingsWriter.pending(name);
         if (pending != null && fallback != null && fallback.getClass().isInstance(pending)) {
             return (V) pending;
         }
@@ -271,13 +267,16 @@ final class EditorState {
 
     /** Changes a setting of the mod. The settings file is written away from the client thread */
     static void saveSetting(String name, Object value) {
-        SAVING.put(name, value);
-        Controls.offThread(() -> Host.get().saveSetting(name, value), Kit.t("notice.setting_failed"), () -> SAVING.remove(name));
+        SettingsWriter.save(name, value, trouble -> {
+            if (trouble != null) {
+                Controls.tell(Kit.t("notice.setting_failed"));
+            }
+        });
     }
 
     /** How a new keyframe blends towards the next one: the "defaultInterpolation" setting */
     static Interpolation defaultInterpolation() {
-        Object pending = SAVING.get("defaultInterpolation");
+        Object pending = SettingsWriter.pending("defaultInterpolation");
         Object setting = pending != null ? pending : Host.get().<Object>setting("defaultInterpolation", "SMOOTH");
         try {
             return Interpolation.parse(String.valueOf(setting));

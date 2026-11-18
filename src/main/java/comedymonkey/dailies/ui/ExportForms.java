@@ -455,9 +455,9 @@ final class ExportForms {
         form.add(new Gadget.Check(Kit.t("export.captions.burn"), () -> burnCaptions, on -> burnCaptions = on).tip(Kit.t("export.captions.burn.tip")));
         form.add(new Told(pair("export.captions.style", "export.captions.style.tip", new Gadget.Dropdown<>(CAPTION_STYLES, id -> Kit.t("export.captions.style." + id),
             ExportForms::captionStyleNow, id -> captionStyle = id))).unless(() -> burnCaptions ? null : Kit.t("export.captions.needs_burn")));
-        form.add(new Gadget.Check(Kit.t("export.captions.speakers"), () -> Host.get().setting("captionSpeakerNames", true), on -> saveSetting("captionSpeakerNames", on))
+        form.add(new Gadget.Check(Kit.t("export.captions.speakers"), () -> EditorState.setting("captionSpeakerNames", true), on -> saveSetting("captionSpeakerNames", on))
             .tip(Kit.t("export.captions.speakers.tip")));
-        form.add(new Gadget.Check(Kit.t("export.captions.preview"), () -> Host.get().setting("captionPreview", false), on -> saveSetting("captionPreview", on))
+        form.add(new Gadget.Check(Kit.t("export.captions.preview"), () -> EditorState.setting("captionPreview", false), on -> saveSetting("captionPreview", on))
             .tip(Kit.t("export.captions.preview.tip")));
 
         // --- Where it goes
@@ -950,7 +950,10 @@ final class ExportForms {
     }
 
     private static void saveSetting(String name, Object value) {
-        Controls.offThread(() -> Host.get().saveSetting(name, value), Kit.t("export.captions.save_failed"), () -> {
+        SettingsWriter.save(name, value, trouble -> {
+            if (trouble != null) {
+                Controls.tell(Kit.t("export.captions.save_failed"));
+            }
         });
     }
 
@@ -1031,6 +1034,11 @@ final class ExportForms {
             if (this.usable.getAsBoolean()) {
                 this.row.collect(order);
             }
+        }
+
+        @Override
+        boolean holds(Gadget control) {
+            return control == this || this.row.holds(control);
         }
 
         @Override

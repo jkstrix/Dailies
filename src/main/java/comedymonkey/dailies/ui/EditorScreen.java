@@ -98,7 +98,13 @@ public final class EditorScreen extends Screen {
     private Gadget.Push viewerFold;
     private Gadget.Push playersFold;
     private @Nullable Gadget held;
-    private int selectionSeen = 0;
+    /** The revision of the selection the keyframe tab last saw */
+    private long selectionSeen = -1;
+    /** The things near the viewer the pick panel lists, looked for again every 0.8 s, and the word for them */
+    private List<Entity> pickNear = List.of();
+    private long pickNearAt = 0;
+    private int pickNearFor = 0;
+    private String pickShape = "";
 
     private EditorLayout.Layout layout = EditorLayout.of(new EditorLayout.Input(1920, 1080, 2, false, false, false, false, 0, 0, 0, 0, 40, 40));
     /** Where the thin lines between the bar's groups stand */
@@ -563,7 +569,7 @@ public final class EditorScreen extends Screen {
                 }
                 sceneSeen = scene;
             }
-            int selected = EditorState.selection.hashCode();
+            long selected = EditorState.selection.revision();
             if (selected != this.selectionSeen) {
                 this.selectionSeen = selected;
                 this.keyframeForm.forget();
@@ -612,8 +618,7 @@ public final class EditorScreen extends Screen {
     private void refresh(Form form) {
         String shape;
         if (form == this.pickForm) {
-            // The entities near the viewer come and go
-            shape = System.identityHashCode(EditorState.pick) + ":" + System.currentTimeMillis() / 800;
+            shape = this.pickShape();
         } else if (form == this.looksForm) {
             shape = LooksForms.shape();
         } else if (form == this.exportForm) {
@@ -636,6 +641,27 @@ public final class EditorScreen extends Screen {
         }
     }
 
+    /**
+     * The entities near the viewer come and go, so they are looked for again every 0.8 s. The panel is built afresh
+     * only when which of them it lists has changed: building it takes the keys' ring away.
+     */
+    private String pickShape() {
+        EditorState.Pick pick = EditorState.pick;
+        int which = System.identityHashCode(pick);
+        long now = net.minecraft.Util.getMillis();
+        if (which != this.pickNearFor || now - this.pickNearAt >= 800 || this.pickShape.isEmpty()) {
+            this.pickNearFor = which;
+            this.pickNearAt = now;
+            this.pickNear = pick == null || pick.block() ? List.of() : ViewPick.nearby(pick.playersOnly(), 40);
+            int[] ids = new int[this.pickNear.size()];
+            for (int i = 0; i < ids.length; i++) {
+                ids[i] = this.pickNear.get(i).getId();
+            }
+            this.pickShape = PickShape.of(which, ids);
+        }
+        return this.pickShape;
+    }
+
     private void buildPick() {
         EditorState.Pick pick = EditorState.pick;
         this.pickForm.clear();
@@ -651,21 +677,22 @@ public final class EditorScreen extends Screen {
         if (pick.block()) {
             return;
         }
-        List<Entity> near = ViewPick.nearby(pick.playersOnly(), 40);
+        List<Entity> near = this.pickNear;
         if (near.isEmpty()) {
             this.pickForm.add(new Gadget.Note(Kit.t(pick.playersOnly() ? "pick.no_players" : "pick.no_entities")));
             return;
         }
         this.pickForm.add(new Gadget.Words(() -> Kit.t("pick.nearby"), Controls.PARCHMENT_DIM));
         for (Entity entity : near) {
-            this.pickForm.add(new Gadget.Push(Component.literal(ViewPick.describe(entity)), () -> {
+            // The distance in its name is kept up to date as things move, without building the panel again
+            this.pickForm.add(new Gadget.Push(() -> Component.literal(ViewPick.describe(entity)), () -> {
                 if (entity.isRemoved()) {
                     EditorState.say(Kit.t("pick.gone"));
                     return;
                 }
                 EditorState.pick = null;
                 pick.entity().accept(entity);
-            }).tip(Kit.t("pick.choose.tip", ViewPick.describe(entity))));
+            }).liveTip(() -> Kit.t("pick.choose.tip", ViewPick.describe(entity))));
         }
     }
 
