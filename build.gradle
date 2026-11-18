@@ -208,10 +208,16 @@ tasks.register('installTestMods', Sync) {
     into file('run-modded/mods')
 }
 
+// Mods only the owner's free play has, from the same folder: Distant Horizons, which the scripted run does not need
+def playOnlyMods = providers.gradleProperty('dailies.playMods').getOrElse('DistantHorizons-*').split(',')
+
 tasks.register('installPlayMods', Sync) {
-    description = 'Puts the same mods as the modded test into run-play/mods'
+    description = 'Puts the same mods as the modded test, and the play-only ones, into run-play/mods'
     dependsOn 'installTestMods'
     from file('run-modded/mods')
+    from(modsSource) {
+        include playOnlyMods.collect { it.trim() + '.jar' }
+    }
     into file('run-play/mods')
 }
 
