@@ -221,6 +221,10 @@ public final class Recorder {
         this.worldsStored = 0;
         this.storingNanos = 0L;
         this.longestStoreNanos = 0L;
+        java.util.Arrays.fill(this.storingParts, 0.0);
+        this.chunksNamed = 0;
+        this.chunksEncoded = 0;
+        this.longestStore = null;
         this.segmentTicks =Math.max(20, Integer.getInteger("dailies.test.segmentTicks", Host.get().setting("snapshotSeconds", DEFAULT_SEGMENT_TICKS / 20) * 20));
         this.tick = 0;
         this.id = manifest.id;
@@ -261,10 +265,40 @@ public final class Recorder {
     private long storingNanos = 0L;
     private long longestStoreNanos = 0L;
 
+    /** Where storing the world spent its time, summed over the recording: light and the world's description, chunks, entities, mods' own */
+    private final double[] storingParts = new double[4];
+    private int chunksNamed = 0, chunksEncoded = 0;
+    private Snapshots.Cost longestStore = null;
+
     private void storedWorld(long nanos) {
         this.worldsStored++;
         this.storingNanos += nanos;
+        Snapshots.Cost cost = Snapshots.last;
+        if (cost != null) {
+            this.storingParts[0] += cost.world();
+            this.storingParts[1] += cost.chunkMillis();
+            this.storingParts[2] += cost.entityMillis();
+            this.storingParts[3] += cost.extensions();
+            this.chunksNamed += cost.chunks();
+            this.chunksEncoded += cost.encoded();
+        }
+        if (nanos > this.longestStoreNanos) {
+            this.longestStore = cost;
+        }
         this.longestStoreNanos = Math.max(this.longestStoreNanos, nanos);
+    }
+
+    /** Where storing the world spent its time, for the log: what can be taken off the game's thread depends on it */
+    private String storingBreakdown() {
+        int stored = Math.max(1, this.worldsStored);
+        String parts = String.format(java.util.Locale.ROOT, "on average: settling light and describing the world %.2f ms, chunks %.2f ms (%d named, %d encoded afresh a time), entities %.2f ms, mods' own %.2f ms",
+            this.storingParts[0] / stored, this.storingParts[1] / stored, this.chunksNamed / stored, this.chunksEncoded / stored, this.storingParts[2] / stored, this.storingParts[3] / stored);
+        Snapshots.Cost worst = this.longestStore;
+        if (worst != null) {
+            parts += String.format(java.util.Locale.ROOT, "; the longest: light and world %.2f ms, chunks %.2f ms (%d named, %d encoded), entities %.2f ms (%d), mods' own %.2f ms",
+                worst.world(), worst.chunkMillis(), worst.chunks(), worst.encoded(), worst.entityMillis(), worst.entities(), worst.extensions());
+        }
+        return parts;
     }
 
     /** Worlds stored in the recording being made, their average and longest cost on the game's thread in milliseconds */
@@ -286,8 +320,8 @@ public final class Recorder {
             this.flushPart();
         }
         double[] storing = this.storingCost();
-        Host.LOGGER.info(String.format(java.util.Locale.ROOT, "Dailies: the recording stored the world %d times, every %d ticks, taking the game %.2f ms each on average and %.2f ms at the longest",
-            (int) storing[0], this.segmentTicks, storing[1], storing[2]));
+        Host.LOGGER.info(String.format(java.util.Locale.ROOT, "Dailies: the recording stored the world %d times, every %d ticks, taking the game %.2f ms each on average and %.2f ms at the longest; %s",
+            (int) storing[0], this.segmentTicks, storing[1], storing[2], this.storingBreakdown()));
         String wanted = name == null || name.isBlank() ? this.manifest.name : name.trim();
         Path working = this.workingFile;
         Spool spool = this.spool;
