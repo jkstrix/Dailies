@@ -82,8 +82,10 @@ The scripted test is its own jar, `build/libs/dailies-selftest-*.jar`, built by 
 (`runTestClient`, `runHandsOn`, `runKitShots`) load it from its classes; `runTestModded` and `runManualShots` get the
 jar in `run-modded/mods` from `installTestMods`. `runClient` and `runPlayModded` never have it.
 
-`runTestModded` copies the other mods from a game profile on the owner's machine. To use another folder holding those
-jars, pass `-Pdailies.modsFolder=<folder>`. The companion jar is taken from `companion/build/libs`, so build the
+`runTestModded` copies the other mods from a folder of jars that you name, in your own `~/.gradle/gradle.properties`:
+`dailies.modsFolder=<folder>` (or pass `-Pdailies.modsFolder=<folder>`). Jars that should replace one of those, such as
+a newer build of a mod, go in `dailies.modJars=<jar>,<jar>`. The modded runs stop with a message when the folder is not
+set. The companion jar is taken from `companion/build/libs`, so build the
 companion first.
 
 Video is encoded by a bundled FFmpeg, LGPL build. Today that is the JavaCPP Presets' build

@@ -255,8 +255,10 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // --- The modded test game ---
-// Where the other mods are copied from. Never written to. Override with -Pdailies.modsFolder=...
-def modsSource = file(providers.gradleProperty('dailies.modsFolder').getOrElse("${System.getenv('APPDATA')}/ModrinthApp/profiles/Clockwork Commonwealth/mods"))
+// Where the other mods are copied from (never written to): a folder of jars, set as dailies.modsFolder in your own
+// ~/.gradle/gradle.properties, or with -Pdailies.modsFolder=... Only the modded runs need it, and they say so without it
+def modsFolderSetting = providers.gradleProperty('dailies.modsFolder').orNull
+def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
 // The mods the scripted run needs or has to prove it works with; their own requirements are added as the game asks for them
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
     'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*').split(',')
@@ -269,14 +271,30 @@ tasks.register('buildCompanion', GradleBuild) {
 }
 
 // Jars that take the place of the same mod from the mods folder, e.g. a fix not yet in the owner's profile:
-// -Pdailies.modJars=E:/Repos/McpCraft/build/libs/mcpcraft-1.21.1-0.2.0.jar (comma-separated). Matched by the mod's name,
+// dailies.modJars=../McpCraft/build/libs/mcpcraft-1.21.1-0.2.0.jar (comma-separated; in ~/.gradle/gradle.properties or with
+// -P). Matched by the mod's name,
 // the part before the first "-<digit>", so another version of it in the folder is left out too
 def overrideJars = providers.gradleProperty('dailies.modJars').getOrElse('').split(',').findAll { !it.trim().isEmpty() }.collect { file(it.trim()) }
 def overriddenMods = overrideJars.collect { it.name.replaceFirst(/-\d.*$/, '') + '-*.jar' }
 
+// The modded runs stop at once without their mods, rather than run a game missing them: the folder must be set and
+// there, and every jar named to replace one in it must exist (a missing one would quietly leave that mod out)
+def checkModsFolder = {
+    if (modsFolderSetting == null || !modsSource.isDirectory()) {
+        throw new GradleException("The modded runs copy Create, Sable and the other test mods from a folder of jars: set " +
+            "dailies.modsFolder=<folder> in ~/.gradle/gradle.properties, or pass -Pdailies.modsFolder=<folder>" +
+            (modsFolderSetting == null ? '' : " (${modsSource} is not a folder)"))
+    }
+    def missing = overrideJars.findAll { !it.isFile() }
+    if (!missing.isEmpty()) {
+        throw new GradleException("dailies.modJars names jars that are not there: ${missing.join(', ')}")
+    }
+}
+
 tasks.register('installTestMods', Sync) {
     description = 'Puts the built Dailies jar, the self test jar and the other test mods into run-modded/mods'
     dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion'
+    doFirst { checkModsFolder() }
     from(tasks.named('jar'))
     from(tasks.named('selftestJar'))
     from(modsSource) {
@@ -296,6 +314,7 @@ def playOnlyMods = providers.gradleProperty('dailies.playMods').getOrElse('Dista
 tasks.register('installPlayMods', Sync) {
     description = 'Puts the same mods as the modded test, and the play-only ones, into run-play/mods'
     dependsOn 'installTestMods'
+    doFirst { checkModsFolder() }
     from(file('run-modded/mods')) {
         // A game to play in never carries the scripted runs
         exclude 'dailies-selftest-*.jar'

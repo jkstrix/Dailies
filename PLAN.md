@@ -320,7 +320,7 @@ The transcription filter throws laughter away, yet a burst of laughter is often 
   - **HTTPS:** when bound beyond localhost, the server uses HTTPS with a certificate it generates on first use. Its fingerprint is shown in the settings and the log, so a client can pin it.
   - The Origin and Host checks still apply, widened to the bound address.
   - The page asks for the token once when it is not on localhost and remembers it in that browser.
-- **Why:** an agent on the TrueNAS box can drive clip-finding while the game runs on the PC, safely.
+- **Why:** an agent on another machine can drive clip-finding while the game runs on the PC, safely.
 
 ### 2.11 The page, live (Yours, S)
 - **Live updates:** the page gets a small event stream of its own (`GET /live`, not part of MCP), so new events, clips and transcripts appear the moment they happen. It becomes a second-screen view while playing. It falls back to refreshing every 10 s if the stream drops.

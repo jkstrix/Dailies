@@ -29,7 +29,7 @@ The owner asked for every finding to be fixed. All of them were, on master, exce
 | Export | EXP-1..8, L-7..13, L-31 | `5ecf006`, `6eff868`, `ac65256` | Fixed; the encoder is made ready off the client thread by every way an export starts |
 | Build, CI, self test | BLD-1, BLD-2, TST-1..3, L-40..44 | `8e3bb44`, `2e69491`, `d8ce8c6` | Fixed; the self test is its own mod and jar |
 | Repository hygiene | L-39 | `43a6973` | Fixed |
-| Machine paths | BLD-3 | none | Left as it is, by the owner's choice |
+| Machine paths | BLD-3 | made before the repository went public | Fixed: `dailies.modsFolder` and `dailies.modJars` live in the owner's own `~/.gradle/gradle.properties`, and the modded runs stop with a message when the folder is not set or a replacement jar is missing |
 
 ### Tested (2026-11-18, afternoon)
 
@@ -168,7 +168,7 @@ The problems found fall into a few patterns, and most can be fixed with one shar
 | SEC-6 | `reference/.../moments/storage/MomentsStorage.java:151-154` | The session-id check rejects `/ \ ..` but not `:`. On Windows `root.resolve("D:x")` can point at another drive (PLAUSIBLE: confirm with `Path.of("E:\\m").resolve("D:x")`). A `:` elsewhere in the id throws `InvalidPathException`, which becomes an HTTP 500. | Allow only `[A-Za-z0-9._-]{1,80}` and check that the parent of the resolved path is the root. |
 | SEC-7 | `reference/.../mcp/McpHttpServer.java:47-50,333-341,381` | The 15 s timeout applies to each read, and the head is read one byte at a time before the token check. Four slow clients (any allowed LAN address in remote mode, or any local process) take all 4 workers. Long tools (combine/trim 250 s, POV share/import 600 s) also hold workers. | Give each request one overall deadline. Cap connections per IP. Cap the drain loop by time. Run long tools on their own executor. |
 | SEC-8 | `reference/.../moments/track/GameplayTracker.java:633-649`, `compat/companion/ServerMoments.java:81-95` | Any server can send `dailies_companion:event` packets (up to 32 KB each) with no rate limit. Each packet is held in memory, written to disk, published and scored. | Add a token bucket per session (for example 5 per second) and cap the stored `data`. |
-| SEC-9 ✔ | `config/DailiesConfig.java:112,116` | `momentsWhisperUrl` and `momentsOllamaUrl` default to `http://192.168.188.50:…`, a private LAN address. A user who turns AI on without changing them sends everyone's voice, unencrypted, to whatever device has that address on their network. | Default both to empty, which the setting descriptions already describe as "off". The spec repeats these values (2 occurrences), so it needs the same change. That is the owner's decision. |
+| SEC-9 ✔ | `config/DailiesConfig.java:112,116` | `momentsWhisperUrl` and `momentsOllamaUrl` default to the owner's own machine, a private LAN address. A user who turns AI on without changing them sends everyone's voice, unencrypted, to whatever device has that address on their network. | Default both to empty, which the setting descriptions already describe as "off". The spec repeats these values (2 occurrences), so it needs the same change. That is the owner's decision. |
 
 ### Recording and the file format
 
