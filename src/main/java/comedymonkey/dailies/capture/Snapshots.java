@@ -231,6 +231,8 @@ public final class Snapshots {
      */
     static void forgetAll() {
         CHUNKS.clear();
+        WHY.clear();
+        REASONS.clear();
         worldOf = null;
         world = null;
     }
@@ -244,6 +246,15 @@ public final class Snapshots {
         CHUNKS.put(ChunkPos.asLong(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
     }
 
+    /** Why each chunk has to be described afresh at the next snapshot, the first reason seen: for the log of what storing costs */
+    private static final Map<Long, String> WHY = new HashMap<>();
+    /** How many chunks were described afresh for each reason, over the recording being made */
+    public static final Map<String, Integer> REASONS = new java.util.TreeMap<>();
+
+    private static void because(net.minecraft.core.BlockPos pos, String reason) {
+        WHY.putIfAbsent(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), reason);
+    }
+
     /** A packet is about to be applied. Any chunk it changes has to be described afresh in the next snapshot */
     static void applied(Packet<?> packet) {
         if (packet instanceof ClientboundUpdateTagsPacket) {
@@ -255,15 +266,22 @@ public final class Snapshots {
         }
         if (packet instanceof ClientboundBlockUpdatePacket update) {
             changed(update.getPos(), update.getBlockState());
+            because(update.getPos(), "blocks");
         } else if (packet instanceof ClientboundSectionBlocksUpdatePacket updates) {
-            updates.runUpdates(Snapshots::changed);
+            updates.runUpdates((pos, state) -> {
+                changed(pos, state);
+                because(pos, "blocks");
+            });
         } else if (packet instanceof ClientboundBlockEntityDataPacket data) {
             dirty(data.getPos());
+            because(data.getPos(), "block entity data");
         } else if (packet instanceof ClientboundBlockEventPacket event) {
             // A piston's push is done by each game for itself when it is told of the event: blocks move with no packet of their own
             changed(event.getPos(), null);
+            because(event.getPos(), "block events");
         } else if (packet instanceof ClientboundLightUpdatePacket light) {
             CHUNKS.remove(ChunkPos.asLong(light.getX(), light.getZ()));
+            WHY.putIfAbsent(ChunkPos.asLong(light.getX(), light.getZ()), "light");
         } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
             CHUNKS.remove(ChunkPos.asLong(chunk.getX(), chunk.getZ()));
         } else if (packet instanceof ClientboundForgetLevelChunkPacket forgotten) {
@@ -572,6 +590,9 @@ public final class Snapshots {
                     out.sharedRef(Records.SHARED_PACKET, known);
                     continue;
                 }
+                String why = stored != null ? "not yet stored by the writer" : !chunk.getBlockEntities().isEmpty() && CHUNKS.containsKey(key) ? "what its block entities say"
+                    : WHY.getOrDefault(key, CHUNKS.containsKey(key) ? "what its block entities say" : "new, or changed by a packet not told apart");
+                REASONS.merge(why, 1, Integer::sum);
                 try {
                     java.util.concurrent.atomic.AtomicReference<byte[]> name = new java.util.concurrent.atomic.AtomicReference<>();
                     fresh.add(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
@@ -583,6 +604,7 @@ public final class Snapshots {
                 }
             }
         }
+        WHY.clear();
         if (!fresh.isEmpty()) {
             out.sharedPackets(fresh, freshNames, codec);
         }

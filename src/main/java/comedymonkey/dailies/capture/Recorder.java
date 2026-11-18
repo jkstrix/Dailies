@@ -298,7 +298,7 @@ public final class Recorder {
             parts += String.format(java.util.Locale.ROOT, "; the longest: light and world %.2f ms, chunks %.2f ms (%d named, %d encoded), entities %.2f ms (%d), mods' own %.2f ms",
                 worst.world(), worst.chunkMillis(), worst.chunks(), worst.encoded(), worst.entityMillis(), worst.entities(), worst.extensions());
         }
-        return parts;
+        return parts + "; chunks described afresh, by why: " + Snapshots.REASONS;
     }
 
     /** Worlds stored in the recording being made, their average and longest cost on the game's thread in milliseconds */
