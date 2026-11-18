@@ -532,6 +532,11 @@ public final class Recorder {
         this.flushPart();
         this.segmentStartTick = this.tick;
         this.partBeginsSegment = true;
+        // The segment's times are taken before the world is stored: storing chunks afresh hands what has been gathered to
+        // the writer partway through (Out.sharedPackets), and the part that begins the segment carries these times into
+        // the time index. Taken after, that part had the last segment's times, or the last recording's
+        this.segmentReal = System.currentTimeMillis();
+        this.segmentGame = minecraft.level.getGameTime();
         this.codec = new GameCodec(listener.registryAccess(), listener.getConnectionType());
         this.own.reset();
         this.part.number(Records.SNAPSHOT_BEGIN, this.tick);
@@ -567,8 +572,6 @@ public final class Recorder {
         this.part.record(Records.SNAPSHOT_END);
         // The times of the segment's first tick, in full: each segment's time index can be read without any other
         this.timeEncoder.reset();
-        this.segmentReal = System.currentTimeMillis();
-        this.segmentGame = minecraft.level.getGameTime();
         this.writeTime(this.segmentReal, this.segmentGame);
         this.waitingForSnapshot = false;
     }

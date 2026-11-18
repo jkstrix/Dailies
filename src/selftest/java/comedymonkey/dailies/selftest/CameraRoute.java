@@ -799,8 +799,40 @@ final class CameraRoute {
             RealWorldSteps.ticks(test, 10);
         }
         check(RealWorldSteps.blockAt(test, new BlockPos(x + 1, y, z)).is(net.minecraft.world.level.block.Blocks.NETHER_PORTAL), "the portal did not light");
+        portal = new BlockPos(x + 1, y, z);
         test.command("item replace entity @s weapon.mainhand with minecraft:air");
         RealWorldSteps.ticks(test, 20);
+    }
+
+    /** The lit portal's lower block nearest the start of the walk, set by the Nether's setup */
+    private static BlockPos portal = null;
+
+    /** For a walk that never reached the Nether: where the player is, what the portal is, and what the server makes of it */
+    private static String whereAtThePortal(SelfTest test) {
+        StringBuilder said = new StringBuilder();
+        try {
+            Minecraft minecraft = minecraft();
+            said.append(test.onClient(() -> {
+                net.minecraft.client.player.LocalPlayer player = minecraft.player;
+                if (player == null || minecraft.level == null) {
+                    return "no player or level";
+                }
+                return String.format(java.util.Locale.ROOT, "player at %.2f %.2f %.2f facing %.0f in %s, screen %s, portal %s: %s and %s", player.getX(), player.getY(), player.getZ(),
+                    player.getYRot(), minecraft.level.dimension().location(), minecraft.screen == null ? "none" : minecraft.screen.getClass().getSimpleName(), portal,
+                    portal == null ? "-" : minecraft.level.getBlockState(portal), portal == null ? "-" : minecraft.level.getBlockState(portal.east()));
+            }));
+            net.minecraft.client.server.IntegratedServer server = minecraft.getSingleplayerServer();
+            if (server != null) {
+                said.append("; on the server ").append(server.submit(() -> {
+                    net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
+                    return String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f in %s, %s, portal cooldown %d, on cooldown %s", player.getX(), player.getY(), player.getZ(),
+                        player.level().dimension().location(), player.gameMode.getGameModeForPlayer(), player.getPortalCooldown(), player.isOnPortalCooldown());
+                }).get(10, java.util.concurrent.TimeUnit.SECONDS));
+            }
+        } catch (Throwable t) {
+            said.append(" (and then ").append(t).append(')');
+        }
+        return said.toString();
     }
 
     /** Through the portal on foot, then off across the Nether */
@@ -808,7 +840,12 @@ final class CameraRoute {
         Minecraft minecraft = minecraft();
         int end = now() + STRETCH;
         RealWorldSteps.drive = new Drive(180.0F, 0.0F, true, false, false, false, false);
-        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.NETHER, 40, "the walk through the portal into the Nether");
+        try {
+            test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.NETHER, 40, "the walk through the portal into the Nether");
+        } catch (Throwable notThere) {
+            RealWorldSteps.drive = null;
+            check(false, notThere.getMessage() + "; " + whereAtThePortal(test));
+        }
         RealWorldSteps.drive = null;
         test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Nether to appear");
         RealWorldSteps.flying(test, false, 0.05F);
