@@ -276,6 +276,10 @@ public final class TetherSolver {
             // would whip round: look at it by a cut instead, and say so
             this.aimer.reset(goal);
             cut = true;
+            // The new shot begins from standing, as one after any other cut does. The frames between steps show a cut's
+            // first place held until the next step comes; a camera that went on at the speed it had (racing past the
+            // subject, as it often is when this happens) would then set off with a jolt the films count as a pop
+            this.clearance.halt();
         } else if (dt > 0.0) {
             this.aimer.step(goal.yaw(), goal.pitch(), aimTime, fov, aspect, dt);
         }

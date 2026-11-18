@@ -53,6 +53,15 @@ public final class Clearance {
         this.jumped = false;
     }
 
+    /**
+     * Stops the camera where it is, for a new shot that begins here: from the next step it sets off from standing, its
+     * speed growing only as fast as it may, as after any cut. Carried on at speed instead, a shot that the frames
+     * between the steps show held still for a tick would set off with a jolt.
+     */
+    public void halt() {
+        this.eyeVelocity = Vec.ZERO;
+    }
+
     /** For the director's shots: never jump by itself; the director cuts away from a blocked shot instead */
     public void neverJump() {
         this.mayJump = false;
