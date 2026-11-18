@@ -101,6 +101,9 @@ final class TimelinePanel {
 
     private @Nullable TimeMap realTime;
     private long realTimeFor = Long.MIN_VALUE;
+    /** The speed, timelapse and freeze tracks the map was made from, and the length it covers */
+    private List<Track> realTimeTracks = List.of();
+    private int realTimeTotal = -1;
 
     TimelinePanel() {
         this.transport.add(Gadget.Push.icon(Kit.Icon.TO_START, Kit.t("transport.to_start"), () -> Controls.jumpTo(0)));
@@ -321,26 +324,39 @@ final class TimelinePanel {
         }
     }
 
-    /** How long the video runs up to each tick, when speed, timelapse or freeze keyframes change that; else null */
+    /**
+     * How long the video runs up to each tick, when speed, timelapse or freeze keyframes change that; else null. Made
+     * again only when those tracks change: a track an edit leaves alone stays the same object (see EditHistory), so an
+     * edit to the camera, say, does not cost a new map
+     */
     private @Nullable TimeMap realTime() {
         EditHistory history = EditorState.history();
-        long stamp = history.revision() * 31 + PointOfView.total();
+        int total = PointOfView.total();
+        long stamp = history.revision() * 31 + total;
         if (stamp != this.realTimeFor) {
             this.realTimeFor = stamp;
-            this.realTime = null;
             Scene scene = history.scene();
-            boolean changes = false;
+            List<Track> timing = new ArrayList<>();
             for (Track track : scene.tracks()) {
                 KeyframeKind kind = track.kind();
                 if (track.enabled() && !track.isEmpty() && (kind == KeyframeKind.SPEED || kind == KeyframeKind.TIMELAPSE || kind == KeyframeKind.FREEZE)) {
-                    changes = true;
+                    timing.add(track);
                 }
             }
-            if (changes && PointOfView.total() > 0) {
-                try {
-                    this.realTime = new TimeMap(scene, 0, PointOfView.total());
-                } catch (RuntimeException e) {
-                    this.realTime = null;
+            boolean same = total == this.realTimeTotal && timing.size() == this.realTimeTracks.size();
+            for (int i = 0; same && i < timing.size(); i++) {
+                same = timing.get(i) == this.realTimeTracks.get(i);
+            }
+            if (!same) {
+                this.realTimeTracks = timing;
+                this.realTimeTotal = total;
+                this.realTime = null;
+                if (!timing.isEmpty() && total > 0) {
+                    try {
+                        this.realTime = new TimeMap(scene, 0, total);
+                    } catch (RuntimeException e) {
+                        this.realTime = null;
+                    }
                 }
             }
         }

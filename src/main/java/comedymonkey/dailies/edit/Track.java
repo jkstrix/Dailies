@@ -8,13 +8,34 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * One row of the timeline: keyframes of exactly one kind, kept in tick order with at most one on a tick
  * (specification EDIT-2, EDIT-3). A track can be named and switched off.
+ * <p>
+ * Every change in the editor is made on a copy (see {@link EditHistory}), so the same track is a new object after
+ * each change. What belongs to the track itself rather than to one version of it, such as the springs of a camera
+ * that follows someone, is kept by its {@link #id()}, which every copy shares.
  */
 public final class Track {
 
+    /**
+     * Who a track is, the same for all its copies and different for every track made afresh. Compared by identity,
+     * so it can key a map that lets go of what it holds once no copy of the track is left. Not saved: a recording
+     * opened again gives its tracks new ones.
+     */
+    public static final class Id {
+        private static final AtomicLong NEXT = new AtomicLong();
+        private final long number = NEXT.incrementAndGet();
+
+        @Override
+        public String toString() {
+            return "track " + this.number;
+        }
+    }
+
+    private final Id id;
     private final KeyframeKind kind;
     /** Empty means the track is shown under the name of its kind */
     private String name = "";
@@ -22,10 +43,20 @@ public final class Track {
     private final List<Keyframe> keyframes = new ArrayList<>();
 
     public Track(KeyframeKind kind) {
+        this(kind, new Id());
+    }
+
+    private Track(KeyframeKind kind, Id id) {
         if (kind == null) {
             throw new IllegalArgumentException("'type' is required: one of " + KeyframeKind.allowed());
         }
         this.kind = kind;
+        this.id = id;
+    }
+
+    /** Who this track is: kept by {@link #copy}, so the same through every change made in the editor */
+    public Id id() {
+        return this.id;
     }
 
     public KeyframeKind kind() {
@@ -142,9 +173,9 @@ public final class Track {
         this.keyframes.clear();
     }
 
-    /** A separate track with the same content */
+    /** A separate track with the same content and the same {@link #id()} */
     public Track copy() {
-        Track copy = new Track(this.kind);
+        Track copy = new Track(this.kind, this.id);
         copy.name = this.name;
         copy.enabled = this.enabled;
         copy.keyframes.addAll(this.keyframes);

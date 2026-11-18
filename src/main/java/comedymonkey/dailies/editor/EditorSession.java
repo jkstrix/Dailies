@@ -20,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The editor's state for the recording that is open (specification chapter V): its scenes, tracks and keyframes with
@@ -30,11 +31,28 @@ import java.util.concurrent.TimeUnit;
 public final class EditorSession {
 
     private static final long SAVE_AFTER_MILLIS = 750;
+    /** After a save has failed, how long to wait before trying again */
+    private static final long RETRY_AFTER_MILLIS = 5000;
+
+    /** A revision of one history: the one on disk, or the one handed to the saver thread */
+    private record Revision(@Nullable EditHistory history, long revision) {
+        static final Revision NONE = new Revision(null, -1);
+
+        boolean of(EditHistory current) {
+            return this.history == current && this.revision == current.revision();
+        }
+    }
 
     private static volatile EditHistory history = null;
     private static RecordingFile file = null;
-    private static long savedRevision = -1;
+    /** The revision known to be on disk, set by the saver thread only once a save has gone through */
+    private static final AtomicReference<Revision> saved = new AtomicReference<>(Revision.NONE);
+    /** The revision last handed to the saver thread, so the same one is not handed over every frame while it saves */
+    private static volatile Revision queued = Revision.NONE;
+    private static volatile long retryAt = 0;
     private static long changedAt = 0;
+    /** Whether the view's roll is the scene looks' roll, set because no keyframe gave one */
+    private static boolean rollFromLooks = false;
     private static volatile boolean followCamera = true;
     private static volatile boolean exporting = false;
     private static final ExecutorService SAVER = Executors.newSingleThreadExecutor(runnable -> {
@@ -60,7 +78,10 @@ public final class EditorSession {
         EditHistory fresh = new EditHistory(state);
         fresh.addListener((changed, description) -> changedAt = System.currentTimeMillis());
         file = recording;
-        savedRevision = fresh.revision();
+        saved.set(new Revision(fresh, fresh.revision()));
+        queued = Revision.NONE;
+        retryAt = 0;
+        rollFromLooks = false;
         followCamera = true;
         history = fresh;
         PointOfView.home(recording);
@@ -76,12 +97,14 @@ public final class EditorSession {
         history = null;
         file = null;
         // The background export game reads recordings and never writes to them (EXP-13)
-        if (closingHistory != null && closingFile != null && closingHistory.revision() != savedRevision && !comedymonkey.dailies.export.Worker.active()) {
+        if (closingHistory != null && closingFile != null && !saved.get().of(closingHistory) && !comedymonkey.dailies.export.Worker.active()) {
+            long revision = closingHistory.revision();
             byte[] bytes = closingHistory.state().toBytes();
             try {
                 // After anything the saver thread still has in hand, and before the file is closed
                 SAVER.submit(() -> {
                     closingFile.saveEditState(bytes);
+                    markSaved(closingHistory, revision);
                     return null;
                 }).get(20, TimeUnit.SECONDS);
             } catch (Exception e) {
@@ -124,22 +147,35 @@ public final class EditorSession {
         return exporting;
     }
 
+    /**
+     * Notes that a revision of a history is on disk. Saver thread. A save of an older revision that finishes late, or
+     * one of a recording closed since, changes nothing
+     */
+    private static void markSaved(EditHistory of, long revision) {
+        saved.updateAndGet(known -> known.history() != of || known.revision() < revision ? new Revision(of, revision) : known);
+    }
+
     /** Once a frame: save what has changed, once it has been still for a moment */
     private static void autosave() {
         EditHistory current = history;
         RecordingFile target = file;
-        if (current == null || target == null || current.revision() == savedRevision || System.currentTimeMillis() - changedAt < SAVE_AFTER_MILLIS
+        long now = System.currentTimeMillis();
+        if (current == null || target == null || saved.get().of(current) || queued.of(current) || now - changedAt < SAVE_AFTER_MILLIS || now < retryAt
             || comedymonkey.dailies.export.Worker.active()) {
             return;
         }
         long revision = current.revision();
         byte[] bytes = current.state().toBytes();
-        savedRevision = revision;
+        queued = new Revision(current, revision);
         SAVER.execute(() -> {
             try {
                 target.saveEditState(bytes);
+                markSaved(current, revision);
             } catch (Exception e) {
-                Host.LOGGER.error("Dailies: the editor state could not be saved", e);
+                // Not marked as saved, so it is tried again in a while, and closing the recording tries once more
+                Host.LOGGER.error("Dailies: the editor state could not be saved; trying again in {} seconds", RETRY_AFTER_MILLIS / 1000, e);
+                retryAt = System.currentTimeMillis() + RETRY_AFTER_MILLIS;
+                queued = Revision.NONE;
             }
         });
     }
@@ -151,15 +187,15 @@ public final class EditorSession {
     public static void saveNow() {
         EditHistory current = history;
         RecordingFile target = file;
-        if (current == null || target == null || current.revision() == savedRevision || comedymonkey.dailies.export.Worker.active()) {
+        if (current == null || target == null || saved.get().of(current) || comedymonkey.dailies.export.Worker.active()) {
             return;
         }
         long revision = current.revision();
         byte[] bytes = current.state().toBytes();
-        savedRevision = revision;
         try {
             SAVER.submit(() -> {
                 target.saveEditState(bytes);
+                markSaved(current, revision);
                 return null;
             }).get(20, TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -206,8 +242,10 @@ public final class EditorSession {
         }
         boolean placed = false;
         try {
-            Double fov = Evaluator.fieldOfView(scene, tick);
-            Viewer.setFov(fov != null ? fov : scene.looks().fov);
+            // The field of view belongs to the camera, and carries on changing through a freeze as the camera does
+            Track zoom = Evaluator.applyingTrack(scene, KeyframeKind.FIELD_OF_VIEW, tick);
+            double[] fov = zoom == null ? null : Evaluator.blend(zoom, cameraTick(zoom, tick));
+            Viewer.setFov(fov != null ? fov[0] : scene.looks().fov);
             Double time = Evaluator.timeOfDay(scene, tick);
             if (time != null && minecraft.level != null) {
                 minecraft.level.getLevelData().setDayTime(Math.round(time));
@@ -215,6 +253,9 @@ public final class EditorSession {
             if (followCamera || exporting) {
                 CameraSteps.catchUp();
                 placed = placeCamera(minecraft, scene, tick);
+                if (!placed) {
+                    looksRoll(scene);
+                }
             }
         } catch (RuntimeException e) {
             Host.LOGGER.warn("Dailies: a keyframe could not be applied at tick {}", tick, e);
@@ -222,20 +263,45 @@ public final class EditorSession {
         return placed;
     }
 
+    /**
+     * The tick at which to sample a track that moves the camera. In an export this carries on through a freeze, the
+     * track spreading its way from one keyframe to the next over the frozen time too, while the world stands still
+     * (see the freeze keyframe). Playback does not hold the world for a freeze, so there it is the recording's tick.
+     */
+    private static double cameraTick(Track track, double tick) {
+        return exporting ? comedymonkey.dailies.export.Export.cameraTick(track, tick) : tick;
+    }
+
+    /** Where no track places the camera, the roll set in the scene's looks, if any, is the view's roll */
+    private static void looksRoll(Scene scene) {
+        float roll = (float) scene.looks().roll;
+        if (roll != 0.0F) {
+            Viewer.setRoll(roll);
+            rollFromLooks = true;
+        } else if (rollFromLooks) {
+            // The looks' roll has been taken away again: so is the roll it gave
+            Viewer.setRoll(0.0F);
+            rollFromLooks = false;
+        }
+    }
+
     private static boolean placeCamera(Minecraft minecraft, Scene scene, double tick) {
         Track driver = Evaluator.cameraDriver(scene, tick);
         if (driver == null) {
             return false;
         }
+        // The keyframed paths carry on through a freeze; the cameras that follow someone stay with the frozen world
+        double moving = cameraTick(driver, tick);
         Evaluator.CameraPose pose = null;
         switch (driver.kind()) {
-            case CAMERA -> pose = Evaluator.camera(scene, tick);
+            case CAMERA -> pose = Evaluator.camera(driver, moving);
             case ORBIT -> {
-                Evaluator.OrbitValue orbit = Evaluator.orbit(scene, tick);
+                Evaluator.OrbitValue orbit = Evaluator.orbit(driver, tick);
                 if (orbit != null && orbit.onEntity()) {
                     // Centred on an entity: stepped with the recording's ticks, smoothed and kept clear of blocks
                     pose = CameraSteps.pose(driver, tick);
                 } else {
+                    orbit = Evaluator.orbit(driver, moving);
                     pose = orbit == null ? null : orbit.pose();
                 }
             }
@@ -255,14 +321,19 @@ public final class EditorSession {
         }
         double yaw = pose.yaw();
         double pitch = pose.pitch();
-        Evaluator.ShakeValue shake = Evaluator.shake(scene, tick);
-        if (shake != null && shake.strength() > 0.0) {
+        // The shake goes with the camera, so it carries on through a freeze when the camera does
+        Track shakeTrack = Evaluator.applyingTrack(scene, KeyframeKind.CAMERA_SHAKE, moving);
+        double[] shake = shakeTrack == null ? null : Evaluator.blend(shakeTrack, moving);
+        if (shake != null && shake[0] > 0.0) {
             // A hand-held wobble: two slow waves that never quite repeat, timed by the recording so exports match playback
-            double seconds = tick / 20.0 * Math.max(0.1, shake.frequency());
-            yaw += shake.strength() * (Math.sin(seconds * 6.1) * 0.6 + Math.sin(seconds * 13.7 + 1.3) * 0.4);
-            pitch += shake.strength() * (Math.sin(seconds * 7.3 + 0.7) * 0.6 + Math.sin(seconds * 11.9 + 2.1) * 0.4);
+            double phase = Evaluator.shakePhase(shakeTrack, moving);
+            yaw += shake[0] * (Math.sin(phase * 6.1) * 0.6 + Math.sin(phase * 13.7 + 1.3) * 0.4);
+            pitch += shake[0] * (Math.sin(phase * 7.3 + 0.7) * 0.6 + Math.sin(phase * 11.9 + 2.1) * 0.4);
         }
-        Viewer.drive(pose.x(), pose.y(), pose.z(), (float) yaw, (float) Mth.clamp(pitch, -90.0, 90.0), (float) (pose.roll() + scene.looks().roll));
+        // A camera keyframe sets the roll itself; the looks' roll is for when none does (the other cameras have none)
+        double roll = driver.kind() == KeyframeKind.CAMERA ? pose.roll() : scene.looks().roll;
+        rollFromLooks = driver.kind() != KeyframeKind.CAMERA && roll != 0.0;
+        Viewer.drive(pose.x(), pose.y(), pose.z(), (float) yaw, (float) Mth.clamp(pitch, -90.0, 90.0), (float) roll);
         return true;
     }
 

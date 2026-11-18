@@ -7,12 +7,18 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 /**
  * One cut of a recording (specification EDIT-1): a name, its own tracks, the range of ticks to export and its
  * {@link Looks}. Tracks are ordered from the top of the timeline down; where two enabled tracks of a kind both apply,
  * the upper one (the lower index) wins.
+ * <p>
+ * While {@link EditHistory} makes a step, the scene it works on is a draft ({@link #draft}): it starts out sharing its
+ * tracks and looks with the scene it was made from, and copies each one the first time it is handed out, so that
+ * only what the step touches is copied and the scene it came from is never altered.
  */
 public final class Scene {
 
@@ -24,6 +30,10 @@ public final class Scene {
     private Looks looks = new Looks();
     /** Other recordings of the same stretch that this scene can show (PLAY-19), in the order they were linked */
     private final List<LinkedRecording> linked = new ArrayList<>();
+    /** While this is a draft: the tracks that are its own, which it may hand out to be changed. Null otherwise */
+    private @Nullable Set<Track> ownTracks = null;
+    /** While this is a draft: whether its looks are its own yet */
+    private boolean ownLooks = true;
 
     public Scene(String name) {
         this.name = name == null ? "" : name;
@@ -42,6 +52,11 @@ public final class Scene {
 
     /** The tracks from the top of the timeline down. The list cannot be changed through this view */
     public List<Track> tracks() {
+        if (this.ownTracks != null) {
+            for (int i = 0; i < this.tracks.size(); i++) {
+                this.own(i);
+            }
+        }
         return Collections.unmodifiableList(this.tracks);
     }
 
@@ -51,7 +66,18 @@ public final class Scene {
             throw new IllegalArgumentException("'track' must be the index of a track, " + (this.tracks.isEmpty()
                     ? "but the scene has no tracks yet" : "from 0 to " + (this.tracks.size() - 1)) + ", got " + index);
         }
-        return this.tracks.get(index);
+        return this.own(index);
+    }
+
+    /** The track at the index, first copied when this is a draft that does not have its own yet */
+    private Track own(int index) {
+        Track track = this.tracks.get(index);
+        if (this.ownTracks != null && !this.ownTracks.contains(track)) {
+            track = track.copy();
+            this.tracks.set(index, track);
+            this.ownTracks.add(track);
+        }
+        return track;
     }
 
     /** The index of the uppermost track of the kind, or -1 */
@@ -67,6 +93,9 @@ public final class Scene {
     /** Adds a track at the bottom and returns its index */
     public int addTrack(Track track) {
         this.tracks.add(track);
+        if (this.ownTracks != null) {
+            this.ownTracks.add(track);
+        }
         return this.tracks.size() - 1;
     }
 
@@ -76,6 +105,9 @@ public final class Scene {
             throw new IllegalArgumentException("'to' must be a whole number from 0 to " + this.tracks.size() + ", got " + index);
         }
         this.tracks.add(index, track);
+        if (this.ownTracks != null) {
+            this.ownTracks.add(track);
+        }
     }
 
     public Track removeTrack(int index) {
@@ -135,6 +167,10 @@ public final class Scene {
     }
 
     public Looks looks() {
+        if (!this.ownLooks) {
+            this.looks = this.looks.copy();
+            this.ownLooks = true;
+        }
         return this.looks;
     }
 
@@ -174,7 +210,29 @@ public final class Scene {
         return this.linked.removeIf(recording -> recording.recordingId().equals(recordingId));
     }
 
-    /** A separate scene with the same content */
+    /**
+     * A draft for {@link EditHistory} to change: a separate scene with the same content that shares its tracks and
+     * looks with this one until they are asked for. Call {@link #seal} once the change is made.
+     */
+    Scene draft() {
+        Scene draft = new Scene(this.name);
+        draft.tracks.addAll(this.tracks);
+        draft.exportStart = this.exportStart;
+        draft.exportEnd = this.exportEnd;
+        draft.looks = this.looks;
+        draft.linked.addAll(this.linked);
+        draft.ownTracks = Collections.newSetFromMap(new IdentityHashMap<>());
+        draft.ownLooks = false;
+        return draft;
+    }
+
+    /** The change is made: from now on the scene is only read, and hands out what it holds as it is */
+    void seal() {
+        this.ownTracks = null;
+        this.ownLooks = true;
+    }
+
+    /** A separate scene with the same content, sharing nothing that can change */
     public Scene copy() {
         Scene copy = new Scene(this.name);
         for (Track track : this.tracks) {

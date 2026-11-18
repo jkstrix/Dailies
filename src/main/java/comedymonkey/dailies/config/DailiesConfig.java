@@ -20,7 +20,7 @@ public final class DailiesConfig {
     }
 
     public enum Blend {
-        HOLD, LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT, SMOOTH
+        HOLD, LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT, SMOOTH, HERMITE
     }
 
     public enum CaptionStyle {

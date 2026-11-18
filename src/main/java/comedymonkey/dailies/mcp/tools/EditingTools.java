@@ -31,7 +31,8 @@ import java.util.List;
 final class EditingTools {
 
     private static final String INTERPOLATION_HELP = "How the keyframe blends towards the next one: " + Interpolation.allowed()
-        + ". Left out, the 'defaultInterpolation' setting is used";
+        + ". 'smooth' is a curve through the neighbouring keyframes that never swings past a keyframe; 'hermite' is a freer Catmull-Rom curve that"
+        + " keeps its speed through keyframes and may overshoot them. Left out, the 'defaultInterpolation' setting is used";
 
     /** What a tool does once its arguments are known to be its own and a recording is open and loaded */
     interface Body {
@@ -320,7 +321,7 @@ final class EditingTools {
             McpSchema.object()
                 .integer("track", "Index of the track, from keyframes_list")
                 .integer("tick", "Tick the keyframe sits on. Left out, all keyframes of the track are changed")
-                .string("interpolation", "One of " + Interpolation.allowed())
+                .string("interpolation", "One of " + Interpolation.allowed() + " ('hermite' is a curve that may overshoot a keyframe, 'smooth' one that never does)")
                 .required("track", "interpolation"),
             (args, history) -> {
                 int index = trackIndex(history, args.integer("track"));

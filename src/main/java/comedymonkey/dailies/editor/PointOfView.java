@@ -246,13 +246,13 @@ public final class PointOfView {
         Path file = fileOf(target);
         Alignment runs = runs(target);
         if (file == null || runs == null) {
-            complain(target, "is not in the recordings folder, or is still being looked for");
+            complain(target, "missing", "is not in the recordings folder, or is still being looked for");
             return;
         }
         int there = homeRuns.map(homeTick, runs);
         if (there < 0) {
             // That player was not recording at this moment: the scene stays on what it shows
-            complain(target, "does not hold tick " + homeTick);
+            complain(target, "not holding", "does not hold tick " + homeTick);
             return;
         }
         pendingGame = homeRuns.gameAt(homeTick);
@@ -356,8 +356,14 @@ public final class PointOfView {
         }
     }
 
-    private static void complain(String recordingId, String why) {
-        if (COMPLAINED.add(recordingId + why)) {
+    /**
+     * Says once why a switch to a recording cannot be made.
+     *
+     * @param reason what is wrong, the same each time it is wrong in the same way, so it is said once; {@code why}
+     *               may name the tick, which changes every tick
+     */
+    private static void complain(String recordingId, String reason, String why) {
+        if (COMPLAINED.add(recordingId + " " + reason)) {
             Host.LOGGER.warn("Dailies: the point of view {} {}, so the scene goes on showing what it shows", recordingId, why);
         }
     }

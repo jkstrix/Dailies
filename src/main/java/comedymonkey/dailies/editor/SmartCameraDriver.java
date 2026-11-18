@@ -61,11 +61,19 @@ public final class SmartCameraDriver {
         if (keyframe == null || minecraft.level == null) {
             return false;
         }
-        SmartCameraSettings settings = PARSED.computeIfAbsent(keyframe, key -> settings(minecraft, key.settings()));
-        SmartCameraSolver solver = SmartCameraSolver.forTrack(track);
+        SmartCameraSettings settings = PARSED.get(keyframe);
+        if (settings == null) {
+            settings = settings(minecraft, keyframe.settings(), false);
+            if (settings.target != null) {
+                PARSED.put(keyframe, settings);
+            }
+        }
+        // By the track's id, which every copy keeps: an edit elsewhere in the scene does not start the shots again
+        SmartCameraSolver solver = SmartCameraSolver.forTrack(track.id());
         lastSolver = solver;
         lastTrack = track;
         if (settings.target == null) {
+            // The player named is not in the world at this tick: looked for again on the next one
             return false;
         }
         SmartCameraSolver.Result result = solver.step(settings, keyframe.tick(), tick, minecraft, applied);
@@ -78,7 +86,7 @@ public final class SmartCameraDriver {
 
     /** Where the Smart Camera of a track puts the view for a frame drawn at this tick, or null when it has nothing to film */
     static @Nullable Evaluator.CameraPose pose(Track track, double tick) {
-        PoseBlend.Pose pose = SmartCameraSolver.forTrack(track).poseAt(tick);
+        PoseBlend.Pose pose = SmartCameraSolver.forTrack(track.id()).poseAt(tick);
         if (pose == null) {
             return null;
         }
@@ -218,8 +226,10 @@ public final class SmartCameraDriver {
         if (mode.equals("orbit") && !settings.has("start_angle")) {
             settings.addProperty("start_angle", Viewer.yaw());
         }
-        // Reject what the solver could not use before anything is stored
-        settings(minecraft, settings);
+        // Reject what the solver could not use before anything is stored, and keep the player by uuid, which is
+        // found at every tick, never by a name that only players in the world at the moment can answer to
+        SmartCameraSettings checked = settings(minecraft, settings, true);
+        settings.addProperty("target", checked.target.toString());
 
         Keyframe.SmartCamera keyframe = new Keyframe.SmartCamera(tick, Interpolation.HOLD, settings);
         var history = EditorSession.history();
@@ -238,8 +248,12 @@ public final class SmartCameraDriver {
         return track;
     }
 
-    private static SmartCameraSettings settings(Minecraft minecraft, JsonObject json) {
-        SmartCameraSettings settings = new SmartCameraSettings(target(minecraft, json.has("target") ? json.get("target").getAsString() : ""));
+    /**
+     * @param strict whether a player who cannot be found is an error (when the keyframe is made); otherwise the
+     *               settings come without a target, and the player is looked for again later
+     */
+    private static SmartCameraSettings settings(Minecraft minecraft, JsonObject json, boolean strict) {
+        SmartCameraSettings settings = new SmartCameraSettings(target(minecraft, json.has("target") ? json.get("target").getAsString() : "", strict));
         String mode = json.has("mode") ? json.get("mode").getAsString() : "chase";
         try {
             settings.mode = SmartCameraMode.valueOf(mode.toUpperCase(Locale.ROOT));
@@ -314,8 +328,12 @@ public final class SmartCameraDriver {
         return settings;
     }
 
-    /** A player by uuid, or by name among the players in the world now. The recorder when nothing is given */
-    private static @Nullable UUID target(Minecraft minecraft, String text) {
+    /**
+     * A player by uuid, or by name among the players in the world now. The recorder when nothing is given.
+     *
+     * @return null when there is no such player now and {@code strict} is false
+     */
+    private static @Nullable UUID target(Minecraft minecraft, String text, boolean strict) {
         String wanted = text.isBlank() && Playback.manifest() != null ? Playback.manifest().recorderId : text.trim();
         try {
             return UUID.fromString(wanted);
@@ -329,6 +347,9 @@ public final class SmartCameraDriver {
             }
             if (Playback.manifest() != null && Playback.manifest().recorderName.equalsIgnoreCase(wanted)) {
                 return UUID.fromString(Playback.manifest().recorderId);
+            }
+            if (!strict) {
+                return null;
             }
             throw new IllegalArgumentException("There is no player called '" + wanted + "' in the recording at this tick. Give a name from replay_list_entities, or a uuid (any entity's)");
         }
