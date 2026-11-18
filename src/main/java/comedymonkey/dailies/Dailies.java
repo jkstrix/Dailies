@@ -9,7 +9,6 @@ import comedymonkey.dailies.mcp.McpHttpServer;
 import comedymonkey.dailies.moments.Moments;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
-import comedymonkey.dailies.selftest.SelfTest;
 import comedymonkey.dailies.ui.Keys;
 import comedymonkey.dailies.ui.Notices;
 import comedymonkey.dailies.ui.PlaybackBar;
@@ -71,7 +70,8 @@ public final class Dailies {
         comedymonkey.dailies.command.DailiesCommand.init();
         Screens.init();
 
-        SelfTest.startIfAsked();
+        // The scripted runs are the mod dailies_selftest, which starts itself; this only fails a run that lacks it
+        ScriptedRun.checkSelfTestLoaded();
     }
 
     private static void settingsChanged(ModConfigEvent event) {

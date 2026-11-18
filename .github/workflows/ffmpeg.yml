@@ -1,7 +1,7 @@
 # Builds the LGPL FFmpeg that Dailies carries (specification EXP-8), for every platform, with tools/ffmpeg/build.sh.
 # Each platform is built, checked on its own kind of machine, then all are packed as one jar per platform and one of
-# all. Run by hand, or when the build script or its pinned sources change. sources.lock must be pinned first
-# (./build.sh lock): the build refuses unpinned sources.
+# all. Run by hand, or when the build script or its pinned sources change. Every source in sources.lock is pinned
+# (./build.sh lock): the build refuses unpinned sources, so a changed version is locked again before it is pushed.
 name: FFmpeg for Dailies
 
 on:
@@ -29,10 +29,10 @@ jobs:
           - platform: macosx-arm64
             runner: macos-14
           - platform: macosx-x86_64
-            runner: macos-13
+            runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Tools (Linux)
         if: runner.os == 'Linux'
@@ -58,7 +58,7 @@ jobs:
         if: matrix.platform != 'windows-x86_64'
         run: tools/ffmpeg/build.sh verify ${{ matrix.platform }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ffmpeg-${{ matrix.platform }}
           path: |
@@ -74,8 +74,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ffmpeg-windows-x86_64
           path: tools/ffmpeg/out
@@ -85,15 +85,15 @@ jobs:
     needs: [build, verify-windows]
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ffmpeg-*
           path: tools/ffmpeg/out
           merge-multiple: true
       - run: sudo apt-get install -y --no-install-recommends zip
       - run: tools/ffmpeg/build.sh pack
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dailies-ffmpeg-jars
           path: tools/ffmpeg/out/jars

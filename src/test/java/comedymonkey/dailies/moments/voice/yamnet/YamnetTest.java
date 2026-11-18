@@ -1,6 +1,7 @@
 package comedymonkey.dailies.moments.voice.yamnet;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -123,7 +124,12 @@ class YamnetTest {
         assertEquals(want[0][beep], got[0][beep], 0.05);
     }
 
+    /**
+     * A measure of the machine as much as of the code, so it is a benchmark, left out of the unit tests a build runs
+     * (a busy machine would fail it for nothing): gradlew benchmarks
+     */
     @Test
+    @Tag("benchmark")
     void oneSecondTakesWellUnderASecond() {
         short[] second = new short[Yamnet.SAMPLE_RATE];
         java.util.Random random = new java.util.Random(7);

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,14 +39,16 @@ class ProbeTest {
 
     @Test
     void nothingListeningIsReportedAsSuch() throws Exception {
-        int free;
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            free = socket.getLocalPort();
+        // A port held for the whole test by a socket that is bound and never listens: nothing can answer on it, and
+        // nothing else can take it in the meantime, as it could a port found free and let go of first
+        try (Socket held = new Socket()) {
+            held.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            int free = held.getLocalPort();
+            Probe.Result result = Probe.ask("http://127.0.0.1:" + free + "/", 3000).get(10, TimeUnit.SECONDS);
+            assertFalse(result.answered());
+            assertEquals("refused", result.problem());
+            assertFalse(Probe.knock("127.0.0.1", free, 3000).get(10, TimeUnit.SECONDS).answered());
         }
-        Probe.Result result = Probe.ask("http://127.0.0.1:" + free + "/", 3000).get(10, TimeUnit.SECONDS);
-        assertFalse(result.answered());
-        assertEquals("refused", result.problem());
-        assertFalse(Probe.knock("127.0.0.1", free, 3000).get(10, TimeUnit.SECONDS).answered());
     }
 
     @Test

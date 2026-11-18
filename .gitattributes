@@ -1,3 +1,5 @@
 *.sh text eol=lf
 *.bin binary
 *.pcm binary
+# Read line by line by build.sh, which would not see a pin's "-" with a carriage return after it
+tools/ffmpeg/sources.lock text eol=lf
