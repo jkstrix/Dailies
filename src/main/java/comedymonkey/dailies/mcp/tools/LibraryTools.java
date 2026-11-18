@@ -79,10 +79,11 @@ final class LibraryTools {
             McpSchema.object().string("recording", "A name, a file name, a path or a recording id, as replay_list shows them").required("recording"),
             McpTool.ThreadMode.HTTP, 60, args -> {
                 CoreTools.allowOnly(args, "recording");
+                // Only ever a recording in the recordings folder: find refuses any other path, and delete refuses it again
                 Path file = recording(args.string("recording"));
                 try {
                     return item(Library.delete(file));
-                } catch (IllegalStateException e) {
+                } catch (IllegalArgumentException | IllegalStateException e) {
                     throw new McpToolException(e.getMessage());
                 }
             });
@@ -187,6 +188,7 @@ final class LibraryTools {
         return json;
     }
 
+    /** A recording in the recordings folder; a path to anywhere else, or to a file that is not a recording, is not found */
     private static Path recording(String text) {
         Path file = Library.find(text);
         if (file == null) {

@@ -54,13 +54,20 @@ public final class Library {
     private Library() {
     }
 
-    /** At start-up: the index is checked against the files in the background, and built if it is not there (FILE-12) */
+    /**
+     * At start-up: the index is checked against the files in the background, and built if it is not there (FILE-12).
+     * Then the storage settings are applied, except in the background export game, which shares the Dailies folder
+     * with the game being played and leaves the bin and the recordings to it (EXP-13)
+     */
     public static void init() {
         Thread check = new Thread(() -> {
             try {
                 index().refresh(true);
             } catch (Throwable t) {
                 Host.LOGGER.warn("Dailies: the index of recordings could not be checked at start-up. It is checked again when it is next needed", t);
+            }
+            if (comedymonkey.dailies.export.Worker.active()) {
+                return;
             }
             try {
                 // The settings file is read a moment after start-up; housekeeping waits for it so it acts on what the person chose
@@ -112,24 +119,18 @@ public final class Library {
         return index().fileOf(entry);
     }
 
-    /** A recording by path (absolute, or relative to the folder), by file name with or without its extension, by its name or by its id */
+    /**
+     * A recording in the recordings folder by path (absolute, or relative to the folder), by file name with or without
+     * its extension, by its name or by its id. A path that leads outside the folder, or to a file that is not a
+     * recording, finds nothing
+     */
     public static @Nullable Path find(@Nullable String text) {
         if (text == null || text.isBlank()) {
             return null;
         }
-        Path folder = Recorder.folder();
-        try {
-            Path given = Path.of(text);
-            Path file = given.isAbsolute() ? given : folder.resolve(given);
-            if (Files.isRegularFile(file)) {
-                return file;
-            }
-            file = folder.resolve(text + RecordingFile.EXTENSION);
-            if (Files.isRegularFile(file)) {
-                return file;
-            }
-        } catch (java.nio.file.InvalidPathException notAPath) {
-            // A name, then
+        Path file = index().fileNamed(text);
+        if (file != null) {
+            return file;
         }
         for (LibraryIndex.Entry entry : list()) {
             if (entry.id.equals(text) || entry.name.equalsIgnoreCase(text)) {
@@ -149,6 +150,16 @@ public final class Library {
 
     // --- Rename, move, delete ---
 
+    /**
+     * Refuses anything but a recording's file in the recordings folder. Everything here that deletes, moves, bins or
+     * writes to a recording asks this first: the path may have come from a tool's arguments
+     */
+    private static void requireRecording(Path file) {
+        if (!index().holds(file)) {
+            throw new IllegalArgumentException("Only a recording in the recordings folder can be changed, moved or deleted, and " + file.getFileName() + " is not one");
+        }
+    }
+
     private static void requireNotOpen(Path file) {
         RecordingFile open = Playback.active() ? Playback.file() : null;
         if (open != null && open.file().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
@@ -161,6 +172,7 @@ public final class Library {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("A recording needs a name");
         }
+        requireRecording(file);
         RecordingFile open = Playback.active() ? Playback.file() : null;
         if (open != null && open.file().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
             // The recording being watched is renamed through playback's own handle on it, which can write to it
@@ -176,15 +188,17 @@ public final class Library {
     /**
      * Moves a recording's file, or gives the file another name.
      *
-     * @param target the new file, absolute or relative to the recordings folder; the extension is added when left out
+     * @param target the new file, absolute or relative to the recordings folder, and inside it; the extension is added when left out
      * @return where it is now
      */
     public static Path move(Path file, Path target) throws IOException {
+        requireRecording(file);
         requireNotOpen(file);
-        Path wanted = target.isAbsolute() ? target : Recorder.folder().resolve(target);
+        Path wanted = (target.isAbsolute() ? target : Recorder.folder().resolve(target)).normalize();
         if (!wanted.getFileName().toString().endsWith(RecordingFile.EXTENSION)) {
             wanted = wanted.resolveSibling(wanted.getFileName() + RecordingFile.EXTENSION);
         }
+        requireRecording(wanted);
         if (Files.exists(wanted)) {
             throw new IOException("There is already a file called " + wanted.getFileName());
         }
@@ -203,6 +217,7 @@ public final class Library {
      * @return what it is in the bin as
      */
     public static Bin.Item delete(Path file) throws IOException {
+        requireRecording(file);
         requireNotOpen(file);
         String name = file.getFileName().toString();
         String world = "";
@@ -476,6 +491,7 @@ public final class Library {
             throw new IllegalArgumentException("There is no folder " + relative);
         }
         for (Path file : files) {
+            requireRecording(file);
             requireNotOpen(file);
         }
         List<Path> moved = new ArrayList<>();
@@ -508,6 +524,7 @@ public final class Library {
      * through playback's own handle on the file. Any thread but the client's.
      */
     public static void setPreview(Path file, byte[] png) throws IOException {
+        requireRecording(file);
         RecordingFile open = Playback.active() ? Playback.file() : null;
         if (open != null && open.file().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
             open.savePreview(png);
@@ -547,8 +564,12 @@ public final class Library {
      * The storage settings at work (REC-8, REC-9): what has been in the bin too long is deleted for good, recordings
      * older than {@code retentionDays} go to the bin unless starred or holding exported footage, and voice audio goes
      * as the voice settings say. Each part is left alone while its setting keeps everything. Not for the client thread.
+     * The background export game never does any of it: the game being played owns the bin and the recordings (EXP-13).
      */
     public static void housekeeping() {
+        if (comedymonkey.dailies.export.Worker.active()) {
+            return;
+        }
         long now = System.currentTimeMillis();
         try {
             List<Bin.Item> gone = bin().expire(binDays());

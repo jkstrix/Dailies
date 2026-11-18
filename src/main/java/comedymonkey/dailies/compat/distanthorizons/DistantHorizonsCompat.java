@@ -232,12 +232,14 @@ public final class DistantHorizonsCompat {
                 return null;
             }
             String dimension = mc.dimension().location().toString();
-            String recorded = manifest.distantHorizonsFolders.get(dimension);
-            if (recorded == null || recorded.isBlank()) {
+            // Only a recording made here is believed, and only for a folder inside the game's folder: the name comes from
+            // the recording's file, and a shared one could otherwise have this game copy and open a store from anywhere
+            comedymonkey.dailies.file.RecordingFile open = Playback.file();
+            if (open == null || FarTerrainFolders.shared(comedymonkey.dailies.capture.Recorder.folder(), open.file())) {
                 return null;
             }
-            Path source = gameFolder().resolve(recorded).normalize();
-            if (!java.nio.file.Files.isRegularFile(source.resolve(DATABASE))) {
+            Path source = FarTerrainFolders.recorded(gameFolder(), manifest.distantHorizonsFolders.get(dimension));
+            if (source == null || !java.nio.file.Files.isRegularFile(source.resolve(DATABASE))) {
                 return null;
             }
             Path copy = folderRoot().resolve("worlds").resolve(safe(Integer.toHexString(source.toString().toLowerCase(java.util.Locale.ROOT).hashCode())
@@ -295,7 +297,7 @@ public final class DistantHorizonsCompat {
 
     /**
      * Where Distant Horizons keeps the far terrain of each dimension of the world being played now, by dimension id,
-     * relative to the game's folder where it is inside it. Empty without Distant Horizons, and in playback. Client thread
+     * relative to the game's folder; a folder outside it is left out. Empty without Distant Horizons, and in playback. Client thread
      */
     public static java.util.Map<String, String> liveFolders() {
         java.util.Map<String, String> folders = new java.util.TreeMap<>();
@@ -315,7 +317,11 @@ public final class DistantHorizonsCompat {
                 if (path.startsWith(ours)) {
                     continue;
                 }
-                folders.put(level.dimension().location().toString(), (path.startsWith(game) ? game.relativize(path) : path).toString().replace('\\', '/'));
+                // A folder outside the game's folder is not written down: playback believes only one inside it
+                String relative = FarTerrainFolders.toRecord(game, path);
+                if (relative != null) {
+                    folders.put(level.dimension().location().toString(), relative);
+                }
             }
         } catch (Throwable t) {
             // Nothing to say where the far terrain is: playback builds its own

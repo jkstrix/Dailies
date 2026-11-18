@@ -107,6 +107,9 @@ public final class FlywheelLooks {
                 int reach = minecraft.options.getEffectiveRenderDistance() + 1;
                 int centreX = minecraft.gameRenderer.getMainCamera().getBlockPosition().getX() >> 4;
                 int centreZ = minecraft.gameRenderer.getMainCamera().getBlockPosition().getZ() >> 4;
+                // Flywheel puts a block entity back by itself when its block changes. While it draws none, only those
+                // not taken out yet need asking for; while it still draws any, every one is asked for again
+                boolean noneDrawn = (int) visualCount.invoke(blockList) == 0;
                 for (int x = centreX - reach; x <= centreX + reach; x++) {
                     for (int z = centreZ - reach; z <= centreZ + reach; z++) {
                         LevelChunk chunk = level.getChunkSource().getChunk(x, z, false);
@@ -114,9 +117,9 @@ public final class FlywheelLooks {
                             continue;
                         }
                         for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-                            // Asked for again each frame: Flywheel puts a block entity back by itself when its block changes
-                            hiddenBlockEntities.add(blockEntity);
-                            queueRemove.invoke(blockList, (Object) blockEntity);
+                            if (hiddenBlockEntities.add(blockEntity) || !noneDrawn) {
+                                queueRemove.invoke(blockList, (Object) blockEntity);
+                            }
                         }
                     }
                 }

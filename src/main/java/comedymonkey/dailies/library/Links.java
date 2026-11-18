@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Recordings linked as points of view of each other (PLAY-18): made on the same server, at the same time, by different
@@ -36,8 +35,15 @@ public final class Links {
     private record Known(long modified, RecordingManifest manifest, Alignment alignment) {
     }
 
+    /** The most descriptions kept; the one asked for least lately is let go first */
+    private static final int MOST_KNOWN = 256;
     /** Descriptions already read, by file: a recording's description only changes when its file does */
-    private static final Map<Path, Known> KNOWN = new ConcurrentHashMap<>();
+    private static final Map<Path, Known> KNOWN = java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Path, Known> eldest) {
+            return this.size() > MOST_KNOWN;
+        }
+    });
     /** Recordings whose real times are further apart than this are never looked at closely */
     private static final long REAL_SLACK_MILLIS = Alignment.CLOCK_SLACK_MILLIS + 60_000;
 

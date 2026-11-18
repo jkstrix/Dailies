@@ -20,12 +20,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * drawing. A snapshot is given both, under the names the block entity reads them back by, so a burner is as it was
  * after a jump to any part of a flight.
  * <p>
- * Nothing is compiled against Aeronautics: the one field is found by name, and a version that has no such field is
- * left to the plain fallback, with its one warning.
+ * Nothing is compiled against Aeronautics: the one field and the figures' accessors are found by name, once for each
+ * kind of block entity and of balloon figures, and a version that has no such field is left to the plain fallback, with
+ * its one warning. Should reading the figures fail once, it is not tried again: every burner is then left to the
+ * fallback, and that is said once.
  */
 public final class AeronauticsCompat {
 
     private static final Map<Class<?>, Optional<Field>> INFO_FIELDS = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Optional<Figures>> FIGURES = new ConcurrentHashMap<>();
+    private static volatile boolean failed = false;
+
+    /** The accessors of a balloon's figures, as the server last sent them */
+    private record Figures(Method volume, Method filled, Method target, Method change, Method lift, Method centre) {
+    }
 
     private AeronauticsCompat() {
     }
@@ -39,6 +47,9 @@ public final class AeronauticsCompat {
 
     /** Adds what the server last told this game about a gas provider's balloon. False when this is not one */
     private static boolean complete(BlockEntity blockEntity, CompoundTag tag) {
+        if (failed) {
+            return false;
+        }
         Optional<Field> field = INFO_FIELDS.computeIfAbsent(blockEntity.getClass(), AeronauticsCompat::find);
         if (field.isEmpty()) {
             return false;
@@ -49,26 +60,42 @@ public final class AeronauticsCompat {
                 // Not part of a balloon yet: its own data is the whole of it
                 return true;
             }
-            tag.putInt("Volume", ((Number) call(info, "clientBalloonVolume")).intValue());
-            tag.putDouble("Filled", ((Number) call(info, "clientBalloonFilled")).doubleValue());
-            tag.putDouble("Target", ((Number) call(info, "clientBalloonTarget")).doubleValue());
-            tag.putDouble("Delta", ((Number) call(info, "clientBalloonChange")).doubleValue());
-            tag.putDouble("Lift", ((Number) call(info, "clientBalloonLift")).doubleValue());
-            if (call(info, "gasCenter") instanceof Vec3 centre) {
+            Optional<Figures> figures = FIGURES.computeIfAbsent(info.getClass(), AeronauticsCompat::figures);
+            if (figures.isEmpty()) {
+                throw new NoSuchMethodException(info.getClass().getName() + " does not have the balloon figures this version of Dailies knows");
+            }
+            Figures known = figures.get();
+            tag.putInt("Volume", ((Number) known.volume().invoke(info)).intValue());
+            tag.putDouble("Filled", ((Number) known.filled().invoke(info)).doubleValue());
+            tag.putDouble("Target", ((Number) known.target().invoke(info)).doubleValue());
+            tag.putDouble("Delta", ((Number) known.change().invoke(info)).doubleValue());
+            tag.putDouble("Lift", ((Number) known.lift().invoke(info)).doubleValue());
+            if (known.centre().invoke(info) instanceof Vec3 centre) {
                 tag.putDouble("CenterX", centre.x);
                 tag.putDouble("CenterY", centre.y);
                 tag.putDouble("CenterZ", centre.z);
             }
             return true;
         } catch (Throwable t) {
+            failed = true;
+            Host.LOGGER.warn("Dailies: Create Aeronautics' balloon figures could not be read, so burners and vents are kept in snapshots by their own data only. Said once", t);
             return false;
         }
     }
 
-    private static Object call(Object info, String accessor) throws Exception {
-        Method method = info.getClass().getMethod(accessor);
+    private static Optional<Figures> figures(Class<?> type) {
+        try {
+            return Optional.of(new Figures(accessor(type, "clientBalloonVolume"), accessor(type, "clientBalloonFilled"), accessor(type, "clientBalloonTarget"),
+                accessor(type, "clientBalloonChange"), accessor(type, "clientBalloonLift"), accessor(type, "gasCenter")));
+        } catch (ReflectiveOperationException | RuntimeException missing) {
+            return Optional.empty();
+        }
+    }
+
+    private static Method accessor(Class<?> type, String name) throws NoSuchMethodException {
+        Method method = type.getMethod(name);
         method.setAccessible(true);
-        return method.invoke(info);
+        return method;
     }
 
     private static Optional<Field> find(Class<?> type) {

@@ -3,7 +3,10 @@ package comedymonkey.dailies.library;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -14,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** The bin (specification REC-9): what goes in, how long it stays, and putting it back */
 class BinTest {
@@ -22,6 +26,10 @@ class BinTest {
 
     @TempDir
     Path dailies;
+
+    /** Somewhere that is not the Dailies folder */
+    @TempDir
+    Path elsewhere;
 
     private final AtomicLong now = new AtomicLong(START);
 
@@ -147,6 +155,59 @@ class BinTest {
         Bin.Item item = bin.put(Bin.Kind.RECORDING, this.recording("A.dailies", "a"), "A", "", "a");
         item.from = "../elsewhere/A.dailies";
         assertThrows(IOException.class, () -> bin.restore(item.id));
+    }
+
+
+    @Test
+    void onlyWhatDailiesKeepsGoesInTheBin() throws IOException {
+        Bin bin = this.bin();
+        Path outside = this.elsewhere.resolve("level.dat");
+        Files.writeString(outside, "someone's world");
+        assertThrows(IllegalArgumentException.class, () -> bin.put(Bin.Kind.RECORDING, outside, "level", "", ""));
+        assertThrows(IllegalArgumentException.class, () -> bin.put(Bin.Kind.RECORDING, this.dailies.resolve("recordings/../../" + this.elsewhere.getFileName() + "/level.dat"), "level", "", ""));
+        assertThrows(IllegalArgumentException.class, () -> bin.put(Bin.Kind.SESSION, this.dailies, "everything", "", ""));
+        assertTrue(Files.exists(outside), "a file from outside was moved");
+        assertTrue(bin.list().isEmpty());
+
+        // Nor what is in the bin already
+        Bin.Item item = bin.put(Bin.Kind.RECORDING, this.recording("A.dailies", "a"), "A", "", "a");
+        assertThrows(IllegalArgumentException.class, () -> bin.put(Bin.Kind.RECORDING, bin.pathOf(item), "A again", "", ""));
+        assertEquals(1, bin.list().size());
+    }
+
+    @Test
+    void anItemThatWillNotDeleteLeavesThoseDeletedBeforeItGone() throws IOException {
+        Bin bin = this.bin();
+        Bin.Item first = bin.put(Bin.Kind.RECORDING, this.recording("A.dailies", "a"), "A", "", "a");
+        Bin.Item stuck = bin.put(Bin.Kind.RECORDING, this.recording("B.dailies", "b"), "B", "", "b");
+        Bin.Item last = bin.put(Bin.Kind.RECORDING, this.recording("C.dailies", "c"), "C", "", "c");
+        Path stuckFolder = bin.pathOf(stuck).getParent();
+        boolean refused = false;
+        // Held open (which Windows will not delete) in a folder that may not be written to (which other systems will not)
+        try (InputStream held = new FileInputStream(bin.pathOf(stuck).toFile())) {
+            stuckFolder.toFile().setWritable(false);
+            try {
+                bin.empty();
+            } catch (IOException expected) {
+                refused = true;
+            }
+        } finally {
+            stuckFolder.toFile().setWritable(true);
+        }
+        assumeTrue(refused, "this system deleted a file that was held open in a folder that may not be written to");
+
+        // Gone from the list at once, here and on disk, though the next item could not be deleted
+        List<String> left = bin.list().stream().map(item -> item.id).toList();
+        assertFalse(left.contains(first.id));
+        assertTrue(left.contains(stuck.id));
+        assertTrue(left.contains(last.id));
+        String saved = Files.readString(bin.folder().resolve(Bin.FILE_NAME), StandardCharsets.UTF_8);
+        assertFalse(saved.contains(first.id), "bin.json still lists an item deleted for good");
+        assertTrue(saved.contains(last.id));
+
+        // And once it can be, the rest goes
+        assertEquals(2, bin.empty());
+        assertTrue(bin.list().isEmpty());
     }
 
 }

@@ -23,12 +23,12 @@ public abstract class SableMotionMixin {
 
     @Inject(method = "handle", at = @At("HEAD"), remap = false, require = 0)
     private void dailies$normalStart(CallbackInfo ci) {
-        SableCompat.arrivingNormally(true);
+        SableCompat.arrivingNormally(this, true);
     }
 
     @Inject(method = "handle", at = @At("RETURN"), remap = false, require = 0)
     private void dailies$normalEnd(CallbackInfo ci) {
-        SableCompat.arrivingNormally(false);
+        SableCompat.arrivingNormally(this, false);
     }
 
 }

@@ -62,6 +62,7 @@ public final class SableCompat implements Host.Crafts {
     private Method plotBounds, plotLightEngine, plotLoadedChunks, holderChunk;
     private Field plotPos, mostRecentTick, originX, originY;
     private Method transformPosition, transformPositionInverse, transformNormal;
+    private Method posePosition, poseOrientation, poseRotationPoint, poseScale;
     private Method helperProject, helperContainingEntity, helperContainingPosition, helperTrackingOrVehicle;
     private Object helper, removedReason;
     private Constructor<?> startTracking, finalizeSubLevel;
@@ -223,6 +224,11 @@ public final class SableCompat implements Host.Crafts {
         this.transformPosition = pose.getMethod("transformPosition", Vec3.class);
         this.transformPositionInverse = pose.getMethod("transformPositionInverse", Vec3.class);
         this.transformNormal = pose.getMethod("transformNormal", Vec3.class);
+        // A pose's parts, read and written every tick a craft moves; called on the interface, so any pose answers
+        this.posePosition = pose.getMethod("position");
+        this.poseOrientation = pose.getMethod("orientation");
+        this.poseRotationPoint = pose.getMethod("rotationPoint");
+        this.poseScale = pose.getMethod("scale");
 
         this.helper = Class.forName(base + "Sable").getField("HELPER").get(null);
         Class<?> helperClass = this.helper.getClass();
@@ -257,17 +263,26 @@ public final class SableCompat implements Host.Crafts {
 
     // --- Recording motion (it never crosses the normal connection) ---
 
-    private static final ThreadLocal<Boolean> ARRIVING_NORMALLY = ThreadLocal.withInitial(() -> false);
+    /**
+     * The motion message being handled now that came over the normal connection, if any. Kept as the message itself and
+     * not as a yes or no, so that should Sable's handling of one throw before the end is reached, the next message to
+     * arrive the other way is still recorded
+     */
+    private static final ThreadLocal<Object> ARRIVING_NORMALLY = new ThreadLocal<>();
 
     /** Called around Sable's handling of a motion message that came over the normal connection, which is recorded there already */
-    public static void arrivingNormally(boolean now) {
-        ARRIVING_NORMALLY.set(now);
+    public static void arrivingNormally(Object payload, boolean now) {
+        if (now) {
+            ARRIVING_NORMALLY.set(payload);
+        } else if (ARRIVING_NORMALLY.get() == payload) {
+            ARRIVING_NORMALLY.remove();
+        }
     }
 
     /** Called at the start of Sable's client handling of a motion message, whichever way it came */
     public static void motion(Object payload) {
         try {
-            if (instance == null || ARRIVING_NORMALLY.get() || Playback.active() || !(payload instanceof CustomPacketPayload message)) {
+            if (instance == null || ARRIVING_NORMALLY.get() == payload || Playback.active() || !(payload instanceof CustomPacketPayload message)) {
                 return;
             }
             Minecraft minecraft = Minecraft.getInstance();
@@ -367,23 +382,29 @@ public final class SableCompat implements Host.Crafts {
     private Field lastPoseField, renderPoseField;
     private Method forceUpdateBounds, getInterpolator;
 
-    private static double[] numbers(Object pose) throws Exception {
-        org.joml.Vector3dc position = (org.joml.Vector3dc) pose.getClass().getMethod("position").invoke(pose);
-        org.joml.Quaterniondc turn = (org.joml.Quaterniondc) pose.getClass().getMethod("orientation").invoke(pose);
-        org.joml.Vector3dc pivot = (org.joml.Vector3dc) pose.getClass().getMethod("rotationPoint").invoke(pose);
-        org.joml.Vector3dc scale = (org.joml.Vector3dc) pose.getClass().getMethod("scale").invoke(pose);
+    private double[] numbers(Object pose) throws Exception {
+        org.joml.Vector3dc position = (org.joml.Vector3dc) this.posePosition.invoke(pose);
+        org.joml.Quaterniondc turn = (org.joml.Quaterniondc) this.poseOrientation.invoke(pose);
+        org.joml.Vector3dc pivot = (org.joml.Vector3dc) this.poseRotationPoint.invoke(pose);
+        org.joml.Vector3dc scale = (org.joml.Vector3dc) this.poseScale.invoke(pose);
         return new double[]{position.x(), position.y(), position.z(), turn.x(), turn.y(), turn.z(), turn.w(), pivot.x(), pivot.y(), pivot.z(), scale.x(), scale.y(), scale.z()};
     }
 
-    private static void apply(Object pose, double[] n) throws Exception {
-        ((org.joml.Vector3d) pose.getClass().getMethod("position").invoke(pose)).set(n[0], n[1], n[2]);
-        ((org.joml.Quaterniond) pose.getClass().getMethod("orientation").invoke(pose)).set(n[3], n[4], n[5], n[6]);
-        ((org.joml.Vector3d) pose.getClass().getMethod("rotationPoint").invoke(pose)).set(n[7], n[8], n[9]);
-        ((org.joml.Vector3d) pose.getClass().getMethod("scale").invoke(pose)).set(n[10], n[11], n[12]);
+    private void apply(Object pose, double[] n) throws Exception {
+        ((org.joml.Vector3d) this.posePosition.invoke(pose)).set(n[0], n[1], n[2]);
+        ((org.joml.Quaterniond) this.poseOrientation.invoke(pose)).set(n[3], n[4], n[5], n[6]);
+        ((org.joml.Vector3d) this.poseRotationPoint.invoke(pose)).set(n[7], n[8], n[9]);
+        ((org.joml.Vector3d) this.poseScale.invoke(pose)).set(n[10], n[11], n[12]);
     }
+
+    /** Set once recording where craft are has failed: it is not tried again every tick, and said only once */
+    private boolean posesFailed = false;
 
     /** At the end of every recorded tick */
     private void writePoses() {
+        if (this.posesFailed) {
+            return;
+        }
         try {
             ClientLevel level = Minecraft.getInstance().level;
             Object container = level == null ? null : this.getContainer.invoke(null, level);
@@ -417,6 +438,7 @@ public final class SableCompat implements Host.Crafts {
                 this.lastWritten.clear();
             }
         } catch (Throwable t) {
+            this.posesFailed = true;
             failOnce("recording where craft are", t);
         }
     }
