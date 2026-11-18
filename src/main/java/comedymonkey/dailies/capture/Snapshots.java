@@ -73,9 +73,19 @@ public final class Snapshots {
      * A chunk's stored form: its name, which the recorder's writer fills in once it has encoded and stored the chunk off
      * the game's thread (null until then, when the chunk is simply described again)
      */
-    private record Stored(java.util.concurrent.atomic.AtomicReference<byte[]> name, boolean asked, long said) {
+    private record Stored(java.util.concurrent.atomic.AtomicReference<byte[]> name, boolean asked, long said, boolean lightChanged,
+                          java.util.concurrent.atomic.AtomicReference<byte[]> light) {
+        Stored(java.util.concurrent.atomic.AtomicReference<byte[]> name, boolean asked, long said) {
+            this(name, asked, said, false, null);
+        }
+
         byte[] known() {
             return this.name.get();
+        }
+
+        /** The same chunk, whose blocks are as stored, but whose light may have changed since because a block next door did */
+        Stored withLightChanged() {
+            return new Stored(this.name, this.asked, this.said, true, this.light);
         }
     }
 
@@ -300,9 +310,22 @@ public final class Snapshots {
      */
     private static void dirty(BlockPos pos) {
         int x = pos.getX() >> 4, z = pos.getZ() >> 4;
+        CHUNKS.remove(ChunkPos.asLong(x, z));
+        lightNextDoor(x, z);
+    }
+
+    /**
+     * The eight chunks round one that changed may have different light now, and nothing else: their own blocks are as
+     * stored, or a packet of their own would say otherwise and they would be described afresh for it. So each keeps its
+     * stored form and the next snapshot adds its light as it is then, which is a fraction of what describing the whole
+     * chunk again cost (one block mined or placed had nine chunks described afresh)
+     */
+    private static void lightNextDoor(int x, int z) {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                CHUNKS.remove(ChunkPos.asLong(x + dx, z + dz));
+                if (dx != 0 || dz != 0) {
+                    CHUNKS.computeIfPresent(ChunkPos.asLong(x + dx, z + dz), (key, stored) -> stored.withLightChanged());
+                }
             }
         }
     }
@@ -324,11 +347,7 @@ public final class Snapshots {
         if (to != null && level != null && !lightMayChange(level, pos, level.getBlockState(pos), to)) {
             return;
         }
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                CHUNKS.remove(ChunkPos.asLong(x + dx, z + dz));
-            }
-        }
+        lightNextDoor(x, z);
     }
 
     /** Whether one block in place of another gives off, stops or shapes light differently: the game's own test, less cautious about blocks that only shape it */
@@ -587,7 +606,30 @@ public final class Snapshots {
                 }
                 byte[] known = stored == null ? null : stored.known();
                 if (known != null) {
-                    out.sharedRef(Records.SHARED_PACKET, known);
+                    byte[] light = stored.light() == null ? null : stored.light().get();
+                    boolean lightWanted = stored.lightChanged() || (stored.light() != null && light == null);
+                    if (!lightWanted) {
+                        out.sharedRef(Records.SHARED_PACKET, known);
+                        if (light != null) {
+                            // The light it was given at an earlier snapshot, still as it is
+                            out.sharedRef(Records.SHARED_PACKET, light);
+                        }
+                        continue;
+                    }
+                    // Its blocks as stored, then its light as it is now: in this order, by the writer, with the chunks below
+                    try {
+                        java.util.concurrent.atomic.AtomicReference<byte[]> lightName = new java.util.concurrent.atomic.AtomicReference<>();
+                        Packet<? super ClientGamePacketListener> lightPacket = new net.minecraft.network.protocol.game.ClientboundLightUpdatePacket(chunk.getPos(), level.getLightEngine(), null, null);
+                        fresh.add(null);
+                        freshNames.add(stored.name());
+                        fresh.add(lightPacket);
+                        freshNames.add(lightName);
+                        CHUNKS.put(key, new Stored(stored.name(), stored.asked(), stored.said(), false, lightName));
+                        REASONS.merge("only its light, from a block next door", 1, Integer::sum);
+                    } catch (Throwable t) {
+                        warnOnce("chunk light", t);
+                        out.sharedRef(Records.SHARED_PACKET, known);
+                    }
                     continue;
                 }
                 String why = stored != null ? "not yet stored by the writer" : !chunk.getBlockEntities().isEmpty() && CHUNKS.containsKey(key) ? "what its block entities say"

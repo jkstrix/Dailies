@@ -628,7 +628,12 @@ public final class Recorder {
          */
         default void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
             for (int i = 0; i < packets.size(); i++) {
-                names.get(i).set(this.sharedPacket(codec.encode(packets.get(i))));
+                if (packets.get(i) == null) {
+                    // Already stored: named again, in its place among the others
+                    this.sharedRef(Records.SHARED_PACKET, names.get(i).get());
+                } else {
+                    names.get(i).set(this.sharedPacket(codec.encode(packets.get(i))));
+                }
             }
         }
 
@@ -718,6 +723,11 @@ public final class Recorder {
                 public void run(RecordingWriter writer) throws Exception {
                     Records.Writer records = new Records.Writer();
                     for (int i = 0; i < made.size(); i++) {
+                        if (made.get(i) == null) {
+                            // Already stored (a chunk whose light alone is written afresh): named again, in its place
+                            records.record(Records.SHARED_PACKET, naming.get(i).get());
+                            continue;
+                        }
                         byte[] encoded = codec.encode(made.get(i));
                         byte[] hash = sha256(encoded);
                         writer.putShared(encoded);

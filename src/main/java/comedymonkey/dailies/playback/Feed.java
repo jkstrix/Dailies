@@ -637,8 +637,12 @@ final class Feed {
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundBlockEventPacket event) {
             this.changed(event.getPos(), false);
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
-            this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
-            this.sameBlocks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+            // A snapshot gives a chunk whose blocks are as stored its new light this way, straight after naming the chunk
+            // (capture.Snapshots): that chunk is still the stored one, and a jump may keep it, its light then given again
+            if (!(this.loading && this.storedNow != null)) {
+                this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+                this.sameBlocks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+            }
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
             if (this.letsGoOf(forgotten.pos())) {
                 this.loadedChunks.remove(forgotten.pos().toLong());
