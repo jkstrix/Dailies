@@ -211,7 +211,7 @@ build_libvpx() {
         macosx-x86_64) target=x86_64-darwin20-gcc ;;
     esac
     case "$PLATFORM" in *x86_64) as=(--as=nasm) ;; esac
-    (cd "$src" && CROSS="$CROSS" ./configure --target="$target" --prefix="$PREFIX" --libdir="$PREFIX/lib" "${as[@]}" \
+    (cd "$src" && CROSS="$CROSS" ./configure --target="$target" --prefix="$PREFIX" --libdir="$PREFIX/lib" ${as[@]+"${as[@]}"} \
         --disable-examples --disable-tools --disable-docs --disable-unit-tests --disable-shared --enable-static \
         --enable-pic --enable-vp9-highbitdepth && make -j "$JOBS_N" && make install)
 }
