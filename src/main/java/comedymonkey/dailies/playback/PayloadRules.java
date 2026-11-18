@@ -22,7 +22,9 @@ public final class PayloadRules {
         "minecraft:brand", "neoforge:config_file", "neoforge:frozen_registry", "neoforge:frozen_registry_sync_completed",
         "neoforge:frozen_registry_sync_start", "neoforge:known_registry_data_maps", "neoforge:modded_network", "neoforge:modded_network_query",
         "neoforge:modded_network_setup_failed", "neoforge:advanced_open_screen",
-        // Simple Voice Chat: its messages set up the recorder's own voice connection
+        // Simple Voice Chat: some set up the recorder's own voice connection, and its handlers write to the viewer's own
+        // files and screens. The few that say who is talking to whom are read instead for the voice chat look
+        // (compat.voicechat.VoiceChatPayloads)
         "voicechat:*",
         // Sable: these three open its side channel, freeze the player and enter an editing mode (MOD-6)
         "sable:udp_activation", "sable:freeze_player", "sable:enter_gizmo_mode"

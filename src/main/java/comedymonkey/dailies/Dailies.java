@@ -56,6 +56,8 @@ public final class Dailies {
         comedymonkey.dailies.export.Export.init();
         comedymonkey.dailies.sound.Sound.init();
         comedymonkey.dailies.looks.LooksRenderer.init();
+        comedymonkey.dailies.compat.voicechat.VoiceChatLook.init();
+        comedymonkey.dailies.compat.iris.IrisShaders.init();
 
         // Optional, so a server without the Dailies Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));

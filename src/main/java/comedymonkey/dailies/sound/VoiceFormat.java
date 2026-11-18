@@ -35,6 +35,8 @@ public final class VoiceFormat {
     public static final int HAS_RANGE = 8;
     /** Group chat, heard the same wherever the listener is. Before this flag, group chat was the voice without a position */
     public static final int GROUP = 16;
+    /** The speaker was whispering, which Simple Voice Chat shows with an icon of its own */
+    public static final int WHISPER = 32;
 
     /** One piece of voice read back from a recording; range is 0 when the recording does not say */
     public record Frame(int format, int flags, UUID speaker, double x, double y, double z, float range, byte[] audio) {

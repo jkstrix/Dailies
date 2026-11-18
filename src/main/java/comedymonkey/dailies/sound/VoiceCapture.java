@@ -58,7 +58,7 @@ final class VoiceCapture {
 
     static void heardEntity(ClientReceiveSoundEvent.EntitySound event) {
         try {
-            heard(event.getId(), event.getRawAudio(), Place.ENTITY, event.getEntityId(), 0.0, 0.0, 0.0, event.getDistance());
+            heard(event.getId(), event.getRawAudio(), Place.ENTITY, event.getEntityId(), 0.0, 0.0, 0.0, event.getDistance(), event.isWhispering());
         } catch (Throwable t) {
             warnOnce("heard", t);
         }
@@ -68,9 +68,9 @@ final class VoiceCapture {
         try {
             Position position = event.getPosition();
             if (position == null) {
-                heard(event.getId(), event.getRawAudio(), Place.NONE, null, 0.0, 0.0, 0.0, event.getDistance());
+                heard(event.getId(), event.getRawAudio(), Place.NONE, null, 0.0, 0.0, 0.0, event.getDistance(), false);
             } else {
-                heard(event.getId(), event.getRawAudio(), Place.FIXED, null, position.getX(), position.getY(), position.getZ(), event.getDistance());
+                heard(event.getId(), event.getRawAudio(), Place.FIXED, null, position.getX(), position.getY(), position.getZ(), event.getDistance(), false);
             }
         } catch (Throwable t) {
             warnOnce("heard", t);
@@ -79,7 +79,7 @@ final class VoiceCapture {
 
     static void heardEverywhere(ClientReceiveSoundEvent.StaticSound event) {
         try {
-            heard(event.getId(), event.getRawAudio(), Place.GROUP, null, 0.0, 0.0, 0.0, 0.0F);
+            heard(event.getId(), event.getRawAudio(), Place.GROUP, null, 0.0, 0.0, 0.0, 0.0F, false);
         } catch (Throwable t) {
             warnOnce("heard", t);
         }
@@ -91,13 +91,14 @@ final class VoiceCapture {
             Minecraft minecraft = Minecraft.getInstance();
             var player = minecraft.player;
             UUID self = player != null ? player.getUUID() : minecraft.getUser().getProfileId();
-            heard(self, event.getRawAudio(), Place.OWN, null, 0.0, 0.0, 0.0, 0.0F);
+            heard(self, event.getRawAudio(), Place.OWN, null, 0.0, 0.0, 0.0, 0.0F, event.isWhispering());
         } catch (Throwable t) {
             warnOnce("spoke", t);
         }
     }
 
-    private static void heard(@Nullable UUID speaker, @Nullable short[] samples, Place place, @Nullable UUID entity, double x, double y, double z, float range) {
+    private static void heard(@Nullable UUID speaker, @Nullable short[] samples, Place place, @Nullable UUID entity, double x, double y, double z, float range,
+                              boolean whispering) {
         if (speaker == null || samples == null || samples.length == 0) {
             // An empty piece only marks the end of a stretch of speech
             return;
@@ -113,6 +114,10 @@ final class VoiceCapture {
             // Another player, or a fixed place: heard by distance, and the voice chat says how far it carries
             case ENTITY, FIXED, NONE -> range > 0.0F ? VoiceFormat.HAS_RANGE : 0;
         };
+        if (whispering) {
+            // Kept for the voice chat look, which shows a whisper with voice chat's own icon for it
+            flags |= VoiceFormat.WHISPER;
+        }
         int format = VoiceFormat.PCM;
         byte[] audio = null;
         if (copy.length == VoiceFormat.FRAME_SAMPLES) {

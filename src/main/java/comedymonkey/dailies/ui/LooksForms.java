@@ -29,12 +29,16 @@ final class LooksForms {
 
     private static final List<String> DRAWN = List.of("show_hud", "show_chat", "show_boss_bars", "show_titles", "show_name_tags", "show_particles",
             "show_held_items", "show_block_outline", "show_own_shadow", "show_scoreboard", "show_action_bar", "show_hotbar", "show_blocks", "show_entities",
-            "show_players", "show_beacon_beams", "void_spill", "head_bob");
+            "show_players", "show_beacon_beams", "void_spill", "head_bob", "voice_chat");
     private static final List<String> LISTS = List.of("hidden_entity_types", "hidden_particle_types");
     private static final List<String> WORLD = List.of("weather", "fog_mode", "fog_start", "fog_end", "fog_colour", "sky", "background_colour", "night_vision",
-            "server_resource_packs");
+            "server_resource_packs", "shaders");
     private static final List<String> FRAME = List.of("fov", "roll", "aspect_guide", "custom_aspect", "letterbox", "thirds_guide", "centre_guide");
     private static final List<String> GLOWS = List.of("default", "force_glow", "force_no_glow");
+    /** Settings that act through another mod: shown unusable, with a tip saying so, when that mod is not here */
+    private static final Map<String, java.util.function.BooleanSupplier> NEEDS_MOD = Map.of(
+            "voice_chat", comedymonkey.dailies.compat.voicechat.VoiceChatLook::available,
+            "shaders", comedymonkey.dailies.compat.iris.IrisShaders::available);
 
     private LooksForms() {
     }
@@ -95,6 +99,18 @@ final class LooksForms {
             String type = about.has("type") ? about.get("type").getAsString() : "";
             Component label = Kit.named("looks." + name, Kit.pretty(name));
             Component tip = Kit.named("looks." + name + ".tip", about.has("description") ? about.get("description").getAsString() : Kit.pretty(name));
+            java.util.function.BooleanSupplier needs = NEEDS_MOD.get(name);
+            if (needs != null && !needs.getAsBoolean()) {
+                // The mod it works through is not here: shown, so it can be found, and not usable
+                Component missing = Kit.named("looks." + name + ".missing", Kit.pretty(name));
+                if (type.equals("boolean")) {
+                    form.add(new Gadget.Check(label, () -> looks().get(name).getAsBoolean(), on -> { }).tip(missing).when(() -> false));
+                } else {
+                    form.add(new Gadget.Pair(label, new Gadget.Cycle<>(List.of(looks().get(name).getAsString()), id -> Kit.named("looks.choice." + id, id),
+                            () -> looks().get(name).getAsString(), id -> { })).tip(missing).when(() -> false));
+                }
+                continue;
+            }
             switch (type) {
                 case "boolean" -> form.add(new Gadget.Check(label, () -> looks().get(name).getAsBoolean(), on -> set(name, new JsonPrimitive(on))).tip(tip));
                 case "enum" -> {

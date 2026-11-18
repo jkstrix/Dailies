@@ -812,6 +812,10 @@ final class Feed {
                     }
                     this.bundleExtras.add(java.util.Arrays.copyOfRange(this.reader.payload(), this.reader.bodyStart(), this.reader.length()));
                 }
+                if (comedymonkey.dailies.compat.voicechat.VoiceChatPayloads.isVoiceChat(id)) {
+                    // Never handed to voice chat itself; what it says of players and groups is read for the voice chat look
+                    comedymonkey.dailies.compat.voicechat.VoiceChatLook.payload(id, this.reader.payload(), this.reader.bodyStart(), this.reader.length() - this.reader.bodyStart());
+                }
                 if (PayloadRules.ignored(id) || this.session == null) {
                     return;
                 }

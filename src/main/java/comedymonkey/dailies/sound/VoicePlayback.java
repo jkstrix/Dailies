@@ -63,17 +63,22 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
 
     @Override
     public void play(byte[] data, int from, int length, boolean skipping) {
-        if (skipping || Playback.skipping() || !audible()) {
+        if (skipping || Playback.skipping()) {
+            return;
+        }
+        VoiceFormat.Frame frame = VoiceFormat.read(data, from, length);
+        // Voice chat's own talking icons, for the voice chat look: at any speed, heard or not
+        comedymonkey.dailies.compat.voicechat.VoiceChatLook.spoke(frame.speaker(), (frame.flags() & VoiceFormat.WHISPER) != 0);
+        if (!audible()) {
             return;
         }
         if (ExportSound.keepsVoicesApart()) {
-            this.keepApart(VoiceFormat.read(data, from, length));
+            this.keepApart(frame);
             return;
         }
         if (ALC10.alcGetCurrentContext() == 0L) {
             return;
         }
-        VoiceFormat.Frame frame = VoiceFormat.read(data, from, length);
         int tick = Playback.position();
         this.dropIdle(tick);
         Voice voice = this.voice(frame.speaker());
