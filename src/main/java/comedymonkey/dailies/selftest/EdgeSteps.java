@@ -210,26 +210,17 @@ final class EdgeSteps {
 
     /** Out of the bottom of the world in survival: the void hurts until the recorder dies, and the recorder respawns */
     private static void theVoid(SelfTest test, Minecraft minecraft) throws Exception {
-        item("Falling into the void with a full inventory, dying there and respawning").owns("recorder", "minecraft:item", "blocks")
+        item("Falling into the void with a full inventory, dying there and respawning").owns("recorder", "blocks")
             .need(where("recorder", "below the bottom of the world", thing -> thing.y() < -100))
             .need(where("recorder", "dying", thing -> thing.state().contains("pose=DYING") || thing.clocks().contains("deathTime=")))
-            .need(present("minecraft:item", 6))
             .need(where("recorder", "standing again after respawning", thing -> thing.y() > Y - 1 && thing.y() < Y + 2 && !thing.state().contains("pose=DYING")))
-            .note("everything carried spills out where the recorder dies, and below the world is gone again a tick later; the dead recorder goes in a puff"
-                + " of smoke a second after dying, as other players see it; the respawn is shown a tick after the live game rebuilt its world");
+            .note("what is carried spills out where the recorder dies, three hundred blocks below the world, and is gone on the next tick, in the live"
+                + " game as in playback: nothing to see (the ground fall after this shows the spill); the dead recorder goes in a puff of smoke a second"
+                + " after dying, as other players see it; the respawn is shown a tick after the live game rebuilt its world");
         c("effect clear @s");
         c("gamemode survival");
-        // A full inventory to spill: the hotbar, armour and the bag
-        String[] carried = {"diamond_sword", "bow", "arrow 64", "cooked_beef 32", "torch 64", "oak_planks 64", "iron_pickaxe", "water_bucket", "shield",
-            "cobblestone 64", "gold_ingot 20", "redstone 48", "ender_pearl 16", "golden_apple 3", "spyglass", "compass", "clock", "bucket"};
-        for (String thing : carried) {
-            c("give @s minecraft:" + thing);
-        }
-        c("item replace entity @s armor.head with minecraft:iron_helmet");
-        c("item replace entity @s armor.chest with minecraft:iron_chestplate");
-        c("item replace entity @s armor.legs with minecraft:iron_leggings");
-        c("item replace entity @s armor.feet with minecraft:iron_boots");
         c("gamerule keepInventory false");
+        fillInventory();
         waitTicks(5);
         c("tp @s 2.5 -90 2.5 0 60");
         int at = mark("the recorder falls out of the world");
@@ -251,7 +242,53 @@ final class EdgeSteps {
         waitTicks(10);
         at = mark("the recorder respawned");
         still("edges-respawned", at + 10, 6.5, Y + 3.0, 6.5, 0.5, Y + 1.0, 0.5, false);
-        waitTicks(60);
+        waitTicks(40);
+        groundFall(test, minecraft);
+    }
+
+    /** A full inventory to spill: the bag, the hotbar and armour */
+    private static void fillInventory() throws Exception {
+        String[] carried = {"diamond_sword", "bow", "arrow 64", "cooked_beef 32", "torch 64", "oak_planks 64", "iron_pickaxe", "water_bucket", "shield",
+            "cobblestone 64", "gold_ingot 20", "redstone 48", "ender_pearl 16", "golden_apple 3", "spyglass", "compass", "clock", "bucket"};
+        for (String thing : carried) {
+            c("give @s minecraft:" + thing);
+        }
+        c("item replace entity @s armor.head with minecraft:iron_helmet");
+        c("item replace entity @s armor.chest with minecraft:iron_chestplate");
+        c("item replace entity @s armor.legs with minecraft:iron_leggings");
+        c("item replace entity @s armor.feet with minecraft:iron_boots");
+    }
+
+    /** Sixty blocks onto the ground with a full inventory: everything carried scatters where the recorder lands, for all to see */
+    private static void groundFall(SelfTest test, Minecraft minecraft) throws Exception {
+        double landX = 12.5, landZ = -6.5;
+        item("Falling sixty blocks with a full inventory: everything carried scatters where the recorder lands").owns("recorder", "minecraft:item", "blocks")
+            .need(where("recorder", "dying on the ground", thing -> (thing.state().contains("pose=DYING") || thing.clocks().contains("deathTime="))
+                && Math.abs(thing.x() - landX) < 2 && Math.abs(thing.z() - landZ) < 2))
+            .need(present("minecraft:item", 6))
+            .need(where("minecraft:item", "lying around where the recorder landed", thing -> Math.abs(thing.x() - landX) < 5 && Math.abs(thing.z() - landZ) < 5 && thing.y() < Y + 1))
+            .note("the items are the server's, sent to every player; the recorder's body goes in a puff of smoke as other players see it, and the items stay");
+        c("gamemode survival");
+        fillInventory();
+        waitTicks(5);
+        c(String.format(java.util.Locale.ROOT, "tp @s %.1f %d %.1f 0 60", landX, Y + 60, landZ));
+        int at = mark("the recorder falls sixty blocks");
+        try {
+            test.waitFor(() -> minecraft.screen instanceof DeathScreen, 20, "the recorder to die from the fall");
+        } catch (Throwable never) {
+            problems.add("the recorder did not die from a sixty block fall");
+            c("gamemode creative");
+            return;
+        }
+        at = mark("the recorder dead on the ground, everything scattered");
+        still("edges-spilled", at + 10, landX + 5.0, Y + 3.0, landZ + 5.0, landX, Y + 0.3, landZ, true);
+        waitTicks(40);
+        test.onClientRun(() -> {
+            minecraft.player.respawn();
+            minecraft.setScreen(null);
+        });
+        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn after the fall");
+        waitTicks(40);
         c("gamemode creative");
     }
 
