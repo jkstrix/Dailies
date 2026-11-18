@@ -991,6 +991,8 @@
   "dailies.editor.progress.frames": "Frame %1$s of %2$s",
   "dailies.editor.progress.speed": "%s frames a second",
   "dailies.editor.progress.starting": "starting",
+  "dailies.editor.progress.finishing": "finishing the file",
+
   "dailies.editor.progress.left": "%s left",
   "dailies.editor.progress.cancel": "Cancel (Esc)",
   "dailies.editor.viewer.title": "Viewer",

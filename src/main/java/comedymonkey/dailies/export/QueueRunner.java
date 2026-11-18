@@ -11,9 +11,12 @@ import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,6 +48,8 @@ public final class QueueRunner {
         return thread;
     });
     private static final long PID = ProcessHandle.current().pid();
+    /** How many times a change to the queue file is tried before it is given up, a moment apart */
+    private static final int FILE_TRIES = 4;
 
     // --- Working through the queue in this game (client thread) ---
     private static volatile boolean running = false;
@@ -58,6 +63,11 @@ public final class QueueRunner {
     private static long heartbeatAt = 0;
     private static int done = 0;
     private static int failed = 0;
+    /**
+     * The job this game has claimed in the file and not yet written the end of, or null. Set and cleared only while
+     * the file is locked, so a recovery never takes the job under way for one a failure left behind (EXP-5)
+     */
+    private static volatile @Nullable String workingOn = null;
     /** What the game was showing before the queue took over, to go back to afterwards */
     private static @Nullable Path returnTo = null;
     private static int returnScene = -1;
@@ -78,15 +88,35 @@ public final class QueueRunner {
                 frame();
             } catch (Throwable t) {
                 Host.LOGGER.error("Dailies: the export queue failed", t);
-                running = false;
+                abandon(t);
             }
         });
-        // A game that closed in the middle of a job, or a worker that died, left it marked as running
+        // A game that closed in the middle of a job, or a worker that died, left it marked as running, and left the
+        // export's temporary files beside its output
         FILE.execute(() -> {
+            List<Path> folders = new ArrayList<>();
             try {
-                ExportQueue.update(file(), queue -> queue.recover(System.currentTimeMillis(), QueueRunner::alive, PID));
+                folders.add(Host.get().dataDirectory().resolve("exports"));
+                ExportQueue queue = ExportQueue.update(file(), fresh -> {
+                    fresh.recover(System.currentTimeMillis(), QueueRunner::alive, PID, workingOn);
+                    return fresh;
+                });
+                for (ExportQueue.Job job : queue.jobs()) {
+                    try {
+                        Path output = Path.of(job.output);
+                        if (output.isAbsolute() && output.getParent() != null) {
+                            folders.add(output.getParent());
+                        }
+                    } catch (RuntimeException unreadable) {
+                        // A path this computer cannot read holds nothing of ours
+                    }
+                }
             } catch (Exception e) {
                 Host.LOGGER.warn("Dailies: the export queue could not be checked at start-up", e);
+            }
+            int removed = TemporaryFiles.sweep(folders, QueueRunner::alive, System.currentTimeMillis());
+            if (removed > 0) {
+                Host.LOGGER.info("Dailies: took away {} temporary files left by exports that did not finish", removed);
             }
         });
     }
@@ -135,7 +165,7 @@ public final class QueueRunner {
     /** Reads the file again now, away from the client thread, and waits for it. Not for the client thread */
     public static ExportQueue refresh() throws Exception {
         ExportQueue fresh = ExportQueue.update(file(), queue -> {
-            queue.recover(System.currentTimeMillis(), QueueRunner::alive, PID);
+            queue.recover(System.currentTimeMillis(), QueueRunner::alive, PID, workingOn);
             return queue;
         });
         view = fresh;
@@ -343,13 +373,15 @@ public final class QueueRunner {
             T result = null;
             Exception problem = null;
             try {
-                result = ExportQueue.update(file(), queue -> {
+                result = updateWithTries(queue -> {
                     T answer = change.apply(queue);
                     view = queue;
                     return answer;
                 });
             } catch (Exception e) {
                 problem = e;
+                // Whatever this game had claimed is left marked as running; the next recovery marks it failed
+                workingOn = null;
             }
             T answer = result;
             Exception failure = problem;
@@ -365,6 +397,88 @@ public final class QueueRunner {
         });
     }
 
+    /**
+     * Changes the queue file, tried again a moment later when the file cannot be written: another program (a virus
+     * scanner, a backup) can hold it for a moment. Not for the client thread
+     */
+    private static <T> T updateWithTries(java.util.function.Function<ExportQueue, T> change) throws Exception {
+        IOException last = null;
+        for (int attempt = 0; attempt < FILE_TRIES; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(250L * attempt);
+            }
+            try {
+                return ExportQueue.update(file(), change);
+            } catch (IOException e) {
+                last = e;
+                Host.LOGGER.warn("Dailies: the export queue file could not be written (try {} of {}): {}", attempt + 1, FILE_TRIES, e.getMessage());
+            }
+        }
+        throw last;
+    }
+
+    /**
+     * The queue failed in a way nothing else caught. The job under way is marked failed in the file, tried a few
+     * times, the export is cancelled and the queue stops, so no job is left marked as running in this game, where it
+     * could be neither removed nor run again (EXP-5). Client thread; never throws
+     */
+    private static void abandon(Throwable problem) {
+        String why = "The export queue failed: " + (problem.getMessage() == null ? problem.toString() : problem.getMessage());
+        ExportQueue.Job job = current;
+        String id = job != null ? job.id : workingOn;
+        if (!running && id == null) {
+            // Nothing under way to stop or mark; the caller has logged what went wrong
+            return;
+        }
+        try {
+            if (Export.active()) {
+                Export.cancel();
+            }
+        } catch (Throwable ignored) {
+            // Ended meanwhile
+        }
+        if (id != null) {
+            long now = System.currentTimeMillis();
+            FILE.execute(() -> {
+                try {
+                    updateWithTries(queue -> {
+                        ExportQueue.Job there = queue.job(id);
+                        // Only one still running: an end written a moment ago stays
+                        if (there != null && there.state == ExportQueue.State.RUNNING) {
+                            queue.finish(id, ExportQueue.State.FAILED, null, why, null, now);
+                        }
+                        if (id.equals(workingOn)) {
+                            workingOn = null;
+                        }
+                        view = queue;
+                        return null;
+                    });
+                } catch (Exception e) {
+                    workingOn = null;
+                    Host.LOGGER.error("Dailies: the failed job could not be marked so in the export queue file", e);
+                }
+            });
+        }
+        if (job != null) {
+            done++;
+            failed++;
+        }
+        waitingForFile = false;
+        // Not back to what was being looked at: an export may still be finishing
+        returnTo = null;
+        returnScene = -1;
+        try {
+            endRun(why);
+        } catch (Throwable again) {
+            Host.LOGGER.error("Dailies: the export queue could not be stopped cleanly", again);
+            running = false;
+            stopping = false;
+            step = Step.IDLE;
+            current = null;
+            lastWords = why;
+        }
+    }
+
     private static void takeNext(Minecraft minecraft) {
         if (stopping) {
             endRun("The queue was stopped");
@@ -378,12 +492,14 @@ public final class QueueRunner {
                     return null;
                 }
             }
-            queue.recover(System.currentTimeMillis(), QueueRunner::alive, PID);
+            // Nothing is under way here between jobs: a job of this game's still marked as running was left by a failure
+            queue.recover(System.currentTimeMillis(), QueueRunner::alive, PID, null);
             ExportQueue.Job next = queue.next();
             if (next == null) {
                 return null;
             }
             queue.claim(next, PID, where, System.currentTimeMillis());
+            workingOn = next.id;
             return next.copy();
         }, job -> {
             if (job == null) {
@@ -521,6 +637,9 @@ public final class QueueRunner {
         int failedNow = failed;
         withFile(queue -> {
             queue.finish(job.id, state, written, error, note, System.currentTimeMillis());
+            if (job.id.equals(workingOn)) {
+                workingOn = null;
+            }
             if (Worker.active()) {
                 queue.worker(worker -> {
                     worker.done = doneNow;

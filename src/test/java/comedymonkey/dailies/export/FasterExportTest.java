@@ -8,6 +8,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -93,6 +95,29 @@ class FasterExportTest {
         assertSame(first, pool.take(10));
         pool.end();
         assertSame(FramePool.END, pool.next());
+    }
+
+    /** Frames are made as they are first needed, never more than the pool's number, and a free one is used before a new one */
+    @Test
+    void poolMakesFramesOnlyAsTheyAreNeeded() throws Exception {
+        FramePool pool = new FramePool(3, 8);
+        assertEquals(0, pool.freeCount(), "nothing is made before it is asked for");
+        FramePool.Frame first = pool.take(10);
+        pool.giveBack(first);
+        assertSame(first, pool.take(10), "the free one comes first");
+        FramePool.Frame second = pool.take(10);
+        FramePool.Frame third = pool.take(10);
+        assertNotNull(second);
+        assertNotNull(third);
+        assertNotSame(first, second);
+        assertNotSame(second, third);
+        assertEquals(8, third.data.length);
+        assertNull(pool.take(10), "three made, all in use");
+        // Given back from another thread, as a sink holding frames does
+        Thread giver = new Thread(() -> pool.giveBack(second));
+        giver.start();
+        giver.join();
+        assertSame(second, pool.take(10));
     }
 
     @Test

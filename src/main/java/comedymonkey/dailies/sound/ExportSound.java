@@ -56,7 +56,8 @@ import java.util.concurrent.TimeUnit;
  * the mixed track is the sum of the separate ones, sample for sample, so that they always add up to it.
  * <p>
  * Nothing here may stop an export: when sound cannot be captured the video is finished without it and
- * {@link #note} says why. Client thread throughout, except the flags the sound hooks read.
+ * {@link #note} says why. Client thread throughout, except the flags the sound hooks read, and {@link #finish}, which
+ * runs on the export's finishing thread once capturing has stopped.
  */
 public final class ExportSound {
 
@@ -77,6 +78,8 @@ public final class ExportSound {
     private static Scene scene;
     private static @Nullable Path videoFile = null;
     private static @Nullable Path pcmFile = null;
+    /** The output's name without its ending, which every temporary file of the export starts with */
+    private static String soundBase = "export";
     private static @Nullable OutputStream pcm = null;
     private static long rendered = 0;
     private static @Nullable String problem = null;
@@ -239,8 +242,10 @@ public final class ExportSound {
         int dot = name.lastIndexOf('.');
         String base = dot > 0 ? name.substring(0, dot) : name;
         String extension = dot > 0 ? name.substring(dot) : "." + wanted.container;
-        videoFile = output.resolveSibling(base + ".dailies-picture" + extension);
-        pcmFile = output.resolveSibling(base + ".dailies-sound.pcm");
+        // Named so that what a game that closed half way through left behind can be told apart and taken away later
+        videoFile = output.resolveSibling(comedymonkey.dailies.export.TemporaryFiles.picture(base, extension));
+        pcmFile = output.resolveSibling(comedymonkey.dailies.export.TemporaryFiles.sound(base));
+        soundBase = base;
         separate = wanted.stemFiles || wanted.stemTracks;
         return videoFile;
     }
@@ -339,8 +344,7 @@ public final class ExportSound {
             if (voice == null) {
                 voice = new Voice();
                 voice.name = name;
-                String file = pcmFile.getFileName().toString();
-                voice.file = pcmFile.resolveSibling(file.substring(0, file.length() - 4) + "-voice" + VOICES.size() + ".pcm");
+                voice.file = pcmFile.resolveSibling(comedymonkey.dailies.export.TemporaryFiles.voice(soundBase, VOICES.size()));
                 voice.out = new BufferedOutputStream(Files.newOutputStream(voice.file), 1 << 15);
                 VOICES.put(speaker, voice);
             }
@@ -421,8 +425,10 @@ public final class ExportSound {
 
     /**
      * The video has been written. Joins it with the sound and returns the finished file. Never throws: at worst the
-     * soundless video is moved to its final place.
+     * soundless video is moved to its final place, as it is when the export is cancelled while this runs. The export's
+     * finishing thread, with capturing stopped by {@link #stopCapture}.
      */
+
     public static Path finish(Path written, boolean cancelled) {
         Path video = videoFile;
         if (video == null) {
@@ -462,6 +468,15 @@ public final class ExportSound {
             Host.LOGGER.warn("Dailies: the soundless video could not be moved to {}; it stays at {}", output, video, t);
             return video;
         }
+    }
+
+    /**
+     * Every picture of the export has been taken: nothing more goes into the captured sound, which is closed so that
+     * it can be joined to the picture on the export's finishing thread. Client thread
+     */
+    public static void stopCapture() {
+        capturing = false;
+        closePcm();
     }
 
     /** The export failed: throw the temporary files away */
@@ -657,7 +672,6 @@ public final class ExportSound {
         int channels = settings.stereo ? 2 : 1;
         String name = output.getFileName().toString();
         String base = name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
-        Path scratch = game.resolveSibling(base + ".dailies-track");
         List<Path> temporary = new ArrayList<>();
         try {
             closeVoices(false);
@@ -667,7 +681,7 @@ public final class ExportSound {
             List<Track> tracks = new ArrayList<>();
             sources.add(game);
             orders.add(ByteOrder.nativeOrder());
-            tracks.add(new Track("Game", "game", Path.of(scratch + "-game.pcm")));
+            tracks.add(new Track("Game", "game", scratch(game, base, "game")));
             List<String> taken = new ArrayList<>(List.of("mix", "game", "music"));
             for (Voice voice : VOICES.values()) {
                 String title = voice.name == null || voice.name.isBlank() ? "Speaker" : voice.name.trim();
@@ -676,17 +690,17 @@ public final class ExportSound {
                 taken.add(unique.toLowerCase(Locale.ROOT));
                 sources.add(voice.file);
                 orders.add(ByteOrder.LITTLE_ENDIAN);
-                tracks.add(new Track(unique.equals(tag) ? title : title + unique.substring(tag.length()), "voice-" + unique, Path.of(scratch + "-voice" + tracks.size() + ".pcm")));
+                tracks.add(new Track(unique.equals(tag) ? title : title + unique.substring(tag.length()), "voice-" + unique, scratch(game, base, "voice" + tracks.size())));
             }
             List<Cue> extra = cues(remarks);
             if (!extra.isEmpty()) {
-                Path music = Path.of(scratch + "-music-in.pcm");
+                Path music = scratch(game, base, "music-in");
                 temporary.add(music);
                 String failure = run(musicCommand(extra, frames, music));
                 if (failure == null && Files.exists(music)) {
                     sources.add(music);
                     orders.add(ByteOrder.LITTLE_ENDIAN);
-                    tracks.add(new Track("Music", "music", Path.of(scratch + "-music.pcm")));
+                    tracks.add(new Track("Music", "music", scratch(game, base, "music")));
                 } else {
                     // An audio keyframe's file the encoder cannot read must not cost the rest
                     Host.LOGGER.warn("Dailies: the audio keyframes could not be rendered ({}); going on without them", failure);
@@ -694,7 +708,7 @@ public final class ExportSound {
                     extra = List.of();
                 }
             }
-            Path mix = Path.of(scratch + "-mix.pcm");
+            Path mix = scratch(game, base, "mix");
             temporary.add(mix);
             tracks.forEach(track -> temporary.add(track.samples()));
             sum(sources, orders, tracks, mix, frames, channels);
@@ -754,6 +768,11 @@ public final class ExportSound {
         }
     }
 
+    /** A track being made, beside the captured sound */
+    private static Path scratch(Path game, String base, String which) {
+        return game.resolveSibling(comedymonkey.dailies.export.TemporaryFiles.track(base, which));
+    }
+
     /**
      * Writes every source out as a finished track of exactly {@code frames} sample frames, and their sum as the mix.
      * A source that is shorter is silent for the rest. The mix is the sum of the tracks as they are written, so
@@ -803,16 +822,10 @@ public final class ExportSound {
         }
     }
 
-    /** Samples as a WAV file: the 44 bytes that say what they are, then the samples */
+    /** Samples as a WAV file: what they are, said as RF64 for a track too long for plain WAV, then the samples */
     private static void wav(Path samples, Path file, long frames, int channels) throws IOException {
-        long bytes = frames * 2 * channels;
-        ByteBuffer head = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
-        head.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt((int) (36 + bytes)).put("WAVE".getBytes(StandardCharsets.US_ASCII));
-        head.put("fmt ".getBytes(StandardCharsets.US_ASCII)).putInt(16).putShort((short) 1).putShort((short) channels).putInt(SAMPLE_RATE)
-            .putInt(SAMPLE_RATE * 2 * channels).putShort((short) (2 * channels)).putShort((short) 16);
-        head.put("data".getBytes(StandardCharsets.US_ASCII)).putInt((int) bytes);
         try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file), 1 << 16)) {
-            out.write(head.array());
+            out.write(comedymonkey.dailies.export.WavHeader.of(frames, channels, SAMPLE_RATE));
             Files.copy(samples, out);
         }
     }
@@ -879,14 +892,22 @@ public final class ExportSound {
         return command;
     }
 
-    /** Runs the encoder to its end. Null when it worked, else what it said */
+    /**
+     * Runs the encoder to its end. Null when it worked, else what it said. An export cancelled meanwhile interrupts
+     * this thread: the encoder is then stopped, and has let go of its files, before this returns
+     */
     private static @Nullable String run(List<String> command) {
+        if (Thread.currentThread().isInterrupted()) {
+            return "stopped, as the export was cancelled";
+        }
+        Process process = null;
         try {
             Host.LOGGER.info("Dailies: joining sound and picture: {}", String.join(" ", command));
-            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            Process running = process;
             StringBuilder log = new StringBuilder();
             Thread reader = new Thread(() -> {
-                try (BufferedReader lines = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                try (BufferedReader lines = new BufferedReader(new InputStreamReader(running.getInputStream(), StandardCharsets.UTF_8))) {
                     for (String line = lines.readLine(); line != null; line = lines.readLine()) {
                         synchronized (log) {
                             if (log.length() < 4000) {
@@ -904,7 +925,12 @@ public final class ExportSound {
                 process.destroyForcibly();
                 return "the encoder did not finish";
             }
-            reader.join(2000);
+            try {
+                reader.join(2000);
+            } catch (InterruptedException late) {
+                // The encoder has ended already, and what it wrote stands
+                Thread.currentThread().interrupt();
+            }
             if (process.exitValue() != 0) {
                 synchronized (log) {
                     return log.length() == 0 ? "the encoder stopped without saying why" : log.toString().trim();
@@ -912,9 +938,21 @@ public final class ExportSound {
             }
             return null;
         } catch (InterruptedException e) {
+            if (process != null) {
+                process.destroyForcibly();
+                try {
+                    // Not interrupted again until it has gone: on Windows its files cannot be moved while it has them open
+                    process.waitFor(10, TimeUnit.SECONDS);
+                } catch (InterruptedException again) {
+                    // Gone or not, on we go
+                }
+            }
             Thread.currentThread().interrupt();
-            return "interrupted";
+            return "stopped, as the export was cancelled";
         } catch (Throwable t) {
+            if (process != null) {
+                process.destroyForcibly();
+            }
             return t.toString();
         }
     }

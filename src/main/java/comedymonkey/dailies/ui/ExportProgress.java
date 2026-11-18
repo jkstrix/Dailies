@@ -217,7 +217,10 @@ public final class ExportProgress extends Screen {
         Kit.text(graphics, font, share, x + inner - font.width(share), top + 8, Controls.BRASS_BRIGHT);
         Kit.rule(graphics, x, top + 20, x + inner);
 
-        String rate = speed > 0.0 ? Kit.t("progress.speed", String.format(Locale.ROOT, "%.1f", speed)).getString() : Kit.t("progress.starting").getString();
+        // Every picture taken, the file is being finished: the parts joined, the sound joined to the picture
+        boolean finishing = Export.finishing();
+        String rate = finishing ? Kit.t("progress.finishing").getString()
+            : speed > 0.0 ? Kit.t("progress.speed", String.format(Locale.ROOT, "%.1f", speed)).getString() : Kit.t("progress.starting").getString();
         int rateWidth = font.width(rate);
         Kit.text(graphics, font, Kit.clip(font, Kit.t("progress.frames", done, total).getString(), inner - rateWidth - 8), x, top + 27, Controls.PARCHMENT);
         Kit.text(graphics, font, rate, x + inner - rateWidth, top + 27, Controls.PARCHMENT_DIM);
@@ -233,7 +236,8 @@ public final class ExportProgress extends Screen {
         int buttonWidth = Math.max(70, font.width(Kit.t("progress.cancel")) + 12);
         int buttonLeft = left + width - 8 - buttonWidth;
         int buttonTop = top + PLATE_HEIGHT - 8 - 16;
-        String left1 = speed > 0.0 ? Kit.t("progress.left", Kit.seconds((total - done) / speed)).getString() : "";
+        String left1 = !finishing && speed > 0.0 ? Kit.t("progress.left", Kit.seconds((total - done) / speed)).getString() : "";
+
         Kit.text(graphics, font, Kit.clip(font, left1, inner - buttonWidth - 8), x, buttonTop + 4, Controls.PARCHMENT);
         Kit.face(graphics, buttonLeft, buttonTop, buttonWidth, 16, cancelHovered, false, true);
         Kit.centred(graphics, font, Kit.t("progress.cancel").getString(), buttonLeft, buttonTop + 4, buttonWidth, Controls.PARCHMENT);

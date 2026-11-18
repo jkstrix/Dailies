@@ -399,21 +399,32 @@ final class GpuCapture implements AutoCloseable {
     /** Frees what it holds on the card. Render thread */
     @Override
     public void close() {
+        boolean copierStopped = true;
         if (this.copier != null) {
             this.copier.shutdown();
             try {
                 // Whatever is being copied out reads the buffers, which go now
-                this.copier.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS);
+                if (!this.copier.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                    // Stuck waiting for a writer that takes nothing: interrupted, and given a moment more
+                    this.copier.shutdownNow();
+                    copierStopped = this.copier.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS);
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                copierStopped = this.copier.isTerminated();
             }
+        }
+        if (!copierStopped) {
+            // A copy may still be reading a buffer: unmapping it under the copy would crash the game, so the buffers are
+            // left to the graphics card rather than freed, a few megabytes lost once
+            Host.LOGGER.warn("Dailies: an exported picture was still being copied out as the export ended; its read-back buffers are left unfreed");
         }
         for (int i = 0; i < this.slots; i++) {
             if (this.fences[i] != 0L) {
                 org.lwjgl.opengl.GL32.glDeleteSync(this.fences[i]);
                 this.fences[i] = 0L;
             }
-            if (this.buffers[i] != 0) {
+            if (this.buffers[i] != 0 && copierStopped) {
                 if (this.views[i] != null) {
                     GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, this.buffers[i]);
                     GL15.glUnmapBuffer(GL21.GL_PIXEL_PACK_BUFFER);

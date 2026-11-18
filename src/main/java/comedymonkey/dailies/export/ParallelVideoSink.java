@@ -8,12 +8,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -30,12 +34,13 @@ import java.util.stream.Stream;
  * copies them into the file asked for: the times already run on unbroken, so nothing has to be worked out, and a run
  * of FFmpeg's file-by-file joiner, which spent a thirtieth of a second looking into each file, is not needed.
  * <p>
- * Frames still arrive in order on the export's one writer thread. {@link #frame} copies each into a buffer of the
- * encoder whose chunk it belongs to and returns; that encoder's thread pushes it down the pipe. While one encoder
+ * Frames still arrive in order on the export's one writer thread. {@link #keep} hands each, as it is, to the encoder
+ * whose chunk it belongs to and returns; that encoder's thread pushes it down the pipe and then gives the frame back
+ * to the export's own frames, so no frame is copied on its way (a 4K frame is twelve megabytes). While one encoder
  * takes in its chunk the others are still working through theirs, and only frames held for them let them do so:
  * with two or three buffers each, the encoders took turns and a 4K export gained a tenth; with most of a chunk each,
  * it ran twice as fast (on an RTX 5090, 147 frames a second with one encoder, 295 with three, joining included).
- * When an encoder's buffers are all full, {@link #frame} waits for one.
+ * The export keeps that many more frames ({@link #keeps}), and when all are held it waits for one to come back.
  * <p>
  * No Minecraft here: measured, and its pure parts tested, without a game.
  */
@@ -43,8 +48,14 @@ final class ParallelVideoSink implements FrameSink {
 
     /** How much is handed to a pipe at a time, as {@code VideoSink} does, so Java never copies a whole frame natively */
     private static final int WRITE = 256 * 1024;
+
+    /** A frame handed to an encoder, and what gives it back once it is down the pipe */
+    private record Held(byte[] data, Runnable done) {
+    }
+
     /** Handed to an encoder's thread to say its share has ended */
-    private static final byte[] END = new byte[0];
+    private static final Held END = new Held(new byte[0], () -> {
+    });
 
     private final Path program;
     private final int width, height;
@@ -52,8 +63,10 @@ final class ParallelVideoSink implements FrameSink {
     private final double framesPerSecond;
     private final int chunk;
     private final int offset;
+    private final int buffers;
     private final String container;
     private final Path output;
+    private final boolean faststart;
     private final Path folder;
     private final Consumer<String> log;
     private final List<Lane> lanes = new ArrayList<>();
@@ -64,11 +77,13 @@ final class ParallelVideoSink implements FrameSink {
      * words are thrown, so the caller can fall back to a single encoder.
      *
      * @param encoderArguments as {@link Codecs#videoArguments}, from "-c:v" on
+     * @param faststart        the joined file has its index at the front, as the file the export ends with needs; not
+     *                         a soundless file that sound is joined to afterwards, which that join writes again
      * @param chunk            frames in a chunk, which is also the keyframe interval
      * @param buffers          frames each encoder may have waiting for it
      */
     ParallelVideoSink(Path program, int width, int height, double framesPerSecond, List<String> encoderArguments, String container,
-                      Path output, int processes, int chunk, int buffers, Consumer<String> log) throws IOException {
+                      Path output, boolean faststart, int processes, int chunk, int buffers, Consumer<String> log) throws IOException {
         if (processes < 2) {
             throw new IllegalArgumentException("Encoding side by side needs at least two encoders");
         }
@@ -79,26 +94,39 @@ final class ParallelVideoSink implements FrameSink {
         this.framesPerSecond = framesPerSecond;
         this.chunk = Math.max(1, chunk);
         this.offset = offset(processes, this.chunk);
+        this.buffers = Math.max(1, buffers);
         this.container = container;
         this.output = output.toAbsolutePath();
+        this.faststart = faststart;
         this.log = log;
         Path parent = this.output.getParent();
         Files.createDirectories(parent);
-        this.folder = parent.resolve(this.output.getFileName() + ".dailies-parts");
-        deleteFolder(this.folder);
+        // A folder of its own every time, named by nothing the person typed: the encoders read its path as a pattern
+        this.folder = parent.resolve(TemporaryFiles.parts());
         Files.createDirectories(this.folder);
         try {
             for (int index = 0; index < processes; index++) {
-                this.lanes.add(new Lane(index, this.laneCommand(index, processes, encoderArguments), buffers));
+                this.lanes.add(new Lane(index, this.laneCommand(index, processes, encoderArguments)));
             }
-            // An encoder that cannot start says so at once
+            // An encoder that cannot start says so at once, and is not waited for any longer than it takes to
+            CompletableFuture<?>[] exits = this.lanes.stream().map(lane -> lane.process.onExit()).toArray(CompletableFuture[]::new);
             try {
-                Thread.sleep(400);
+                CompletableFuture.anyOf(exits).get(400, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException allRunning) {
+                // As it should be
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            } catch (ExecutionException e) {
+                // Looked at below
             }
             for (Lane lane : this.lanes) {
                 if (!lane.process.isAlive()) {
+                    try {
+                        // What it said is still on its way to the reader
+                        lane.reader.join(1000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                     throw new IOException(lane.said());
                 }
             }
@@ -273,35 +301,41 @@ final class ParallelVideoSink implements FrameSink {
         command.addAll(encoderArguments);
         command.add("-an");
         command.addAll(laneArguments(index, processes, this.chunk, this.framesPerSecond, this.folder.resolve(index + ".csv").toString()));
-        command.add(this.folder.resolve(index + "-%06d.ts").toString());
+        command.add(segmentTemplate(this.folder, index));
         return command;
     }
 
-    /** One encoder: its process, its buffers, and the thread that feeds it */
+    /**
+     * Where an encoder writes its parts: its number and the part's, in the folder. The encoder reads the whole path as
+     * a pattern, in which a percent sign starts a number, so every percent sign of the folder's own path is doubled,
+     * which the encoder reads as one
+     */
+    static String segmentTemplate(Path folder, int index) {
+        String inside = folder.toAbsolutePath().toString().replace("%", "%%");
+        String separator = folder.getFileSystem().getSeparator();
+        return (inside.endsWith(separator) ? inside : inside + separator) + index + "-%06d.ts";
+    }
+
+    /** One encoder: its process, the frames waiting for it, and the thread that feeds it */
     private final class Lane {
 
         final int index;
         final Process process;
         final OutputStream input;
         final StringBuilder said = new StringBuilder();
-        final BlockingQueue<byte[]> free;
-        final BlockingQueue<byte[]> full;
-        final int capacity;
-        int allocated = 0;
+        /** Frames waiting to go down the pipe, with the end after the last; no more than the export's own frames */
+        final BlockingQueue<Held> full = new LinkedBlockingQueue<>();
         /** Frames handed to this encoder: one the export never reached has none, and its list says nothing true */
         long sent = 0;
+        final Thread reader;
         final Thread feeder;
         volatile IOException failure = null;
 
-        Lane(int index, List<String> command, int buffers) throws IOException {
+        Lane(int index, List<String> command) throws IOException {
             this.index = index;
-            this.capacity = Math.max(1, buffers);
-            this.free = new ArrayBlockingQueue<>(this.capacity);
-            // One more place than there are buffers, so the end can always be said
-            this.full = new ArrayBlockingQueue<>(this.capacity + 1);
             this.process = new ProcessBuilder(command).redirectErrorStream(true).start();
             this.input = this.process.getOutputStream();
-            Thread reader = new Thread(() -> {
+            this.reader = new Thread(() -> {
                 try (BufferedReader lines = new BufferedReader(new InputStreamReader(this.process.getInputStream(), StandardCharsets.UTF_8))) {
                     for (String line = lines.readLine(); line != null; line = lines.readLine()) {
                         synchronized (this.said) {
@@ -314,8 +348,8 @@ final class ParallelVideoSink implements FrameSink {
                     // The encoder has gone
                 }
             }, "Dailies-Encoder-Log-" + index);
-            reader.setDaemon(true);
-            reader.start();
+            this.reader.setDaemon(true);
+            this.reader.start();
             this.feeder = new Thread(this::feed, "Dailies-Encoder-Feed-" + index);
             this.feeder.setDaemon(true);
             this.feeder.start();
@@ -328,27 +362,28 @@ final class ParallelVideoSink implements FrameSink {
         }
 
         /**
-         * Pushes frames down the pipe until the end. After a failure it goes on taking frames and handing their
-         * buffers back unwritten, so the writer is never left waiting on a buffer that cannot come free; the writer
-         * sees the failure at its next frame for this encoder.
+         * Pushes frames down the pipe until the end, giving each back once it is written. After a failure it goes on
+         * taking frames and giving them back unwritten, so the export is never left waiting on a frame that cannot
+         * come back; the writer sees the failure at its next frame for this encoder.
          */
         private void feed() {
             try {
                 while (true) {
-                    byte[] frame = this.full.take();
+                    Held frame = this.full.take();
                     if (frame == END) {
                         break;
                     }
-                    if (this.failure == null) {
-                        try {
+                    try {
+                        if (this.failure == null) {
                             for (int at = 0; at < ParallelVideoSink.this.frameBytes; at += WRITE) {
-                                this.input.write(frame, at, Math.min(WRITE, ParallelVideoSink.this.frameBytes - at));
+                                this.input.write(frame.data(), at, Math.min(WRITE, ParallelVideoSink.this.frameBytes - at));
                             }
-                        } catch (IOException e) {
-                            this.failure = e;
                         }
+                    } catch (IOException e) {
+                        this.failure = e;
+                    } finally {
+                        frame.done().run();
                     }
-                    this.free.offer(frame);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -360,32 +395,6 @@ final class ParallelVideoSink implements FrameSink {
                         this.failure = e;
                     }
                 }
-            }
-        }
-
-        /** A buffer to copy the next frame into: a free one, a new one while there are fewer than allowed, else waits */
-        byte[] buffer() throws IOException {
-            byte[] buffer = this.free.poll();
-            if (buffer != null) {
-                return buffer;
-            }
-            if (this.allocated < this.capacity) {
-                this.allocated++;
-                return new byte[ParallelVideoSink.this.frameBytes];
-            }
-            try {
-                while (true) {
-                    buffer = this.free.poll(200, TimeUnit.MILLISECONDS);
-                    if (buffer != null) {
-                        return buffer;
-                    }
-                    if (!this.feeder.isAlive()) {
-                        throw new IOException("The encoder stopped: " + this.said());
-                    }
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("The export was interrupted", e);
             }
         }
 
@@ -421,24 +430,39 @@ final class ParallelVideoSink implements FrameSink {
     }
 
     @Override
-    public void frame(long number, byte[] pixels, int length, int frameWidth, int frameHeight) throws IOException {
+    public int keeps() {
+        return this.lanes.size() * this.buffers;
+    }
+
+    /**
+     * Hands a frame to the encoder whose chunk it belongs to, as it is: the array stays with that encoder until its
+     * thread has written it, and {@code done} gives it back. Nothing is kept when this throws.
+     */
+    @Override
+    public void keep(long number, byte[] pixels, int length, int frameWidth, int frameHeight, Runnable done) throws IOException {
         if (frameWidth != this.width || frameHeight != this.height) {
             throw new IOException("A frame of " + frameWidth + "x" + frameHeight + " arrived in an export of " + this.width + "x" + this.height);
         }
-        if (length != this.frameBytes) {
+        if (length != this.frameBytes || pixels.length < this.frameBytes) {
             throw new IOException("A frame of " + length + " bytes arrived where " + this.frameBytes + " were expected");
         }
         Lane lane = this.lanes.get(laneOf(this.frames, this.chunk, this.lanes.size()));
         if (lane.failure != null) {
             throw new IOException("The encoder stopped: " + lane.said(), lane.failure);
         }
-        byte[] buffer = lane.buffer();
-        System.arraycopy(pixels, 0, buffer, 0, length);
-        if (!lane.full.offer(buffer)) {
-            throw new IllegalStateException("More frames were sent to an encoder than it has buffers");
+        if (!lane.feeder.isAlive()) {
+            throw new IOException("The encoder stopped: " + lane.said());
         }
+        lane.full.add(new Held(pixels, done));
         lane.sent++;
         this.frames++;
+    }
+
+    /** For a caller that does not hand its frames over: each is copied first, so this costs an array a frame */
+    @Override
+    public void frame(long number, byte[] pixels, int length, int frameWidth, int frameHeight) throws IOException {
+        this.keep(number, Arrays.copyOf(pixels, Math.max(length, 0)), length, frameWidth, frameHeight, () -> {
+        });
     }
 
     @Override
@@ -499,7 +523,7 @@ final class ParallelVideoSink implements FrameSink {
     private void join(List<Part> order) throws IOException {
         List<String> command = new ArrayList<>(List.of(this.program.toString(), "-hide_banner", "-loglevel", "error", "-y",
             "-f", "mpegts", "-i", "pipe:0", "-c", "copy", "-an"));
-        if (this.container.equals("mp4") || this.container.equals("mov")) {
+        if (this.faststart && (this.container.equals("mp4") || this.container.equals("mov"))) {
             // A file cut short by a cancel must still play (EXP-6)
             command.addAll(List.of("-movflags", "+faststart"));
         }
@@ -550,7 +574,8 @@ final class ParallelVideoSink implements FrameSink {
     /**
      * Deletes the chunk files and their folder. On Windows a file just written, or an encoder just stopped, can keep a
      * file from going for a moment (a virus scanner looking at it is enough), and the folder cannot go before its
-     * files, so it is tried again a few times. Whatever is left is cleared by the next export of the same name
+     * files, so it is tried again a few times. Whatever is left is taken away when a game next starts, once this game
+     * has closed ({@link TemporaryFiles#sweep})
      */
     private static void deleteFolder(Path folder) {
         for (int attempt = 0; attempt < 20 && Files.exists(folder); attempt++) {
