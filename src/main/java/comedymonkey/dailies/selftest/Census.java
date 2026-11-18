@@ -147,6 +147,15 @@ final class Census {
             NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, (ClientTickEvent.Post event) -> endOfTick());
             NeoForge.EVENT_BUS.addListener((PlaySoundEvent event) -> heard(event));
             NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderFrameEvent.Post event) -> drawn());
+            // The recorder respawned: the live game's world is rebuilt on this tick, which playback only reaches by the next
+            NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.Clone event) -> {
+                if (mode == Mode.LIVE && comedymonkey.dailies.capture.Recorder.get().state() == comedymonkey.dailies.capture.Recorder.State.RECORDING) {
+                    respawnTicks.add(comedymonkey.dailies.capture.Recorder.get().recordingTick());
+                }
+            });
+        }
+        if (wanted == Mode.LIVE) {
+            respawnTicks.clear();
         }
         previous = null;
         lastPlayed = -1;
@@ -783,9 +792,18 @@ final class Census {
     private static final Map<String, Double> CLOCK_SLACK = Map.of("emerge", 300.0, "beam", 0.11, "swell", 0.001, "fangs", 0.051,
         "shownX", 0.011, "shownY", 0.011, "shownZ", 0.011, "shownScale", 0.011);
 
+    /** The live ticks on which the recorder respawned */
+    static final Set<Integer> respawnTicks = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     static void compare(Census then, Census now, String mode, Tally tally) {
         int tick = then.tick;
         tally.compared++;
+        if (mode.equals("play") && respawnTicks.contains(tick)) {
+            // A respawn begins a stored world of its own, as a change of dimension does, and play reaches it on the tick
+            // after, as it does a change of dimension: the live game had rebuilt its world on this one. Noted, not counted
+            tally.add(mode, "respawn", "is shown a tick later", tick, "the recorder respawned on this tick of the live game", true);
+            return;
+        }
         if (!then.dimension.equals(now.dimension)) {
             // On the tick a change of dimension is recorded, play shows the old world for that one tick and builds the new
             // one before the next: the live game was already there. Noted, not counted

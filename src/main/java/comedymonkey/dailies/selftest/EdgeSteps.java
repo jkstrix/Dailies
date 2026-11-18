@@ -210,13 +210,27 @@ final class EdgeSteps {
 
     /** Out of the bottom of the world in survival: the void hurts until the recorder dies, and the recorder respawns */
     private static void theVoid(SelfTest test, Minecraft minecraft) throws Exception {
-        item("Falling into the void, dying there and respawning").owns("recorder", "blocks")
+        item("Falling into the void with a full inventory, dying there and respawning").owns("recorder", "minecraft:item", "blocks")
             .need(where("recorder", "below the bottom of the world", thing -> thing.y() < -100))
             .need(where("recorder", "dying", thing -> thing.state().contains("pose=DYING") || thing.clocks().contains("deathTime=")))
+            .need(present("minecraft:item", 6))
             .need(where("recorder", "standing again after respawning", thing -> thing.y() > Y - 1 && thing.y() < Y + 2 && !thing.state().contains("pose=DYING")))
-            .note("the recorder falls through chunks with nothing below them; death and the respawn come to the recorder's game as packets of their own");
+            .note("everything carried spills out where the recorder dies, and below the world is gone again a tick later; the dead recorder goes in a puff"
+                + " of smoke a second after dying, as other players see it; the respawn is shown a tick after the live game rebuilt its world");
         c("effect clear @s");
         c("gamemode survival");
+        // A full inventory to spill: the hotbar, armour and the bag
+        String[] carried = {"diamond_sword", "bow", "arrow 64", "cooked_beef 32", "torch 64", "oak_planks 64", "iron_pickaxe", "water_bucket", "shield",
+            "cobblestone 64", "gold_ingot 20", "redstone 48", "ender_pearl 16", "golden_apple 3", "spyglass", "compass", "clock", "bucket"};
+        for (String thing : carried) {
+            c("give @s minecraft:" + thing);
+        }
+        c("item replace entity @s armor.head with minecraft:iron_helmet");
+        c("item replace entity @s armor.chest with minecraft:iron_chestplate");
+        c("item replace entity @s armor.legs with minecraft:iron_leggings");
+        c("item replace entity @s armor.feet with minecraft:iron_boots");
+        c("gamerule keepInventory false");
+        waitTicks(5);
         c("tp @s 2.5 -90 2.5 0 60");
         int at = mark("the recorder falls out of the world");
         still("edges-void-falling", at + 10, 8.5, -80.0, 8.5, 2.5, -100.0, 2.5, false);
