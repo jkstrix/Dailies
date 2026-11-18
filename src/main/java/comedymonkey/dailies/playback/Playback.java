@@ -115,8 +115,7 @@ public final class Playback {
         NeoForge.EVENT_BUS.addListener((ClientChatEvent event) -> {
             if (active) {
                 event.setCanceled(true);
-                Minecraft.getInstance().gui.getChat().addMessage(
-                    net.minecraft.network.chat.Component.translatable("dailies.command.no_chat").withStyle(net.minecraft.ChatFormatting.RED));
+                PlaybackChat.say(net.minecraft.network.chat.Component.translatable("dailies.command.no_chat").withStyle(net.minecraft.ChatFormatting.RED));
             }
         });
     }

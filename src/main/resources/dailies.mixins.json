@@ -24,6 +24,7 @@
     "access.ClientLevelAccess",
     "playback.MinecraftMixin",
     "playback.HoldFrameMixin",
+    "playback.ChatMixin",
     "playback.SoundEngineMixin",
     "playback.ParticleEngineMixin",
     "playback.RemotePlayerMixin",

@@ -711,6 +711,9 @@ public final class Library {
                     worlds.add(source.worldName);
                 }
                 source.mods.forEach(mod -> mods.putIfAbsent(mod.id, mod.version));
+                if (source.distantHorizonsFolders != null) {
+                    source.distantHorizonsFolders.forEach(manifest.distantHorizonsFolders::putIfAbsent);
+                }
                 players.addAll(source.players);
                 manifest.created = Math.min(manifest.created, source.created);
                 if (source.realStart > 0) {

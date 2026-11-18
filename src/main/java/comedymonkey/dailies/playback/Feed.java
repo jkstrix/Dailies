@@ -875,7 +875,19 @@ final class Feed {
                 new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(new net.minecraft.world.level.ChunkPos(chunk.getX(), chunk.getZ())).handle(this.session.listener);
             }
             this.track(packet, minecraft);
-            ((Packet) packet).handle(this.session.listener);
+            // What a recorded packet says in the chat is the recording's. Not while a world opens: mods speak up then of
+            // their own accord, about playback, not the recording (playback.PlaybackChat)
+            boolean speaks = !(packet instanceof ClientboundLoginPacket) && !(packet instanceof net.minecraft.network.protocol.game.ClientboundRespawnPacket);
+            if (speaks) {
+                PlaybackChat.enterRecorded();
+            }
+            try {
+                ((Packet) packet).handle(this.session.listener);
+            } finally {
+                if (speaks) {
+                    PlaybackChat.leaveRecorded();
+                }
+            }
             this.followGame(packet);
             if (packet instanceof ClientboundLoginPacket) {
                 // The viewer is a spectator who is in nobody's tab list

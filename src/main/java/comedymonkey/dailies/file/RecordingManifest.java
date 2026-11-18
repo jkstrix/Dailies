@@ -54,6 +54,12 @@ public final class RecordingManifest {
     /** The earliest and latest real time the recording holds, in milliseconds since 1970; 0 when not known */
     public long realStart = 0;
     public long realEnd = 0;
+    /**
+     * Where Distant Horizons kept its far terrain for each dimension of the world recorded, by dimension id, relative
+     * to the game's folder where it is inside it: playback shows that far terrain from a copy of its own
+     * (compat.distanthorizons.DistantHorizonsCompat). Empty without Distant Horizons
+     */
+    public java.util.Map<String, String> distantHorizonsFolders = new java.util.TreeMap<>();
 
     public static final class SpanEntry {
         public String source = "";

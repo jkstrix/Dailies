@@ -194,7 +194,13 @@ public final class DistantHorizonsCompat {
         return Host.get().dataDirectory().resolve("dh");
     }
 
-    /** Where a playback world's far terrain is kept; null outside playback, which leaves Distant Horizons its own choice */
+    /**
+     * Where a playback world's far terrain is kept; null outside playback, which leaves Distant Horizons its own choice.
+     * When the recording says where Distant Horizons kept the far terrain of the world it was made in, and that is still
+     * there, a copy of it, kept by Dailies for that world and made afresh whenever the world's own is newer: playback
+     * then shows the far terrain that was built while playing (the owner, 18 November: "distant horizons data isn't
+     * loaded"), and writes only to its copy. Otherwise a store of the recording's own, built from the chunks it holds
+     */
     private static @Nullable File folderFor(Object level) {
         String recording = folderRecording;
         if (recording == null) {
@@ -206,9 +212,115 @@ public final class DistantHorizonsCompat {
         } catch (Throwable t) {
             // The folder is still the recording's own, only not named after the dimension
         }
+        File copied = copyOfWorld(level);
+        if (copied != null) {
+            return copied;
+        }
         File folder = folderRoot().resolve(safe(recording)).resolve(safe(name)).toFile();
         folder.mkdirs();
         return folder;
+    }
+
+    private static final String DATABASE = "DistantHorizons.sqlite";
+
+    /** Dailies' copy of the far terrain of the world recorded, for this dimension; null when there is none to copy */
+    private static @Nullable File copyOfWorld(Object level) {
+        try {
+            comedymonkey.dailies.file.RecordingManifest manifest = Playback.manifest();
+            Object wrapped = getWrappedMcObject.invoke(level);
+            if (manifest == null || manifest.distantHorizonsFolders == null || !(wrapped instanceof net.minecraft.world.level.Level mc)) {
+                return null;
+            }
+            String dimension = mc.dimension().location().toString();
+            String recorded = manifest.distantHorizonsFolders.get(dimension);
+            if (recorded == null || recorded.isBlank()) {
+                return null;
+            }
+            Path source = gameFolder().resolve(recorded).normalize();
+            if (!java.nio.file.Files.isRegularFile(source.resolve(DATABASE))) {
+                return null;
+            }
+            Path copy = folderRoot().resolve("worlds").resolve(safe(Integer.toHexString(source.toString().toLowerCase(java.util.Locale.ROOT).hashCode())
+                + "-" + source.getFileName())).resolve(safe(dimension));
+            refresh(source, copy);
+            return copy.toFile();
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies: the far terrain of the world recorded could not be copied for playback; it is built from the recording's chunks instead: {}", t.toString());
+            return null;
+        }
+    }
+
+    /** Copies the world's far terrain store, with the journal that may hold its latest writes, when it has changed since */
+    private static void refresh(Path source, Path copy) throws java.io.IOException {
+        java.nio.file.Files.createDirectories(copy);
+        String stamp = stamp(source);
+        Path stampFile = copy.resolve("dailies-source.txt");
+        if (java.nio.file.Files.isRegularFile(copy.resolve(DATABASE)) && java.nio.file.Files.isRegularFile(stampFile)
+            && java.nio.file.Files.readString(stampFile).equals(stamp)) {
+            return;
+        }
+        long started = System.nanoTime();
+        long bytes = 0;
+        for (String part : new String[]{DATABASE, DATABASE + "-wal", DATABASE + "-shm"}) {
+            Path from = source.resolve(part);
+            Path to = copy.resolve(part);
+            if (java.nio.file.Files.isRegularFile(from)) {
+                Path partial = copy.resolve(part + ".copying");
+                java.nio.file.Files.copy(from, partial, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                java.nio.file.Files.move(partial, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                bytes += java.nio.file.Files.size(to);
+            } else {
+                java.nio.file.Files.deleteIfExists(to);
+            }
+        }
+        java.nio.file.Files.writeString(stampFile, stamp);
+        Host.LOGGER.info("Dailies: copied the far terrain of {} for playback ({} MB in {} ms)", source, bytes / (1024 * 1024), (System.nanoTime() - started) / 1_000_000);
+    }
+
+    /** What the world's own store is now: when any of its files changes, the copy is made afresh */
+    private static String stamp(Path source) throws java.io.IOException {
+        StringBuilder stamp = new StringBuilder(source.toString());
+        for (String part : new String[]{DATABASE, DATABASE + "-wal"}) {
+            Path file = source.resolve(part);
+            if (java.nio.file.Files.isRegularFile(file)) {
+                stamp.append('|').append(part).append(':').append(java.nio.file.Files.size(file)).append(':').append(java.nio.file.Files.getLastModifiedTime(file).toMillis());
+            }
+        }
+        return stamp.toString();
+    }
+
+    private static Path gameFolder() {
+        return Minecraft.getInstance().gameDirectory.toPath().toAbsolutePath().normalize();
+    }
+
+    /**
+     * Where Distant Horizons keeps the far terrain of each dimension of the world being played now, by dimension id,
+     * relative to the game's folder where it is inside it. Empty without Distant Horizons, and in playback. Client thread
+     */
+    public static java.util.Map<String, String> liveFolders() {
+        java.util.Map<String, String> folders = new java.util.TreeMap<>();
+        if (!working || Playback.active()) {
+            return folders;
+        }
+        try {
+            Path game = gameFolder();
+            Path ours = folderRoot().toAbsolutePath().normalize();
+            for (Object wrapper : (Iterable<?>) getAllLoadedLevelWrappers.invoke(worldProxy)) {
+                Object wrapped = getWrappedMcObject.invoke(wrapper);
+                Object folder = getDhSaveFolder.invoke(wrapper);
+                if (!(wrapped instanceof net.minecraft.world.level.Level level) || !(folder instanceof File file)) {
+                    continue;
+                }
+                Path path = file.toPath().toAbsolutePath().normalize();
+                if (path.startsWith(ours)) {
+                    continue;
+                }
+                folders.put(level.dimension().location().toString(), (path.startsWith(game) ? game.relativize(path) : path).toString().replace('\\', '/'));
+            }
+        } catch (Throwable t) {
+            // Nothing to say where the far terrain is: playback builds its own
+        }
+        return folders;
     }
 
     private static String safe(String name) {

@@ -466,6 +466,22 @@ public final class Recorder {
         }
         Snapshots.ownShown = this.own.shown();
         Snapshots.write(this.live, minecraft, listener, this.codec);
+        // Where Distant Horizons keeps this world's far terrain, so playback can show it from a copy of its own. Asked
+        // here, written into the manifest by the writer, whose it is
+        java.util.Map<String, String> farTerrain = comedymonkey.dailies.compat.distanthorizons.DistantHorizonsCompat.liveFolders();
+        if (!farTerrain.isEmpty() && this.spool != null) {
+            this.spool.add(new Spool.Job() {
+                @Override
+                public void run(RecordingWriter writer) {
+                    writer.manifest().distantHorizonsFolders.putAll(farTerrain);
+                }
+
+                @Override
+                public long bytes() {
+                    return 0;
+                }
+            });
+        }
         for (net.minecraft.client.multiplayer.PlayerInfo info : listener.getOnlinePlayers()) {
             this.players.add(info.getProfile().getName());
         }
