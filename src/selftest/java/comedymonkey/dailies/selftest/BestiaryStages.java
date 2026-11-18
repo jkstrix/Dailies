@@ -177,7 +177,7 @@ final class BestiaryStages {
     private static void wither() throws Exception {
         item("Wither: summoned, charging, its explosion").owns("Test Wither").need(present("Test Wither", 1)).need(state("Test Wither", "d19=")).need(changed(-12, 14, 12, 34, 30, 100000));
         item("Wither: boss bar (name, progress, colour, darkened sky)").owns("boss bar").need(seen("a bar named Test Wither that darkens the sky", census -> census.bars.contains("Test Wither") && census.bars.contains("darken=true")))
-            .need(item -> {
+            .need("the bar at eight or more lengths", item -> {
                 java.util.TreeSet<String> shown = new java.util.TreeSet<>();
                 Census.live.subMap(item.from, item.to).values().forEach(census -> {
                     if (census.bars.contains("Test Wither|")) {
@@ -249,7 +249,7 @@ final class BestiaryStages {
         item("Creeper: charged").owns("creeper charged").need(state("creeper charged", "charged=true")).need(changed(-18, 21, 2, 40, 60, 100000));
         item("Creeper: a chain of three").owns("creeper chain 1", "creeper chain 2", "creeper chain 3").need(present("creeper chain 1", 1)).need(present("creeper chain 3", 1))
             .need(changed(1, 4, 24, 17, 30, 100000));
-        item("Creeper: into water (no blocks broken)").owns("creeper wet").need(present("creeper wet", 1)).need(item -> {
+        item("Creeper: into water (no blocks broken)").owns("creeper wet").need(present("creeper wet", 1)).need("nothing round the pool blown away", item -> {
             // From after the pool was dug to the end: nothing but the pool's own water may have changed there
             int blown = 0;
             for (Census census : Census.live.subMap(item.from + 12, item.to).values()) {
@@ -388,7 +388,7 @@ final class BestiaryStages {
         item("XP: a burst from a killed mob").owns("xp pig", "minecraft:experience_orb").need(present("xp pig", 1)).need(present("minecraft:experience_orb", 1));
         item("XP: a bottle o' enchanting breaking").owns("minecraft:experience_bottle").need(present("minecraft:experience_bottle", 1));
         item("XP: orbs in quantity, merging").owns("minecraft:experience_orb").need(present("minecraft:experience_orb", 100))
-            .need(item -> {
+            .need("orbs worth 1 merging", item -> {
                 java.util.Set<Integer> ever = new java.util.HashSet<>();
                 long most = 0;
                 for (Census census : Census.live.subMap(item.from, item.to).values()) {
@@ -410,7 +410,7 @@ final class BestiaryStages {
             });
         item("XP: orbs homing on the recorder and collected, the XP bar in the recorded HUD").owns("recorded HUD")
             .need(seen("an experience level in the HUD", census -> !census.hud.contains("level=0 ") && census.hud.contains("level=")));
-        item("XP: orbs left lying").owns("minecraft:experience_orb").need(item -> orbs(item.to - 4, 0) > 10 ? orbs(item.to - 4, 0) + " orbs still lying at the end" : null);
+        item("XP: orbs left lying").owns("minecraft:experience_orb").need("orbs still lying at the end", item -> orbs(item.to - 4, 0) > 10 ? orbs(item.to - 4, 0) + " orbs still lying at the end" : null);
 
         waitTicks(6);
         mark("before the orbs");
@@ -938,7 +938,7 @@ final class BestiaryStages {
         item("Item display, transformation interpolating").owns("minecraft:item_display").need(state("minecraft:item_display", "shownY=1.5"));
         item("Text display, transformation interpolating").owns("minecraft:text_display").need(state("minecraft:text_display", "shownY=1.5"));
         item("Interaction entity").owns("minecraft:interaction").need(present("minecraft:interaction", 1));
-        item("Marker (must be ignored)").owns("minecraft:marker").need(item -> Census.live.subMap(item.from, item.to).values().stream()
+        item("Marker (must be ignored)").owns("minecraft:marker").need("the marker was never sent to the client", item -> Census.live.subMap(item.from, item.to).values().stream()
             .noneMatch(census -> census.things.values().stream().anyMatch(thing -> thing.type().equals("minecraft:marker"))) ? "a marker was summoned and the game was never told of it" : null);
         item("Horse with armour and a rider").owns("armoured horse", "horse rider").need(state("armoured horse", "diamond_horse_armor")).need(state("horse rider", "vehicle="));
         item("Allay holding an item").owns("allay").need(state("allay", "wears.mainhand=1 minecraft:amethyst_shard"));

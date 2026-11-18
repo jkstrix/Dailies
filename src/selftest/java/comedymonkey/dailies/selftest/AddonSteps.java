@@ -182,21 +182,7 @@ final class AddonSteps {
 
     /** What the live game showed of each item's needs, as the bestiary weighs its own */
     private static void weigh() {
-        for (BestiarySteps.Item item : BestiarySteps.items) {
-            for (Function<BestiarySteps.Item, String> need : item.needs) {
-                String seen;
-                try {
-                    seen = need.apply(item);
-                } catch (Throwable t) {
-                    seen = null;
-                }
-                if (seen == null) {
-                    item.missing.add("need " + (item.needs.indexOf(need) + 1));
-                } else {
-                    item.evidence.add(seen);
-                }
-            }
-        }
+        BestiarySteps.weigh();
     }
 
     /** A creative motor turning the block in front of it, from the north, at 64 rpm */

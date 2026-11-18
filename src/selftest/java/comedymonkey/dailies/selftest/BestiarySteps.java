@@ -33,7 +33,9 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  * a walking mob ({@link BestiaryStages} sets them up). While it records, the live game is written down at the end of
  * every tick ({@link Census}). The recording is then played through and compared with that tick by tick, jumped
  * through forwards, and jumped through backwards, where every landing starts from a stored world. Everything that
- * differs is gathered, so one run reports all of it, item by item, and the test fails at the end with the list.
+ * differs is gathered. A difference is counted once, however many items share its label, and it is charged to an item
+ * only on the ticks of that item's own stage. The test fails at the end with that list, and with any item the live
+ * game never staged.
  * <p>
  * Tolerances, which are this step's own and looser than nothing that existed before: an entity may be a third of a
  * block from its live place plus one tick of its own travel as the live game saw it (the measure PlaybackSteps uses);
@@ -55,8 +57,11 @@ final class BestiarySteps {
     static final String WORLD = "Dailies Bestiary";
     static final String OVERWORLD = "minecraft:overworld";
     static final String END = "minecraft:the_end";
-    /** Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself */
-    static final int VERSION = 1;
+    /**
+     * Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself.
+     * 2: a stage closes after two quiet ticks, before the field is cleared, so that clearing it is not part of the item.
+     */
+    static final int VERSION = 2;
 
     static SelfTest test;
     static Minecraft minecraft;
@@ -86,7 +91,7 @@ final class BestiarySteps {
             this.name = name;
         }
 
-        /** The names or kinds of entity, or "blocks", "boss bar" and the like, whose differences count against this item */
+        /** The names or kinds of entity, or "blocks", "boss bar" and the like, whose differences count against this item on its own ticks */
         Item owns(String... labels) {
             this.labels.addAll(List.of(labels));
             return this;
@@ -94,13 +99,35 @@ final class BestiarySteps {
 
         /** Something the live game must have shown for this item to have been staged at all */
         Item need(Function<Item, String> need) {
-            this.needs.add(need);
+            this.needs.add(need instanceof Need named ? named : new Need("need " + (this.needs.size() + 1), need));
+            return this;
+        }
+
+        /** The same, with a name that is reported when the live game never shows it */
+        Item need(String name, Function<Item, String> need) {
+            this.needs.add(new Need(name, need));
             return this;
         }
 
         Item note(String note) {
             this.note = note;
             return this;
+        }
+    }
+
+    /** A staging check that can say its own name when the live game never shows it */
+    static final class Need implements Function<Item, String> {
+        final String name;
+        private final Function<Item, String> body;
+
+        Need(String name, Function<Item, String> body) {
+            this.name = name;
+            this.body = body;
+        }
+
+        @Override
+        public String apply(Item item) {
+            return this.body.apply(item);
         }
     }
 
@@ -121,10 +148,20 @@ final class BestiarySteps {
         open.clear();
     }
 
-    static void end() {
+    /**
+     * Closes the items opened since {@link #begin()}. Two quiet ticks pass first, so the last thing staged is in the
+     * census, and whatever the caller does next, such as clearing the field, falls outside the window.
+     */
+    static void end() throws Exception {
+        try {
+            waitTicks(2);
+        } catch (Throwable t) {
+            problems.add("the quiet ticks at the end of a stage did not pass: " + t);
+        }
+        int to = tick();
         for (Item item : open) {
             item.from = openFrom;
-            item.to = tick() + 2;
+            item.to = to;
         }
         open.clear();
     }
@@ -250,7 +287,7 @@ final class BestiarySteps {
     // --- What the live game showed, for proving a thing was staged ---
 
     static Function<Item, String> present(String label, int atLeast) {
-        return item -> {
+        return new Need("at least " + atLeast + " " + label, item -> {
             int ticks = 0, most = 0;
             TreeSet<Integer> ids = new TreeSet<>();
             for (Census census : Census.live.subMap(item.from, true, item.to, true).values()) {
@@ -265,7 +302,7 @@ final class BestiarySteps {
                 most = Math.max(most, here);
             }
             return ids.size() < atLeast ? null : ids.size() + " " + label + " over " + ticks + " ticks (" + most + " at once)";
-        };
+        });
     }
 
     static Function<Item, String> state(String label, String fragment) {
@@ -273,7 +310,7 @@ final class BestiarySteps {
     }
 
     static Function<Item, String> where(String label, String what, Predicate<Census.Thing> test) {
-        return item -> {
+        return new Need(label + ": " + what, item -> {
             int ticks = 0, first = -1;
             for (Census census : Census.live.subMap(item.from, true, item.to, true).values()) {
                 for (Census.Thing thing : census.things.values()) {
@@ -285,12 +322,12 @@ final class BestiarySteps {
                 }
             }
             return ticks == 0 ? null : label + " " + what + " on " + ticks + " ticks from " + first;
-        };
+        });
     }
 
     /** Blocks changed inside a box of the staging ground while the item was staged: at least and at most so many */
     static Function<Item, String> changed(int x1, int z1, int x2, int z2, int atLeast, int atMost) {
-        return item -> {
+        return new Need(atLeast + " to " + atMost + " block changes inside " + x1 + "," + z1 + " to " + x2 + "," + z2, item -> {
             int changed = 0;
             for (Census census : Census.live.subMap(item.from, true, item.to, true).values()) {
                 if (census.changes == null) {
@@ -305,11 +342,11 @@ final class BestiarySteps {
                 }
             }
             return changed < atLeast || changed > atMost ? null : changed + " block changes";
-        };
+        });
     }
 
     static Function<Item, String> blockChange(String fragment) {
-        return item -> {
+        return new Need("a block change of '" + fragment + "'", item -> {
             int changed = 0, first = -1;
             for (Census census : Census.live.subMap(item.from, true, item.to, true).values()) {
                 if (census.changes != null) {
@@ -322,11 +359,11 @@ final class BestiarySteps {
                 }
             }
             return changed == 0 ? null : changed + " blocks '" + fragment + "' from tick " + first;
-        };
+        });
     }
 
     static Function<Item, String> blockEntity(String kind, String fragment) {
-        return item -> {
+        return new Need(kind + " with " + fragment, item -> {
             int ticks = 0;
             for (Census census : Census.live.subMap(item.from, true, item.to, true).values()) {
                 for (String entity : census.blockEntities.values()) {
@@ -337,11 +374,11 @@ final class BestiarySteps {
                 }
             }
             return ticks == 0 ? null : kind + " with " + fragment + " on " + ticks + " ticks";
-        };
+        });
     }
 
     static Function<Item, String> seen(String what, Predicate<Census> test) {
-        return item -> {
+        return new Need(what, item -> {
             int ticks = 0, first = -1;
             for (Census census : Census.live.subMap(item.from, true, item.to, true).values()) {
                 if (test.test(census)) {
@@ -350,15 +387,15 @@ final class BestiarySteps {
                 }
             }
             return ticks == 0 ? null : what + " on " + ticks + " ticks from " + first;
-        };
+        });
     }
 
     static Function<Item, String> heard(String sound) {
-        return item -> {
+        return new Need("heard " + sound, item -> {
             long times = Census.liveSounds.stream().filter(line -> line.endsWith(" " + sound) && Integer.parseInt(line.substring(0, line.indexOf(' '))) >= item.from
                 && Integer.parseInt(line.substring(0, line.indexOf(' '))) <= item.to).count();
             return times == 0 ? null : sound + " heard " + times + " times";
-        };
+        });
     }
 
     // --- The run ---
@@ -419,6 +456,7 @@ final class BestiarySteps {
         Census.stop();
         test.tool("replay_set_speed", args("tick_rate", 20));
         int played = tally.compared;
+        noteCoverage(played, length);
         test.log("bestiary: played through " + length + " ticks, " + played + " compared with the live game");
 
         // --- Jump through it forwards, then backwards: every landing going back starts from a stored world ---
@@ -506,21 +544,40 @@ final class BestiarySteps {
     }
 
     /** What the live game showed of each item's needs: it all lies in the census of the recording, so it is weighed once, as the recording ends */
-    private static void weigh() {
+    static void weigh() {
         for (Item item : items) {
             for (Function<Item, String> need : item.needs) {
+                String name = need instanceof Need named ? named.name : "a need";
                 String seen;
                 try {
                     seen = need.apply(item);
                 } catch (Throwable t) {
-                    seen = null;
+                    item.missing.add(name + " threw " + t.getClass().getSimpleName());
+                    problems.add(item.name + ": " + name + " threw " + t);
+                    continue;
                 }
                 if (seen == null) {
-                    item.missing.add("need " + (item.needs.indexOf(need) + 1));
+                    item.missing.add(name);
                 } else {
                     item.evidence.add(seen);
                 }
             }
+        }
+    }
+
+    /**
+     * Play compares a tick only when the client actually reaches it. A large gap means those ticks were never judged,
+     * so the run says so instead of treating the sample as the whole recording.
+     */
+    static void noteCoverage(int played, int through) {
+        int expected = 0;
+        for (Integer tick : Census.live.keySet()) {
+            if (tick <= through) {
+                expected++;
+            }
+        }
+        if (expected > 50 && played + Math.max(50, expected / 10) < expected) {
+            problems.add("play compared " + played + " of " + expected + " ticks; the ones skipped were not judged");
         }
     }
 
@@ -753,26 +810,60 @@ final class BestiarySteps {
         report("BESTIARY", "bestiary", folder, tally, total, played, stops);
     }
 
-    /** The result, item by item, under a heading of the step's own (the addon and train steps report the same way) */
+    /** The result, item by item. A difference is one failure however many items it touches, and only on the ticks inside each item. */
     static void report(String heading, String step, Path folder, Census.Tally tally, int total, int played, int stops) throws Exception {
         List<String> lines = new ArrayList<>();
         List<String> failures = new ArrayList<>();
-        java.util.Set<Census.Entry> claimed = new java.util.HashSet<>();
-        int fine = 0;
+        java.util.Map<Item, List<String>> wrongByItem = new java.util.LinkedHashMap<>();
+        java.util.Map<Item, List<String>> noteByItem = new java.util.LinkedHashMap<>();
         for (Item item : items) {
-            // Weighed as the recording ended, or kept with the fixture
-            List<String> evidence = item.evidence;
-            List<String> missing = item.missing;
-            List<String> wrong = new ArrayList<>();
-            List<String> noted = new ArrayList<>();
-            for (Census.Entry entry : tally.entries.values()) {
-                if (!item.labels.contains(entry.label) || entry.ticks.subSet(item.from, true, item.to, true).isEmpty()) {
+            wrongByItem.put(item, new ArrayList<>());
+            noteByItem.put(item, new ArrayList<>());
+        }
+        List<String> loose = new ArrayList<>();
+        int differences = 0;
+        for (Census.Entry entry : tally.entries.values()) {
+            TreeSet<Integer> ownedTicks = new TreeSet<>();
+            List<String> owners = new ArrayList<>();
+            TreeSet<Integer> uncovered = new TreeSet<>(entry.ticks);
+            for (Item item : items) {
+                if (item.from > item.to || !item.labels.contains(entry.label)) {
                     continue;
                 }
-                claimed.add(entry);
-                (entry.warning ? noted : wrong).add(entry.toString());
+                java.util.SortedSet<Integer> hit = entry.ticks.subSet(item.from, true, item.to, true);
+                if (hit.isEmpty()) {
+                    continue;
+                }
+                uncovered.removeAll(hit);
+                (entry.warning ? noteByItem : wrongByItem).get(item).add(entry.describe(new TreeSet<>(hit)));
+                if (!entry.warning) {
+                    owners.add(item.name);
+                    ownedTicks.addAll(hit);
+                }
             }
-            String status = !missing.isEmpty() ? "NOT STAGED" : wrong.isEmpty() ? "OK" : "FAIL";
+            if (!entry.warning && !ownedTicks.isEmpty()) {
+                differences++;
+                failures.add(entry.describe(ownedTicks) + " — " + names(owners));
+            }
+            if (!uncovered.isEmpty()) {
+                String text = entry.describe(uncovered);
+                loose.add(text);
+                if (!entry.warning) {
+                    differences++;
+                    failures.add("unclaimed: " + text);
+                }
+            }
+        }
+        int fine = 0;
+        int notStaged = 0;
+        int touched = 0;
+        for (Item item : items) {
+            List<String> evidence = item.evidence;
+            List<String> missing = item.missing;
+            List<String> wrong = wrongByItem.get(item);
+            List<String> noted = noteByItem.get(item);
+            // A playback difference stays a failure when the live game also failed to stage the item
+            String status = !wrong.isEmpty() ? "FAIL" : !missing.isEmpty() ? "NOT STAGED" : "OK";
             String line = heading + " " + status + " | " + item.name + " | ticks " + item.from + "-" + item.to + " | live: " + (evidence.isEmpty() ? "-" : String.join("; ", evidence))
                 + (missing.isEmpty() ? "" : " | the live game never showed: " + missing) + (item.note.isEmpty() ? "" : " | " + item.note);
             lines.add(line);
@@ -780,21 +871,19 @@ final class BestiarySteps {
             noted.forEach(one -> lines.add("    " + one));
             if (status.equals("OK")) {
                 fine++;
-            } else {
-                failures.add(item.name + (missing.isEmpty() ? " (" + wrong.size() + " differences)" : " (not staged)"));
+            }
+            if (!wrong.isEmpty()) {
+                touched++;
+            }
+            if (!missing.isEmpty()) {
+                notStaged++;
+                failures.add(item.name + " (not staged: " + String.join(", ", missing) + ")");
             }
         }
-        List<String> other = new ArrayList<>();
-        for (Census.Entry entry : tally.entries.values()) {
-            if (!claimed.contains(entry)) {
-                other.add(entry.toString());
-                if (!entry.warning) {
-                    failures.add("unclaimed: " + entry.mode + " " + entry.label + " " + entry.what);
-                }
-            }
-        }
-        lines.add(heading + " differences that belong to no item: " + other.size());
-        other.forEach(one -> lines.add("    " + one));
+        lines.add(heading + " differences that belong to no item: " + loose.size());
+        loose.forEach(one -> lines.add("    " + one));
+        lines.add(heading + " counted once: " + differences + " differences, " + notStaged + " items not staged");
+        failures.forEach(one -> lines.add("    " + one));
         lines.add(heading + " staging problems: " + problems.size());
         problems.forEach(one -> lines.add("    " + one));
         StringBuilder far = new StringBuilder();
@@ -809,13 +898,21 @@ final class BestiarySteps {
         pictureNotes.forEach(note -> lines.add(heading + " pictures: " + note));
         lines.add(heading + " marks: " + marks);
         lines.add(heading + " sounds: " + Census.liveSounds.size() + " live, " + Census.playSounds.size() + " in play and landings, " + Census.skippedSounds.size() + " from skipped time");
-        String summary = heading + " SUMMARY: " + items.size() + " items, " + fine + " OK, " + (items.size() - fine) + " not; " + total + " ticks recorded, " + played + " compared in play, "
-            + stops + " ticks jumped to each way, " + tally.thingsCompared + " entity comparisons; " + tally.entries.size() + " kinds of difference; " + problems.size() + " staging problems";
+        String summary = heading + " SUMMARY: " + items.size() + " items, " + fine + " OK, " + notStaged + " not staged, " + touched + " touched by " + differences
+            + " differences; " + total + " ticks recorded, " + played + " compared in play, " + stops + " ticks jumped to each way, " + tally.thingsCompared
+            + " entity comparisons; " + tally.entries.size() + " kinds of difference; " + problems.size() + " staging problems";
         lines.add(summary);
         Files.write(folder.resolve("report.txt"), lines, StandardCharsets.UTF_8);
         lines.forEach(line -> Host.LOGGER.info("{}", line));
-        check(failures.isEmpty() && problems.isEmpty(), step + ": " + failures.size() + " items or differences are wrong and " + problems.size() + " things could not be staged (see the " + heading + " lines): "
-            + String.join("; ", failures.subList(0, Math.min(12, failures.size()))));
+        check(failures.isEmpty() && problems.isEmpty(), step + ": " + differences + " differences, " + notStaged + " items not staged and " + problems.size()
+            + " staging problems (see the " + heading + " lines): " + String.join("; ", failures.subList(0, Math.min(12, failures.size()))));
+    }
+
+    /** The first few item names a difference was charged to */
+    private static String names(List<String> owners) {
+        int shown = Math.min(6, owners.size());
+        String text = String.join("; ", owners.subList(0, shown));
+        return owners.size() > shown ? text + " and " + (owners.size() - shown) + " more" : text;
     }
 
 }

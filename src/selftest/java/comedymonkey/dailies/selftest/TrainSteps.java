@@ -183,17 +183,7 @@ final class TrainSteps {
         }
         JsonObject finished = test.tool("recording_finish", args("name", "Trains"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);
-        for (BestiarySteps.Item item : BestiarySteps.items) {
-            for (java.util.function.Function<BestiarySteps.Item, String> need : item.needs) {
-                String seen;
-                try {
-                    seen = need.apply(item);
-                } catch (Throwable t) {
-                    seen = null;
-                }
-                (seen == null ? item.missing : item.evidence).add(seen == null ? "need " + (item.needs.indexOf(need) + 1) : seen);
-            }
-        }
+        BestiarySteps.weigh();
         CensusPlayback.explain(test, "trains");
         test.log("trains: recorded " + Census.live.lastKey() + " ticks; " + problems.size() + " staging problems");
         return true;

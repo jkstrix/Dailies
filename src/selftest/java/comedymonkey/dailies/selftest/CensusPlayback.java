@@ -53,6 +53,7 @@ final class CensusPlayback {
             Census.stop();
             test.tool("replay_set_speed", args("tick_rate", 20));
             int played = tally.compared;
+            BestiarySteps.noteCoverage(played, length);
             test.log(step + ": played through " + length + " ticks, " + played + " compared with the live game");
 
             // By jump, forwards, then backwards

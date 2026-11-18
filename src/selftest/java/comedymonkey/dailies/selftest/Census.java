@@ -748,13 +748,13 @@ final class Census {
 
     // --- Comparing ---
 
-    /** One kind of difference, with how often and where it was first seen */
+    /** One kind of difference, with every tick it was seen and an example from each stretch of twenty */
     static final class Entry {
         final String mode, label, what;
         final boolean warning;
-        int count;
         final TreeSet<Integer> ticks = new TreeSet<>();
-        String first;
+        /** The first detail stored in each band of twenty ticks, so a later stretch can quote its own */
+        final TreeMap<Integer, String> examples = new TreeMap<>();
 
         Entry(String mode, String label, String what, boolean warning) {
             this.mode = mode;
@@ -763,10 +763,37 @@ final class Census {
             this.warning = warning;
         }
 
+        /** How this difference reads for the ticks in question */
+        String describe(java.util.SortedSet<Integer> span) {
+            StringBuilder text = new StringBuilder();
+            if (this.warning) {
+                text.append("(noted) ");
+            }
+            text.append(this.mode).append(": ").append(this.label).append(' ').append(this.what);
+            if (span.isEmpty()) {
+                return text.toString();
+            }
+            String detail = "";
+            for (Map.Entry<Integer, String> example : this.examples.entrySet()) {
+                if (span.contains(example.getKey())) {
+                    detail = example.getValue();
+                    break;
+                }
+            }
+            int found = span.size();
+            text.append(", on ").append(found).append(found == 1 ? " tick" : " ticks").append(" from ").append(span.first());
+            if (found > 1) {
+                text.append(" to ").append(span.last());
+            }
+            if (!detail.isEmpty()) {
+                text.append(" [").append(detail.length() > 420 ? detail.substring(0, 420) + "..." : detail).append(']');
+            }
+            return text.toString();
+        }
+
         @Override
         public String toString() {
-            return (this.warning ? "(noted) " : "") + this.mode + ": " + this.label + " " + this.what + ", " + this.count + " time" + (this.count == 1 ? "" : "s") + " from tick " + this.ticks.first()
-                + (this.ticks.size() > 1 ? " to " + this.ticks.last() : "") + (this.first.isEmpty() ? "" : " [" + (this.first.length() > 420 ? this.first.substring(0, 420) + "..." : this.first) + "]");
+            return describe(this.ticks);
         }
     }
 
@@ -783,12 +810,10 @@ final class Census {
 
         synchronized void add(String mode, String label, String what, int tick, String detail, boolean warning) {
             Entry entry = this.entries.computeIfAbsent(mode + "|" + label + "|" + what, key -> new Entry(mode, label, what, warning));
-            entry.count++;
-            if (entry.ticks.size() < 4000) {
-                entry.ticks.add(tick);
-            }
-            if (entry.first == null) {
-                entry.first = detail;
+            entry.ticks.add(tick);
+            int band = Math.floorDiv(tick, 20) * 20;
+            if (entry.examples.subMap(band, true, band + 19, true).isEmpty()) {
+                entry.examples.put(tick, detail == null ? "" : detail);
             }
         }
     }
@@ -822,9 +847,10 @@ final class Census {
             return;
         }
         if (!then.dimension.equals(now.dimension)) {
-            // On the tick a change of dimension is recorded, play shows the old world for that one tick and builds the new
-            // one before the next: the live game was already there. Noted, not counted
-            tally.add(mode, "dimension", "differs", tick, "live " + then.dimension + ", playback " + now.dimension, mode.equals("play") && then.changes == null);
+            // On the tick a change of dimension is recorded, playback shows the old world for that one tick and builds
+            // the new one before the next: the live game was already there. The same tick on a jump is the same lag.
+            // Noted, not counted. A mismatch that lasts past that tick still counts.
+            tally.add(mode, "dimension", "differs", tick, "live " + then.dimension + ", playback " + now.dimension, then.changes == null);
             return;
         }
         for (Map.Entry<Integer, Thing> entry : then.things.entrySet()) {
