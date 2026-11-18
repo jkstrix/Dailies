@@ -65,21 +65,30 @@ final class Form {
         return this;
     }
 
-    /** Takes every row away. A box being typed into is left first, its value handed over */
+    /**
+     * Takes every row away. A box of this form being typed into is left first, its value handed over, and the ring
+     * leaves a control of this form. A box or a ring in another form is left alone: that form is not changing.
+     */
     void clear() {
-        if (Entry.focused != null && this.holdsFocus()) {
+        Entry typing = Entry.focused;
+        if (typing != null && this.holds(typing)) {
             Entry.blur();
         }
-        if (Gadget.focus != null && Gadget.focus.clipTop != Integer.MIN_VALUE) {
+        Gadget ringed = Gadget.focus;
+        if (ringed != null && this.holds(ringed)) {
             Gadget.focus = null;
         }
         this.rows.clear();
     }
 
-    private boolean holdsFocus() {
-        Entry typing = Entry.focused;
-        // Boxes in a bar are clipped by nothing; every other box sits in a form, and only one form is typed in at a time
-        return typing != null && typing.clipTop != Integer.MIN_VALUE;
+    /** Whether a control is one of this form's rows or inside one, whether or not it can be seen or reached now */
+    boolean holds(Gadget control) {
+        for (Gadget row : this.rows) {
+            if (row.holds(control)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     boolean isEmpty() {

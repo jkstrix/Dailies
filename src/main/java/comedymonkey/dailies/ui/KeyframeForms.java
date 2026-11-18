@@ -335,7 +335,7 @@ final class KeyframeForms {
             Interpolation mode = Interpolation.parse(id);
             EditHistory history = EditorState.history();
             Set<KeyframeRef> all = new LinkedHashSet<>(EditorState.selection);
-            history.beginGroup("Set interpolation of " + all.size() + " keyframes to " + mode.id());
+            history.beginGroup(Kit.t("many.blend.step", all.size(), mode.id()).getString());
             try {
                 for (KeyframeRef ref : all) {
                     history.setInterpolation(ref.track(), ref.tick(), mode);

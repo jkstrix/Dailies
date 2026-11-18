@@ -97,8 +97,15 @@ public final class EditorScreen extends Screen {
     private Gadget.Push sideFold;
     private Gadget.Push viewerFold;
     private Gadget.Push playersFold;
-    private @Nullable Gadget held;
-    private int selectionSeen = 0;
+    /** How the mouse and the keys reach the controls, as in every other Dailies screen */
+    private final InputRouter input = new InputRouter();
+    /** The revision of the selection the keyframe tab last saw */
+    private long selectionSeen = -1;
+    /** The things near the viewer the pick panel lists, looked for again every 0.8 s, and the word for them */
+    private List<Entity> pickNear = List.of();
+    private long pickNearAt = 0;
+    private int pickNearFor = 0;
+    private String pickShape = "";
 
     private EditorLayout.Layout layout = EditorLayout.of(new EditorLayout.Input(1920, 1080, 2, false, false, false, false, 0, 0, 0, 0, 40, 40));
     /** Where the thin lines between the bar's groups stand */
@@ -247,10 +254,7 @@ public final class EditorScreen extends Screen {
     }
 
     private void build() {
-        Entry.drop();
-        Menu.close();
-        Gadget.focus = null;
-        this.held = null;
+        this.input.begin();
         EditorState.attach();
         this.top.clear();
         this.topLeft.clear();
@@ -498,10 +502,7 @@ public final class EditorScreen extends Screen {
     /** The screen was taken away. After a jump {@link #watch} puts it back; otherwise it stays away */
     @Override
     public void removed() {
-        EditorState.guard(Entry::blur);
-        Menu.close();
-        Gadget.focus = null;
-        this.held = null;
+        this.input.end();
         this.stopFlying();
         if (this.minecraft != null) {
             // Whatever comes next is drawn at the game's own size
@@ -563,7 +564,7 @@ public final class EditorScreen extends Screen {
                 }
                 sceneSeen = scene;
             }
-            int selected = EditorState.selection.hashCode();
+            long selected = EditorState.selection.revision();
             if (selected != this.selectionSeen) {
                 this.selectionSeen = selected;
                 this.keyframeForm.forget();
@@ -583,7 +584,7 @@ public final class EditorScreen extends Screen {
             Menu menu = Menu.open;
             if (menu != null) {
                 menu.draw(graphics, this.font, mouseX, mouseY, this.width, this.height);
-            } else if (!this.flying && this.held == null && !this.timeline.dragging()) {
+            } else if (!this.flying && this.input.held() == null && !this.timeline.dragging()) {
                 Component words = this.tipAt(mouseX, mouseY);
                 if (words != null) {
                     this.setTooltipForNextRenderPass(words);
@@ -612,8 +613,7 @@ public final class EditorScreen extends Screen {
     private void refresh(Form form) {
         String shape;
         if (form == this.pickForm) {
-            // The entities near the viewer come and go
-            shape = System.identityHashCode(EditorState.pick) + ":" + System.currentTimeMillis() / 800;
+            shape = this.pickShape();
         } else if (form == this.looksForm) {
             shape = LooksForms.shape();
         } else if (form == this.exportForm) {
@@ -636,6 +636,27 @@ public final class EditorScreen extends Screen {
         }
     }
 
+    /**
+     * The entities near the viewer come and go, so they are looked for again every 0.8 s. The panel is built afresh
+     * only when which of them it lists has changed: building it takes the keys' ring away.
+     */
+    private String pickShape() {
+        EditorState.Pick pick = EditorState.pick;
+        int which = System.identityHashCode(pick);
+        long now = net.minecraft.Util.getMillis();
+        if (which != this.pickNearFor || now - this.pickNearAt >= 800 || this.pickShape.isEmpty()) {
+            this.pickNearFor = which;
+            this.pickNearAt = now;
+            this.pickNear = pick == null || pick.block() ? List.of() : ViewPick.nearby(pick.playersOnly(), 40);
+            int[] ids = new int[this.pickNear.size()];
+            for (int i = 0; i < ids.length; i++) {
+                ids[i] = this.pickNear.get(i).getId();
+            }
+            this.pickShape = PickShape.of(which, ids);
+        }
+        return this.pickShape;
+    }
+
     private void buildPick() {
         EditorState.Pick pick = EditorState.pick;
         this.pickForm.clear();
@@ -651,21 +672,22 @@ public final class EditorScreen extends Screen {
         if (pick.block()) {
             return;
         }
-        List<Entity> near = ViewPick.nearby(pick.playersOnly(), 40);
+        List<Entity> near = this.pickNear;
         if (near.isEmpty()) {
             this.pickForm.add(new Gadget.Note(Kit.t(pick.playersOnly() ? "pick.no_players" : "pick.no_entities")));
             return;
         }
         this.pickForm.add(new Gadget.Words(() -> Kit.t("pick.nearby"), Controls.PARCHMENT_DIM));
         for (Entity entity : near) {
-            this.pickForm.add(new Gadget.Push(Component.literal(ViewPick.describe(entity)), () -> {
+            // The distance in its name is kept up to date as things move, without building the panel again
+            this.pickForm.add(new Gadget.Push(() -> Component.literal(ViewPick.describe(entity)), () -> {
                 if (entity.isRemoved()) {
                     EditorState.say(Kit.t("pick.gone"));
                     return;
                 }
                 EditorState.pick = null;
                 pick.entity().accept(entity);
-            }).tip(Kit.t("pick.choose.tip", ViewPick.describe(entity))));
+            }).liveTip(() -> Kit.t("pick.choose.tip", ViewPick.describe(entity))));
         }
     }
 
@@ -890,21 +912,16 @@ public final class EditorScreen extends Screen {
     }
 
     private @Nullable Component tipAt(double mouseX, double mouseY) {
-        for (Gadget gadget : this.top) {
-            Component words = gadget.height > 0 ? gadget.tipAt(mouseX, mouseY) : null;
-            if (words != null) {
-                return words;
-            }
+        Component barWords = InputRouter.tipAmong(this.top, mouseX, mouseY);
+        if (barWords != null) {
+            return barWords;
         }
         EditorLayout.Layout at = this.layout;
         Component words = null;
         if (at.side().contains(mouseX, mouseY)) {
             words = this.sideFold.tipAt(mouseX, mouseY);
-            List<Gadget> heads = this.sideOpen() ? this.tabs : this.edgeTabs;
-            for (Gadget tab : heads) {
-                if (words == null && tab.height > 0) {
-                    words = tab.tipAt(mouseX, mouseY);
-                }
+            if (words == null) {
+                words = InputRouter.tipAmong(this.sideOpen() ? this.tabs : this.edgeTabs, mouseX, mouseY);
             }
             if (words == null && this.sideOpen()) {
                 words = this.sideForm().tipAt(mouseX, mouseY);
@@ -980,20 +997,11 @@ public final class EditorScreen extends Screen {
             }
             return;
         }
-        Menu menu = Menu.open;
-        if (menu != null) {
-            menu.press(mouseX, mouseY);
+        if (InputRouter.beforeClick(mouseX, mouseY)) {
             return;
         }
-        Entry typing = Entry.focused;
-        if (typing != null && !typing.over(mouseX, mouseY)) {
-            // What was typed is handed over before the click does anything, so the click acts on the new value
-            Entry.blur();
-        }
-        // The ring is for the keys; the mouse says where it is by itself
-        Gadget.focus = null;
         if (this.overPanels(mouseX, mouseY)) {
-            this.held = this.pressPanels(mouseX, mouseY, button);
+            this.input.hold(this.pressPanels(mouseX, mouseY, button));
             return;
         }
         if (button == 1) {
@@ -1028,24 +1036,15 @@ public final class EditorScreen extends Screen {
     private @Nullable Gadget pressPanels(double mouseX, double mouseY, int button) {
         EditorLayout.Layout at = this.layout;
         if (at.bar().contains(mouseX, mouseY)) {
-            for (Gadget gadget : this.top) {
-                Gadget hit = gadget.height > 0 ? gadget.press(mouseX, mouseY, button) : null;
-                if (hit != null) {
-                    return hit;
-                }
-            }
-            return null;
+            return InputRouter.pressAmong(this.top, mouseX, mouseY, button);
         }
         if (at.side().contains(mouseX, mouseY)) {
             Gadget hit = this.sideFold.press(mouseX, mouseY, button);
+            if (hit == null) {
+                hit = InputRouter.pressAmong(this.sideOpen() ? this.tabs : this.edgeTabs, mouseX, mouseY, button);
+            }
             if (hit != null) {
                 return hit;
-            }
-            for (Gadget tab : this.sideOpen() ? this.tabs : this.edgeTabs) {
-                hit = tab.height > 0 ? tab.press(mouseX, mouseY, button) : null;
-                if (hit != null) {
-                    return hit;
-                }
             }
             return this.sideOpen() ? this.sideForm().press(mouseX, mouseY, button) : null;
         }
@@ -1093,8 +1092,7 @@ public final class EditorScreen extends Screen {
         if (button == 1) {
             this.stopFlying();
         }
-        Gadget was = this.held;
-        this.held = null;
+        Gadget was = this.input.letGo();
         if (this.usable()) {
             EditorState.guard(() -> {
                 if (was != null) {
@@ -1115,9 +1113,7 @@ public final class EditorScreen extends Screen {
         }
         if (button == 0 && this.usable() && !this.hidden()) {
             EditorState.guard(() -> {
-                if (this.held != null) {
-                    this.held.drag(mouseX, mouseY);
-                }
+                this.input.drag(mouseX, mouseY);
                 this.timeline.dragTo(mouseX, mouseY);
             });
         }
@@ -1181,13 +1177,13 @@ public final class EditorScreen extends Screen {
     }
 
     private void key(int keyCode, int scanCode, int modifiers) {
-        boolean back = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        boolean back = InputRouter.back(modifiers);
         Entry typing = Entry.focused;
         if (typing != null) {
             // A real box, and not the stand-in that hands the keys to an open menu
             boolean box = Entry.typing();
-            typing.key(keyCode, scanCode, modifiers);
-            if (box && keyCode == GLFW.GLFW_KEY_TAB && Entry.focused == null && Menu.open == null && !this.hidden()) {
+            boolean handedOver = InputRouter.typeKey(typing, keyCode, scanCode, modifiers);
+            if (box && handedOver && Menu.open == null && !this.hidden()) {
                 // Tab hands over what was typed and moves on, as it does in every other Dailies screen
                 this.moveFocus(typing, back);
             }
@@ -1307,28 +1303,8 @@ public final class EditorScreen extends Screen {
     }
 
     private void moveFocus(@Nullable Gadget from, boolean back) {
-        List<Gadget> order = this.order();
-        if (order.isEmpty()) {
-            Gadget.focus = null;
-            return;
-        }
-        int at = from == null ? -1 : order.indexOf(from);
-        int next = at < 0 ? (back ? order.size() - 1 : 0) : Math.floorMod(at + (back ? -1 : 1), order.size());
-        Gadget control = order.get(next);
-        if (control instanceof Entry box) {
-            box.focus();
-        } else {
-            Entry.blur();
-            Gadget.focus = control;
-        }
         // A control further down a panel than it shows is scrolled into sight
-        for (Form form : List.of(this.viewerForm, this.playersForm, this.sideForm())) {
-            List<Gadget> inside = new ArrayList<>();
-            form.collect(inside);
-            if (inside.contains(control)) {
-                form.reveal(control);
-            }
-        }
+        InputRouter.moveFocus(this.order(), from, back, List.of(this.viewerForm, this.playersForm, this.sideForm()));
     }
 
     @Override

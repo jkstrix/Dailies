@@ -26,8 +26,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 /**
@@ -50,12 +48,6 @@ public final class SettingsScreen extends KitScreen {
     private static boolean visited = false;
     /** Lists of known values for settings that are stored as plain text, by a pattern for the setting's name */
     private static final Map<Pattern, List<String>> OFFERED = new LinkedHashMap<>();
-    /** One at a time and in order, so that two changes to one setting cannot overtake each other on their way to the file */
-    private static final ExecutorService SAVER = Executors.newSingleThreadExecutor(work -> {
-        Thread thread = new Thread(work, "Dailies-Settings-Save");
-        thread.setDaemon(true);
-        return thread;
-    });
 
     private static final List<String> COLOURS = List.of("red", "orange", "yellow", "green", "cyan", "blue", "purple", "white");
     private static final List<String> LANGUAGES = List.of("", "en", "de", "fr", "es", "it", "pt", "nl", "sv", "no", "da", "fi", "pl", "cs", "uk", "ru",
@@ -71,8 +63,6 @@ public final class SettingsScreen extends KitScreen {
         offer("(?i).*container", List.of("mp4", "mkv", "webm", "mov"));
     }
 
-    /** Changes on their way to the file: what the screen shows for a setting until the save is done */
-    private final Map<String, Object> pending = new ConcurrentHashMap<>();
     /** What a slider is being dragged through, shown but not yet set */
     private final Map<String, Object> trying = new ConcurrentHashMap<>();
     private final Form list = new Form();
@@ -194,7 +184,8 @@ public final class SettingsScreen extends KitScreen {
         if (tried != null) {
             return tried;
         }
-        Object waiting = this.pending.get(setting.name());
+        // A change on its way to the file is shown until the save is done, wherever it was made
+        Object waiting = SettingsWriter.pending(setting.name());
         return waiting != null ? waiting : setting.get();
     }
 
@@ -211,25 +202,12 @@ public final class SettingsScreen extends KitScreen {
     private void save(Setting<?> setting, Object value) {
         String name = setting.name();
         this.trying.remove(name);
-        this.pending.put(name, value);
-        Minecraft minecraft = Minecraft.getInstance();
-        SAVER.execute(() -> {
-            Component trouble = null;
-            try {
-                Host.get().saveSetting(name, value);
-            } catch (IllegalArgumentException refused) {
-                trouble = Component.literal(String.valueOf(refused.getMessage()));
-            } catch (RuntimeException | LinkageError e) {
-                Host.LOGGER.error("Dailies: the setting {} could not be saved", name, e);
-                trouble = t("save_failed");
+        SettingsWriter.save(name, value, trouble -> {
+            if (trouble instanceof IllegalArgumentException refused) {
+                Notices.show(Component.literal(String.valueOf(refused.getMessage())));
+            } else if (trouble != null) {
+                Notices.show(t("save_failed"));
             }
-            Component said = trouble;
-            minecraft.execute(() -> {
-                this.pending.remove(name, value);
-                if (said != null) {
-                    Notices.show(said);
-                }
-            });
         });
     }
 
@@ -414,9 +392,9 @@ public final class SettingsScreen extends KitScreen {
         }
     }
 
-    /** Whether a change made here is still on its way to the file */
+    /** Whether a change is still on its way to the file */
     public boolean saving() {
-        return !this.pending.isEmpty();
+        return SettingsWriter.saving();
     }
 
     public boolean changed(String name) {
@@ -547,6 +525,11 @@ public final class SettingsScreen extends KitScreen {
         void collect(List<Gadget> order) {
             order.add(this);
             this.reset.collect(order);
+        }
+
+        @Override
+        boolean holds(Gadget control) {
+            return control == this || control == this.reset;
         }
 
         @Override
@@ -805,6 +788,11 @@ public final class SettingsScreen extends KitScreen {
         }
 
         @Override
+        boolean holds(Gadget other) {
+            return other == this || this.control.holds(other) || other == this.reset;
+        }
+
+        @Override
         int heightFor(Font font, int forWidth) {
             return Math.max(Kit.ROW, this.control.heightFor(font, this.controlWidth(forWidth)));
         }
@@ -955,6 +943,11 @@ public final class SettingsScreen extends KitScreen {
         void collect(List<Gadget> order) {
             this.box.collect(order);
             this.test.collect(order);
+        }
+
+        @Override
+        boolean holds(Gadget control) {
+            return control == this || control == this.box || control == this.test;
         }
 
         private int boxWidth(int of) {

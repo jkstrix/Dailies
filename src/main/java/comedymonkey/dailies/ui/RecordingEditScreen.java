@@ -300,7 +300,7 @@ final class RecordingEditScreen extends KitScreen {
             return;
         }
         Thread waiter = new Thread(() -> {
-            String trouble = null;
+            Component trouble = null;
             try {
                 long deadline = System.currentTimeMillis() + 60_000;
                 while (Export.active() && System.currentTimeMillis() < deadline) {
@@ -308,12 +308,12 @@ final class RecordingEditScreen extends KitScreen {
                 }
                 Path written = Export.lastOutput();
                 if (Export.active() || Export.lastError() != null || written == null || !Files.isRegularFile(written)) {
-                    trouble = Export.lastError() != null ? Export.lastError() : "no picture was written";
+                    trouble = Export.lastError() != null ? Component.literal(Export.lastError()) : t("still.no_picture");
                 } else {
                     Library.setPreview(file, Files.readAllBytes(written));
                 }
             } catch (Exception e) {
-                trouble = String.valueOf(e.getMessage());
+                trouble = Component.literal(String.valueOf(e.getMessage()));
             } finally {
                 try {
                     Files.deleteIfExists(output);
@@ -322,7 +322,7 @@ final class RecordingEditScreen extends KitScreen {
                     // A small file in the temporary folder
                 }
             }
-            String said = trouble;
+            Component said = trouble;
             game.execute(() -> {
                 game.setScreen(back);
                 Notices.show(said == null ? t("still.done") : t("still.failed", said));

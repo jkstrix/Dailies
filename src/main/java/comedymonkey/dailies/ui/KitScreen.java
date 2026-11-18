@@ -14,7 +14,8 @@ import java.util.List;
 /**
  * What every Dailies screen other than the editor is built on: one walnut plate in the middle of the window with the
  * kit's controls on it. It hands the mouse and the keys to the controls, the open menu and the box being typed into,
- * moves the keys from control to control with Tab, and shows explanations in the house colours.
+ * moves the keys from control to control with Tab, and shows explanations in the house colours. How the mouse and the
+ * keys reach the controls is {@link InputRouter}'s, shared with the editor.
  * <p>
  * A screen says what is on it in {@link #build}, where it all goes in {@link #arrange}, and draws its own words in
  * {@link #paint}.
@@ -25,7 +26,7 @@ public abstract class KitScreen extends Screen {
     /** The controls that stay where they are; those that scroll are in {@link #forms} */
     final List<Gadget> fixed = new ArrayList<>();
     final List<Form> forms = new ArrayList<>();
-    private @Nullable Gadget held;
+    private final InputRouter input = new InputRouter();
     private boolean failureLogged = false;
     /** Where the mouse is taken to be, for a picture of a control with the mouse on it; -1 for where it really is */
     private int pointX = -1;
@@ -130,10 +131,7 @@ public abstract class KitScreen extends Screen {
 
     @Override
     protected void init() {
-        Entry.drop();
-        Menu.close();
-        Gadget.focus = null;
-        this.held = null;
+        this.input.begin();
         this.fixed.clear();
         this.forms.clear();
         try {
@@ -146,10 +144,7 @@ public abstract class KitScreen extends Screen {
 
     @Override
     public void removed() {
-        EditorState.guard(Entry::blur);
-        Menu.close();
-        Gadget.focus = null;
-        this.held = null;
+        this.input.end();
     }
 
     @Override
@@ -188,7 +183,7 @@ public abstract class KitScreen extends Screen {
             Notices.drawOver(graphics, font);
             if (menu != null) {
                 menu.draw(graphics, font, mouseX, mouseY, this.width, this.height);
-            } else if (this.held == null) {
+            } else if (this.input.held() == null) {
                 Kit.tooltip(graphics, font, this.tipAt(mouseX, mouseY), mouseX, mouseY, this.width, this.height);
             }
         } catch (RuntimeException | LinkageError e) {
@@ -200,13 +195,9 @@ public abstract class KitScreen extends Screen {
     }
 
     private @Nullable Component tipAt(double mouseX, double mouseY) {
-        for (Gadget gadget : this.fixed) {
-            if (gadget.height > 0) {
-                Component words = gadget.tipAt(mouseX, mouseY);
-                if (words != null) {
-                    return words;
-                }
-            }
+        Component fixedWords = InputRouter.tipAmong(this.fixed, mouseX, mouseY);
+        if (fixedWords != null) {
+            return fixedWords;
         }
         for (Form form : this.forms) {
             Component words = form.tipAt(mouseX, mouseY);
@@ -226,35 +217,17 @@ public abstract class KitScreen extends Screen {
     }
 
     private void pressed(double mouseX, double mouseY, int button) {
-        Menu menu = Menu.open;
-        if (menu != null) {
-            // A click outside the list closes it and is spent
-            menu.press(mouseX, mouseY);
+        if (InputRouter.beforeClick(mouseX, mouseY)) {
             return;
         }
-        Entry typing = Entry.focused;
-        if (typing != null && !typing.over(mouseX, mouseY)) {
-            // What was typed is handed over before the click does anything, so the click acts on the new value
-            Entry.blur();
+        this.input.hold(null);
+        Gadget hit = InputRouter.pressAmong(this.fixed, mouseX, mouseY, button);
+        for (int i = 0; hit == null && i < this.forms.size(); i++) {
+            hit = this.forms.get(i).press(mouseX, mouseY, button);
         }
-        // The ring is for the keys; the mouse says where it is by itself
-        Gadget.focus = null;
-        this.held = null;
-        for (Gadget gadget : this.fixed) {
-            if (gadget.height > 0) {
-                Gadget hit = gadget.press(mouseX, mouseY, button);
-                if (hit != null) {
-                    this.held = hit;
-                    return;
-                }
-            }
-        }
-        for (Form form : this.forms) {
-            Gadget hit = form.press(mouseX, mouseY, button);
-            if (hit != null) {
-                this.held = hit;
-                return;
-            }
+        if (hit != null) {
+            this.input.hold(hit);
+            return;
         }
         this.clickedElsewhere(mouseX, mouseY, button);
     }
@@ -270,8 +243,7 @@ public abstract class KitScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        Gadget was = this.held;
-        this.held = null;
+        Gadget was = this.input.letGo();
         if (was != null) {
             EditorState.guard(() -> was.release(mouseX, mouseY));
         }
@@ -280,9 +252,8 @@ public abstract class KitScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        Gadget now = this.held;
-        if (button == 0 && now != null) {
-            EditorState.guard(() -> now.drag(mouseX, mouseY));
+        if (button == 0 && this.input.held() != null) {
+            EditorState.guard(() -> this.input.drag(mouseX, mouseY));
         }
         return true;
     }
@@ -316,20 +287,15 @@ public abstract class KitScreen extends Screen {
             menu.key(keyCode, modifiers);
             return;
         }
-        boolean back = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        boolean back = InputRouter.back(modifiers);
         if (Entry.typing()) {
             Entry box = Entry.focused;
             if (keyCode == GLFW.GLFW_KEY_ESCAPE && !box.dirty()) {
                 // Nothing typed would be lost, so Escape means what it means everywhere else
                 Entry.drop();
                 this.onClose();
-            } else if (keyCode == GLFW.GLFW_KEY_TAB) {
-                box.key(keyCode, scanCode, modifiers);
-                if (Entry.focused == null) {
-                    this.moveFocus(box, back);
-                }
-            } else {
-                box.key(keyCode, scanCode, modifiers);
+            } else if (InputRouter.typeKey(box, keyCode, scanCode, modifiers)) {
+                this.moveFocus(box, back);
             }
             return;
         }
@@ -368,31 +334,12 @@ public abstract class KitScreen extends Screen {
     }
 
     private void moveFocus(@Nullable Gadget from, boolean back) {
-        List<Gadget> order = this.order();
-        if (order.isEmpty()) {
-            Gadget.focus = null;
-            return;
-        }
-        int at = from == null ? -1 : order.indexOf(from);
-        int next = at < 0 ? (back ? order.size() - 1 : 0) : Math.floorMod(at + (back ? -1 : 1), order.size());
-        this.focusOn(order.get(next));
+        InputRouter.moveFocus(this.order(), from, back, this.forms);
     }
 
     /** Puts the keys on a control and scrolls it into view */
     void focusOn(Gadget control) {
-        if (control instanceof Entry box) {
-            box.focus();
-        } else {
-            Entry.blur();
-            Gadget.focus = control;
-        }
-        for (Form form : this.forms) {
-            List<Gadget> inside = new ArrayList<>();
-            form.collect(inside);
-            if (inside.contains(control)) {
-                form.reveal(control);
-            }
-        }
+        InputRouter.focusOn(control, this.forms);
     }
 
 }
