@@ -205,6 +205,7 @@ final class CraftSteps {
             } else {
                 test.skip("Create Aeronautics is not installed: no balloon was built (MOD-2 with a flying craft)");
             }
+            loseCraft(test, minecraft);
         } else {
             test.skip("Sable is not installed or not the known version: no physics craft were built (MOD-2 to MOD-5)");
         }
@@ -236,7 +237,7 @@ final class CraftSteps {
     }
 
     private static void buildBalloon(SelfTest test, Minecraft minecraft) throws Exception {
-        buildBalloon(test, minecraft, new BlockPos(-24, -60, -24), true);
+        buildBalloon(test, minecraft, new BlockPos(-24, -60, -24), true, true);
     }
 
     /**
@@ -244,6 +245,14 @@ final class CraftSteps {
      * @param goBack whether the recorder is put back where it stood once the flight is noted; the camera route stays aboard
      */
     static void buildBalloon(SelfTest test, Minecraft minecraft, BlockPos origin, boolean goBack) throws Exception {
+        buildBalloon(test, minecraft, origin, goBack, false);
+    }
+
+    /**
+     * @param speedRecord whether the balloon is then pushed along for a speed record (plan 2.1), as the recording steps
+     *                    want and the camera route, which films the flight as it is, does not
+     */
+    private static void buildBalloon(SelfTest test, Minecraft minecraft, BlockPos origin, boolean goBack, boolean speedRecord) throws Exception {
         ResourceLocation name = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope");
         ServerLevel level = minecraft.getSingleplayerServer().overworld();
         // The structure is one of the mod's own demonstration scenes, which live with its client resources
@@ -395,6 +404,10 @@ final class CraftSteps {
         test.log("balloon with its burner turned down at tick " + balloonBurnerOffTick + ":" + after + " (it climbed at " + String.format("%.1f", climbRate)
             + " blocks a second, and was last moving at " + String.format("%.1f", lastRate) + ")");
         SelfTest.check(lastRate < climbRate * 0.5, "turning the burner down did not slow the balloon: it climbed at " + climbRate + " blocks a second and still rises at " + lastRate);
+        // After the noted flight, which BalloonSteps holds playback to, so the pushes below move nothing it compares
+        if (speedRecord) {
+            pushForSpeed(test, minecraft);
+        }
         // The flight is noted; what the two do when the basket bumps down again is not part of it, and the recorder goes
         // back to where it stood before, so the steps after this one find it where they always have
         test.command("kill @e[type=minecraft:pig,name=Aeronaut]");
@@ -430,6 +443,215 @@ final class CraftSteps {
             }
         }
         return best;
+    }
+
+    // ------------------------------------------------------------------ Staged for craft moments (plan 2.1)
+
+    /** Whether the balloon was pushed for a speed record, and what each push did, for PointOfViewSteps' check and its message */
+    static boolean pushedForSpeed = false;
+    static String speedDetail = "";
+    /** The slab taken out of the world while it fell, and how fast it was falling then; null when it was not */
+    static java.util.UUID lostCraft = null;
+    static String lostDetail = "";
+
+    /**
+     * A speed record aboard the balloon (speed_record): with the recorder still standing in the basket, Sable's own
+     * impulse command shoves the balloon west, then again twice as hard, then stops it. One shove could never make a
+     * record: the first speed of four blocks a second or more is only where the best starts, and a record has to beat the
+     * best by a tenth (CraftRules.Best). The bests are forgotten first, since the platforms' fall with the recorder aboard
+     * may already have set one, and a record within a minute of another is not logged.
+     * <p>
+     * An impulse is mass times change of speed. The mass is Sable's own, read on the server; in case its units are not
+     * blocks a second, the first shove is measured and tried again harder when it falls short, and the second and the
+     * stop are scaled from what it did
+     */
+    private static void pushForSpeed(SelfTest test, Minecraft minecraft) throws Exception {
+        java.util.UUID craft = balloon;
+        test.onClientRun(() -> {
+            if (comedymonkey.dailies.moments.Moments.gameplay() != null) {
+                comedymonkey.dailies.moments.Moments.gameplay().crafts().forgetRecordsForSelfTest();
+            }
+        });
+        double mass = serverMass(minecraft, craft);
+        double perSpeed = Double.isFinite(mass) && mass > 0.0 ? mass : 1000.0;
+        StringBuilder detail = new StringBuilder("mass " + decimal(mass));
+        double first = 0.0;
+        double impulse = 0.0;
+        for (int attempt = 0; attempt < 3 && first < 4.5; attempt++) {
+            if (attempt > 0) {
+                // Too gentle for the units guessed: aim at five and a half blocks a second from what the last shove did
+                perSpeed *= Math.min(100.0, Math.max(2.0, 5.5 / Math.max(first, 0.05)));
+            }
+            impulse = perSpeed * 5.0;
+            first = shove(test, minecraft, craft, -impulse);
+            detail.append("; shoved with ").append(decimal(impulse)).append(", reached ").append(decimal(first)).append(" blocks a second");
+        }
+        // The same way again, twice as hard: at least twice the speed the best started from, whatever is left of the first
+        double second = shove(test, minecraft, craft, -impulse * 2.0);
+        boolean aboard = test.onClient(() -> {
+            Object under = Host.crafts().getSubLevel(minecraft.player);
+            return under != null && craft.equals(Host.crafts().craftId(under));
+        });
+        detail.append("; then with ").append(decimal(impulse * 2.0)).append(", reached ").append(decimal(second)).append(" blocks a second, the recorder ")
+            .append(aboard ? "still aboard" : "no longer aboard");
+        // Stopped again, so it stays in sight of the steps after this one, which count it among the craft in the world
+        Vec3 velocity = velocity(test, minecraft, craft);
+        double perBlock = first > 0.0 ? impulse / first : perSpeed;
+        if (velocity != null) {
+            test.command(String.format(java.util.Locale.ROOT, "sable physics impulse %s linear %.3f 0 %.3f global", craft, -velocity.x * perBlock, -velocity.z * perBlock));
+            test.waitTicks(10);
+            Vec3 after = velocity(test, minecraft, craft);
+            detail.append("; stopped from ").append(decimal(velocity.length())).append(" to ").append(after == null ? "unknown" : decimal(after.length())).append(" blocks a second");
+        }
+        pushedForSpeed = true;
+        speedDetail = detail.toString();
+        test.log("balloon pushed for a speed record: " + speedDetail);
+    }
+
+    /** Shoves a craft along X with Sable's impulse command; the fastest it then went over the next half second, in blocks a second */
+    private static double shove(SelfTest test, Minecraft minecraft, java.util.UUID craft, double impulseX) throws Exception {
+        java.util.List<Vec3> path = new java.util.ArrayList<>();
+        path.add(test.onClient(() -> craftCentre(minecraft, craft)));
+        test.command(String.format(java.util.Locale.ROOT, "sable physics impulse %s linear %.3f 0 0 global", craft, impulseX));
+        double fastest = 0.0;
+        for (int tick = 0; tick < 10; tick++) {
+            test.waitTicks(1);
+            path.add(test.onClient(() -> craftCentre(minecraft, craft)));
+            fastest = Math.max(fastest, speedOver(path));
+        }
+        return fastest;
+    }
+
+    /** How fast the last five ticks of a path went, in blocks a second; 0 while it is shorter or has a gap */
+    private static double speedOver(java.util.List<Vec3> path) {
+        if (path.size() < 6) {
+            return 0.0;
+        }
+        Vec3 now = path.get(path.size() - 1);
+        Vec3 then = path.get(path.size() - 6);
+        return now == null || then == null ? 0.0 : now.distanceTo(then) * 4.0;
+    }
+
+    /** A craft's velocity over five ticks, in blocks a second, or null when it cannot be seen */
+    private static Vec3 velocity(SelfTest test, Minecraft minecraft, java.util.UUID craft) throws Exception {
+        Vec3 from = test.onClient(() -> craftCentre(minecraft, craft));
+        test.waitTicks(5);
+        Vec3 to = test.onClient(() -> craftCentre(minecraft, craft));
+        return from == null || to == null ? null : to.subtract(from).scale(4.0);
+    }
+
+    /**
+     * A craft lost while it moves (craft_lost): a slab dropped from high up beside the recorder, taken out of the world
+     * with Sable's own command while it falls faster than CraftRules.LOST_SPEED. The game sees a craft vanish at speed
+     * near the player; the companion, when there is one, sees Sable remove it. Before the recording's pause, so the
+     * notes and cuts after it never hold the slab
+     */
+    private static void loseCraft(SelfTest test, Minecraft minecraft) throws Exception {
+        Vec3 wasAt = test.onClient(() -> minecraft.player.position());
+        // A ledge for the recorder beside the column the slab falls down, twelve blocks under the slab
+        test.command("setblock 38 -31 -7 minecraft:stone");
+        test.command("tp @s 38.5 -30 -6.5 -90 -30");
+        test.command("fill 40 -18 -8 43 -18 -5 minecraft:stone");
+        test.waitTicks(10);
+        java.util.Set<java.util.UUID> before = test.onClient(() -> craftIds(minecraft));
+        test.command("sable assemble area 40 -18 -8 43 -18 -5");
+        test.waitFor(() -> newCraft(minecraft, before) != null, 15, "the falling slab to become a physics object");
+        java.util.UUID slab = newCraft(minecraft, before);
+        java.util.List<Vec3> path = new java.util.ArrayList<>();
+        double speed = 0.0;
+        boolean removed = false;
+        // Taken away at sixteen blocks a second, twice the speed that counts as lost, so that the game's own look, a quarter
+        // of a second earlier, has seen it going fast enough; or before it lands, however fast it is going then
+        for (int tick = 0; tick < 100 && !removed; tick++) {
+            Vec3 at = test.onClient(() -> craftCentre(minecraft, slab));
+            if (at == null) {
+                break;
+            }
+            path.add(at);
+            speed = speedOver(path);
+            if (speed >= 16.0 || at.y < -45.0) {
+                test.command("sable remove " + slab);
+                removed = true;
+            } else {
+                test.waitTicks(1);
+            }
+        }
+        double fallen = path.isEmpty() ? 0.0 : path.get(0).y - path.get(path.size() - 1).y;
+        if (removed) {
+            test.waitFor(() -> newCraft(minecraft, before) == null, 10, "the slab to be gone once removed");
+        }
+        test.command("setblock 38 -31 -7 minecraft:air");
+        test.command(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f", wasAt.x, wasAt.y, wasAt.z));
+        lostDetail = String.format(java.util.Locale.ROOT, "the slab was %s falling at %.1f blocks a second, %.1f blocks below where it was assembled",
+            removed ? "taken away" : "not taken away (it was out of sight first)", speed, fallen);
+        lostCraft = removed ? slab : null;
+        test.log("craft lost: " + lostDetail + " (craft " + slab + ")");
+        if (!removed) {
+            test.fault("the falling slab was not removed while it fell, so a craft lost while moving was not tried: " + lostDetail);
+        }
+        test.waitTicks(20);
+    }
+
+    /** The ids of the craft this game knows. Client thread */
+    private static java.util.Set<java.util.UUID> craftIds(Minecraft minecraft) {
+        java.util.Set<java.util.UUID> ids = new java.util.HashSet<>();
+        for (Host.CraftInfo info : Host.crafts().crafts(minecraft.level)) {
+            ids.add(info.uniqueId());
+        }
+        return ids;
+    }
+
+    /** A craft this game knows that is not among these, or null */
+    private static java.util.UUID newCraft(Minecraft minecraft, java.util.Set<java.util.UUID> known) {
+        try {
+            return minecraft.submit(() -> {
+                for (java.util.UUID id : craftIds(minecraft)) {
+                    if (!known.contains(id)) {
+                        return id;
+                    }
+                }
+                return null;
+            }).get();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** The middle of a craft as this game shows it, or null when it is not there. Client thread */
+    private static Vec3 craftCentre(Minecraft minecraft, java.util.UUID craft) {
+        Object found = minecraft.level == null ? null : Host.crafts().craftById(minecraft.level, craft);
+        net.minecraft.world.phys.AABB bounds = found == null ? null : Host.crafts().getSubLevelBounds(found);
+        return bounds == null ? null : bounds.getCenter();
+    }
+
+    /** The mass Sable gives a craft, read on the server without compiling against Sable; NaN when it cannot be read */
+    private static double serverMass(Minecraft minecraft, java.util.UUID craft) throws Exception {
+        ServerLevel level = minecraft.getSingleplayerServer().overworld();
+        return minecraft.getSingleplayerServer().submit(() -> {
+            try {
+                Object container = Class.forName("dev.ryanhcode.sable.api.sublevel.SubLevelContainer")
+                    .getMethod("getContainer", net.minecraft.world.level.Level.class).invoke(null, level);
+                for (Object subLevel : (Iterable<?>) invoke(container, "getAllSubLevels")) {
+                    if (craft.equals(invoke(subLevel, "getUniqueId"))) {
+                        return ((Number) invoke(invoke(subLevel, "getMassTracker"), "getMass")).doubleValue();
+                    }
+                }
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies self test: the balloon's mass could not be read", t);
+            }
+            return Double.NaN;
+        }).get();
+    }
+
+    /** A public method with no arguments, called on an object whose class may be one Sable keeps to itself */
+    private static Object invoke(Object target, String name) throws ReflectiveOperationException {
+        java.lang.reflect.Method method = target.getClass().getMethod(name);
+        method.setAccessible(true);
+        return method.invoke(target);
+    }
+
+    private static String decimal(double value) {
+        return String.format(java.util.Locale.ROOT, "%.1f", value);
     }
 
     /** Where everything was at ticks of the balloon's flight, with the balloon's own state. Checked by BalloonSteps */

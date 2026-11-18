@@ -31,14 +31,24 @@ public final class MomentsConfig {
         return baseUrl(Host.get().setting("momentsWhisperUrl", ""));
     }
 
-    /** The one switch for everything that talks to an AI service (Whisper, Ollama). Off by default */
+    /** The one switch for everything that uses a model: Whisper, Ollama and the bundled sound classifier. Off by default */
     public static boolean aiEnabled() {
         return Host.get().setting("momentsAiEnabled", false);
     }
 
-    /** Name each burst of noise (laughter, cheering, screaming, shouting) with the bundled classifier. It runs on this computer and sends nothing anywhere */
+    /**
+     * Name each burst of noise (laughter, cheering, screaming, shouting) with the bundled classifier. It runs on this
+     * computer and sends nothing anywhere, but it is a model all the same, and everything that uses a model sits behind
+     * momentsAiEnabled (plan principle 7); momentsBurstLabels is the finer switch for it alone. With either off, bursts
+     * are still found by loudness and keep the subject unclassified
+     */
     public static boolean burstLabels() {
-        return Host.get().setting("momentsBurstLabels", true);
+        return burstLabels(aiEnabled(), Host.get().setting("momentsBurstLabels", true));
+    }
+
+    /** The rule of {@link #burstLabels()} on its own: the finer switch counts only while the AI one is on */
+    public static boolean burstLabels(boolean aiEnabled, boolean burstLabels) {
+        return aiEnabled && burstLabels;
     }
 
     /** Transcription is optional and off until momentsAiEnabled is set: nothing is sent anywhere and voice segments stay untranscribed */

@@ -16,7 +16,7 @@ public final class PayloadRules {
 
     private static final List<String> BUILT_IN = List.of(
         // The server mods that feed Moments: replaying these would log a recording's moments a second time (SRV-4, SRV-14)
-        "dailies_companion:*", "moments_companion:*", "mcpcraft:*",
+        "dailies_companion:*", "mcpcraft:*",
         // Connection housekeeping
         "neoforge:register", "neoforge:unregister", "c:register", "c:unregister", "c:version", "minecraft:register", "minecraft:unregister",
         "minecraft:brand", "neoforge:config_file", "neoforge:frozen_registry", "neoforge:frozen_registry_sync_completed",

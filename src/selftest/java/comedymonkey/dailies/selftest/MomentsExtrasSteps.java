@@ -110,7 +110,8 @@ final class MomentsExtrasSteps {
     private static void bursts(SelfTest test) throws Exception {
         JsonObject labels = test.tool("config_get", args("key", "momentsBurstLabels"));
         check(labels.get("value").getAsBoolean(), "momentsBurstLabels is not on by default: " + labels);
-        // The test tones are no one's laughter; with the classifier off the burst keeps the loudness-only subject and weight checked below
+        // The test tones are no one's laughter; with the classifier off the burst keeps the loudness-only subject and weight checked below.
+        // The classifier also needs momentsAiEnabled, which is off here, but switching the labels off as well keeps this check true either way
         test.tool("config_set", args("key", "momentsBurstLabels", "value", false));
         try {
             loudBursts(test);

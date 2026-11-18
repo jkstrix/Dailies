@@ -206,7 +206,7 @@ public final class Moments {
 
     /**
      * Plug in something that can tell laughter from shouting (plan 2.9) in place of the bundled YAMNet, or null for
-     * none. It is only asked while momentsBurstLabels is on: see {@link BurstClassifier}
+     * none. It is only asked while momentsAiEnabled and momentsBurstLabels are both on: see {@link BurstClassifier}
      */
     public static void setBurstClassifier(@Nullable BurstClassifier classifier) {
         burstClassifier = classifier == null ? BurstClassifier.NONE : classifier;
@@ -626,7 +626,7 @@ public final class Moments {
         });
     }
 
-    /** Whether the classifier may listen now: it is switched on, and nothing is being played back or exported */
+    /** Whether the classifier may listen now: AI and the labels are switched on, and nothing is being played back or exported */
     private static boolean mayClassify() {
         return burstClassifier != BurstClassifier.NONE && MomentsConfig.burstLabels() && !Host.get().inPlayback() && !Host.get().exportRunning();
     }
