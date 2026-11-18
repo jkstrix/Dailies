@@ -372,6 +372,16 @@ final class AddonSteps {
         if (!seated) {
             problems.add("the farmer did not sit down on the Create seat: Trade Bot only sells to seated villagers");
         }
+        // The offers given at the summoning do not last: a farmer's own (potatoes for an emerald, an emerald for bread) were
+        // what Trade Bot saw, and none buys wheat. His one offer is set here, on the server, after he has sat down
+        BestiarySteps.server("the farmer's wheat offer", (level, player) -> {
+            for (net.minecraft.world.entity.npc.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
+                net.minecraft.world.item.trading.MerchantOffers offers = new net.minecraft.world.item.trading.MerchantOffers();
+                offers.add(new net.minecraft.world.item.trading.MerchantOffer(new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.WHEAT, 20),
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD), 16, 2, 0.05F));
+                villager.setOffers(offers);
+            }
+        });
         c("item replace entity @s weapon.mainhand with minecraft:air");
         return true;
     }
@@ -546,9 +556,10 @@ final class AddonSteps {
     // --- On a contraption and on a physics object ---
 
     private static void contraption(SelfTest test, Minecraft minecraft) throws Exception {
-        item("A Fluid Wellspring on a bearing's arm").owns("create:contraption", "blocks", "block entity create:mechanical_bearing")
-            .need(present("create:contraption", 1))
-            .need(BestiarySteps.where("create:contraption", "carrying the Wellspring", thing -> thing.state().contains("wellspring")))
+        // A bearing's arm is one of Create's stationary contraptions, not a free one
+        item("A Fluid Wellspring on a bearing's arm").owns("create:stationary_contraption", "blocks", "block entity create:mechanical_bearing")
+            .need(present("create:stationary_contraption", 1))
+            .need(BestiarySteps.where("create:stationary_contraption", "carrying the Wellspring", thing -> thing.state().contains("wellspring")))
             .note("the addon says everything works on Create contraptions; the Wellspring is the machine that keeps working there");
         c("fill 58 -58 6 61 -58 6 minecraft:oak_planks");
         c("setblock 60 -57 6 " + MOD + "wellspring{UpgradeSlots:{Size:6,Items:[{Slot:0,id:\"" + MOD + "water_upgrade\",count:1}]}}");

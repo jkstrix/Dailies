@@ -52,6 +52,8 @@ final class TrainSteps {
     private static final BlockPos WEST = new BlockPos(0, Y, TRACK_Z + 1);
     private static final BlockPos EAST = new BlockPos(60, Y, TRACK_Z + 1);
     private static final BlockPos SEAT = new BlockPos(3, Y + 3, TRACK_Z);
+    private static final String DRIVER_BOT = "comedymonkeysaddons:helper_bot";
+    private static final String DRIVER_BURNER = "create:blaze_burner";
     private static int movingTick = -1;
 
     private TrainSteps() {
@@ -109,11 +111,19 @@ final class TrainSteps {
         test.log("trains: the stations as the server holds them: " + describeStation(minecraft, WEST) + " || " + describeStation(minecraft, EAST));
         name(WEST, "Dailies West");
         name(EAST, "Dailies East");
-        // Two carriages, each two bogeys under a row of casing; controls at both ends of the train
+        // Two carriages, each two bogeys under a row of casing; controls at both ends of the train, each with a driver
+        // directly behind it: Create drives a train on a schedule in a direction only when a conductor has controls next
+        // to it that way, facing back at it ("Driver has gone missing" otherwise). The drivers are the owner's Helper
+        // Bots, who conduct as a Blaze Burner does (no seat: a block behind the controls) and have animations of their
+        // own; without the addon, Create's Blaze Burners. The west driver takes it west, the east driver east
         carriage(1, 5);
         carriage(8, 12);
-        c("setblock 1 " + (Y + 3) + " " + TRACK_Z + " create:controls[facing=west]");
-        c("setblock 12 " + (Y + 3) + " " + TRACK_Z + " create:controls[facing=east]");
+        String driver = Host.get().isModLoaded("comedymonkeysaddons") ? DRIVER_BOT : DRIVER_BURNER;
+        c("setblock 2 " + (Y + 3) + " " + TRACK_Z + " " + driver + "[facing=west]");
+        c("setblock 11 " + (Y + 3) + " " + TRACK_Z + " " + driver + "[facing=east]");
+        // Placed after the drivers: controls set down beside a Helper Bot, facing him, turn him to face them
+        c("setblock 1 " + (Y + 3) + " " + TRACK_Z + " create:controls[facing=east]");
+        c("setblock 12 " + (Y + 3) + " " + TRACK_Z + " create:controls[facing=west]");
         c("setblock " + SEAT.getX() + " " + SEAT.getY() + " " + SEAT.getZ() + " create:white_seat");
         c("create glue 1 " + (Y + 1) + " " + TRACK_Z + " 5 " + (Y + 3) + " " + TRACK_Z);
         c("create glue 8 " + (Y + 1) + " " + TRACK_Z + " 12 " + (Y + 3) + " " + TRACK_Z);
@@ -142,7 +152,14 @@ final class TrainSteps {
             return false;
         }
         test.sleepTicks(40);
+        String drivers = conductors(minecraft);
+        test.log("trains: the train's drivers as Create found them: " + drivers);
+        if (!drivers.contains("forward=true") || !drivers.contains("backward=true")) {
+            problems.add("Create did not find a driver each way on the assembled train (" + drivers + ")");
+        }
 
+        // The census compares the recorded HUD as well, so the recording keeps it
+        test.tool("config_set", args("key", "recordHud", "value", true));
         test.tool("recording_start", new JsonObject());
         Census.start(Census.Mode.LIVE);
         try {
@@ -152,6 +169,7 @@ final class TrainSteps {
             test.sleepTicks(10);
         } finally {
             Census.stop();
+            test.tool("config_set", args("key", "recordHud", "value", false));
         }
         JsonObject finished = test.tool("recording_finish", args("name", "Trains"));
         Files.move(Path.of(finished.get("path").getAsString()), recording, StandardCopyOption.REPLACE_EXISTING);
@@ -209,6 +227,23 @@ final class TrainSteps {
         }
     }
 
+    /** Whether Create found a driver each way on the train it assembled, for the log and the staging problems */
+    private static String conductors(Minecraft minecraft) throws Exception {
+        return minecraft.getSingleplayerServer().submit(() -> {
+            try {
+                Object train = serverTrain(minecraft);
+                if (train == null) {
+                    return "no train";
+                }
+                Object forward = train.getClass().getMethod("hasForwardConductor").invoke(train);
+                Object backward = train.getClass().getMethod("hasBackwardConductor").invoke(train);
+                return "forward=" + forward + " backward=" + backward + " doubleEnded=" + secret(train, "doubleEnded");
+            } catch (Throwable t) {
+                return "unreadable (" + t + ")";
+            }
+        }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
     private static void carriage(int from, int to) throws Exception {
         c("setblock " + from + " " + (Y + 1) + " " + TRACK_Z + " create:small_bogey[axis=x]");
         c("setblock " + to + " " + (Y + 1) + " " + TRACK_Z + " create:small_bogey[axis=x]");
@@ -237,7 +272,8 @@ final class TrainSteps {
     }
 
     private static void rideEast(SelfTest test, Minecraft minecraft, boolean seated) throws Exception {
-        item("The train runs east with the recorder aboard and stops at the station").owns(CARRIAGE, "recorder", "blocks", "block entity create:track_station", "block entity create:track")
+        item("The train runs east with the recorder aboard and stops at the station").owns(CARRIAGE, "recorder", "blocks", "block entity create:track_station", "block entity create:track",
+                "block entity " + DRIVER_BOT, "block entity " + DRIVER_BURNER)
             .need(present(CARRIAGE, 2))
             .need(where("recorder", "seated on the train", thing -> thing.state().contains("vehicle=")))
             .need(where(CARRIAGE, "standing by the east station", thing -> Math.abs(thing.x() - EAST.getX()) < 10))
@@ -266,7 +302,9 @@ final class TrainSteps {
     }
 
     private static void watchWest(SelfTest test, Minecraft minecraft) throws Exception {
-        item("The train runs back west, watched from the ground").owns(CARRIAGE, "recorder", "blocks", "block entity create:track_station", "block entity create:track")
+        item("The train runs back west, watched from the ground").owns(CARRIAGE, "recorder", "blocks", "block entity create:track_station", "block entity create:track",
+                "block entity " + DRIVER_BOT, "block entity " + DRIVER_BURNER)
+            .need(where(CARRIAGE, "having been away east", thing -> Math.abs(thing.x() - EAST.getX()) < 14))
             .need(where(CARRIAGE, "standing by the west station", thing -> Math.abs(thing.x() - WEST.getX()) < 14))
             .need(where("recorder", "on foot", thing -> !thing.state().contains("vehicle=")));
         c("ride @s dismount");
