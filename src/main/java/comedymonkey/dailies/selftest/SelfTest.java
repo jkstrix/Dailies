@@ -78,7 +78,7 @@ public final class SelfTest {
             // Some parts by themselves, together, for a short targeted run, e.g. the owner's addon, trains and the renderers:
             // -PdailiesFlags=dailies.test.addonOnly,dailies.test.trainsOnly,dailies.test.rendererOnly
             List<String> only = onlyParts();
-            if (only.contains("addon") || only.contains("trains") || only.contains("renderer") || only.size() > 1) {
+            if (only.contains("addon") || only.contains("trains") || only.contains("renderer") || only.contains("edges") || only.size() > 1) {
                 this.runOnly(only);
                 return;
             }
@@ -147,6 +147,8 @@ public final class SelfTest {
             // their mods are not installed (the plain game)
             this.step("AddonSteps.run", () -> AddonSteps.run(this));
             this.step("TrainSteps.run", () -> TrainSteps.run(this));
+            // Powder snow, snowballs and the void, in a recording of their own
+            this.step("EdgeSteps.run", () -> EdgeSteps.run(this));
             if (Boolean.getBoolean("dailies.test.bestiary")) {
                 // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
                 // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
@@ -187,10 +189,10 @@ public final class SelfTest {
         this.finish(result);
     }
 
-    /** The parts asked for by themselves, one flag each: dailies.test.addonOnly, trainsOnly, rendererOnly, bestiaryOnly, realWorldOnly, cameraFilmsOnly */
+    /** The parts asked for by themselves, one flag each: dailies.test.addonOnly, trainsOnly, rendererOnly, edgesOnly, bestiaryOnly, realWorldOnly, cameraFilmsOnly */
     private static List<String> onlyParts() {
         List<String> parts = new ArrayList<>();
-        for (String part : List.of("addon", "trains", "renderer", "bestiary", "realWorld", "cameraFilms")) {
+        for (String part : List.of("addon", "trains", "renderer", "edges", "bestiary", "realWorld", "cameraFilms")) {
             if (Boolean.getBoolean("dailies.test." + part + "Only")) {
                 parts.add(part);
             }
@@ -216,6 +218,9 @@ public final class SelfTest {
         }
         if (parts.contains("trains")) {
             this.step("TrainSteps.run", () -> TrainSteps.run(this));
+        }
+        if (parts.contains("edges")) {
+            this.step("EdgeSteps.run", () -> EdgeSteps.run(this));
         }
         if (parts.contains("bestiary")) {
             this.step("BestiarySteps.run", () -> BestiarySteps.run(this));
