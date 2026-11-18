@@ -298,6 +298,11 @@ final class Census {
             if (entity.getId() == Snapshots.VIEWER_ENTITY_ID || (!isLive && entity == minecraft.player)) {
                 continue;
             }
+            // Items playback lets fall out of the world for a few seconds, for the fun of it, which the live game deleted at once
+            if (!isLive && comedymonkey.dailies.playback.VoidSpill.lingers(entity)) {
+                voidSpilled++;
+                continue;
+            }
             boolean own = entity.getUUID().equals(recorder);
             if (own) {
                 census.recorderId = entity.getId();
@@ -804,6 +809,8 @@ final class Census {
 
     /** The live ticks on which the recorder respawned */
     static final Set<Integer> respawnTicks = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Items seen left falling out of the world in playback (playback.VoidSpill), counted once a tick each */
+    static int voidSpilled = 0;
 
     static void compare(Census then, Census now, String mode, Tally tally) {
         int tick = then.tick;

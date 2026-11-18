@@ -1063,6 +1063,8 @@
   "dailies.editor.looks.show_players.tip": "Draw players. To hide just one, use the Players panel",
   "dailies.editor.looks.show_beacon_beams": "Beacon beams",
   "dailies.editor.looks.show_beacon_beams.tip": "Draw the beams of beacons and end gateways. Unticked, the beacon itself stays",
+  "dailies.editor.looks.void_spill": "Spill in the void",
+  "dailies.editor.looks.void_spill.tip": "When a player dies in the void, what they carried bursts out and tumbles down for a few seconds. The game itself deletes it at once, so the live game showed nothing",
   "dailies.editor.looks.letterbox": "Hold the picture to the frame shape",
   "dailies.editor.looks.letterbox.tip": "The frame shape becomes the picture itself: black bars here, and exports come out in that shape, fitted inside the size asked for",
   "dailies.editor.viewer.path": "Camera path",

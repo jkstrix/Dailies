@@ -71,6 +71,7 @@ public final class Playback {
     public static void init() {
         PackPlayback.init();
         onClosing(FrameHold::forget);
+        VoidSpill.init();
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> latchPause());
         // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks

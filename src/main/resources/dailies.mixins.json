@@ -26,6 +26,7 @@
     "playback.MinecraftMixin",
     "playback.HoldFrameMixin",
     "playback.ChatMixin",
+    "playback.VoidSpillMixin",
     "playback.SoundEngineMixin",
     "playback.ParticleEngineMixin",
     "playback.RemotePlayerMixin",

@@ -869,6 +869,16 @@ final class Feed {
         if (packet instanceof ClientboundLoginPacket login && this.keepWorld(login, minecraft)) {
             return;
         }
+        if (packet instanceof net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket removed) {
+            // Items playback is letting fall out of the world go when their time is up, not when the server dropped them
+            it.unimi.dsi.fastutil.ints.IntList left = VoidSpill.stillToRemove(removed.getEntityIds());
+            if (left.isEmpty()) {
+                return;
+            }
+            if (left.size() != removed.getEntityIds().size()) {
+                packet = new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(left);
+            }
+        }
         try {
             if (this.rewound && packet instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket chunk && this.lightLeftBehind(chunk, minecraft)) {
                 // Only forgetting the chunk makes the game drop light the packet does not speak of; it is built again at once

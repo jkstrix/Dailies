@@ -69,7 +69,16 @@ final class EdgeSteps {
             Census.EXTRA_SLACK.put("frozen", 12.0);
             Path recording = folder.resolve("Edges.dailies");
             record(test, minecraft, recording);
-            CensusPlayback.compare(test, recording, folder, "EDGES", "edges");
+            Census.voidSpilled = 0;
+            try {
+                CensusPlayback.compare(test, recording, folder, "EDGES", "edges");
+            } finally {
+                // What the recorder dropped dying in the void is left to scatter and fall in playback, for the fun of it
+                test.log("edges: items seen falling out of the world in playback, counted a tick each: " + Census.voidSpilled);
+            }
+            if (Census.voidSpilled == 0) {
+                throw new IllegalStateException("edges: what the recorder dropped dying in the void was never seen scattering and falling in playback");
+            }
         } finally {
             CensusPlayback.end();
         }

@@ -90,6 +90,8 @@ public final class Looks {
     public boolean showEntities = true;
     public boolean showPlayers = true;
     public boolean showBeaconBeams = true;
+    /** What a player drops dying in the void flies out and falls for a few seconds, where the game deletes it at once */
+    public boolean voidSpill = true;
     /** Ids of entity types that are not drawn, for example "minecraft:bat" */
     public List<String> hiddenEntityTypes = new ArrayList<>();
     /** Ids of particle types that are not drawn, for example "minecraft:rain" */
@@ -521,6 +523,8 @@ public final class Looks {
         toggle("show_entities", "Draw entities other than players", looks -> looks.showEntities, (looks, value) -> looks.showEntities = value);
         toggle("show_players", "Draw players", looks -> looks.showPlayers, (looks, value) -> looks.showPlayers = value);
         toggle("show_beacon_beams", "Draw the beams of beacons, end gateways and anything else that uses the game's beam; the beacon itself stays", looks -> looks.showBeaconBeams, (looks, value) -> looks.showBeaconBeams = value);
+        toggle("void_spill", "Let what a player drops dying in the void scatter and fall for a few seconds; the game itself deletes it at once, so the live game showed nothing",
+                looks -> looks.voidSpill, (looks, value) -> looks.voidSpill = value);
         list("hidden_entity_types", "Ids of entity types that are not drawn, for example [\"minecraft:bat\"]. An empty list draws them all",
                 looks -> looks.hiddenEntityTypes, (looks, value) -> looks.hiddenEntityTypes = value);
         list("hidden_particle_types", "Ids of particle types that are not drawn, for example [\"minecraft:rain\"]. An empty list draws them all",
