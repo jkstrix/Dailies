@@ -8,20 +8,30 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
+import java.util.zip.CRC32;
 
 /**
  * The video encoder shipped inside the mod (specification EXP-8): the FFmpeg libraries and their command-line front
@@ -71,24 +81,77 @@ public final class Encoder {
         }
         String platform = platform();
         String resource = String.format(PACKED, platform);
-        try (InputStream packed = Encoder.class.getResourceAsStream(resource)) {
+        if (Encoder.class.getResource(resource) == null) {
+            throw new IOException(noEncoderWords());
+        }
+        Path folder = Host.get().dataDirectory().resolve("encoder").resolve(platform);
+        program = unpack(() -> {
+            InputStream packed = Encoder.class.getResourceAsStream(resource);
             if (packed == null) {
                 throw new IOException(noEncoderWords());
             }
-            Path folder = Host.get().dataDirectory().resolve("encoder").resolve(platform);
-            Files.createDirectories(folder);
+            return packed;
+        }, folder, platform, Host.get().modVersion());
+        return program;
+    }
+
+    /** Where the packed encoder is read from, as often as it is needed */
+    interface Packed {
+        InputStream open() throws IOException;
+    }
+
+    /** The file beside the unpacked encoder that says which packed encoder it was unpacked from */
+    static final String STAMP = ".stamp";
+    /** The ending of a file being unpacked, until it is complete and moved into place */
+    static final String UNPACKING = ".dailies-unpacking";
+
+    /**
+     * Unpacks the encoder into its folder, unless the files there were unpacked from this very packed encoder, as the
+     * stamp beside them says: then nothing is written at all, so an encoder that another game (the background export,
+     * say) is running is never touched. Otherwise every file is written under a temporary name and moved into place
+     * whole, a file already there with the same bytes is left as it is, and the stamp is written last, so an unpacking
+     * cut short is never trusted. A lock on a file in the folder keeps two games from unpacking at once.
+     *
+     * @param version the mod's version, part of the stamp
+     * @return the encoder's program
+     */
+    static Path unpack(Packed packed, Path folder, String platform, String version) throws IOException {
+        Files.createDirectories(folder);
+        String stamp = stamp(packed, version);
+        Path programFile = folder.resolve(platform.startsWith("windows") ? "ffmpeg.exe" : "ffmpeg");
+        try (FileChannel channel = FileChannel.open(folder.resolve(".lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            Path stampFile = folder.resolve(STAMP);
+            String stored = null;
+            try {
+                stored = Files.isRegularFile(stampFile) ? Files.readString(stampFile, StandardCharsets.UTF_8) : null;
+            } catch (IOException unreadable) {
+                // Unpacked again
+            }
+            if (upToDate(stored, stamp, Files.isRegularFile(programFile))) {
+                return programFile;
+            }
+            Files.deleteIfExists(stampFile);
+            sweepUnpacking(folder);
             Path found = null;
-            try (JarInputStream jar = new JarInputStream(packed)) {
+            try (JarInputStream jar = new JarInputStream(packed.open())) {
                 for (JarEntry entry = jar.getNextJarEntry(); entry != null; entry = jar.getNextJarEntry()) {
                     String name = entry.getName();
                     if (entry.isDirectory() || !name.contains("/" + platform + "/")) {
                         continue;
                     }
-                    Path file = folder.resolve(name.substring(name.lastIndexOf('/') + 1));
-                    if (!Files.exists(file) || Files.size(file) != entry.getSize()) {
-                        Files.copy(jar, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    String base = name.substring(name.lastIndexOf('/') + 1);
+                    if (base.isEmpty() || base.equals(".") || base.equals("..")) {
+                        continue;
                     }
-                    String base = file.getFileName().toString();
+                    Path file = folder.resolve(base);
+                    Path temporary = folder.resolve(base + "." + UUID.randomUUID() + UNPACKING);
+                    try {
+                        Files.copy(jar, temporary);
+                        place(temporary, file);
+                    } finally {
+                        Files.deleteIfExists(temporary);
+                    }
                     if (base.equals("ffmpeg.exe") || base.equals("ffmpeg")) {
                         found = file;
                         file.toFile().setExecutable(true);
@@ -101,10 +164,100 @@ public final class Encoder {
             if (found == null) {
                 throw new IOException("The video encoder packed in this build of Dailies is incomplete");
             }
-            program = found;
+            Path newStamp = folder.resolve(STAMP + "." + UUID.randomUUID() + UNPACKING);
+            try {
+                Files.writeString(newStamp, stamp, StandardCharsets.UTF_8);
+                move(newStamp, stampFile);
+            } finally {
+                Files.deleteIfExists(newStamp);
+            }
             return found;
         }
     }
+
+    /** Whether the files in the folder can be used as they are: the encoder is there, unpacked from this packed encoder */
+    static boolean upToDate(@Nullable String stored, String stamp, boolean programThere) {
+        return programThere && stored != null && stored.trim().equals(stamp.trim());
+    }
+
+    /**
+     * What a packed encoder is known by: the mod's version, and the packed encoder's length and checksum, so that a
+     * build with another encoder in it unpacks again though its version is the same
+     */
+    static String stamp(Packed packed, String version) throws IOException {
+        CRC32 checksum = new CRC32();
+        long length = 0;
+        try (InputStream in = packed.open()) {
+            byte[] buffer = new byte[1 << 16];
+            for (int read = in.read(buffer); read >= 0; read = in.read(buffer)) {
+                checksum.update(buffer, 0, read);
+                length += read;
+            }
+        }
+        return "Dailies " + version + ", " + length + " bytes, CRC32 " + Long.toHexString(checksum.getValue());
+    }
+
+    /**
+     * Moves a file just unpacked into place. A file there already with the same bytes stays: it may be running in
+     * another game, and on Windows a running program cannot be replaced
+     */
+    private static void place(Path temporary, Path file) throws IOException {
+        if (Files.isRegularFile(file) && Files.size(file) == Files.size(temporary) && Files.mismatch(file, temporary) == -1L) {
+            return;
+        }
+        try {
+            move(temporary, file);
+        } catch (IOException e) {
+            throw new IOException("The video encoder's file " + file.getFileName() + " could not be replaced, perhaps because another game is using it. "
+                + "Close other games and exports and try again (" + e.getMessage() + ")", e);
+        }
+    }
+
+    private static void move(Path from, Path to) throws IOException {
+        try {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** Takes away what an unpacking cut short left behind. Only ever called holding the lock */
+    private static void sweepUnpacking(Path folder) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(folder, "*" + UNPACKING)) {
+            for (Path file : files) {
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException stillOpen) {
+                    // Tried again next time
+                }
+            }
+        } catch (IOException e) {
+            Host.LOGGER.debug("Dailies: the encoder folder could not be swept", e);
+        }
+    }
+
+    /**
+     * Unpacks the encoder and works out what this machine can encode, on a thread of its own, so the first export
+     * does not wait for it on the game's thread. Once a session, after the graphics card has been named. Never throws
+     */
+    static void warmUp() {
+        if (warming || !bundled()) {
+            return;
+        }
+        warming = true;
+        Thread warm = new Thread(() -> {
+            try {
+                choices();
+            } catch (Throwable t) {
+                Host.LOGGER.info("Dailies: the video encoder could not be made ready ahead of the first export ({})", t.toString());
+            }
+        }, "Dailies-Encoder-Warm");
+        warm.setDaemon(true);
+        warm.setPriority(Thread.MIN_PRIORITY);
+        warm.start();
+    }
+
+    private static volatile boolean warming = false;
 
     public static Path programPath() throws IOException {
         return program();
@@ -120,23 +273,65 @@ public final class Encoder {
         return probe;
     }
 
-    /** The names of the encoders this build really contains */
+    /**
+     * The names of the encoders this build really contains. Kept for the session once the encoder has answered; an
+     * encoder that failed to answer is asked again next time, rather than taken to have none
+     */
     public static synchronized Set<String> encoders() throws IOException {
         if (encoders != null) {
             return encoders;
         }
-        Process process = new ProcessBuilder(program().toString(), "-hide_banner", "-encoders").redirectErrorStream(true).start();
         Set<String> found = new TreeSet<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            for (String line = reader.readLine(); line != null; line = reader.readLine()) {
-                String[] parts = line.trim().split("\\s+");
-                if (parts.length >= 2 && parts[0].length() == 6 && (parts[0].startsWith("V") || parts[0].startsWith("A"))) {
-                    found.add(parts[1]);
-                }
+        for (String line : run(List.of(program().toString(), "-hide_banner", "-encoders"), 30)) {
+            String[] parts = line.trim().split("\\s+");
+            if (parts.length >= 2 && parts[0].length() == 6 && (parts[0].startsWith("V") || parts[0].startsWith("A"))) {
+                found.add(parts[1]);
             }
+        }
+        if (found.isEmpty()) {
+            throw new IOException("The video encoder named no encoders");
         }
         encoders = found;
         return found;
+    }
+
+    /**
+     * Runs the encoder to its end and returns what it said, line by line. Its words are read on a thread of their own,
+     * so one that stops talking without ending is still given up on after the time allowed.
+     */
+    private static List<String> run(List<String> command, long seconds) throws IOException {
+        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        List<String> lines = java.util.Collections.synchronizedList(new ArrayList<>());
+        Thread reader = new Thread(() -> {
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                for (String line = in.readLine(); line != null; line = in.readLine()) {
+                    lines.add(line);
+                }
+            } catch (IOException ignored) {
+                // The encoder has gone
+            }
+        }, "Dailies-Encoder-Answer");
+        reader.setDaemon(true);
+        reader.start();
+        try {
+            if (!process.waitFor(seconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IOException("The video encoder did not answer in " + seconds + " seconds");
+            }
+            reader.join(2000);
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while the video encoder was asked", e);
+        }
+        List<String> said;
+        synchronized (lines) {
+            said = List.copyOf(lines);
+        }
+        if (process.exitValue() != 0) {
+            throw new IOException("The video encoder failed (exit code " + process.exitValue() + "): " + String.join(" ", said.subList(0, Math.min(5, said.size()))));
+        }
+        return said;
     }
 
     // ------------------------------------------------------------------ What this machine can really do (EXP-1)
@@ -288,10 +483,13 @@ public final class Encoder {
         }
         IOException last = null;
         boolean split = Host.get().setting("exportSplitEncoding", true);
+        // A soundless video that sound is joined to afterwards is written once more by that join, which puts the index
+        // at the front itself: moving it there in this file too would only write the whole file again for nothing
+        boolean faststart = settings.output == null || output.toAbsolutePath().normalize().equals(settings.output.toAbsolutePath().normalize());
         for (Codecs.Choice choice : order) {
             boolean takesI420 = i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent);
             if (takesI420 && Codecs.parallel(choice.encoder())) {
-                FrameSink parallel = parallelSink(settings, choice.encoder(), container, output);
+                FrameSink parallel = parallelSink(settings, choice.encoder(), container, output, faststart);
                 if (parallel != null) {
                     return parallel;
                 }
@@ -300,7 +498,7 @@ public final class Encoder {
                 try {
                     // Tried already, but a card can still refuse the size or rate of this export, or a way of splitting
                     // frames it has too few encoding units for: go on to the next
-                    return new VideoSink(settings, scale, choice.encoder(), mode, output, takesI420);
+                    return new VideoSink(settings, scale, choice.encoder(), mode, output, takesI420, faststart);
                 } catch (IOException e) {
                     last = e;
                     Host.LOGGER.info("Dailies: encoder {}{} is not usable for this export ({}), trying the next", choice.encoder(),
@@ -321,7 +519,7 @@ public final class Encoder {
      * Once setting says; or null, and the caller goes on to a single encoder, when the setting is 1, when there is too
      * little memory spare for the frames they must hold, or when they cannot all start on this card. Never throws.
      */
-    private static @Nullable FrameSink parallelSink(Export.Settings settings, String encoder, String container, Path output) {
+    private static @Nullable FrameSink parallelSink(Export.Settings settings, String encoder, String container, Path output, boolean faststart) {
         int processes = Host.get().setting("exportParallelEncoders", 3);
         int width = settings.width;
         int height = settings.height;
@@ -345,7 +543,7 @@ public final class Encoder {
                 return null;
             }
             FrameSink sink = new ParallelVideoSink(ffmpeg, width, height, settings.framesPerSecond, Codecs.videoArguments(encoder, settings.bitrate, false, -1),
-                container, output, processes, plan.chunk(), plan.buffers(), line -> Host.LOGGER.info("Dailies: {}", line));
+                container, output, faststart, processes, plan.chunk(), plan.buffers(), line -> Host.LOGGER.info("Dailies: {}", line));
             Host.LOGGER.info("Dailies: {} {} encoders side by side, in chunks of {} frames, each holding up to {} frames ({} MB in all at most)",
                 processes, encoder, plan.chunk(), plan.buffers(), (long) processes * plan.buffers() * frameBytes >> 20);
             return sink;
@@ -359,35 +557,59 @@ public final class Encoder {
      * Whether this many encoders start at once on this card at this size. An encoder only opens on the card when its
      * first frame comes, which for an export is after it has begun; a card or driver that allows fewer encoders at
      * once than asked for (or other programs using some) would then fail the export a few seconds in. So they are
-     * tried together first, a few frames each, and the answer kept for the session
+     * tried together first, a few frames each, and the answer kept for the session. Tried outside the map's own lock,
+     * so a trial of one size never holds up the answer for another
      */
     private static boolean parallelTrial(String ffmpeg, String encoder, int width, int height, int processes) {
-        return PARALLEL_TRIED.computeIfAbsent(encoder + " " + width + "x" + height + " x" + processes + " on " + machine, key -> {
-            List<Process> started = new ArrayList<>();
-            try {
-                for (int i = 0; i < processes; i++) {
-                    started.add(new ProcessBuilder(Codecs.trialArguments(ffmpeg, encoder, width, height)).redirectErrorStream(true)
-                        .redirectOutput(ProcessBuilder.Redirect.DISCARD).start());
-                }
-                boolean all = true;
-                for (Process process : started) {
-                    if (!process.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)) {
-                        process.destroyForcibly();
-                        all = false;
-                    } else if (process.exitValue() != 0) {
-                        all = false;
-                    }
-                }
-                return all;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                started.forEach(Process::destroyForcibly);
-                return false;
-            } catch (IOException | RuntimeException e) {
-                started.forEach(Process::destroyForcibly);
-                return false;
+        String key = encoder + " " + width + "x" + height + " x" + processes + " on " + machine;
+        Boolean known = PARALLEL_TRIED.get(key);
+        if (known != null) {
+            return known;
+        }
+        boolean all = true;
+        List<Process> started = new ArrayList<>();
+        try {
+            for (int i = 0; i < processes; i++) {
+                started.add(new ProcessBuilder(Codecs.trialArguments(ffmpeg, encoder, width, height)).redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).start());
             }
-        });
+            for (Process process : started) {
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                    all = false;
+                } else if (process.exitValue() != 0) {
+                    all = false;
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            started.forEach(Process::destroyForcibly);
+            // Not kept: an interrupted trial says nothing about the card
+            return false;
+        } catch (IOException | RuntimeException e) {
+            started.forEach(Process::destroyForcibly);
+            all = false;
+        }
+        Boolean first = PARALLEL_TRIED.putIfAbsent(key, all);
+        return first != null ? first : all;
+    }
+
+    /**
+     * Whether an encoder just started is still running a moment later: one that cannot start says so at once. Waits
+     * at most this long, and less when the encoder ends sooner, rather than always the whole time.
+     */
+    static boolean stillRunningAfter(Process process, long millis) {
+        try {
+            process.onExit().get(millis, TimeUnit.MILLISECONDS);
+            return false;
+        } catch (TimeoutException running) {
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return process.isAlive();
+        } catch (ExecutionException e) {
+            return process.isAlive();
+        }
     }
 
     private static final class VideoSink implements FrameSink {
@@ -405,7 +627,11 @@ public final class Encoder {
         private final int width, height;
         private final Layout layout;
 
-        VideoSink(Export.Settings settings, int scale, String encoder, int split, Path output, boolean i420) throws IOException {
+        /**
+         * @param faststart the index is moved to the front of an MP4 or MOV, as the file the export ends with needs;
+         *                  not a soundless file that sound is joined to afterwards
+         */
+        VideoSink(Export.Settings settings, int scale, String encoder, int split, Path output, boolean i420, boolean faststart) throws IOException {
             this.output = output;
             this.width = settings.width * scale;
             this.height = settings.height * scale;
@@ -421,7 +647,7 @@ public final class Encoder {
             }
             command.addAll(Codecs.videoArguments(encoder, settings.bitrate, settings.transparent, split));
             command.add("-an");
-            if (settings.container.equals("mp4") || settings.container.equals("mov")) {
+            if (faststart && (settings.container.equals("mp4") || settings.container.equals("mov"))) {
                 // A file cut short by a cancel must still play (EXP-6)
                 command.addAll(List.of("-movflags", "+faststart"));
             }
@@ -443,13 +669,14 @@ public final class Encoder {
             }, "Dailies-Encoder-Log");
             reader.setDaemon(true);
             reader.start();
-            // An encoder that cannot start says so at once
-            try {
-                Thread.sleep(400);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            if (!this.process.isAlive()) {
+            // An encoder that cannot start says so at once, and is not waited for any longer than it takes to
+            if (!stillRunningAfter(this.process, 400)) {
+                try {
+                    // What it said is still on its way to the reader
+                    reader.join(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
                 throw new IOException(this.said());
             }
         }
@@ -485,14 +712,31 @@ public final class Encoder {
 
         @Override
         public Path finish(boolean cancelled) throws IOException {
-            this.input.close();
             try {
-                if (!this.process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) {
-                    this.process.destroyForcibly();
-                    throw new IOException("The encoder did not finish the file");
+                this.input.close();
+            } catch (IOException gone) {
+                // An encoder that has already stopped: how it ended says why
+            }
+            // Waited for whatever interrupts this thread: the file is only whole once the encoder has ended by itself,
+            // which after its last frame takes moments
+            boolean interrupted = false;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
+            try {
+                while (true) {
+                    try {
+                        if (!this.process.waitFor(Math.max(0L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS)) {
+                            this.process.destroyForcibly();
+                            throw new IOException("The encoder did not finish the file");
+                        }
+                        break;
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            } finally {
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
             }
             if (this.process.exitValue() != 0) {
                 throw new IOException("The encoder failed: " + this.said());

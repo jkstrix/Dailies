@@ -3,6 +3,7 @@ package comedymonkey.dailies.export;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A few frame buffers that go round between the game, which fills them, and the writer, which hands them to the
@@ -29,18 +30,33 @@ final class FramePool {
 
     private final BlockingQueue<Frame> free;
     private final BlockingQueue<Frame> full;
+    private final int count;
+    private final int capacity;
+    /** Frames made so far: they are made as they are first needed, so a pool of many costs nothing until it is used */
+    private final AtomicInteger made = new AtomicInteger();
 
     FramePool(int count, int capacity) {
+        this.count = count;
+        this.capacity = capacity;
         this.free = new ArrayBlockingQueue<>(count);
         // One more place than there are frames, so the end can always be said
         this.full = new ArrayBlockingQueue<>(count + 1);
-        for (int i = 0; i < count; i++) {
-            this.free.add(new Frame(capacity));
-        }
     }
 
-    /** An empty buffer for the game to fill, or null when none came free in time (the writer is behind) */
+    /**
+     * An empty buffer for the game to fill: a free one, a new one while fewer than the pool's number have been made,
+     * or null when none came free in time (the writer, or a sink holding frames, is behind)
+     */
     Frame take(long timeoutMillis) throws InterruptedException {
+        Frame frame = this.free.poll();
+        if (frame != null) {
+            return frame;
+        }
+        for (int now = this.made.get(); now < this.count; now = this.made.get()) {
+            if (this.made.compareAndSet(now, now + 1)) {
+                return new Frame(this.capacity);
+            }
+        }
         return this.free.poll(timeoutMillis, TimeUnit.MILLISECONDS);
     }
 
@@ -56,7 +72,7 @@ final class FramePool {
         return this.full.take();
     }
 
-    /** A buffer the writer has finished with */
+    /** A buffer the writer, or a sink it was handed to, has finished with. Any thread */
     void giveBack(Frame frame) {
         if (frame != END) {
             this.free.offer(frame);

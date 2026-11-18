@@ -175,22 +175,35 @@ public final class Worker {
         }
         long pid = ProcessHandle.current().pid();
         try {
+            // Its complaints are thrown away, so they can never fill a pipe nobody reads and hold it up
             Process ask = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
                 "[Console]::OutputEncoding = [Text.Encoding]::UTF8; (Get-CimInstance Win32_Process -Filter 'ProcessId=" + pid + "').CommandLine")
-                .redirectErrorStream(false).start();
+                .redirectError(ProcessBuilder.Redirect.DISCARD).start();
             ask.getOutputStream().close();
             StringBuilder said = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(ask.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    said.append(line);
+            // Read on a thread of its own, so that the time allowed below holds even when the answer never ends
+            Thread reader = new Thread(() -> {
+                try (BufferedReader lines = new BufferedReader(new InputStreamReader(ask.getInputStream(), StandardCharsets.UTF_8))) {
+                    for (String line = lines.readLine(); line != null; line = lines.readLine()) {
+                        synchronized (said) {
+                            said.append(line);
+                        }
+                    }
+                } catch (java.io.IOException ignored) {
+                    // PowerShell has gone
                 }
-            }
+            }, "Dailies-Worker-Ask");
+            reader.setDaemon(true);
+            reader.start();
             if (!ask.waitFor(15, TimeUnit.SECONDS)) {
                 ask.destroyForcibly();
                 return null;
             }
-            String line = said.toString().trim();
+            reader.join(2000);
+            String line;
+            synchronized (said) {
+                line = said.toString().trim();
+            }
             // A byte order mark from the console's encoding is not part of it
             return line.isEmpty() ? null : line.replace("﻿", "");
         } catch (Exception e) {

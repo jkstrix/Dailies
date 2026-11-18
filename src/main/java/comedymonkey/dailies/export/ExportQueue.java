@@ -8,8 +8,12 @@ import com.google.gson.JsonParser;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -444,19 +448,32 @@ public final class ExportQueue {
         this.touched();
     }
 
+    /** As below, with no job under way in this process */
+    public int recover(long now, LongPredicate alive, long ownPid) {
+        return this.recover(now, alive, ownPid, null);
+    }
+
     /**
      * Puts right what a process that stopped without saying so left behind: a job it was running is marked failed,
-     * and a worker that died is marked so.
+     * and a worker that died is marked so. A job marked as running in this very process is marked failed too unless
+     * it is the one this process is working on: one left so by a failure in this game could otherwise be neither
+     * removed nor run again until the game was restarted.
      *
-     * @param alive whether a process with this id is running
+     * @param alive  whether a process with this id is running
+     * @param ownJob the id of the job this process is working on, or null when it is working on none
      * @return how many jobs were marked failed
      */
-    public int recover(long now, LongPredicate alive, long ownPid) {
+    public int recover(long now, LongPredicate alive, long ownPid, @Nullable String ownJob) {
         int failed = 0;
         for (Job job : this.jobs) {
-            if (job.state == State.RUNNING && job.pid != ownPid && !alive.test(job.pid)) {
+            if (job.state != State.RUNNING) {
+                continue;
+            }
+            boolean ours = job.pid == ownPid;
+            if (ours ? !job.id.equals(ownJob) : !alive.test(job.pid)) {
                 job.state = State.FAILED;
-                job.error = job.ranIn.equals("worker") ? "The background export stopped before this job was done" : "The game closed before this job was done";
+                job.error = ours ? "The export stopped in this game before this job was done"
+                    : job.ranIn.equals("worker") ? "The background export stopped before this job was done" : "The game closed before this job was done";
                 job.finishedAt = now;
                 job.pid = 0;
                 failed++;
@@ -584,12 +601,16 @@ public final class ExportQueue {
         if (!Files.isRegularFile(file)) {
             return new ExportQueue();
         }
-        String text = Files.readString(file, StandardCharsets.UTF_8);
+        byte[] bytes = Files.readAllBytes(file);
         try {
+            // Strictly: a file that is not UTF-8 at all (saved in another encoding by hand, say) is unreadable too
+            String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
             return fromJson(JsonParser.parseString(text).getAsJsonObject());
-        } catch (RuntimeException e) {
-            // Kept beside for whoever wants to look, and the queue starts again empty rather than never working again
-            Files.writeString(file.resolveSibling(file.getFileName() + ".unreadable"), text, StandardCharsets.UTF_8);
+        } catch (CharacterCodingException | RuntimeException e) {
+            // Kept beside, byte for byte, for whoever wants to look, and the queue starts again empty rather than never
+            // working again
+            Files.write(file.resolveSibling(file.getFileName() + ".unreadable"), bytes);
             return new ExportQueue();
         }
     }

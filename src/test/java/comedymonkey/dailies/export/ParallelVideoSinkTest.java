@@ -1,8 +1,11 @@
 package comedymonkey.dailies.export;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -185,6 +188,31 @@ class ParallelVideoSinkTest {
         assertEquals(2, ParallelVideoSink.buffersFor(3, 3));
         assertEquals(40, ParallelVideoSink.buffersFor(60, 3));
         assertEquals(30, ParallelVideoSink.buffersFor(60, 2));
+    }
+
+    // ------------------------------------------------------------------ Where the parts go
+
+    /**
+     * The encoders read the whole path of their parts as a numbering pattern: a percent sign in the folder's path
+     * (say a folder called "100% done") must reach them doubled, so only the part's own number is a pattern (EXP-2)
+     */
+    @Test
+    void aPercentSignInTheFolderIsDoubledForTheEncoders(@TempDir Path parent) {
+        Path folder = parent.resolve("100% done").resolve(TemporaryFiles.parts());
+        String template = ParallelVideoSink.segmentTemplate(folder, 2);
+        String separator = folder.getFileSystem().getSeparator();
+        assertTrue(template.contains("100%% done"), template);
+        assertTrue(template.endsWith(separator + "2-%06d.ts"), template);
+        // Read as FFmpeg reads it, "%%" is a percent sign: one pattern is left, the part's number
+        assertEquals(1, template.replace("%%", "").chars().filter(c -> c == '%').count(), template);
+        assertEquals(folder.toAbsolutePath() + separator + "2-%06d.ts", template.replace("%%", "%"));
+    }
+
+    @Test
+    void aFolderWithoutPercentSignsIsLeftAsItIs(@TempDir Path parent) {
+        Path folder = parent.resolve(TemporaryFiles.parts());
+        String separator = folder.getFileSystem().getSeparator();
+        assertEquals(folder.toAbsolutePath() + separator + "0-%06d.ts", ParallelVideoSink.segmentTemplate(folder, 0));
     }
 
 }

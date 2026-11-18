@@ -10,7 +10,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -88,6 +90,47 @@ class ExportQueueTest {
         assertEquals("failed", queue.worker().state);
     }
 
+    /**
+     * A job left running in this very game by a failure (EXP-5): a recovery marks it failed unless it is the job
+     * this game is working on, so it can be removed or run again without a restart
+     */
+    @Test
+    void aJobThisGameLeftRunningIsMarkedFailedUnlessItIsUnderWay() {
+        ExportQueue queue = new ExportQueue();
+        ExportQueue.Job mine = queue.add(job("mine.mp4"), 1);
+        ExportQueue.Job other = queue.add(job("other.mp4"), 2);
+        queue.claim(mine, 42, "game", 3);
+        queue.claim(other, 77, "worker", 3);
+
+        assertEquals(0, queue.recover(4, pid -> true, 42, mine.id), "the job under way here stays running");
+        assertEquals(ExportQueue.State.RUNNING, mine.state);
+        assertEquals(ExportQueue.State.RUNNING, other.state);
+
+        assertEquals(1, queue.recover(5, pid -> true, 42, null), "with nothing under way here, this game's running job was left by a failure");
+        assertEquals(ExportQueue.State.FAILED, mine.state);
+        assertEquals(0, mine.pid);
+        assertEquals(5, mine.finishedAt);
+        assertTrue(mine.error.contains("this game"), mine.error);
+        assertEquals(ExportQueue.State.RUNNING, other.state, "a living process's job is left to it");
+
+        // Once failed it can be let go again, or removed
+        queue.setPaused(mine.id, false);
+        assertEquals(ExportQueue.State.WAITING, mine.state);
+        queue.remove(mine.id);
+    }
+
+    @Test
+    void anotherJobOfThisGameIsNotSparedByTheOneUnderWay() {
+        ExportQueue queue = new ExportQueue();
+        ExportQueue.Job left = queue.add(job("left.mp4"), 1);
+        ExportQueue.Job now = queue.add(job("now.mp4"), 2);
+        queue.claim(left, 42, "game", 3);
+        queue.claim(now, 42, "game", 4);
+        assertEquals(1, queue.recover(5, pid -> true, 42, now.id));
+        assertEquals(ExportQueue.State.FAILED, left.state);
+        assertEquals(ExportQueue.State.RUNNING, now.state);
+    }
+
     @Test
     void theFileKeepsEverything(@TempDir Path folder) throws Exception {
         Path file = folder.resolve("export-queue.json");
@@ -118,6 +161,22 @@ class ExportQueueTest {
         Files.writeString(file, "{ not json");
         assertTrue(ExportQueue.read(file).jobs().isEmpty());
         assertTrue(Files.exists(folder.resolve("export-queue.json.unreadable")));
+    }
+
+    /** A file that is not UTF-8 at all (L-11) is set aside like any unreadable one, not left to break the queue for good */
+    @Test
+    void aFileInTheWrongEncodingIsSetAsideAndTheQueueStartsAgain(@TempDir Path folder) throws Exception {
+        Path file = folder.resolve("export-queue.json");
+        // "{\"jobs\": [" then bytes that are no UTF-8 at all, as a file saved in another encoding would hold
+        byte[] bytes = {'{', '"', 'j', 'o', 'b', 's', '"', ':', ' ', '[', (byte) 0xFF, (byte) 0xFE, (byte) 0xC3, (byte) 0x28, ']', '}'};
+        Files.write(file, bytes);
+        assertTrue(ExportQueue.read(file).jobs().isEmpty());
+        Path unreadable = folder.resolve("export-queue.json.unreadable");
+        assertTrue(Files.exists(unreadable));
+        assertArrayEquals(bytes, Files.readAllBytes(unreadable), "set aside byte for byte");
+        // And the queue works again: a change writes a good file over the bad one
+        String id = ExportQueue.update(file, queue -> queue.add(job("again.mp4"), 1).id);
+        assertEquals("again.mp4", ExportQueue.read(file).job(id).output);
     }
 
     @Test

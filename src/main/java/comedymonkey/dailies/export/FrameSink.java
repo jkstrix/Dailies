@@ -29,6 +29,24 @@ interface FrameSink {
     void frame(long number, byte[] pixels, int length, int width, int height) throws IOException;
 
     /**
+     * How many frames the sink may hold on to at once when they are handed over with {@link #keep}; the export keeps
+     * that many frames more. 0 for a sink that is done with a frame when {@link #frame} returns, as most are
+     */
+    default int keeps() {
+        return 0;
+    }
+
+    /**
+     * As {@link #frame}, but the array is handed over: the sink may keep it after this returns, and runs {@code done},
+     * on any thread, once it has finished with it. When this throws, nothing was kept and {@code done} is not run.
+     * Only called when {@link #keeps()} is above 0
+     */
+    default void keep(long number, byte[] pixels, int length, int width, int height, Runnable done) throws IOException {
+        this.frame(number, pixels, length, width, height);
+        done.run();
+    }
+
+    /**
      * @param cancelled the export was stopped early. What was written so far is kept and left usable
      * @return the file or folder that was written
      */
