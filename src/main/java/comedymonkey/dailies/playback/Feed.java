@@ -51,6 +51,17 @@ final class Feed {
 
     /** For each chunk, the name of the stored chunk it was built from, for as long as nothing has changed it since */
     private final java.util.Map<Long, String> cleanChunks = new java.util.HashMap<>();
+    /**
+     * The same, for as long as nothing has changed its blocks, light or biomes since: what its block entities hold may
+     * have changed (machines send theirs all the time), but what the game has drawn of it has not
+     */
+    private final java.util.Map<Long, String> sameBlocks = new java.util.HashMap<>();
+    /**
+     * Whether the snapshot being read is for someone watching (not an export or a tool), so that a chunk whose blocks
+     * are what the kept world already has is left drawn as it is and only its block entities are told what they held
+     */
+    private boolean softChunks = false;
+    private int chunksSoft = 0;
     /** Every chunk the world holds */
     private final Set<Long> loadedChunks = new HashSet<>();
     /** Which chunk each stored chunk is, learned the first time it is read */
@@ -188,9 +199,11 @@ final class Feed {
         this.chunksKept = 0;
         this.chunksBuilt = 0;
         this.chunksLetGo = 0;
+        this.chunksSoft = 0;
         boolean plain = minecraft.level != null && this.plainWorld(minecraft) && this.plainSnapshot(segment);
         this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild") && (plain || !strict);
         this.skipChunks = this.mayRewind && plain;
+        this.softChunks = this.mayRewind && !strict && !Boolean.getBoolean("dailies.playback.noSoftChunks");
         this.keptModded = false;
         PlaybackExtensions.resetAll();
         clearCracks(minecraft);
@@ -239,14 +252,15 @@ final class Feed {
         if (this.session == null) {
             throw new IOException("Segment " + segment.number + " of the recording does not start with a description of its world");
         }
-        this.lastLoad = new Load((System.nanoTime() - started) / 1_000_000.0, this.chunksKept, this.chunksBuilt, this.chunksLetGo, segment.startTick);
+        this.lastLoad = new Load((System.nanoTime() - started) / 1_000_000.0, this.chunksKept, this.chunksBuilt, this.chunksLetGo, segment.startTick, this.chunksSoft);
     }
 
     /**
      * What reading one snapshot into the world cost: how long it took, how many chunks were left as they were, how many
-     * built, and how many the world held that the snapshot does not and were let go; and the tick the snapshot is of
+     * built, and how many the world held that the snapshot does not and were let go; the tick the snapshot is of; and
+     * how many of those left as they were had only their block entities told what they held
      */
-    record Load(double millis, int chunksKept, int chunksBuilt, int chunksLetGo, int tick) {
+    record Load(double millis, int chunksKept, int chunksBuilt, int chunksLetGo, int tick, int chunksSoft) {
     }
 
     private int chunksLetGo = 0;
@@ -323,6 +337,7 @@ final class Feed {
         this.rewound = false;
         this.snapshotChunks = null;
         this.cleanChunks.clear();
+        this.sameBlocks.clear();
         this.loadedChunks.clear();
         this.spawnExtras.clear();
     }
@@ -431,6 +446,7 @@ final class Feed {
                 }
                 this.loadedChunks.remove(key);
                 this.cleanChunks.remove(key);
+                this.sameBlocks.remove(key);
             }
         }
         if (moved) {
@@ -507,21 +523,73 @@ final class Feed {
 
     /** Whether a stored chunk in a snapshot is what the kept world already has in that place, untouched */
     private boolean alreadyThere(String stored, Minecraft minecraft) {
-        if (!this.rewound || this.snapshotChunks == null || !this.skipChunks) {
+        if (!this.rewound || this.snapshotChunks == null || (!this.skipChunks && !this.softChunks) || minecraft.level == null) {
             return false;
         }
         Long key = this.chunkOfStored.get(stored);
-        if (key == null || !stored.equals(this.cleanChunks.get(key)) || minecraft.level == null) {
+        if (key == null) {
             return false;
         }
         net.minecraft.world.level.chunk.LevelChunk chunk = minecraft.level.getChunkSource().getChunk(net.minecraft.world.level.ChunkPos.getX(key),
             net.minecraft.world.level.ChunkPos.getZ(key), net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false);
-        // Machines change in ways no packet shows, so a chunk with any in it is always built again
-        if (chunk == null || !chunk.getBlockEntities().isEmpty()) {
+        if (chunk == null) {
             return false;
         }
-        this.snapshotChunks.add(key);
-        this.chunksKept++;
+        // Machines change in ways no packet shows, so a chunk with any in it is built again for an exact jump
+        if (this.skipChunks && stored.equals(this.cleanChunks.get(key)) && chunk.getBlockEntities().isEmpty()) {
+            this.snapshotChunks.add(key);
+            this.chunksKept++;
+            return true;
+        }
+        // For someone watching: blocks as they were drawn, so the chunk stays drawn and its block entities are told what
+        // they held, as the game tells them from a chunk it is sent, in place. Building it again would have the game draw
+        // every such chunk afresh at every jump, which is most of what made dragging the playhead back stutter
+        if (this.softChunks && stored.equals(this.sameBlocks.get(key)) && this.retell(stored, chunk, minecraft)) {
+            this.snapshotChunks.add(key);
+            this.chunksKept++;
+            this.chunksSoft++;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Gives each block entity of a chunk what the stored chunk says it held, as the game does with a chunk it is sent.
+     * False, with nothing changed, when the chunk's block entities are not the ones the stored chunk speaks of: then it
+     * is built again as usual
+     */
+    private boolean retell(String stored, net.minecraft.world.level.chunk.LevelChunk chunk, Minecraft minecraft) {
+        net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet;
+        try {
+            byte[] shared = this.file.shared(stored);
+            if (!(this.session.codec.decode(shared, 0, shared.length) instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket decoded)) {
+                return false;
+            }
+            packet = decoded;
+        } catch (Throwable t) {
+            return false;
+        }
+        java.util.List<Object[]> told = new ArrayList<>();
+        boolean[] matches = {true};
+        packet.getChunkData().getBlockEntitiesTagsConsumer(packet.getX(), packet.getZ()).accept((pos, type, tag) -> {
+            net.minecraft.world.level.block.entity.BlockEntity entity = chunk.getBlockEntity(pos, net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
+            if (entity == null || entity.getType() != type) {
+                matches[0] = false;
+            } else if (tag != null) {
+                told.add(new Object[]{entity, tag});
+            }
+        });
+        if (!matches[0]) {
+            return false;
+        }
+        net.minecraft.core.HolderLookup.Provider registries = minecraft.level.registryAccess();
+        for (Object[] each : told) {
+            try {
+                ((net.minecraft.world.level.block.entity.BlockEntity) each[0]).handleUpdateTag((net.minecraft.nbt.CompoundTag) each[1], registries);
+            } catch (Throwable t) {
+                this.warnOnce("telling a block entity what it held when going back", t);
+            }
+        }
         return true;
     }
 
@@ -547,14 +615,16 @@ final class Feed {
             }
             if (this.storedNow != null) {
                 this.cleanChunks.put(key, this.storedNow);
+                this.sameBlocks.put(key, this.storedNow);
                 this.chunkOfStored.put(this.storedNow, key);
             } else {
                 this.cleanChunks.remove(key);
+                this.sameBlocks.remove(key);
             }
             if (this.snapshotChunks != null) {
                 this.snapshotChunks.add(key);
             }
-        } else if (this.cleanChunks.isEmpty()) {
+        } else if (this.cleanChunks.isEmpty() && this.sameBlocks.isEmpty()) {
             if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten && this.letsGoOf(forgotten.pos())) {
                 this.loadedChunks.remove(forgotten.pos().toLong());
             }
@@ -568,13 +638,18 @@ final class Feed {
             this.changed(event.getPos(), false);
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
             this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+            this.sameBlocks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
             if (this.letsGoOf(forgotten.pos())) {
                 this.loadedChunks.remove(forgotten.pos().toLong());
             }
             this.cleanChunks.remove(forgotten.pos().toLong());
+            this.sameBlocks.remove(forgotten.pos().toLong());
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket biomes) {
-            biomes.chunkBiomeData().forEach(data -> this.cleanChunks.remove(data.pos().toLong()));
+            biomes.chunkBiomeData().forEach(data -> {
+                this.cleanChunks.remove(data.pos().toLong());
+                this.sameBlocks.remove(data.pos().toLong());
+            });
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundExplodePacket explosion) {
             explosion.getToBlow().forEach(pos -> this.changed(pos, true));
         } else if (packet instanceof ClientboundBundlePacket bundle) {
@@ -603,12 +678,14 @@ final class Feed {
         int x = pos.getX() >> 4;
         int z = pos.getZ() >> 4;
         if (!spreads) {
+            // What a block entity holds, or a block's event: nothing drawn of the blocks has changed
             this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(x, z));
             return;
         }
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(x + dx, z + dz));
+                this.sameBlocks.remove(net.minecraft.world.level.ChunkPos.asLong(x + dx, z + dz));
             }
         }
     }

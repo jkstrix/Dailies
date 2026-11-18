@@ -221,7 +221,7 @@ public final class CreateCompat {
                 BlockEntity blockEntity = controller == null ? null : level.getBlockEntity(controller);
                 if (this.bearing.isInstance(blockEntity)) {
                     // The bearing would otherwise ease the contraption back towards its own idea of the angle
-                    // At its own recorded angle where the recording has it (older recordings do not), else at the contraption's
+                    // At its own recorded angle, else (before its first angle is recorded) at the contraption's
                     Float own = this.bearingsRecorded.get(entity.getUUID());
                     float bearingWanted = own != null ? own : wanted;
                     this.bearingAngle.setFloat(blockEntity, bearingWanted);

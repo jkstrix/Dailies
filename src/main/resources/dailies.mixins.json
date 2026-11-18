@@ -23,6 +23,7 @@
     "access.MinecraftAccess",
     "access.ClientLevelAccess",
     "playback.MinecraftMixin",
+    "playback.HoldFrameMixin",
     "playback.SoundEngineMixin",
     "playback.ParticleEngineMixin",
     "playback.RemotePlayerMixin",

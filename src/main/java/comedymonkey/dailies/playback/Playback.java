@@ -70,6 +70,7 @@ public final class Playback {
 
     public static void init() {
         PackPlayback.init();
+        onClosing(FrameHold::forget);
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Pre event) -> tickStart());
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> latchPause());
         // A recorded teleport: the entity is put at its new place at once, where the game would slide it there over three ticks
@@ -319,8 +320,26 @@ public final class Playback {
     /** Whether the jump under way must build such a world from nothing */
     private static boolean strict = true;
 
+    // --- What each jump cost, for the log: where the time goes when dragging the playhead stutters ---
+    private static long jumpStarted = 0L;
+    private static int jumpFrames = 0;
+    private static int jumpTicks = 0;
+    private static double jumpTickMillis = 0.0;
+    private static double jumpLoadMillis = 0.0;
+    private static String jumpLoads = "";
+    private static int jumpFrom = 0;
+
     private static void jump(int tick, boolean pauseThere, boolean quick, boolean exact) {
         requireLoaded();
+        if (!jumping()) {
+            jumpStarted = System.nanoTime();
+            jumpFrames = 0;
+            jumpTicks = 0;
+            jumpTickMillis = 0.0;
+            jumpLoadMillis = 0.0;
+            jumpLoads = "";
+            jumpFrom = position;
+        }
         int target = Math.max(0, Math.min(total, tick));
         pauseAfterJump = pauseThere || paused;
         boolean again = (rough && !quick) || (loose && exact);
@@ -476,11 +495,18 @@ public final class Playback {
                 feed.load(index, minecraft, strict);
                 loose = feed.keptModded();
                 position = feed.position();
+                Feed.Load load = feed.lastLoad();
+                if (load != null) {
+                    jumpLoadMillis += load.millis();
+                    jumpLoads += String.format(java.util.Locale.ROOT, " [snapshot at %d: %.1f ms, %d chunks kept (%d with only their block entities retold), %d built, %d let go]",
+                        load.tick(), load.millis(), load.chunksKept(), load.chunksSoft(), load.chunksBuilt(), load.chunksLetGo());
+                }
                 if (minecraft.screen instanceof ReceivingLevelScreen || minecraft.screen instanceof GenericMessageScreen) {
                     minecraft.setScreen(null);
                 }
             }
             if (jumpTarget >= 0) {
+                jumpFrames++;
                 runJump(minecraft);
             } else if (skipping) {
                 skipping = false;
@@ -662,7 +688,8 @@ public final class Playback {
 
     /** Runs as much of a jump as fits in this frame */
     private static void runJump(Minecraft minecraft) throws Exception {
-        long deadline = System.nanoTime() + JUMP_SLICE_NANOS;
+        long sliceStarted = System.nanoTime();
+        long deadline = sliceStarted + JUMP_SLICE_NANOS;
         skipping = true;
         feed.skipping = true;
         while (position < jumpTarget) {
@@ -671,6 +698,7 @@ public final class Playback {
                 ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(false);
                 // A whole game tick, so every mod that keeps time by ticks stays in step. Its start feeds the recording
                 minecraft.tick();
+                jumpTicks++;
             } finally {
                 fastTick = false;
             }
@@ -678,16 +706,19 @@ public final class Playback {
                 break;
             }
             if (System.nanoTime() > deadline) {
+                jumpTickMillis += (System.nanoTime() - sliceStarted) / 1_000_000.0;
                 hold(minecraft, true);
                 return;
             }
         }
+        jumpTickMillis += (System.nanoTime() - sliceStarted) / 1_000_000.0;
         if (feed.reloadWanted() >= 0 && position < jumpTarget) {
             // The stretch ahead starts from its own snapshot; carry on from there next frame
             reloadIndex = feed.reloadWanted();
             hold(minecraft, true);
             return;
         }
+        int landed = jumpTarget;
         jumpTarget = -1;
         skipping = false;
         feed.skipping = false;
@@ -695,7 +726,14 @@ public final class Playback {
         hold(minecraft, paused);
         minecraft.getSoundManager().stop();
         minecraft.particleEngine.setLevel(minecraft.level);
+        long settling = System.nanoTime();
         settle(minecraft);
+        if (!Boolean.getBoolean("dailies.playback.quietJumps")) {
+            Host.LOGGER.info(String.format(java.util.Locale.ROOT,
+                "Dailies: jump from tick %d to %d%s took %.1f ms over %d frames: snapshots %.1f ms,%s %d ticks run in %.1f ms, settling %.1f ms",
+                jumpFrom, landed, rough ? " (while dragging)" : "", (System.nanoTime() - jumpStarted) / 1_000_000.0, jumpFrames, jumpLoadMillis,
+                jumpLoads, jumpTicks, jumpTickMillis, (System.nanoTime() - settling) / 1_000_000.0));
+        }
     }
 
     /**
