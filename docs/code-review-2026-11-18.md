@@ -12,6 +12,27 @@
 
 ---
 
+## Outcome (added 2026-11-18, after the fixes)
+
+The owner asked for every finding to be fixed. All of them were, on master, except BLD-3, which the owner chose to leave. The table gives the commit that holds each area's fixes. The fixes were checked by compiling only; unit tests and game runs follow as one batch.
+
+| Area | Findings | Commit(s) | Outcome |
+|---|---|---|---|
+| Path helper | Section 4 item 1 | `8ebbfc5` | `SafePaths`, used by SEC-1, 3, 5 |
+| Playback, packs, sound | PB-1..5, SEC-3, L-14..16, L-37 (Feed) | `4963142` | Fixed |
+| Library, compat | SEC-1, SEC-5, LIB-1..4, L-6, L-22..24, L-36, L-37 (Links), Section 4 item 6 | `7a76b24` | Fixed |
+| Recording, file format | REC-1..4, FILE-1, L-17..19, L-30 | `272208d` | Fixed (`BoundedReader`) |
+| Editor, timeline | EDT-1..8, L-20, L-21, L-32, L-34, L-38, L-46 | `b1e36a4` | Fixed; `hermite` added as the owner chose |
+| Interface | UI-1, UI-2, L-26..29, L-33, L-35, L-45, L-47 | `22de9f0`, `3f2ce12` | Fixed; `InputRouter`, library views split |
+| MCP, moments, companion, settings | SEC-2, SEC-4, SEC-6..9, L-1, L-2, L-4, L-5, L-25 | `1924993`, `43a6973` (spec text) | Fixed |
+| Certificate | L-3 | `1924993`, `14c591b` | Fixed: server-only certificate, random password kept in the config folder, owner-only files |
+| Export | EXP-1..8, L-7..13, L-31 | `5ecf006`, `6eff868`, `ac65256` | Fixed; the encoder is made ready off the client thread by every way an export starts |
+| Build, CI, self test | BLD-1, BLD-2, TST-1..3, L-40..44 | `8e3bb44`, `2e69491`, `d8ce8c6` | Fixed; the self test is its own mod and jar |
+| Repository hygiene | L-39 | `43a6973` | Fixed |
+| Machine paths | BLD-3 | none | Left as it is, by the owner's choice |
+
+---
+
 ## 1. Summary
 
 The codebase is in good shape for its size and age. Several things are done properly throughout:
