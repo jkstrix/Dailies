@@ -318,12 +318,22 @@ final class EdgeSteps {
     /** Sixty blocks onto the ground with a full inventory: everything carried scatters where the recorder lands, for all to see */
     private static void groundFall(SelfTest test, Minecraft minecraft) throws Exception {
         double landX = 40.5, landZ = 20.5;
-        item("Falling sixty blocks with a full inventory: everything carried scatters where the recorder lands").owns("recorder", "minecraft:item", "blocks")
+        // With the Corpse mod a death leaves a corpse holding what was carried, where the items would otherwise scatter
+        boolean corpse = Host.get().isModLoaded("corpse");
+        BestiarySteps.Item fall = item(corpse ? "Falling sixty blocks with a full inventory: a corpse holding it all lies where the recorder lands"
+                : "Falling sixty blocks with a full inventory: everything carried scatters where the recorder lands")
+            .owns("recorder", "minecraft:item", "corpse:corpse", "blocks")
             .need(where("recorder", "dying on the ground", thing -> (thing.state().contains("pose=DYING") || thing.clocks().contains("deathTime="))
-                && Math.abs(thing.x() - landX) < 2 && Math.abs(thing.z() - landZ) < 2))
-            .need(present("minecraft:item", 6))
-            .need(where("minecraft:item", "lying around where the recorder landed", thing -> Math.abs(thing.x() - landX) < 5 && Math.abs(thing.z() - landZ) < 5 && thing.y() < Y + 1))
-            .note("the items are the server's, sent to every player; the recorder's body goes in a puff of smoke as other players see it, and the items stay");
+                && Math.abs(thing.x() - landX) < 2 && Math.abs(thing.z() - landZ) < 2));
+        if (corpse) {
+            fall.need(present("corpse:corpse", 1))
+                .need(where("corpse:corpse", "lying where the recorder landed", thing -> Math.abs(thing.x() - landX) < 3 && Math.abs(thing.z() - landZ) < 3))
+                .note("the Corpse mod's corpse is an entity of its own the server sends, wearing the recorder's armour and holding the rest");
+        } else {
+            fall.need(present("minecraft:item", 6))
+                .need(where("minecraft:item", "lying around where the recorder landed", thing -> Math.abs(thing.x() - landX) < 5 && Math.abs(thing.z() - landZ) < 5 && thing.y() < Y + 1))
+                .note("the items are the server's, sent to every player; the recorder's body goes in a puff of smoke as other players see it, and the items stay");
+        }
         c("gamemode survival");
         fillInventory();
         waitTicks(5);
