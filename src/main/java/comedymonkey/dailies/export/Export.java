@@ -261,6 +261,36 @@ public final class Export {
         return active && settings != null && !settings.still;
     }
 
+    // --- The window during a video export: shown a few dozen times a second, not at every one of hundreds of frames ---
+    private static final long WINDOW_NANOS = 33_000_000L;
+    private static long windowShownAt = 0L;
+    private static boolean windowThisFrame = true;
+    private static int windowFramesShown = 0;
+    private static int windowFramesSkipped = 0;
+
+    /**
+     * Asked once a frame, where the game would put its picture in the window: whether the window is drawn and shown
+     * this frame. During a video export it shows only the progress panel, and drawing it and handing it to the window
+     * system at every frame took the game seven tenths of a millisecond of each, at hundreds of frames a second; thirty
+     * times a second reads just as well. Render thread
+     */
+    public static boolean windowFrameDue() {
+        long now = System.nanoTime();
+        windowThisFrame = !holdsClock() || now - windowShownAt >= WINDOW_NANOS || Boolean.getBoolean("dailies.export.everyWindowFrame");
+        if (windowThisFrame) {
+            windowShownAt = now;
+            windowFramesShown++;
+        } else {
+            windowFramesSkipped++;
+        }
+        return windowThisFrame;
+    }
+
+    /** Whether the window is shown this frame, as {@link #windowFrameDue} last said */
+    public static boolean windowThisFrame() {
+        return windowThisFrame || !holdsClock();
+    }
+
     public static float partialTick() {
         return partialTick;
     }
@@ -395,6 +425,10 @@ public final class Export {
         drawFrom = 0;
         loopFrom = 0;
         titleNanos = 0;
+        windowShownAt = 0L;
+        windowThisFrame = true;
+        windowFramesShown = 0;
+        windowFramesSkipped = 0;
         writer = new Thread(Export::write, "Dailies-Export-Writer");
         writer.setDaemon(true);
         writer.start();
@@ -674,7 +708,9 @@ public final class Export {
             }
             long convertFrom = System.nanoTime();
             capture.issue(target);
-            TIMINGS.add(ExportTimings.Stage.CONVERT, System.nanoTime() - convertFrom);
+            long slotWait = capture.takeSlotWaitNanos();
+            TIMINGS.add(ExportTimings.Stage.CONVERT, System.nanoTime() - convertFrom - slotWait);
+            TIMINGS.add(ExportTimings.Stage.QUEUE, slotWait);
             frame++;
             // The sound that belongs to this picture, exactly as much as one frame lasts
             long soundFrom = System.nanoTime();
@@ -747,7 +783,9 @@ public final class Export {
         TIMINGS.frames(frame);
         Settings current = settings;
         String what = (current == null ? "?" : current.width + "x" + current.height + " " + (current.still || current.container.equals("png_sequence") ? "pictures" : current.videoCodec))
-            + ", " + (capture != null && capture.i420() ? "converted on the graphics card" : "RGBA");
+            + ", " + (capture != null && capture.i420() ? "converted on the graphics card" : "RGBA")
+            + (capture != null && capture.persistent() ? ", copied out beside the game (copy and queue wait are on that thread)" : "")
+            + (windowFramesSkipped > 0 ? ", the window shown " + windowFramesShown + " times" : "");
         lastTimings = TIMINGS.line(what);
         Host.LOGGER.info("Dailies: {}", lastTimings);
     }
@@ -756,6 +794,8 @@ public final class Export {
         if (capture != null) {
             // The last pictures are still on the graphics card
             capture.collect(true, Export::deliver, waited -> TIMINGS.add(ExportTimings.Stage.READBACK, waited));
+            // And the copying thread has finished with them before the writer is told there are no more
+            capture.awaitCopies();
         }
         pool.end();
         writer.join(120_000);
