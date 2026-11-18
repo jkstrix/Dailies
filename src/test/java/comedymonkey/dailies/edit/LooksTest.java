@@ -31,10 +31,10 @@ class LooksTest {
                 "show_own_shadow", "show_scoreboard", "show_action_bar", "show_hotbar", "show_blocks", "show_entities", "show_players", "show_beacon_beams",
                 "hidden_entity_types", "hidden_particle_types",
                 "weather", "fog_mode", "fog_start", "fog_end", "fog_colour", "sky", "background_colour", "night_vision",
-                "server_resource_packs", "fov", "roll", "aspect_guide", "custom_aspect", "letterbox", "thirds_guide", "centre_guide", "void_spill")) {
+                "server_resource_packs", "fov", "roll", "aspect_guide", "custom_aspect", "letterbox", "thirds_guide", "centre_guide", "void_spill", "head_bob")) {
             assertTrue(names.contains(name), name);
         }
-        assertEquals(35, names.size());
+        assertEquals(36, names.size());
     }
 
     @Test

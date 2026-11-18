@@ -621,6 +621,17 @@ public final class Recorder {
         /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
         byte[] sharedPacket(byte[] encoded);
 
+        /**
+         * Packets stored once and named, as {@link #sharedPacket} does each, written here in this order; each name is set
+         * once it is known. The recording being made does the encoding, naming and storing on its writer's thread, off
+         * the game's; this way of writing does them at once
+         */
+        default void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
+            for (int i = 0; i < packets.size(); i++) {
+                names.get(i).set(this.sharedPacket(codec.encode(packets.get(i))));
+            }
+        }
+
         /** Data stored once and referred to by a record of the given kind */
         void sharedRecord(int kind, byte[] data);
 
@@ -688,6 +699,41 @@ public final class Recorder {
             Recorder.this.flushTicks();
             Recorder.this.part.record(Records.SHARED_PACKET, hash);
             return hash;
+        }
+
+        /**
+         * The chunks a snapshot describes afresh are the most of what storing the world cost the game: turning them into
+         * bytes, naming them by their SHA-256 and storing them took about a third of it in new terrain. What has been
+         * written so far goes to the writer first, then these, encoded, named and stored there, so the recording keeps its
+         * order; what is written after goes in the next part
+         */
+        @Override
+        public void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
+            Recorder.this.flushPart();
+            int endTick = Recorder.this.tick;
+            List<Packet<? super ClientGamePacketListener>> made = new ArrayList<>(packets);
+            List<java.util.concurrent.atomic.AtomicReference<byte[]>> naming = new ArrayList<>(names);
+            Recorder.this.spool.add(new Spool.Job() {
+                @Override
+                public void run(RecordingWriter writer) throws Exception {
+                    Records.Writer records = new Records.Writer();
+                    for (int i = 0; i < made.size(); i++) {
+                        byte[] encoded = codec.encode(made.get(i));
+                        byte[] hash = sha256(encoded);
+                        writer.putShared(encoded);
+                        records.record(Records.SHARED_PACKET, hash);
+                        naming.get(i).set(hash);
+                    }
+                    byte[] bytes = records.take();
+                    writer.appendToSegment(bytes, 0, bytes.length, endTick);
+                }
+
+                @Override
+                public long bytes() {
+                    // About what a chunk comes to, for the writer's queue to judge how much is waiting
+                    return made.size() * 40_000L;
+                }
+            });
         }
 
         /** Data stored once and referred to by a record of the given kind */

@@ -34,6 +34,39 @@ public abstract class RemotePlayerMixin {
      * lies under the death screen until the respawn, and so did the recorder in playback, for as long as the death screen
      * stayed up (the scripted test of falling into the void, 18 November)
      */
+    @org.spongepowered.asm.mixin.Unique
+    private float dailies$bob = 0.0F;
+
+    /**
+     * Head bob when watching through a player's eyes (the owner, 18 November: "a toggle in the editor ui and for the head
+     * bob to be simulated"). The game sways the view from how far its own player has walked and a bob that eases up while
+     * walking on the ground; another player is moved by being put at each recorded place, so neither grows and the view
+     * stood still. Here both are worked out from how far the watched player moved this tick, the way the game works them
+     * out for its own player, and the game's own head bob draws from them. The scene's look head_bob turns it off
+     */
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void dailies$simulatedHeadBob(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        net.minecraft.client.player.RemotePlayer self = (net.minecraft.client.player.RemotePlayer) (Object) this;
+        if (!Playback.active() || net.minecraft.client.Minecraft.getInstance().getCameraEntity() != self) {
+            return;
+        }
+        boolean wanted = !comedymonkey.dailies.editor.EditorSession.open() || comedymonkey.dailies.editor.EditorSession.scene().looks().headBob;
+        double moved = Math.min(1.0, Math.hypot(self.getX() - self.xo, self.getZ() - self.zo));
+        self.walkDistO = self.walkDist;
+        self.oBob = this.dailies$bob;
+        if (!wanted) {
+            this.dailies$bob = 0.0F;
+        } else {
+            self.walkDist += (float) moved * 0.6F;
+            float step = self.onGround() && !self.isDeadOrDying() ? (float) Math.min(0.1, moved) : 0.0F;
+            this.dailies$bob += (step - this.dailies$bob) * 0.4F;
+        }
+        self.bob = this.dailies$bob;
+        if (!wanted) {
+            self.oBob = 0.0F;
+        }
+    }
+
     @Inject(method = "tick", at = @At("TAIL"))
     private void dailies$deadRecorderGoes(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         net.minecraft.client.player.RemotePlayer self = (net.minecraft.client.player.RemotePlayer) (Object) this;

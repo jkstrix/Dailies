@@ -69,7 +69,14 @@ public final class Snapshots {
      * What is remembered of a chunk whose stored form is still good: the name of the stored bytes, and what its block
      * entities said of themselves when it was stored. A chunk kept exactly as the server sent it has not been asked yet
      */
-    private record Stored(byte[] name, boolean asked, long said) {
+    /**
+     * A chunk's stored form: its name, which the recorder's writer fills in once it has encoded and stored the chunk off
+     * the game's thread (null until then, when the chunk is simply described again)
+     */
+    private record Stored(java.util.concurrent.atomic.AtomicReference<byte[]> name, boolean asked, long said) {
+        byte[] known() {
+            return this.name.get();
+        }
     }
 
     /** The stored form of each chunk that no packet has changed since it was stored, by chunk position */
@@ -234,7 +241,7 @@ public final class Snapshots {
      * of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
      */
     static void arrived(int x, int z, byte[] name) {
-        CHUNKS.put(ChunkPos.asLong(x, z), new Stored(name, false, 0));
+        CHUNKS.put(ChunkPos.asLong(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
     }
 
     /** A packet is about to be applied. Any chunk it changes has to be described afresh in the next snapshot */
@@ -534,6 +541,10 @@ public final class Snapshots {
         int radius = Math.max(minecraft.options.getEffectiveRenderDistance(), ((ClientPacketListenerAccess) listener).dailies$serverChunkRadius()) + 4;
         Set<Long> present = new HashSet<>();
         List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();
+        // The chunks to describe afresh: their packets are made here, from the world as it is on this tick, and turned into
+        // bytes, named and stored by the recorder's writer, off the game's thread (Recorder.Out.sharedPackets)
+        List<Packet<? super ClientGamePacketListener>> fresh = new ArrayList<>();
+        List<java.util.concurrent.atomic.AtomicReference<byte[]>> freshNames = new ArrayList<>();
         int count = 0;
         for (int x = centre.x - radius; x <= centre.x + radius; x++) {
             for (int z = centre.z - radius; z <= centre.z + radius; z++) {
@@ -556,18 +567,24 @@ public final class Snapshots {
                         stored = null;
                     }
                 }
-                if (stored != null) {
-                    out.sharedRef(Records.SHARED_PACKET, stored.name());
+                byte[] known = stored == null ? null : stored.known();
+                if (known != null) {
+                    out.sharedRef(Records.SHARED_PACKET, known);
                     continue;
                 }
                 try {
-                    byte[] bytes = codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
-                    CHUNKS.put(key, new Stored(out.sharedPacket(bytes), true, said));
+                    java.util.concurrent.atomic.AtomicReference<byte[]> name = new java.util.concurrent.atomic.AtomicReference<>();
+                    fresh.add(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+                    freshNames.add(name);
+                    CHUNKS.put(key, new Stored(name, true, said));
                     encoded++;
                 } catch (Throwable t) {
                     warnOnce("chunk", t);
                 }
             }
+        }
+        if (!fresh.isEmpty()) {
+            out.sharedPackets(fresh, freshNames, codec);
         }
         CHUNKS.keySet().retainAll(present);
         lids.forEach(out::packet);
