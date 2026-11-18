@@ -347,17 +347,12 @@ final class RendererSteps {
             check(with != null && spread(with) > 12.0, "a still with the shader pack is blank");
             check(!dark(with), String.format(Locale.ROOT, "a still with the shader pack is black or nearly so (mean brightness %.1f of 255, %.0f%% of it near black)", brightness(with), 100.0 * nearBlack(with)));
 
-            // Played, not only jumped to: forty ticks at the usual speed with the pack drawing every frame
+            // Played, not only jumped to: forty ticks at the usual speed with the pack drawing every frame. The pictures
+            // exported below come after the play, so they show whether it left the pack drawing properly
             String packName = pack;
             test.onClientRun(() -> Playback.playTo(from + 40));
             test.waitFor(() -> (Playback.paused() && Playback.position() >= from + 40) || Playback.lastError() != null, 60, "playback to play forty ticks with the shader pack");
             check(Playback.lastError() == null, "playback failed while playing with the shader pack " + packName + ": " + Playback.lastError());
-            Path played = exports().resolve("renderers-with-pack-played.png");
-            Files.deleteIfExists(played);
-            test.tool("export_screenshot", args("output_path", played.toString(), "width", 640, "height", 360, "overwrite", true));
-            test.waitFor(() -> !Export.active(), 120, "the still with the shader pack after play");
-            BufferedImage afterPlay = ImageIO.read(played.toFile());
-            check(afterPlay != null && spread(afterPlay) > 12.0 && !dark(afterPlay), "a still with the shader pack after forty ticks of play is blank or black");
             PlaybackSteps.jump(test, from);
             check(difference(with, ImageIO.read(plain.toFile())) > 2.0, "a still with the shader pack is the same as one without: the pack was not in the picture");
 
