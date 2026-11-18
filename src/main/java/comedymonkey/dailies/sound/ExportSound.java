@@ -8,6 +8,7 @@ import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.edit.TimeMap;
 import comedymonkey.dailies.export.Encoder;
 import comedymonkey.dailies.export.Export;
+import comedymonkey.dailies.export.JoinCommand;
 import comedymonkey.dailies.mixin.sound.SoundEngineAccess;
 import comedymonkey.dailies.mixin.sound.SoundManagerAccess;
 import net.minecraft.client.Minecraft;
@@ -48,7 +49,9 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * Recorded voice chat is played into the same device by {@link VoicePlayback}, so it is captured with the game's
  * sound, as loud as {@link VoiceLevels} says from the export's camera and never placed left or right. At the end one run of the bundled encoder joins the soundless video, the
- * captured sound and the scene's audio keyframes into the finished file.
+ * captured sound and the scene's audio keyframes into the finished file. Where the picture is made by several
+ * encoders at once, there is no soundless video: the sound goes into the run that joins their parts ({@link #joinInto}),
+ * so the picture is written once (EXP-7).
  * <p>
  * With separate tracks asked for (EXP-12) the same sound is also kept apart: the game's sound alone, each speaker's
  * voice alone and the audio keyframes alone. Then the voices are not played into the game's device but placed by
@@ -61,7 +64,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ExportSound {
 
-    public static final int SAMPLE_RATE = 48000;
+    public static final int SAMPLE_RATE = JoinCommand.SAMPLE_RATE;
     private static final int CHUNK_FRAMES = 4096;
     private static final int BYTES_PER_FRAME = 4;
 
@@ -432,29 +435,20 @@ public final class ExportSound {
     public static Path finish(Path written, boolean cancelled) {
         Path video = videoFile;
         if (video == null) {
+            // No sound to join, or it was joined already, with the parts of several encoders (joinInto)
             return written;
         }
         Path output = settings == null ? written : settings.output.toAbsolutePath();
         capturing = false;
         closePcm();
-        try {
-            if (rendered > 0 && pcmFile != null && Files.exists(pcmFile) && settings != null) {
-                StringBuilder said = new StringBuilder();
-                if (separate ? muxApart(video, pcmFile, output, said) : mux(video, pcmFile, output, said)) {
-                    note = said.toString();
-                    Files.deleteIfExists(video);
-                    Files.deleteIfExists(pcmFile);
-                    dropVoices();
-                    videoFile = null;
-                    return output;
-                }
-                note = "no sound: " + said;
-            } else if (note == null || !note.startsWith("no sound")) {
-                note = "no sound: " + (problem != null ? problem : "none was captured");
+        if (joinSound(JoinCommand.file(video), ExportSound::run, output)) {
+            try {
+                Files.deleteIfExists(video);
+            } catch (Throwable t) {
+                Host.LOGGER.debug("Dailies: the soundless video could not be removed", t);
             }
-        } catch (Throwable t) {
-            Host.LOGGER.warn("Dailies: sound could not be added to the export", t);
-            note = "no sound: " + t;
+            throwAwaySound();
+            return output;
         }
         dropVoices();
         try {
@@ -468,6 +462,79 @@ public final class ExportSound {
             Host.LOGGER.warn("Dailies: the soundless video could not be moved to {}; it stays at {}", output, video, t);
             return video;
         }
+    }
+
+    /**
+     * The picture is the parts of several encoders, joined into the finished file by one more run of the encoder: the
+     * sound goes into that same run, and the picture is written once, with no soundless file before it (EXP-7). Says
+     * whether the file was written with sound; when not, {@link #note} says why and the caller joins the parts into it
+     * alone. Either way the captured sound is thrown away afterwards, and {@link #finish} has nothing left to do. Never
+     * throws. The export's finishing thread, with capturing stopped by {@link #stopCapture}.
+     *
+     * @param parts     the parts, as the encoder reads them, and a run of the encoder that hands them to it; a run
+     *                  refused because the export has been stopped meanwhile leaves the sound out
+     * @param cancelled the export was stopped, or its picture ends short of the sound: the picture is kept without it
+     */
+    public static boolean joinInto(JoinCommand.Picture parts, Path output, boolean cancelled) {
+        capturing = false;
+        closePcm();
+        // The picture goes straight to the export's own file: the soundless one prepare() named is never written
+        videoFile = null;
+        try {
+            if (cancelled) {
+                if (note == null || !note.startsWith("no sound")) {
+                    note = "no sound: stopped, as the export was cancelled";
+                }
+                return false;
+            }
+            return joinSound(parts.arguments(), parts::run, output.toAbsolutePath());
+        } finally {
+            throwAwaySound();
+        }
+    }
+
+    /**
+     * Joins the captured sound to a picture, writing the finished file, and sets {@link #note} to what was done or why
+     * it could not be. Whether it worked. Never throws
+     *
+     * @param picture what opens the picture as the encoder's first input
+     * @param runner  a run of the encoder with a command that opens it so
+     */
+    private static boolean joinSound(List<String> picture, Runner runner, Path output) {
+        try {
+            if (rendered > 0 && pcmFile != null && Files.exists(pcmFile) && settings != null) {
+                StringBuilder said = new StringBuilder();
+                if (separate ? muxApart(picture, runner, pcmFile, output, said) : mux(picture, runner, pcmFile, output, said)) {
+                    note = said.toString();
+                    return true;
+                }
+                note = "no sound: " + said;
+            } else if (note == null || !note.startsWith("no sound")) {
+                note = "no sound: " + (problem != null ? problem : "none was captured");
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies: sound could not be added to the export", t);
+            note = "no sound: " + t;
+        }
+        return false;
+    }
+
+    /** A run of the encoder with a command: null when it worked, else what it said */
+    private interface Runner {
+        @Nullable String run(List<String> command);
+    }
+
+    /** The sound has been joined, or will not be: its captured samples and the speakers' files go */
+    private static void throwAwaySound() {
+        dropVoices();
+        try {
+            if (pcmFile != null) {
+                Files.deleteIfExists(pcmFile);
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.debug("Dailies: the captured sound could not be removed", t);
+        }
+        videoFile = null;
     }
 
     /**
@@ -527,20 +594,17 @@ public final class ExportSound {
 
     // --- Joining sound and picture ---
 
-    private record Cue(Path file, double volume, double startSeconds, double skipSeconds) {
-    }
-
-    private static boolean mux(Path video, Path sound, Path output, StringBuilder said) throws IOException {
+    private static boolean mux(List<String> video, Runner runner, Path sound, Path output, StringBuilder said) throws IOException {
         StringBuilder remarks = new StringBuilder();
         String[] codec = codec(remarks);
-        List<Cue> extra = cues(remarks);
-        String failure = run(command(video, sound, output, codec, extra));
+        List<JoinCommand.Cue> extra = cues(remarks);
+        String failure = join(runner, command(video, sound, output, codec, extra));
         if (failure != null && !extra.isEmpty()) {
             // An audio keyframe's file the encoder cannot read must not cost the game's sound
             Host.LOGGER.warn("Dailies: the audio keyframes could not be mixed in ({}); trying without them", failure);
             remarks.append("; the audio keyframes could not be mixed in (").append(firstLine(failure)).append(')');
             extra = List.of();
-            failure = run(command(video, sound, output, codec, extra));
+            failure = join(runner, command(video, sound, output, codec, extra));
         }
         if (failure != null) {
             Host.LOGGER.warn("Dailies: sound could not be joined to the video: {}", failure);
@@ -585,8 +649,8 @@ public final class ExportSound {
     }
 
     /** The scene's audio keyframes that sound within the exported range, with when each starts in the video */
-    private static List<Cue> cues(StringBuilder remarks) {
-        List<Cue> found = new ArrayList<>();
+    private static List<JoinCommand.Cue> cues(StringBuilder remarks) {
+        List<JoinCommand.Cue> found = new ArrayList<>();
         int missing = 0;
         for (Keyframe.Audio cue : cues) {
             try {
@@ -602,11 +666,11 @@ public final class ExportSound {
                     continue;
                 }
                 if (cue.tick() >= timeMap.startTick()) {
-                    found.add(new Cue(file, cue.volume(), timeMap.realSecondsAt(cue.tick()), 0.0));
+                    found.add(new JoinCommand.Cue(file, cue.volume(), timeMap.realSecondsAt(cue.tick()), 0.0));
                 } else {
                     // Started before the range: it is already this far in when the video begins
                     TimeMap before = new TimeMap(scene, cue.tick(), timeMap.startTick());
-                    found.add(new Cue(file, cue.volume(), 0.0, before.realSecondsAt(timeMap.startTick())));
+                    found.add(new JoinCommand.Cue(file, cue.volume(), 0.0, before.realSecondsAt(timeMap.startTick())));
                 }
             } catch (Throwable t) {
                 missing++;
@@ -618,45 +682,15 @@ public final class ExportSound {
         return found;
     }
 
-    private static List<String> command(Path video, Path sound, Path output, String[] codec, List<Cue> extra) throws IOException {
-        List<String> command = new ArrayList<>(List.of(Encoder.programPath().toString(), "-hide_banner", "-loglevel", "error", "-y",
-            "-i", video.toString(),
-            "-f", ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? "s16le" : "s16be", "-ar", String.valueOf(SAMPLE_RATE), "-ac", "2", "-i", sound.toString()));
-        for (Cue cue : extra) {
-            if (cue.skipSeconds() > 0.0) {
-                command.addAll(List.of("-ss", String.format(Locale.ROOT, "%.4f", cue.skipSeconds())));
-            }
-            command.addAll(List.of("-i", cue.file().toString()));
-        }
-        if (extra.isEmpty()) {
-            command.addAll(List.of("-map", "0:v:0", "-map", "1:a:0"));
-        } else {
-            StringBuilder graph = new StringBuilder("[1:a]anull[game]");
-            StringBuilder inputs = new StringBuilder("[game]");
-            for (int i = 0; i < extra.size(); i++) {
-                Cue cue = extra.get(i);
-                graph.append(";[").append(i + 2).append(":a:0]aresample=").append(SAMPLE_RATE).append(",aformat=channel_layouts=stereo,volume=")
-                    .append(String.format(Locale.ROOT, "%.4f", cue.volume()));
-                long delay = Math.round(cue.startSeconds() * 1000.0);
-                if (delay > 0) {
-                    graph.append(",adelay=").append(delay).append(":all=1");
-                }
-                graph.append("[cue").append(i).append(']');
-                inputs.append("[cue").append(i).append(']');
-            }
-            // The game's sound is exactly as long as the picture, so it sets the length; nothing is turned down to make room
-            graph.append(';').append(inputs).append("amix=inputs=").append(extra.size() + 1).append(":duration=first:normalize=0[mix]");
-            command.addAll(List.of("-filter_complex", graph.toString(), "-map", "0:v:0", "-map", "[mix]"));
-        }
-        command.addAll(List.of("-c:v", "copy"));
-        command.addAll(Arrays.asList(codec).subList(1, codec.length));
-        command.addAll(List.of("-ar", String.valueOf(SAMPLE_RATE), "-ac", settings.stereo ? "2" : "1"));
-        String container = settings.container.toLowerCase(Locale.ROOT);
-        if (container.equals("mp4") || container.equals("mov")) {
-            command.addAll(List.of("-movflags", "+faststart"));
-        }
-        command.add(output.toString());
-        return command;
+    private static List<String> command(List<String> video, Path sound, Path output, String[] codec, List<JoinCommand.Cue> extra) throws IOException {
+        return JoinCommand.withSound(Encoder.programPath().toString(), video, sound, ByteOrder.nativeOrder(), extra, Arrays.asList(codec).subList(1, codec.length),
+            settings.stereo, settings.container, output);
+    }
+
+    /** Runs the encoder through the picture's runner, saying what it runs in the log first */
+    private static @Nullable String join(Runner runner, List<String> command) {
+        Host.LOGGER.info("Dailies: joining sound and picture: {}", String.join(" ", command));
+        return runner.run(command);
     }
 
     // --- Separate tracks: the game, each speaker and the music apart, and a mix that is their sum (EXP-12) ---
@@ -665,7 +699,7 @@ public final class ExportSound {
      * Joins the video with a mixed track made by adding the separate ones together, writes the separate ones as WAV
      * files and as named tracks as asked, and says in {@code said} what was done.
      */
-    private static boolean muxApart(Path video, Path game, Path output, StringBuilder said) throws IOException {
+    private static boolean muxApart(List<String> video, Runner runner, Path game, Path output, StringBuilder said) throws IOException {
         StringBuilder remarks = new StringBuilder();
         String[] codec = codec(remarks);
         long frames = rendered;
@@ -692,10 +726,11 @@ public final class ExportSound {
                 orders.add(ByteOrder.LITTLE_ENDIAN);
                 tracks.add(new Track(unique.equals(tag) ? title : title + unique.substring(tag.length()), "voice-" + unique, scratch(game, base, "voice" + tracks.size())));
             }
-            List<Cue> extra = cues(remarks);
+            List<JoinCommand.Cue> extra = cues(remarks);
             if (!extra.isEmpty()) {
                 Path music = scratch(game, base, "music-in");
                 temporary.add(music);
+                Host.LOGGER.info("Dailies: rendering the audio keyframes alone");
                 String failure = run(musicCommand(extra, frames, music));
                 if (failure == null && Files.exists(music)) {
                     sources.add(music);
@@ -733,12 +768,12 @@ public final class ExportSound {
                     remarks.append("; the separate WAV files could not all be written (").append(e.getMessage()).append(')');
                 }
             }
-            String failure = run(apartCommand(video, mix, output, codec, inside ? tracks : List.of(), channels));
+            String failure = join(runner, apartCommand(video, mix, output, codec, inside ? tracks : List.of(), channels));
             if (failure != null && inside) {
                 Host.LOGGER.warn("Dailies: the separate tracks could not be put inside the file ({}); trying with the mixed track alone", failure);
                 remarks.append("; the separate tracks could not be put inside the file (").append(firstLine(failure)).append(')');
                 inside = false;
-                failure = run(apartCommand(video, mix, output, codec, List.of(), channels));
+                failure = join(runner, apartCommand(video, mix, output, codec, List.of(), channels));
             }
             if (failure != null) {
                 Host.LOGGER.warn("Dailies: sound could not be joined to the video: {}", failure);
@@ -831,9 +866,9 @@ public final class ExportSound {
     }
 
     /** Renders the audio keyframes alone to stereo samples, exactly as long as the video, each starting on its own sample */
-    private static List<String> musicCommand(List<Cue> extra, long frames, Path output) throws IOException {
+    private static List<String> musicCommand(List<JoinCommand.Cue> extra, long frames, Path output) throws IOException {
         List<String> command = new ArrayList<>(List.of(Encoder.programPath().toString(), "-hide_banner", "-loglevel", "error", "-y"));
-        for (Cue cue : extra) {
+        for (JoinCommand.Cue cue : extra) {
             if (cue.skipSeconds() > 0.0) {
                 command.addAll(List.of("-ss", String.format(Locale.ROOT, "%.4f", cue.skipSeconds())));
             }
@@ -842,7 +877,7 @@ public final class ExportSound {
         StringBuilder graph = new StringBuilder();
         StringBuilder inputs = new StringBuilder();
         for (int i = 0; i < extra.size(); i++) {
-            Cue cue = extra.get(i);
+            JoinCommand.Cue cue = extra.get(i);
             graph.append('[').append(i).append(":a:0]aresample=").append(SAMPLE_RATE).append(",aformat=channel_layouts=stereo,volume=")
                 .append(String.format(Locale.ROOT, "%.4f", cue.volume()));
             long delay = Math.round(cue.startSeconds() * SAMPLE_RATE);
@@ -861,35 +896,15 @@ public final class ExportSound {
         return command;
     }
 
-    private static List<String> apartCommand(Path video, Path mix, Path output, String[] codec, List<Track> tracks, int channels) throws IOException {
-        List<String> command = new ArrayList<>(List.of(Encoder.programPath().toString(), "-hide_banner", "-loglevel", "error", "-y", "-i", video.toString()));
+    private static List<String> apartCommand(List<String> video, Path mix, Path output, String[] codec, List<Track> tracks, int channels) throws IOException {
         List<String> titles = new ArrayList<>(List.of("Mix"));
         List<Path> inputs = new ArrayList<>(List.of(mix));
         for (Track track : tracks) {
             titles.add(track.title());
             inputs.add(track.samples());
         }
-        for (Path input : inputs) {
-            command.addAll(List.of("-f", "s16le", "-ar", String.valueOf(SAMPLE_RATE), "-ac", String.valueOf(channels), "-i", input.toString()));
-        }
-        command.addAll(List.of("-map", "0:v:0"));
-        for (int i = 0; i < inputs.size(); i++) {
-            command.addAll(List.of("-map", (i + 1) + ":a:0"));
-        }
-        command.addAll(List.of("-c:v", "copy"));
-        command.addAll(Arrays.asList(codec).subList(1, codec.length));
-        command.addAll(List.of("-ar", String.valueOf(SAMPLE_RATE), "-ac", String.valueOf(channels)));
-        for (int i = 0; i < titles.size(); i++) {
-            // MKV shows the title; MOV shows the handler name, and keeps the title as the track's name
-            command.addAll(List.of("-metadata:s:a:" + i, "title=" + titles.get(i), "-metadata:s:a:" + i, "handler_name=" + titles.get(i)));
-            command.addAll(List.of("-disposition:a:" + i, i == 0 ? "default" : "0"));
-        }
-        String container = settings.container.toLowerCase(Locale.ROOT);
-        if (container.equals("mp4") || container.equals("mov")) {
-            command.addAll(List.of("-movflags", "+faststart"));
-        }
-        command.add(output.toString());
-        return command;
+        return JoinCommand.withTracks(Encoder.programPath().toString(), video, titles, inputs, Arrays.asList(codec).subList(1, codec.length), channels,
+            settings.container, output);
     }
 
     /**
@@ -902,7 +917,6 @@ public final class ExportSound {
         }
         Process process = null;
         try {
-            Host.LOGGER.info("Dailies: joining sound and picture: {}", String.join(" ", command));
             process = new ProcessBuilder(command).redirectErrorStream(true).start();
             Process running = process;
             StringBuilder log = new StringBuilder();
