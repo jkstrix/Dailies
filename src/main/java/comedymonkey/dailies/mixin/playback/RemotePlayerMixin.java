@@ -37,7 +37,9 @@ public abstract class RemotePlayerMixin {
     @Inject(method = "tick", at = @At("TAIL"))
     private void dailies$deadRecorderGoes(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         net.minecraft.client.player.RemotePlayer self = (net.minecraft.client.player.RemotePlayer) (Object) this;
-        if (self.deathTime < 20 || self.isRemoved() || !Playback.active()) {
+        // Nineteen: the recorder's death reaches playback with the recorded state of their own player, a tick after their
+        // own game took it, so the live game's twentieth tick of dying is playback's nineteenth (seen in the void test)
+        if (self.deathTime < 19 || self.isRemoved() || !Playback.active()) {
             return;
         }
         RecordingManifest manifest = Playback.manifest();
