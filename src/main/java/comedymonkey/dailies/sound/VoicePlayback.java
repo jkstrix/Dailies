@@ -284,6 +284,31 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
         }
     }
 
+    /**
+     * The recording paused, or is jumping: each voice stops at once, and what it still had waiting (up to half a second)
+     * is dropped rather than heard over a world that stands still or has moved on. The sources are kept for what comes next
+     */
+    @Override
+    public void stopped() {
+        if (this.voices.isEmpty() || ALC10.alcGetCurrentContext() == 0L) {
+            return;
+        }
+        for (Voice voice : this.voices.values()) {
+            try {
+                AL10.alGetError();
+                AL10.alSourceStop(voice.source);
+                // A stopped source has used up every buffer it had queued: all of them can be taken back
+                int processed = AL10.alGetSourcei(voice.source, AL10.AL_BUFFERS_PROCESSED);
+                for (int i = 0; i < processed; i++) {
+                    voice.spare.add(AL10.alSourceUnqueueBuffers(voice.source));
+                }
+                AL10.alGetError();
+            } catch (Throwable t) {
+                Host.LOGGER.debug("Dailies: a voice could not be stopped", t);
+            }
+        }
+    }
+
     /** Stops every voice and gives back everything held: before a jump, when the recording closes */
     @Override
     public void reset() {

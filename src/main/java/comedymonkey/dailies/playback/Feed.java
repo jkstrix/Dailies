@@ -49,25 +49,19 @@ final class Feed {
     // makes the game draw every chunk afresh. Now the world is kept: everything that moves is taken out and put back as
     // the snapshot has it, and only the chunks that have changed since they were last built are built again.
 
-    /** For each chunk, the name of the stored chunk it was built from, for as long as nothing has changed it since */
-    private final java.util.Map<Long, String> cleanChunks = new java.util.HashMap<>();
     /**
-     * The same, for as long as nothing has changed its blocks, light or biomes since: what its block entities hold may
-     * have changed (machines send theirs all the time), but what the game has drawn of it has not
+     * For each chunk, the stored chunk it was built from and the light a snapshot put on top, for as long as nothing has
+     * changed it since
      */
-    private final java.util.Map<Long, String> sameBlocks = new java.util.HashMap<>();
+    private final KeptChunks chunks = new KeptChunks();
     /**
      * Whether the snapshot being read is for someone watching (not an export or a tool), so that a chunk whose blocks
      * are what the kept world already has is left drawn as it is and only its block entities are told what they held
      */
     private boolean softChunks = false;
     private int chunksSoft = 0;
-    /** The chunks the snapshot being read has left as the kept world had them, by chunk, with the stored chunk each is */
-    private final java.util.Map<Long, String> keptNow = new java.util.HashMap<>();
     /** Every chunk the world holds */
     private final Set<Long> loadedChunks = new HashSet<>();
-    /** Which chunk each stored chunk is, learned the first time it is read */
-    private final java.util.Map<String, Long> chunkOfStored = new java.util.HashMap<>();
     /** True while a snapshot is being read by {@link #load} */
     private boolean loading = false;
     /** The world that was open when the snapshot began can be kept, if the snapshot turns out to be of the same place */
@@ -109,8 +103,16 @@ final class Feed {
 
             @Override
             public byte[] storedChunk(long chunk) {
-                String stored = feed.cleanChunks.get(chunk);
+                String stored = feed.chunks.clean(chunk);
                 return stored == null ? null : HexFormat.of().parseHex(stored);
+            }
+
+            @Override
+            public byte[] storedLight(long chunk) {
+                // The light a snapshot put on top of the stored chunk: without it a trimmed recording would have the light
+                // the chunk had when it was stored
+                String light = feed.chunks.clean(chunk) == null ? null : feed.chunks.lightOn(chunk);
+                return light == null ? null : HexFormat.of().parseHex(light);
             }
 
             @Override
@@ -202,7 +204,7 @@ final class Feed {
         this.chunksBuilt = 0;
         this.chunksLetGo = 0;
         this.chunksSoft = 0;
-        this.keptNow.clear();
+        this.chunks.snapshotBegins();
         boolean plain = minecraft.level != null && this.plainWorld(minecraft) && this.plainSnapshot(segment);
         this.mayRewind = minecraft.level != null && this.session != null && !Boolean.getBoolean("dailies.playback.alwaysRebuild") && (plain || !strict);
         this.skipChunks = this.mayRewind && plain;
@@ -227,6 +229,7 @@ final class Feed {
                     break;
                 }
                 if (this.reader.kind() == Records.SNAPSHOT_END) {
+                    this.putBackUnlit(minecraft);
                     this.dropChunksNotInSnapshot();
                     // The light that came with the snapshot's chunks is taken in now, before anything that happened after
                     // it, as the live game had taken in all of its own when it described its world. The game queues such
@@ -240,6 +243,7 @@ final class Feed {
                 }
                 this.handle(minecraft);
             }
+            this.putBackUnlit(minecraft);
             this.dropChunksNotInSnapshot();
             // What arrived after the snapshot on its own tick waits, as it did live, when the recording says when the
             // live game took its light in (capture.LightPasses)
@@ -339,8 +343,7 @@ final class Feed {
         this.mayRewind = false;
         this.rewound = false;
         this.snapshotChunks = null;
-        this.cleanChunks.clear();
-        this.sameBlocks.clear();
+        this.chunks.clear();
         this.loadedChunks.clear();
         this.spawnExtras.clear();
     }
@@ -448,8 +451,7 @@ final class Feed {
                     this.warnOnce("dropping a chunk when going back", t);
                 }
                 this.loadedChunks.remove(key);
-                this.cleanChunks.remove(key);
-                this.sameBlocks.remove(key);
+                this.chunks.changed(key);
             }
         }
         if (moved) {
@@ -529,7 +531,7 @@ final class Feed {
         if (!this.rewound || this.snapshotChunks == null || (!this.skipChunks && !this.softChunks) || minecraft.level == null) {
             return false;
         }
-        Long key = this.chunkOfStored.get(stored);
+        Long key = this.chunks.chunkOf(stored);
         if (key == null) {
             return false;
         }
@@ -539,20 +541,20 @@ final class Feed {
             return false;
         }
         // Machines change in ways no packet shows, so a chunk with any in it is built again for an exact jump
-        if (this.skipChunks && stored.equals(this.cleanChunks.get(key)) && chunk.getBlockEntities().isEmpty()) {
+        if (this.skipChunks && stored.equals(this.chunks.clean(key)) && chunk.getBlockEntities().isEmpty()) {
             this.snapshotChunks.add(key);
             this.chunksKept++;
-            this.keptNow.put(key, stored);
+            this.chunks.kept(key, stored);
             return true;
         }
         // For someone watching: blocks as they were drawn, so the chunk stays drawn and its block entities are told what
         // they held, as the game tells them from a chunk it is sent, in place. Building it again would have the game draw
         // every such chunk afresh at every jump, which is most of what made dragging the playhead back stutter
-        if (this.softChunks && stored.equals(this.sameBlocks.get(key)) && this.retell(stored, chunk, minecraft)) {
+        if (this.softChunks && stored.equals(this.chunks.sameBlocks(key)) && this.retell(stored, chunk, minecraft)) {
             this.snapshotChunks.add(key);
             this.chunksKept++;
             this.chunksSoft++;
-            this.keptNow.put(key, stored);
+            this.chunks.kept(key, stored);
             return true;
         }
         return false;
@@ -564,38 +566,65 @@ final class Feed {
      * is built again as usual
      */
     private boolean retell(String stored, net.minecraft.world.level.chunk.LevelChunk chunk, Minecraft minecraft) {
-        net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet;
-        try {
-            byte[] shared = this.file.shared(stored);
-            if (!(this.session.codec.decode(shared, 0, shared.length) instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket decoded)) {
-                return false;
-            }
-            packet = decoded;
-        } catch (Throwable t) {
+        List<Held> held = this.heldIn(stored);
+        if (held == null) {
             return false;
         }
         java.util.List<Object[]> told = new ArrayList<>();
-        boolean[] matches = {true};
-        packet.getChunkData().getBlockEntitiesTagsConsumer(packet.getX(), packet.getZ()).accept((pos, type, tag) -> {
-            net.minecraft.world.level.block.entity.BlockEntity entity = chunk.getBlockEntity(pos, net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
-            if (entity == null || entity.getType() != type) {
-                matches[0] = false;
-            } else if (tag != null) {
-                told.add(new Object[]{entity, tag});
+        for (Held each : held) {
+            net.minecraft.world.level.block.entity.BlockEntity entity = chunk.getBlockEntity(each.pos(), net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
+            if (entity == null || entity.getType() != each.type()) {
+                return false;
             }
-        });
-        if (!matches[0]) {
-            return false;
+            if (each.tag() != null) {
+                told.add(new Object[]{entity, each.tag()});
+            }
         }
         net.minecraft.core.HolderLookup.Provider registries = minecraft.level.registryAccess();
         for (Object[] each : told) {
             try {
-                ((net.minecraft.world.level.block.entity.BlockEntity) each[0]).handleUpdateTag((net.minecraft.nbt.CompoundTag) each[1], registries);
+                // A copy: the remembered tag is told again at the next jump, and a block entity may take what it reads
+                ((net.minecraft.world.level.block.entity.BlockEntity) each[0]).handleUpdateTag(((net.minecraft.nbt.CompoundTag) each[1]).copy(), registries);
             } catch (Throwable t) {
                 this.warnOnce("telling a block entity what it held when going back", t);
             }
         }
         return true;
+    }
+
+    /** One block entity a stored chunk speaks of: where it is, what it is, and what it held, if the chunk says */
+    private record Held(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.entity.BlockEntityType<?> type,
+                        @org.jetbrains.annotations.Nullable net.minecraft.nbt.CompoundTag tag) {
+    }
+
+    /**
+     * The block entities each stored chunk speaks of, remembered. Every jump used to read, unpack and decode every chunk
+     * it left drawn only to learn this; a stored chunk never changes, so neither does the answer. Most chunks have none,
+     * and remember that in next to nothing
+     */
+    private final RecentlyUsed<String, List<Held>> heldOfStored = new RecentlyUsed<>(8192);
+
+    /** The block entities a stored chunk speaks of, or null when it cannot be read as a chunk */
+    private @org.jetbrains.annotations.Nullable List<Held> heldIn(String stored) {
+        List<Held> known = this.heldOfStored.get(stored);
+        if (known != null) {
+            return known;
+        }
+        net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet;
+        try {
+            byte[] shared = this.file.shared(stored);
+            if (!(this.session.codec.decode(shared, 0, shared.length) instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket decoded)) {
+                return null;
+            }
+            packet = decoded;
+        } catch (Throwable t) {
+            return null;
+        }
+        List<Held> held = new ArrayList<>();
+        packet.getChunkData().getBlockEntitiesTagsConsumer(packet.getX(), packet.getZ()).accept((pos, type, tag) -> held.add(new Held(pos.immutable(), type, tag)));
+        List<Held> kept = held.isEmpty() ? List.of() : List.copyOf(held);
+        this.heldOfStored.put(stored, kept);
+        return kept;
     }
 
     /** Keeps count of which chunks the world holds and which have changed since they were built */
@@ -618,18 +647,11 @@ final class Feed {
             if (this.loading) {
                 this.chunksBuilt++;
             }
-            if (this.storedNow != null) {
-                this.cleanChunks.put(key, this.storedNow);
-                this.sameBlocks.put(key, this.storedNow);
-                this.chunkOfStored.put(this.storedNow, key);
-            } else {
-                this.cleanChunks.remove(key);
-                this.sameBlocks.remove(key);
-            }
+            this.chunks.built(key, this.storedNow);
             if (this.snapshotChunks != null) {
                 this.snapshotChunks.add(key);
             }
-        } else if (this.cleanChunks.isEmpty() && this.sameBlocks.isEmpty()) {
+        } else if (this.chunks.isEmpty()) {
             if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten && this.letsGoOf(forgotten.pos())) {
                 this.loadedChunks.remove(forgotten.pos().toLong());
             }
@@ -643,22 +665,20 @@ final class Feed {
             this.changed(event.getPos(), false);
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
             // A snapshot gives a chunk whose blocks are as stored its new light this way, straight after naming the chunk
-            // (capture.Snapshots): that chunk is still the stored one, and a jump may keep it, its light then given again
-            if (!(this.loading && this.storedNow != null)) {
-                this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
-                this.sameBlocks.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
+            // (capture.Snapshots): that chunk is still the stored one, with that light on it, and a jump may keep it
+            long key = net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ());
+            if (this.loading && this.storedNow != null) {
+                this.chunks.lit(key, this.storedNow);
+            } else {
+                this.chunks.changed(key);
             }
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
             if (this.letsGoOf(forgotten.pos())) {
                 this.loadedChunks.remove(forgotten.pos().toLong());
             }
-            this.cleanChunks.remove(forgotten.pos().toLong());
-            this.sameBlocks.remove(forgotten.pos().toLong());
+            this.chunks.changed(forgotten.pos().toLong());
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket biomes) {
-            biomes.chunkBiomeData().forEach(data -> {
-                this.cleanChunks.remove(data.pos().toLong());
-                this.sameBlocks.remove(data.pos().toLong());
-            });
+            biomes.chunkBiomeData().forEach(data -> this.chunks.changed(data.pos().toLong()));
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundExplodePacket explosion) {
             explosion.getToBlow().forEach(pos -> this.changed(pos, true));
         } else if (packet instanceof ClientboundBundlePacket bundle) {
@@ -688,13 +708,12 @@ final class Feed {
         int z = pos.getZ() >> 4;
         if (!spreads) {
             // What a block entity holds, or a block's event: nothing drawn of the blocks has changed
-            this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(x, z));
+            this.chunks.changedHeld(net.minecraft.world.level.ChunkPos.asLong(x, z));
             return;
         }
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                this.cleanChunks.remove(net.minecraft.world.level.ChunkPos.asLong(x + dx, z + dz));
-                this.sameBlocks.remove(net.minecraft.world.level.ChunkPos.asLong(x + dx, z + dz));
+                this.chunks.changed(net.minecraft.world.level.ChunkPos.asLong(x + dx, z + dz));
             }
         }
     }
@@ -882,22 +901,14 @@ final class Feed {
             // A snapshot gives a chunk whose blocks are as stored its new light straight after naming it. Where that chunk was
             // left as the kept world had it, the light of any part of it the light does not speak of would stay as it was
             // later in the recording: one place by flowing lava stayed a level too bright after a jump back. So the stored
-            // chunk is put in first, as a world built from nothing would have it, and its light goes on that
-            String kept = this.keptNow.remove(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()));
-            if (kept != null && this.session != null) {
-                this.chunksKept--;
-                try {
-                    byte[] chunk = this.file.shared(kept);
-                    String now = this.storedNow;
-                    this.storedNow = kept;
-                    try {
-                        this.packet(chunk, 0, chunk.length, minecraft);
-                    } finally {
-                        this.storedNow = now;
-                    }
-                } catch (IOException e) {
-                    this.warnOnce("putting back a chunk whose light the snapshot gives", e);
-                }
+            // chunk is put in first, as a world built from nothing would have it, and its light goes on that; unless the
+            // chunk already has this very light on it, when there is nothing to do
+            KeptChunks.Light choice = this.chunks.light(net.minecraft.world.level.ChunkPos.asLong(light.getX(), light.getZ()), this.storedNow);
+            if (choice.leaveOut()) {
+                return;
+            }
+            if (choice.putBack() != null) {
+                this.putBack(choice.putBack(), minecraft);
             }
         }
         if (packet instanceof net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket removed) {
@@ -939,6 +950,37 @@ final class Feed {
             }
         } catch (Throwable t) {
             this.warnOnce(packet.getClass().getSimpleName(), t);
+        }
+    }
+
+    /**
+     * At the end of a snapshot read into a kept world: a chunk it left as it was, and gave no light, is the stored chunk
+     * alone. One that a later snapshot had given light on top of is not, and would keep that light from later in the
+     * recording (a jump back to before a lava flow left a place a level too bright), so its stored chunk goes in again
+     */
+    private void putBackUnlit(Minecraft minecraft) {
+        for (String stored : this.chunks.unlit().values()) {
+            this.putBack(stored, minecraft);
+        }
+    }
+
+    /** Builds a chunk the snapshot being read had left as the kept world had it again, from its stored chunk */
+    private void putBack(String stored, Minecraft minecraft) {
+        if (this.session == null) {
+            return;
+        }
+        this.chunksKept--;
+        try {
+            byte[] chunk = this.file.shared(stored);
+            String now = this.storedNow;
+            this.storedNow = stored;
+            try {
+                this.packet(chunk, 0, chunk.length, minecraft);
+            } finally {
+                this.storedNow = now;
+            }
+        } catch (IOException e) {
+            this.warnOnce("putting back a chunk kept with the wrong light", e);
         }
     }
 

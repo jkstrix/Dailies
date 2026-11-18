@@ -29,6 +29,13 @@ public final class PlaybackExtensions {
         }
 
         /**
+         * The recording has stopped, or is leaving the tick it was at for another: stop anything still sounding or moving
+         * on from what was played before. Client thread
+         */
+        default void stopped() {
+        }
+
+        /**
          * The world is about to be described as a snapshot, for a trimmed recording that starts part way through a
          * segment (specification FILE-10). Write the records that would bring a playback that has only just read a
          * snapshot to the state this extension holds now: whatever it has kept from records that are being cut away.
@@ -81,6 +88,16 @@ public final class PlaybackExtensions {
                 extension.arrived();
             } catch (Throwable t) {
                 Host.LOGGER.warn("Dailies: an extension could not settle after a jump", t);
+            }
+        });
+    }
+
+    static void stoppedAll() {
+        EXTENSIONS.values().forEach(extension -> {
+            try {
+                extension.stopped();
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Dailies: an extension could not stop when the recording did", t);
             }
         });
     }
