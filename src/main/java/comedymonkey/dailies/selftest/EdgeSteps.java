@@ -85,11 +85,15 @@ final class EdgeSteps {
 
     private static void record(SelfTest test, Minecraft minecraft, Path recording) throws Exception {
         WorldSteps.createWorld(test, WORLD);
-        Census.watch(OVERWORLD, 0, -12, -64, -12, 30, -55, 30);
+        Census.watch(OVERWORLD, 0, -12, -64, -12, 46, -55, 30);
         c("gamerule sendCommandFeedback false");
         c("gamerule doMobSpawning false");
         c("gamerule doImmediateRespawn false");
         c("time set 1000");
+        // Respawning at a known place, well away from where the recorder dies: respawned on the spot, they picked up all
+        // they had dropped at once (the owner, watching, 18 November: "you keep dying on the spawn block")
+        c("setworldspawn 0 " + Y + " 0");
+        c("spawnpoint @s 0 " + Y + " 0");
         c("fill " + PIT_X + " -63 " + PIT_Z + " " + PIT_X + " -61 " + PIT_Z + " minecraft:powder_snow");
         c("tp @s 0.5 " + Y + " 0.5 0 0");
         test.sleepTicks(40);
@@ -223,9 +227,9 @@ final class EdgeSteps {
         fillInventory();
         waitTicks(5);
         sayRules(test, "the void");
-        c("tp @s 2.5 -90 2.5 0 60");
+        c("tp @s 40.5 -90 2.5 0 60");
         int at = mark("the recorder falls out of the world");
-        still("edges-void-falling", at + 10, 8.5, -80.0, 8.5, 2.5, -100.0, 2.5, false);
+        still("edges-void-falling", at + 10, 46.5, -80.0, 8.5, 40.5, -100.0, 2.5, false);
         try {
             test.waitFor(() -> minecraft.screen instanceof DeathScreen, 30, "the recorder to die in the void");
         } catch (Throwable never) {
@@ -304,7 +308,7 @@ final class EdgeSteps {
 
     /** Sixty blocks onto the ground with a full inventory: everything carried scatters where the recorder lands, for all to see */
     private static void groundFall(SelfTest test, Minecraft minecraft) throws Exception {
-        double landX = 12.5, landZ = -6.5;
+        double landX = 40.5, landZ = 20.5;
         item("Falling sixty blocks with a full inventory: everything carried scatters where the recorder lands").owns("recorder", "minecraft:item", "blocks")
             .need(where("recorder", "dying on the ground", thing -> (thing.state().contains("pose=DYING") || thing.clocks().contains("deathTime="))
                 && Math.abs(thing.x() - landX) < 2 && Math.abs(thing.z() - landZ) < 2))
