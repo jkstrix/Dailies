@@ -228,7 +228,7 @@ final class BudgetSteps {
         // Storing the whole world afresh is done on the game's thread between two frames, every couple of seconds: the longest
         // time it took is a hitch the player may see, so it is held to a frame at 120 frames a second
         double[] storing = Recorder.get().storingCost();
-        measured("BUD-1", "storing the world, the longest pause", storing[2], 1000.0 / 120, true, "ms", String.format(Locale.ROOT,
+        measured("BUD-1", "storing the world, the longest pause after the first", storing[2], 1000.0 / 120, true, "ms", String.format(Locale.ROOT,
             "the flat test world, stored %d times (every %d seconds by default), %.2f ms on average; the tour of generated terrain and the other recordings log their own",
             (int) storing[0], Host.get().setting("snapshotSeconds", 2), storing[1]));
 

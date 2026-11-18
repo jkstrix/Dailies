@@ -221,6 +221,7 @@ public final class Recorder {
         this.worldsStored = 0;
         this.storingNanos = 0L;
         this.longestStoreNanos = 0L;
+        this.firstStoreNanos = 0L;
         java.util.Arrays.fill(this.storingParts, 0.0);
         this.chunksNamed = 0;
         this.chunksEncoded = 0;
@@ -282,11 +283,19 @@ public final class Recorder {
             this.chunksNamed += cost.chunks();
             this.chunksEncoded += cost.encoded();
         }
+        if (this.worldsStored == 1) {
+            // The first describes every chunk there is, once, as the recording starts: the pause that counts is the
+            // one that comes back every couple of seconds while playing
+            this.firstStoreNanos = nanos;
+            return;
+        }
         if (nanos > this.longestStoreNanos) {
             this.longestStore = cost;
         }
         this.longestStoreNanos = Math.max(this.longestStoreNanos, nanos);
     }
+
+    private long firstStoreNanos = 0L;
 
     /** Where storing the world spent its time, for the log: what can be taken off the game's thread depends on it */
     private String storingBreakdown() {
@@ -320,8 +329,8 @@ public final class Recorder {
             this.flushPart();
         }
         double[] storing = this.storingCost();
-        Host.LOGGER.info(String.format(java.util.Locale.ROOT, "Dailies: the recording stored the world %d times, every %d ticks, taking the game %.2f ms each on average and %.2f ms at the longest; %s",
-            (int) storing[0], this.segmentTicks, storing[1], storing[2], this.storingBreakdown()));
+        Host.LOGGER.info(String.format(java.util.Locale.ROOT, "Dailies: the recording stored the world %d times, every %d ticks, taking the game %.2f ms each on average and %.2f ms at the longest after the first (the first, of every chunk, %.2f ms); %s",
+            (int) storing[0], this.segmentTicks, storing[1], storing[2], this.firstStoreNanos / 1e6, this.storingBreakdown()));
         String wanted = name == null || name.isBlank() ? this.manifest.name : name.trim();
         Path working = this.workingFile;
         Spool spool = this.spool;
