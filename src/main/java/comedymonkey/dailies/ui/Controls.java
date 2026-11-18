@@ -347,7 +347,7 @@ public final class Controls {
             }
             // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token.
             // A scripted run must not put browser windows on the desk of whoever is watching it
-            if (!comedymonkey.dailies.selftest.SelfTest.asked()) {
+            if (!comedymonkey.dailies.ScriptedRun.asked()) {
                 net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
             }
             opened[0] = true;

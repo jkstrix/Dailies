@@ -19,6 +19,18 @@ sourceSets {
         java.srcDir 'reference/src/main/java'
         resources.srcDir 'reference/src/main/resources'
     }
+    // The scripted runs of specification chapter XIV, kept out of the jar players get: they run level-4 commands, delete
+    // folders and close the game. A mod of their own, dailies_selftest, built into a jar of its own; the dev runs that
+    // drive the game load it beside Dailies, and installTestMods puts its jar beside the built Dailies jar in run-modded
+    selftest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+    // The unit tests of the self test's own rules (FixtureRulesTest), which need no game
+    test {
+        compileClasspath += sourceSets.selftest.output
+        runtimeClasspath += sourceSets.selftest.output
+    }
 }
 
 neoForge {
@@ -28,17 +40,26 @@ neoForge {
         dailies {
             sourceSet sourceSets.main
         }
+        // In the dev runs the self test is the mod of the same name, with its own neoforge.mods.toml, exactly as its jar
+        // is in run-modded: the same mod either way, so both kinds of run find and start it the same way
+        dailies_selftest {
+            sourceSet sourceSets.selftest
+        }
     }
 
     runs {
+        // The plain game to try things in, without the self test
         client {
             client()
             gameDirectory = file('run')
+            loadedMods = [neoForge.mods.dailies]
         }
         // The scripted run of specification chapter XIV. It drives itself and exits with PASSED or FAILED in the log
         testClient {
             client()
             gameDirectory = file('run-test')
+            // The self test's classpath, which has the main classes on it too; both mods are loaded
+            sourceSet = sourceSets.selftest
             systemProperty 'dailies.test.script', 'auto'
             systemProperty 'dailies.test.segmentTicks', '40'
             // Switches for trying things out, as for the modded run: gradlew runTestClient -PdailiesFlags=dailies.encoder.softwareOnly
@@ -51,10 +72,13 @@ neoForge {
         handsOn {
             client()
             gameDirectory = file('run-test')
+            // The self test's classpath, which has the main classes on it too; both mods are loaded
+            sourceSet = sourceSets.selftest
             systemProperty 'dailies.test.script', 'hands-on'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
-        // Takes the pictures for the manual from the modded game, into run-modded/dailies/manual
+        // Takes the pictures for the manual from the modded game, into run-modded/dailies/manual. Like testModded it
+        // loads Dailies and the self test from their jars in run-modded/mods, put there by installTestMods
         manualShots {
             client()
             gameDirectory = file('run-modded')
@@ -67,11 +91,14 @@ neoForge {
         kitShots {
             client()
             gameDirectory = file('run-test')
+            // The self test's classpath, which has the main classes on it too; both mods are loaded
+            sourceSet = sourceSets.selftest
             systemProperty 'dailies.test.script', 'kit'
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
-        // The same scripted run with the built jar (not the dev classes) beside the other mods it has to work with:
-        // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1)
+        // The same scripted run with the built jars (not the dev classes) beside the other mods it has to work with:
+        // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1). The self test
+        // jar sits beside the Dailies jar in run-modded/mods
         testModded {
             client()
             gameDirectory = file('run-modded')
@@ -132,6 +159,9 @@ if (encoderSource == 'dailies' && encoderJars.isEmpty()) {
     throw new GradleException("dailies.encoderSource is dailies, and there are no dailies-ffmpeg-*-<platform>.jar files in ${encoderDir}: run tools/ffmpeg/build.sh pack, or point dailies.encoderDir at the FFmpeg workflow's jars")
 }
 
+// Minecraft, NeoForge and their libraries for the self test, as the main classes have them
+neoForge.addModdingDependenciesTo(sourceSets.selftest)
+
 dependencies {
     // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
     if (encoderSource == 'bytedeco') {
@@ -140,6 +170,7 @@ dependencies {
 
     // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
     compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
+    selftestCompileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
 
     // Unit tests cover the parts that need no running game: the file format, curves, timing, the undo stack
     testImplementation platform('org.junit:junit-bom:5.11.4')
@@ -177,6 +208,21 @@ processResources {
     }
 }
 
+processSelftestResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+// The self test's own jar, dailies-selftest-1.21.1-<version>.jar: never published, only put into run-modded/mods
+tasks.register('selftestJar', Jar) {
+    description = 'Builds the jar of the Dailies self test (the scripted runs), for run-modded'
+    group = 'build'
+    archiveBaseName = 'dailies-selftest-1.21.1'
+    from sourceSets.selftest.output
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
@@ -202,9 +248,10 @@ def overrideJars = providers.gradleProperty('dailies.modJars').getOrElse('').spl
 def overriddenMods = overrideJars.collect { it.name.replaceFirst(/-\d.*$/, '') + '-*.jar' }
 
 tasks.register('installTestMods', Sync) {
-    description = 'Puts the built Dailies jar and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar'), 'buildCompanion'
+    description = 'Puts the built Dailies jar, the self test jar and the other test mods into run-modded/mods'
+    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion'
     from(tasks.named('jar'))
+    from(tasks.named('selftestJar'))
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
         exclude overriddenMods
@@ -222,7 +269,10 @@ def playOnlyMods = providers.gradleProperty('dailies.playMods').getOrElse('Dista
 tasks.register('installPlayMods', Sync) {
     description = 'Puts the same mods as the modded test, and the play-only ones, into run-play/mods'
     dependsOn 'installTestMods'
-    from file('run-modded/mods')
+    from(file('run-modded/mods')) {
+        // A game to play in never carries the scripted runs
+        exclude 'dailies-selftest-*.jar'
+    }
     from(modsSource) {
         include playOnlyMods.collect { it.trim() + '.jar' }
     }

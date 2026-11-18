@@ -1,0 +1,33 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+# The scripted runs of the Dailies specification, chapter XIV. For the test folders only: never published, never in a
+# player's mods folder. Without the system property dailies.test.script it does nothing
+[[mods]]
+modId = "dailies_selftest"
+version = "${version}"
+displayName = "Dailies Self Test"
+authors = "James Knight"
+description = '''The scripted test runs of Dailies. Only for testing Dailies: it runs commands, deletes test folders and closes the game.'''
+
+[[dependencies.dailies_selftest]]
+modId = "dailies"
+type = "required"
+versionRange = "[${version}]"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.dailies_selftest]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.dailies_selftest]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "CLIENT"

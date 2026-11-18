@@ -584,14 +584,6 @@ public final class Moments {
         feedVoice(speaker, pcm48k);
     }
 
-    /** Feeds audio as if it came from voice chat. Only for the dev self test (-Ddailies.test=true) */
-    public static void injectVoiceForSelfTest(UUID speaker, short[] pcm48k) {
-        if (!Boolean.getBoolean("dailies.test")) {
-            throw new IllegalStateException("Voice can only be injected by the self test");
-        }
-        feedVoice(speaker, pcm48k);
-    }
-
     private static void feedVoice(UUID speaker, short[] pcm48k) {
         Active session = active;
         if (session == null || pcm48k == null || pcm48k.length == 0) {

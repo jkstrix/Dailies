@@ -1,9 +1,9 @@
 package comedymonkey.dailies.ui;
 
 import comedymonkey.dailies.Host;
+import comedymonkey.dailies.ScriptedRun;
 import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.playback.Playback;
-import comedymonkey.dailies.selftest.SelfTest;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -217,7 +217,7 @@ public final class Screens {
         event.addListener(new ReelButton(x + stepX, y + stepY, true, Component.translatable("dailies.ui.title.settings"), button -> SettingsScreen.open(title)));
         event.addListener(new MomentsButton(x + 2 * stepX, y + 2 * stepY, Component.translatable("dailies.ui.title.moments"), button -> Controls.openMomentsPage()));
 
-        if (!lookedForUnfinished && !SelfTest.asked() && !comedymonkey.dailies.export.Worker.active()) {
+        if (!lookedForUnfinished && !ScriptedRun.asked() && !comedymonkey.dailies.export.Worker.active()) {
             lookedForUnfinished = true;
             CompletableFuture.supplyAsync(Recorder::unfinished, Util.ioPool()).whenComplete((found, error) -> minecraft.execute(() -> {
                 if (error != null) {
