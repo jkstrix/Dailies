@@ -56,6 +56,10 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
  */
 final class AddonSteps {
 
+    /** Goes up whenever the staging changes, so that a fixture staged before is staged and recorded again by itself */
+    private static final int VERSION = 1;
+
+
     static final String WORLD = "Dailies Addon";
     private static final String OVERWORLD = BestiarySteps.OVERWORLD;
     private static final String MOD = "comedymonkeysaddons:";
@@ -99,7 +103,13 @@ final class AddonSteps {
             Census.EXTRA_SLACK.put("rootZ", 0.4);
             // Out of the recordings folder, where other steps count what is there
             Path recording = folder.resolve("Addon.dailies");
-            record(test, minecraft, recording);
+            // Played back from the recording kept by an earlier run when it still stands for this code (StagedFixtures)
+            StagedFixtures.recordOrReuse(test, "addon", VERSION, folder, recording, () -> {
+                record(test, minecraft, recording);
+                return true;
+            }, out -> {
+            }, in -> {
+            });
             CensusPlayback.compare(test, recording, folder, "ADDON", "addon");
         } finally {
             CensusPlayback.end();

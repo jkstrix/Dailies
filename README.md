@@ -54,6 +54,8 @@ Java 21. The Gradle wrapper fetches everything else.
 | Start the game with the mod, for development | `gradlew runClient` |
 | The scripted test in a plain game (about 2 minutes) | `gradlew runTestClient` |
 | The scripted test with the built jar beside Create, Sable, Aeronautics, Sodium, Iris, Simple Voice Chat and the companion (about 3 minutes) | `gradlew runTestModded` |
+| Only some groups of the scripted test, with the groups they need | `gradlew runTestModded -PdailiesOnly=trains,library` |
+| Only the groups that failed in the last scripted test in that game folder | `gradlew runTestModded -PdailiesOnly=failed` |
 | Sixty seconds at the controls while recording, then the recording open in the editor | `gradlew runHandsOn` |
 | Retake the manual's pictures | `gradlew runManualShots` |
 | Build the companion (`companion/build/libs/`) | `gradlew build` in `companion/` |
@@ -63,6 +65,16 @@ The scripted test drives the real game through its own MCP tools and prints `DAI
 installed, something that needs a second player) are listed as `DAILIES TEST skipped:`. Something that is there and
 does not work is a failure, not a skip. `runTestModded` also fails at once if a mod it expects is not loaded
 (`-Pdailies.testExpectMods` changes the list).
+
+The groups are `settings`, `world`, `watching`, `moments`, `recording`, `packs`, `playback`, `balloon`, `export`,
+`editor`, `renderer`, `library`, `library-screens`, `points-of-view`, `addon`, `trains`, `edges`, `bestiary`, `tour`,
+`camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`
+and `packs`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
+
+The steps that stage things in a world of their own and compare playback with the live game (the addon, trains, edges,
+the bestiary and the tour) keep their recordings as fixtures in `dailies/fixtures` and play them back on later runs.
+They are recorded again only when the code that writes recordings changes, their staging changes, or
+`-PdailiesFlags=dailies.test.recordTours` asks for it.
 
 The scripted test is its own jar, `build/libs/dailies-selftest-*.jar`, built by `gradlew selftestJar`. The dev runs
 (`runTestClient`, `runHandsOn`, `runKitShots`) load it from its classes; `runTestModded` and `runManualShots` get the

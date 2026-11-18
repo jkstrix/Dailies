@@ -44,6 +44,10 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
  */
 final class TrainSteps {
 
+    /** Goes up whenever the staging changes, so that a fixture staged before is staged and recorded again by itself */
+    private static final int VERSION = 1;
+
+
     static final String WORLD = "Dailies Trains";
     private static final String OVERWORLD = BestiarySteps.OVERWORLD;
     private static final String CARRIAGE = "create:carriage_contraption";
@@ -83,7 +87,10 @@ final class TrainSteps {
         try {
             Census.EXTRAS.add(TrainSteps::describe);
             Path recording = folder.resolve("Trains.dailies");
-            if (!record(test, minecraft, recording)) {
+            // Played back from the recording kept by an earlier run when it still stands for this code (StagedFixtures)
+            boolean staged = StagedFixtures.recordOrReuse(test, "trains", VERSION, folder, recording, () -> record(test, minecraft, recording),
+                out -> out.name("moving").json.value(movingTick), in -> movingTick = in.name("moving").integer());
+            if (!staged) {
                 return;
             }
             test.skip("the train has no sliding doors: doors in playback were not tried");

@@ -548,7 +548,7 @@ final class BestiarySteps {
         Census.forgetLive();
     }
 
-    private static void writeNotes(TourFixtures.Out out, Path folder) throws Exception {
+    static void writeNotes(TourFixtures.Out out, Path folder) throws Exception {
         out.name("problems").strings(problems);
         out.name("marks");
         out.json.beginArray();
@@ -593,7 +593,7 @@ final class BestiarySteps {
         Census.writeLive(out);
     }
 
-    private static void readNotes(TourFixtures.In in, Path folder) throws Exception {
+    static void readNotes(TourFixtures.In in, Path folder) throws Exception {
         problems.addAll(in.name("problems").strings());
         in.name("marks");
         in.json.beginArray();

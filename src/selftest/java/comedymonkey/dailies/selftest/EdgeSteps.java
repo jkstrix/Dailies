@@ -33,9 +33,13 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
  * through, then climbs out and thaws; throws snowballs at a blaze while a snow golem pelts a zombie; and falls out of the
  * bottom of the world, dies in the void and respawns. Playback is compared with the live game by play, by jump and by
  * jump back ({@link CensusPlayback}), the recorder's frost included, and the differences are reported under EDGES.
- * Run by itself with -PdailiesFlags=dailies.test.edgesOnly.
+ * Run by itself with -PdailiesOnly=edges.
  */
 final class EdgeSteps {
+
+    /** Goes up whenever the staging changes, so that a fixture staged before is staged and recorded again by itself */
+    private static final int VERSION = 1;
+
 
     static final String WORLD = "Dailies Edges";
     private static final String OVERWORLD = BestiarySteps.OVERWORLD;
@@ -68,7 +72,27 @@ final class EdgeSteps {
             Census.EXTRAS.add(EdgeSteps::describe);
             Census.EXTRA_SLACK.put("frozen", 12.0);
             Path recording = folder.resolve("Edges.dailies");
-            record(test, minecraft, recording);
+            // Played back from the recording kept by an earlier run when it still stands for this code (StagedFixtures). The
+            // ticks the recorder respawned on go with it: playback reaches the rebuilt world a tick later than the live game did
+            StagedFixtures.recordOrReuse(test, "edges", VERSION, folder, recording, () -> {
+                record(test, minecraft, recording);
+                return true;
+            }, out -> {
+                out.name("respawns");
+                out.json.beginArray();
+                for (int tick : new java.util.TreeSet<>(Census.respawnTicks)) {
+                    out.json.value(tick);
+                }
+                out.json.endArray();
+            }, in -> {
+                Census.respawnTicks.clear();
+                in.name("respawns");
+                in.json.beginArray();
+                while (in.more()) {
+                    Census.respawnTicks.add(in.integer());
+                }
+                in.json.endArray();
+            });
             Census.voidSpilled = 0;
             try {
                 CensusPlayback.compare(test, recording, folder, "EDGES", "edges");

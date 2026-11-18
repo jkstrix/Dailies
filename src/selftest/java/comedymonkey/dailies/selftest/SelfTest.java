@@ -8,6 +8,7 @@ import comedymonkey.dailies.Host;
 import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.mcp.McpHttpServer;
 import net.minecraft.client.Minecraft;
+import org.jetbrains.annotations.Nullable;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -19,9 +20,11 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -92,112 +95,42 @@ public final class SelfTest {
                 }
                 return;
             }
-            // Some parts by themselves, together, for a short targeted run, e.g. the owner's addon, trains and the renderers:
-            // -PdailiesFlags=dailies.test.addonOnly,dailies.test.trainsOnly,dailies.test.rendererOnly
-            List<String> only = onlyParts();
-            if (only.contains("addon") || only.contains("trains") || only.contains("renderer") || only.contains("edges") || only.size() > 1) {
-                this.runOnly(only);
-                return;
-            }
-            if (Boolean.getBoolean("dailies.test.realWorldOnly")) {
-                // Only the tour of generated terrain, for working on it: gradlew runTestClient -PdailiesFlags=dailies.test.realWorldOnly
-                RealWorldSteps.run(this);
-                this.finish(this.verdict(), "the tour of generated terrain only");
-                return;
-            }
-            if (Boolean.getBoolean("dailies.test.cameraFilmsOnly")) {
-                // Only the camera films, for working on the cameras: -PdailiesFlags=dailies.test.cameraFilmsOnly (add dailies.test.cameraFilmsQuick for ten seconds a film)
-                CameraFilms.run(this, Boolean.getBoolean("dailies.test.cameraFilmsQuick"));
-                this.finish(this.verdict(), "the camera films only");
-                return;
-            }
-            // The tour first and everything else after it, with the tour's verdict at the end: one long run that tells both
-            // what the tour found and whether the rest still passes. -PdailiesFlags=dailies.test.realWorldFirst
-            boolean tourFirst = Boolean.getBoolean("dailies.test.realWorldFirst");
+            // Only some groups of steps, with the groups they need, for a short run while one thing is being fixed:
+            // gradlew runTestClient -PdailiesOnly=trains,library, or -PdailiesOnly=failed for the groups that failed last time
+            Set<String> chosen = chosenGroups();
+            boolean tourFirst = chosen == null && Boolean.getBoolean("dailies.test.realWorldFirst");
             if (tourFirst) {
+                // The tour first and everything else after it, with the tour's verdict at the end: one long run that tells
+                // both what the tour found and whether the rest still passes. -PdailiesFlags=dailies.test.realWorldFirst
                 RealWorldSteps.run(this, true);
             }
             this.checkMcp();
-            if (Boolean.getBoolean("dailies.test.bestiaryOnly")) {
-                // For working on the bestiary by itself: gradlew runTestClient -PdailiesFlags=dailies.test.bestiaryOnly. Its
-                // verdict says only the bestiary was run, so a pass of this alone is never taken for a pass of the whole run
-                BestiarySteps.run(this);
-                this.finish(this.verdict(), "bestiary only");
-                return;
+            if (chosen != null) {
+                this.log("running only " + chosen + " (asked for " + System.getProperty(ONLY) + ")");
+                // As the whole run starts: no recordings from an earlier run to pass or fail a check
+                SelfTestSupport.deleteTree(comedymonkey.dailies.capture.Recorder.folder());
             }
-            this.step("SettingsSteps.run", () -> SettingsSteps.run(this, this.port));
-            this.step("WorldSteps.createWorld", () -> WorldSteps.createWorld(this));
-            // First, while nothing else has been recorded: it makes a recording of its own and puts it aside for later
-            this.step("WatchingSteps.record", () -> WatchingSteps.record(this));
-            this.step("MomentsExtrasSteps.run", () -> MomentsExtrasSteps.run(this));
-            this.step("PointOfViewSteps.beforeCraft", () -> PointOfViewSteps.beforeCraft(this));
-            this.step("RecordingSteps.run", () -> RecordingSteps.run(this));
-            this.step("PointOfViewSteps.craftMoments", () -> PointOfViewSteps.craftMoments(this));
-            // A switch for running everything else while a fault in the pack step is being looked into
-            if (!Boolean.getBoolean("dailies.test.skipPacks")) {
-                this.step("ResourcePackSteps.record", () -> ResourcePackSteps.record(this));
-            } else {
-                this.skip("the resource pack steps were switched off for this run (dailies.test.skipPacks)");
+            for (Entry entry : this.plan(tourFirst)) {
+                if (chosen != null ? !chosen.contains(entry.group()) : !entry.inWholeRun()) {
+                    if (chosen == null && entry.skipped() != null) {
+                        this.skip(entry.skipped());
+                    }
+                    continue;
+                }
+                int before = this.failures.size();
+                this.step(entry.label(), entry.body());
+                if (this.failures.size() > before) {
+                    this.failedGroups.add(entry.group());
+                }
             }
-            this.step("PlaybackSteps.run", () -> PlaybackSteps.run(this));
-            this.step("BalloonSteps.run", () -> BalloonSteps.run(this));
-            this.step("ExportSteps.run", () -> ExportSteps.run(this));
-            this.step("SettingsSteps.editorDropdown", () -> SettingsSteps.editorDropdown(this));
-            this.step("EditorDesignSteps.run", () -> EditorDesignSteps.run(this));
-            this.step("ExportPresetSteps.run", () -> ExportPresetSteps.run(this));
-            // With the recording that has the machines in it still open: Flywheel's contraption, Iris's clock, Distant Horizons
-            this.step("RendererSteps.run", () -> RendererSteps.run(this));
-            this.step("QueueSteps.run", () -> QueueSteps.run(this));
-            this.step("PlaybackSteps.close", () -> PlaybackSteps.close(this));
-            // While the recording with the machines in it is still there: the library steps take it apart
-            this.step("WatchingSteps.machines", () -> WatchingSteps.machines(this));
-            this.step("OwnerFeatureSteps.run", () -> OwnerFeatureSteps.run(this));
-            this.step("TimelineSteps.original", () -> TimelineSteps.original(this));
-            this.step("LibrarySteps.run", () -> LibrarySteps.run(this));
-            if (!Boolean.getBoolean("dailies.test.skipPacks")) {
-                this.step("ResourcePackSteps.play", () -> ResourcePackSteps.play(this));
-            }
-            this.step("WatchingSteps.watch", () -> WatchingSteps.watch(this));
-            // The library's screens, the bin and storage, with small recordings of their own (REC-5, REC-8, REC-9)
-            this.step("LibraryScreenSteps.run", () -> LibraryScreenSteps.run(this));
-            this.step("PointOfViewSteps.run", () -> PointOfViewSteps.run(this));
-            // The owner's own addon and Create's trains, each in a world and a recording of its own; skipped with a line when
-            // their mods are not installed (the plain game)
-            this.step("AddonSteps.run", () -> AddonSteps.run(this));
-            this.step("TrainSteps.run", () -> TrainSteps.run(this));
-            // Powder snow, snowballs and the void, in a recording of their own
-            this.step("EdgeSteps.run", () -> EdgeSteps.run(this));
-            if (Boolean.getBoolean("dailies.test.bestiary")) {
-                // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
-                // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
-                this.step("BestiarySteps.run", () -> BestiarySteps.run(this));
-            } else {
-                this.skip("the bestiary was not asked for (dailies.test.bestiary)");
-            }
-            // In a world and with a recording of its own: everything above is in a flat world, this is in generated terrain. It
-            // takes about twelve minutes when it records and three when its fixture is reused, so it runs only when asked for:
-            // -PdailiesFlags=dailies.test.realWorld
             if (tourFirst) {
                 RealWorldSteps.verdict();
-            } else if (Boolean.getBoolean("dailies.test.realWorld")) {
-                this.step("RealWorldSteps.run", () -> RealWorldSteps.run(this));
-            } else {
-                this.skip("the tour of generated terrain was not asked for (dailies.test.realWorld)");
             }
-            // Every tracking camera filmed in every place of a recorded route and measured (FILM-1 to FILM-9). About an hour and
-            // a quarter: -PdailiesFlags=dailies.test.cameraFilms; ten seconds a film, to check the harness: dailies.test.cameraFilmsQuick.
-            // The route is recorded once and kept; dailies.test.recordRoute records it again
-            boolean quickFilms = Boolean.getBoolean("dailies.test.cameraFilmsQuick");
-            if (Boolean.getBoolean("dailies.test.cameraFilms") || quickFilms) {
-                this.step("CameraFilms.run", () -> CameraFilms.run(this, quickFilms));
-            } else {
-                this.skip("the camera films were not asked for (dailies.test.cameraFilms)");
-            }
-            // Last, so the tour's measures are there to be reported with its own. About three minutes, in a world of its own
-            if (!Boolean.getBoolean("dailies.test.skipBudgets")) {
-                this.step("BudgetSteps.run", () -> BudgetSteps.run(this));
-            } else {
-                this.skip("the budgets were switched off for this run (dailies.test.skipBudgets)");
+            this.writeFailedGroups();
+            if (chosen != null) {
+                // Its verdict names what was run, so a pass of some groups is never taken for a pass of the whole run
+                this.finish(this.verdict(), "only " + String.join(", ", chosen));
+                return;
             }
             result = this.verdict();
         } catch (Throwable t) {
@@ -233,49 +166,134 @@ public final class SelfTest {
         this.log("every mod the run expects is loaded: " + expected);
     }
 
-    /** The parts asked for by themselves, one flag each: dailies.test.addonOnly, trainsOnly, rendererOnly, edgesOnly, bestiaryOnly, realWorldOnly, cameraFilmsOnly */
-    private static List<String> onlyParts() {
-        List<String> parts = new ArrayList<>();
-        for (String part : List.of("addon", "trains", "renderer", "edges", "bestiary", "realWorld", "cameraFilms")) {
-            if (Boolean.getBoolean("dailies.test." + part + "Only")) {
-                parts.add(part);
-            }
-        }
-        return parts;
+    /** The system property naming the groups to run by themselves (from -PdailiesOnly) */
+    private static final String ONLY = "dailies.test.only";
+    /** Where a run writes the groups that failed, for -PdailiesOnly=failed; in the game folder, apart from the recordings */
+    private static final String FAILED_FILE = "selftest-failed.txt";
+
+    /**
+     * One top-level step of the scripted run.
+     *
+     * @param group      what -PdailiesOnly names it by; several steps can share a group, which then runs them all
+     * @param label      its name in the log and the verdict
+     * @param inWholeRun whether the whole run includes it (some long parts only when asked for by a flag)
+     * @param skipped    what the whole run says when it leaves the step out, or null
+     */
+    private record Entry(String group, String label, Step body, boolean inWholeRun, @Nullable String skipped) {
     }
 
-    /** Just the parts asked for, each as a step of its own, and the verdict on them */
-    private void runOnly(List<String> parts) {
-        this.log("running only " + parts);
-        if (parts.contains("renderer")) {
-            // The renderer steps need the scripted recording, with its machines, open
-            this.step("RendererSteps (with the scripted recording)", () -> {
-                WorldSteps.createWorld(this);
-                RecordingSteps.run(this);
-                PlaybackSteps.run(this);
-                RendererSteps.run(this);
-                PlaybackSteps.close(this);
-            });
+    private static Entry always(String group, String label, Step body) {
+        return new Entry(group, label, body, true, null);
+    }
+
+    private static Entry when(boolean asked, @Nullable String skipped, String group, String label, Step body) {
+        return new Entry(group, label, body, asked, skipped);
+    }
+
+    /** Every step of the whole run, in the order they run */
+    private List<Entry> plan(boolean tourFirst) {
+        boolean packs = !Boolean.getBoolean("dailies.test.skipPacks");
+        boolean quickFilms = Boolean.getBoolean("dailies.test.cameraFilmsQuick");
+        return List.of(
+            always("settings", "SettingsSteps.run", () -> SettingsSteps.run(this, this.port)),
+            always("world", "WorldSteps.createWorld", () -> WorldSteps.createWorld(this)),
+            // First, while nothing else has been recorded: it makes a recording of its own and puts it aside for later
+            always("watching", "WatchingSteps.record", () -> WatchingSteps.record(this)),
+            always("moments", "MomentsExtrasSteps.run", () -> MomentsExtrasSteps.run(this)),
+            always("recording", "PointOfViewSteps.beforeCraft", () -> PointOfViewSteps.beforeCraft(this)),
+            always("recording", "RecordingSteps.run", () -> RecordingSteps.run(this)),
+            always("recording", "PointOfViewSteps.craftMoments", () -> PointOfViewSteps.craftMoments(this)),
+            // A switch for running everything else while a fault in the pack step is being looked into
+            when(packs, "the resource pack steps were switched off for this run (dailies.test.skipPacks)", "packs", "ResourcePackSteps.record", () -> ResourcePackSteps.record(this)),
+            always("playback", "PlaybackSteps.run", () -> PlaybackSteps.run(this)),
+            always("balloon", "BalloonSteps.run", () -> BalloonSteps.run(this)),
+            always("export", "ExportSteps.run", () -> ExportSteps.run(this)),
+            always("editor", "SettingsSteps.editorDropdown", () -> SettingsSteps.editorDropdown(this)),
+            always("editor", "EditorDesignSteps.run", () -> EditorDesignSteps.run(this)),
+            always("export", "ExportPresetSteps.run", () -> ExportPresetSteps.run(this)),
+            // With the recording that has the machines in it still open: Flywheel's contraption, Iris's clock, Distant Horizons
+            always("renderer", "RendererSteps.run", () -> RendererSteps.run(this)),
+            always("export", "QueueSteps.run", () -> QueueSteps.run(this)),
+            always("playback", "PlaybackSteps.close", () -> PlaybackSteps.close(this)),
+            // While the recording with the machines in it is still there: the library steps take it apart
+            always("watching", "WatchingSteps.machines", () -> WatchingSteps.machines(this)),
+            always("moments", "OwnerFeatureSteps.run", () -> OwnerFeatureSteps.run(this)),
+            always("moments", "TimelineSteps.original", () -> TimelineSteps.original(this)),
+            always("library", "LibrarySteps.run", () -> LibrarySteps.run(this)),
+            when(packs, null, "packs", "ResourcePackSteps.play", () -> ResourcePackSteps.play(this)),
+            always("watching", "WatchingSteps.watch", () -> WatchingSteps.watch(this)),
+            // The library's screens, the bin and storage, with small recordings of their own (REC-5, REC-8, REC-9)
+            always("library-screens", "LibraryScreenSteps.run", () -> LibraryScreenSteps.run(this)),
+            always("points-of-view", "PointOfViewSteps.run", () -> PointOfViewSteps.run(this)),
+            // The owner's own addon and Create's trains, each in a world and a recording of its own; skipped with a line when
+            // their mods are not installed (the plain game)
+            always("addon", "AddonSteps.run", () -> AddonSteps.run(this)),
+            always("trains", "TrainSteps.run", () -> TrainSteps.run(this)),
+            // Powder snow, snowballs and the void, in a recording of their own
+            always("edges", "EdgeSteps.run", () -> EdgeSteps.run(this)),
+            // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
+            // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
+            when(Boolean.getBoolean("dailies.test.bestiary"), "the bestiary was not asked for (dailies.test.bestiary)", "bestiary", "BestiarySteps.run", () -> BestiarySteps.run(this)),
+            // In a world and with a recording of its own: everything above is in a flat world, this is in generated terrain. It
+            // takes about twelve minutes when it records and three when its fixture is reused, so it runs only when asked for:
+            // -PdailiesFlags=dailies.test.realWorld (with realWorldFirst it has already run, first)
+            when(!tourFirst && Boolean.getBoolean("dailies.test.realWorld"), tourFirst ? null : "the tour of generated terrain was not asked for (dailies.test.realWorld)",
+                "tour", "RealWorldSteps.run", () -> RealWorldSteps.run(this)),
+            // Every tracking camera filmed in every place of a recorded route and measured (FILM-1 to FILM-9). About an hour and
+            // a quarter: -PdailiesFlags=dailies.test.cameraFilms; ten seconds a film, to check the harness: dailies.test.cameraFilmsQuick.
+            // The route is recorded once and kept; dailies.test.recordRoute records it again
+            when(Boolean.getBoolean("dailies.test.cameraFilms") || quickFilms, "the camera films were not asked for (dailies.test.cameraFilms)",
+                "camera-films", "CameraFilms.run", () -> CameraFilms.run(this, quickFilms)),
+            // Last, so the tour's measures are there to be reported with its own. About three minutes, in a world of its own
+            when(!Boolean.getBoolean("dailies.test.skipBudgets"), "the budgets were switched off for this run (dailies.test.skipBudgets)", "budgets", "BudgetSteps.run", () -> BudgetSteps.run(this)));
+    }
+
+    /**
+     * The groups -PdailiesOnly asks for, with every group they need, or null for the whole run. "failed" stands for the
+     * groups that failed in the last run in this game folder. A name that is no group fails the run at once, with the list
+     */
+    private @Nullable Set<String> chosenGroups() throws java.io.IOException {
+        String asked = System.getProperty(ONLY, "").trim();
+        if (asked.isEmpty()) {
+            return null;
         }
-        if (parts.contains("addon")) {
-            this.step("AddonSteps.run", () -> AddonSteps.run(this));
+        Set<String> known = new java.util.LinkedHashSet<>();
+        for (Entry entry : this.plan(false)) {
+            known.add(entry.group());
         }
-        if (parts.contains("trains")) {
-            this.step("TrainSteps.run", () -> TrainSteps.run(this));
+        List<String> names = new ArrayList<>();
+        for (String name : asked.split(",")) {
+            String group = name.trim();
+            if (group.equals("failed")) {
+                Path file = Host.get().dataDirectory().resolve(FAILED_FILE);
+                check(Files.exists(file), "-PdailiesOnly=failed: no run in this game folder has written down what failed (" + file + ")");
+                List<String> failed = Files.readAllLines(file).stream().map(String::trim).filter(line -> !line.isEmpty()).toList();
+                check(!failed.isEmpty(), "-PdailiesOnly=failed: nothing failed in the last run");
+                names.addAll(failed);
+            } else if (!group.isEmpty()) {
+                names.add(group);
+            }
         }
-        if (parts.contains("edges")) {
-            this.step("EdgeSteps.run", () -> EdgeSteps.run(this));
+        List<String> unknown = names.stream().filter(name -> !known.contains(name)).toList();
+        check(unknown.isEmpty(), "-PdailiesOnly names no group " + unknown + "; the groups are " + known + ", and failed");
+        return StepGroups.withNeeds(names);
+    }
+
+    /** Groups that failed in this run, for the file -PdailiesOnly=failed reads */
+    private final Set<String> failedGroups = new java.util.LinkedHashSet<>();
+
+    /** Writes down which groups failed (none: an empty file), so the next run can be just those */
+    private void writeFailedGroups() {
+        try {
+            Path file = Host.get().dataDirectory().resolve(FAILED_FILE);
+            Files.createDirectories(file.getParent());
+            Files.write(file, this.failedGroups);
+            if (!this.failedGroups.isEmpty()) {
+                this.log("groups that failed, for -PdailiesOnly=failed: " + String.join(",", this.failedGroups));
+            }
+        } catch (java.io.IOException e) {
+            Host.LOGGER.warn("Dailies self test: could not write down which groups failed", e);
         }
-        if (parts.contains("bestiary")) {
-            this.step("BestiarySteps.run", () -> BestiarySteps.run(this));
-        }
-        if (parts.contains("realWorld")) {
-            this.step("RealWorldSteps.run", () -> RealWorldSteps.run(this));
-        }
-        if (parts.contains("cameraFilms")) {
-            this.step("CameraFilms.run", () -> CameraFilms.run(this, Boolean.getBoolean("dailies.test.cameraFilmsQuick")));
-        }
-        this.finish(this.verdict(), "only " + String.join(", ", parts));
     }
 
     /** Steps that failed in this run, each with its reason; the run carries on past them so that one run finds them all */

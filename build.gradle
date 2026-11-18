@@ -66,6 +66,11 @@ neoForge {
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
             }
+            // Only some groups of steps, with the groups they need: -PdailiesOnly=trains,library, or -PdailiesOnly=failed for
+            // the groups that failed in the last run in this game folder (the groups are listed in the README)
+            if (project.hasProperty('dailiesOnly')) {
+                systemProperty 'dailies.test.only', project.property('dailiesOnly').toString()
+            }
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
         // For judging by eye (TEST-3): the test world, sixty seconds at the controls while recording, then the recording open in playback
@@ -112,6 +117,11 @@ neoForge {
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
+            }
+            // Only some groups of steps, with the groups they need: -PdailiesOnly=trains,library, or -PdailiesOnly=failed for
+            // the groups that failed in the last run in this game folder (the groups are listed in the README)
+            if (project.hasProperty('dailiesOnly')) {
+                systemProperty 'dailies.test.only', project.property('dailiesOnly').toString()
             }
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
