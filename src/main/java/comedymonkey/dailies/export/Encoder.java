@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -46,7 +47,11 @@ public final class Encoder {
 
     /** The packed encoder for this platform inside the mod's jar, or absent in a build made without one */
     private static final String PACKED = "/encoder/ffmpeg-%s.jar";
-    public static final String NOTICE = "FFmpeg, LGPL build, as packaged by the JavaCPP Presets (org.bytedeco:ffmpeg). Licences: THIRD-PARTY-NOTICES.md and the licenses folder inside the Dailies jar";
+    /** Whether the packed encoders are Dailies' own build (tools/ffmpeg/build.sh), which brings its own licence folder */
+    private static final boolean OWN_BUILD = Encoder.class.getResource("/licenses/ffmpeg-build/notices/ffmpeg.txt") != null;
+    public static final String NOTICE = OWN_BUILD
+        ? "FFmpeg, LGPL build made for Dailies (tools/ffmpeg/build.sh). Licences: THIRD-PARTY-NOTICES.md and the licenses/ffmpeg-build folder inside the Dailies jar"
+        : "FFmpeg, LGPL build, as packaged by the JavaCPP Presets (org.bytedeco:ffmpeg). Licences: THIRD-PARTY-NOTICES.md and the licenses folder inside the Dailies jar";
 
     private static Path program = null;
     private static Set<String> encoders = null;
@@ -54,8 +59,37 @@ public final class Encoder {
     private Encoder() {
     }
 
-    /** Where a video encoder is packed into Dailies today. Other platforms export numbered pictures (EXP-8) */
-    public static final String SUPPORTED = "Windows on 64-bit Intel or AMD processors";
+    /** The platforms an encoder can be packed for, with the words for each */
+    private static final String[][] PLATFORMS = {
+        {"windows-x86_64", "Windows (64-bit Intel or AMD)"},
+        {"linux-x86_64", "Linux (64-bit Intel or AMD)"},
+        {"linux-arm64", "Linux (ARM)"},
+        {"macosx-arm64", "macOS (Apple silicon)"},
+        {"macosx-x86_64", "macOS (Intel)"}};
+
+    /** Where a video encoder is packed into this Dailies, read from the jar itself. Other platforms export numbered pictures (EXP-8) */
+    public static final String SUPPORTED = supported();
+
+    private static String supported() {
+        java.util.List<String> packed = new java.util.ArrayList<>();
+        for (String[] platform : PLATFORMS) {
+            if (Encoder.class.getResource(String.format(PACKED, platform[0])) != null) {
+                packed.add(platform[1]);
+            }
+        }
+        return words(packed);
+    }
+
+    /** "A", "A and B", "A, B and C"; "no platform" for none */
+    static String words(java.util.List<String> names) {
+        if (names.isEmpty()) {
+            return "no platform";
+        }
+        if (names.size() == 1) {
+            return names.get(0);
+        }
+        return String.join(", ", names.subList(0, names.size() - 1)) + " and " + names.get(names.size() - 1);
+    }
 
     /** The platform the game runs on, as the packed encoders are named: windows-x86_64, linux-arm64 and so on */
     public static String platform() {
@@ -135,6 +169,7 @@ public final class Encoder {
             Files.deleteIfExists(stampFile);
             sweepUnpacking(folder);
             Path found = null;
+            Set<String> written = new HashSet<>();
             try (JarInputStream jar = new JarInputStream(packed.open())) {
                 for (JarEntry entry = jar.getNextJarEntry(); entry != null; entry = jar.getNextJarEntry()) {
                     String name = entry.getName();
@@ -146,6 +181,7 @@ public final class Encoder {
                         continue;
                     }
                     Path file = folder.resolve(base);
+                    written.add(base);
                     Path temporary = folder.resolve(base + "." + UUID.randomUUID() + UNPACKING);
                     try {
                         Files.copy(jar, temporary);
@@ -165,6 +201,7 @@ public final class Encoder {
             if (found == null) {
                 throw new IOException("The video encoder packed in this build of Dailies is incomplete");
             }
+            removeOthers(folder, written);
             Path newStamp = folder.resolve(STAMP + "." + UUID.randomUUID() + UNPACKING);
             try {
                 Files.writeString(newStamp, stamp, StandardCharsets.UTF_8);
@@ -173,6 +210,29 @@ public final class Encoder {
                 Files.deleteIfExists(newStamp);
             }
             return found;
+        }
+    }
+
+    /**
+     * Takes out of the folder every file this unpacking did not write: what an earlier, different encoder left (the
+     * JavaCPP Presets' build came as libraries beside its programs, our own build is one program), so the folder holds
+     * one encoder only. A file still in use is left for the next time
+     */
+    static void removeOthers(Path folder, Set<String> written) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(folder)) {
+            for (Path file : files) {
+                String name = file.getFileName().toString();
+                if (written.contains(name) || name.equals(".lock") || name.equals(STAMP) || name.endsWith(UNPACKING) || !Files.isRegularFile(file)) {
+                    continue;
+                }
+                try {
+                    Files.deleteIfExists(file);
+                } catch (IOException inUse) {
+                    // Tried again at the next unpacking
+                }
+            }
+        } catch (IOException e) {
+            Host.LOGGER.debug("Dailies: the encoder folder could not be tidied", e);
         }
     }
 

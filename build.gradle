@@ -212,6 +212,11 @@ tasks.register('benchmarks', Test) {
 }
 
 processResources {
+    if (encoderSource == 'bytedeco') {
+        // The JavaCPP Presets' build carries libraries of its own (OpenH264, freetype, lame and others), whose licence texts
+        // go in only with it; our own build brings its own texts (licenses/ffmpeg-build, below)
+        from('src/encoder-licenses/bytedeco') { into 'licenses' }
+    }
     from(encoderJars) {
         into 'encoder'
         // Either kind becomes encoder/ffmpeg-<platform>.jar, which is where Encoder looks

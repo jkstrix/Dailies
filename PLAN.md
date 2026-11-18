@@ -64,7 +64,7 @@ Every task below follows these. Where a task once fell short of one, it has been
 | 2.12 | Done | |
 | 2.13 | Partly | `Host.Crafts` and any-entity targets are done. Craft targets (`craft:<id or name>`, whole-craft framing, headings, hold-then-follow, the editor list, the balloon test) are the owner's Smart Camera work |
 | 2.14 | Done | |
-| 3.1 | Decided for now | Windows only, with H.264 and H.265 from hardware encoders (NVENC, Media Foundation) and software AV1, VP9, ProRes and DNxHR, from the bundled Bytedeco build; OpenH264 is in it but refused. The own build (`tools/ffmpeg/build.sh`, every platform) waits, and its workflow can build it on GitHub |
+| 3.1 | Done | The own LGPL build is packed for every platform: Windows x64, Linux x64 and arm64, macOS Apple silicon and Intel, built on GitHub by the FFmpeg workflow (`dailies.encoderSource=dailies`). EXP-1, EXP-8 and the notices describe it. Only Windows is game-tested here |
 | 3.2 | Done | |
 | 3.3 | Done | |
 | 3.4 | Done | |
@@ -438,7 +438,7 @@ The game's standard settings screen shows every choice as a "< value >" button t
 | Companion ids | Renamed to `dailies_companion` (3.7) |
 | Server resource packs | Stored inside each recording (1.1) |
 | Several points of view | Both linking and switching (2.6) |
-| Encoder, for now (18 November) | The bundled Windows build, hardware H.264 and H.265 only; the own every-platform build waits (3.1) |
+| Encoder (18 November) | The own LGPL build for every platform, from the FFmpeg workflow on GitHub (3.1) |
 | McpCraft and playback (18 November) | McpCraft recognises Dailies only, not Flashback (0.5) |
 
 No decisions are open. New ones found while working go in this table before the work they affect starts.
