@@ -1,5 +1,7 @@
 package comedymonkey.dailies.export;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -42,6 +44,10 @@ import java.util.stream.Stream;
  * it ran twice as fast (on an RTX 5090, 147 frames a second with one encoder, 295 with three, joining included).
  * The export keeps that many more frames ({@link #keeps}), and when all are held it waits for one to come back.
  * <p>
+ * An export with sound has it put into the file by that same last run, which reads the parts on its input pipe and the
+ * captured sound from its file ({@link Sound}, {@link JoinCommand}): the picture is written to disk once, and not
+ * joined into a soundless file first that joining the sound to then copies again (EXP-7).
+ * <p>
  * No Minecraft here: measured, and its pure parts tested, without a game.
  */
 final class ParallelVideoSink implements FrameSink {
@@ -51,6 +57,23 @@ final class ParallelVideoSink implements FrameSink {
 
     /** A frame handed to an encoder, and what gives it back once it is down the pipe */
     private record Held(byte[] data, Runnable done) {
+    }
+
+    /**
+     * The sound of an export, put into the file in the run that joins the parts (EXP-7). The export's finishing thread,
+     * once every picture is taken and the sound has stopped being captured
+     */
+    interface Sound {
+
+        /**
+         * Writes the file with the sound, by running the encoder with the parts as its picture, as often as it needs
+         * (once more without the audio keyframes, say, when one of their files cannot be read). Whether the file was
+         * written with sound: when not, the parts are joined into it alone. Never throws
+         *
+         * @param cancelled the export was stopped before every picture was taken, or an encoder failed: the picture is
+         *                  then kept without sound
+         */
+        boolean joinInto(JoinCommand.Picture parts, Path output, boolean cancelled);
     }
 
     /** Handed to an encoder's thread to say its share has ended */
@@ -66,7 +89,7 @@ final class ParallelVideoSink implements FrameSink {
     private final int buffers;
     private final String container;
     private final Path output;
-    private final boolean faststart;
+    private final @Nullable Sound sound;
     private final Path folder;
     private final Consumer<String> log;
     private final List<Lane> lanes = new ArrayList<>();
@@ -77,13 +100,13 @@ final class ParallelVideoSink implements FrameSink {
      * words are thrown, so the caller can fall back to a single encoder.
      *
      * @param encoderArguments as {@link Codecs#videoArguments}, from "-c:v" on
-     * @param faststart        the joined file has its index at the front, as the file the export ends with needs; not
-     *                         a soundless file that sound is joined to afterwards, which that join writes again
+     * @param output           the file the export ends with: the joined file has its index at the front
+     * @param sound            the sound put into it as the parts are joined, or null for none
      * @param chunk            frames in a chunk, which is also the keyframe interval
      * @param buffers          frames each encoder may have waiting for it
      */
     ParallelVideoSink(Path program, int width, int height, double framesPerSecond, List<String> encoderArguments, String container,
-                      Path output, boolean faststart, int processes, int chunk, int buffers, Consumer<String> log) throws IOException {
+                      Path output, @Nullable Sound sound, int processes, int chunk, int buffers, Consumer<String> log) throws IOException {
         if (processes < 2) {
             throw new IllegalArgumentException("Encoding side by side needs at least two encoders");
         }
@@ -97,7 +120,7 @@ final class ParallelVideoSink implements FrameSink {
         this.buffers = Math.max(1, buffers);
         this.container = container;
         this.output = output.toAbsolutePath();
-        this.faststart = faststart;
+        this.sound = sound;
         this.log = log;
         Path parent = this.output.getParent();
         Files.createDirectories(parent);
@@ -512,24 +535,59 @@ final class ParallelVideoSink implements FrameSink {
             this.log.accept("an encoder of the stopped export failed; its first " + covered + " frames are kept: " + failed.getMessage());
         }
         long started = System.nanoTime();
-        this.join(order);
-        this.log.accept("joined " + order.size() + " parts of " + covered + " frames from " + this.lanes.size() + " H.264 encoders in "
-            + (System.nanoTime() - started) / 1_000_000 + " ms");
+        JoinCommand.Picture picture = new JoinCommand.Picture() {
+            @Override
+            public List<String> arguments() {
+                return JoinCommand.PARTS;
+            }
+
+            @Override
+            public @Nullable String run(List<String> command) {
+                return ParallelVideoSink.this.join(order, command);
+            }
+        };
+        // A stopped export, or one whose picture ends short, is kept without its sound, as with a single encoder: the
+        // sound side says why, and the picture is joined alone
+        boolean withSound = false;
+        if (this.sound != null) {
+            try {
+                withSound = this.sound.joinInto(picture, this.output, cancelled || failed != null);
+            } catch (RuntimeException | LinkageError e) {
+                // Never meant to happen; the picture is still all there
+                this.log.accept("the sound could not be joined in with the parts: " + e);
+            }
+        }
+        if (!withSound) {
+            String failure = this.join(order, joinCommand(this.program.toString(), this.output, this.container));
+            if (failure != null) {
+                deleteFolder(this.folder);
+                throw new IOException("The encoder could not join the parts of the video: " + failure);
+            }
+        }
+        this.log.accept("joined " + order.size() + " parts of " + covered + " frames from " + this.lanes.size() + " H.264 encoders"
+            + (withSound ? " with the sound" : "") + " in " + (System.nanoTime() - started) / 1_000_000 + " ms");
         deleteFolder(this.folder);
         return this.output;
     }
 
-    /** Copies the files, in order, into the file asked for: their bytes one after the other, never encoded again */
-    private void join(List<Part> order) throws IOException {
-        List<String> command = new ArrayList<>(List.of(this.program.toString(), "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "mpegts", "-i", "pipe:0", "-c", "copy", "-an"));
-        if (this.faststart && (this.container.equals("mp4") || this.container.equals("mov"))) {
-            // A file cut short by a cancel must still play (EXP-6)
-            command.addAll(List.of("-movflags", "+faststart"));
-        }
-        command.add(this.output.toString());
+    /** The run that joins the parts alone, when there is no sound to put with them: copied, never encoded again */
+    static List<String> joinCommand(String program, Path output, String container) {
+        return JoinCommand.pictureOnly(program, JoinCommand.PARTS, output, container);
+    }
+
+    /**
+     * Runs the encoder with a command that reads the picture from its input pipe ({@link JoinCommand#PARTS}), and
+     * hands it the files, in order: their bytes one after the other, never encoded again. Null when it worked, else
+     * what the encoder said; run again, it writes the file afresh. An interrupt stops the encoder and the joining.
+     */
+    private @Nullable String join(List<Part> order, List<String> command) {
         Path said = this.folder.resolve("join.log");
-        Process joiner = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(said.toFile()).start();
+        Process joiner;
+        try {
+            joiner = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(said.toFile()).start();
+        } catch (IOException e) {
+            return "it could not start (" + e.getMessage() + ")";
+        }
         long bytes = 0;
         try (OutputStream into = joiner.getOutputStream()) {
             for (Part part : order) {
@@ -539,20 +597,28 @@ final class ParallelVideoSink implements FrameSink {
             // The joiner stopped taking bytes: what it said comes below
         }
         try {
-            // Copying is quick, but a long 4K video is many gigabytes, written twice over for the fast start
-            if (!joiner.waitFor(120 + bytes / (50L * 1024 * 1024), TimeUnit.SECONDS)) {
+            // Copying is quick, but a long 4K video is many gigabytes, written twice over for the fast start; the sound,
+            // when it goes in too, is encoded many times faster than it plays
+            long seconds = 120 + bytes / (50L * 1024 * 1024) + (long) (this.frames / this.framesPerSecond / 10.0);
+            if (!joiner.waitFor(seconds, TimeUnit.SECONDS)) {
                 joiner.destroyForcibly();
-                throw new IOException("The encoder did not finish joining the parts of the video");
+                return "it did not finish in " + seconds + " seconds";
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             joiner.destroyForcibly();
-            throw new IOException("The export was interrupted while the parts of the video were joined", e);
+            return "the export was interrupted while the parts of the video were joined";
         }
         if (joiner.exitValue() != 0) {
-            String words = Files.exists(said) ? Files.readString(said, StandardCharsets.UTF_8).trim() : "";
-            throw new IOException("The encoder could not join the parts of the video: " + (words.isEmpty() ? "it stopped without saying why" : words));
+            String words;
+            try {
+                words = Files.exists(said) ? Files.readString(said, StandardCharsets.UTF_8).trim() : "";
+            } catch (IOException e) {
+                words = "";
+            }
+            return words.isEmpty() ? "it stopped without saying why" : words;
         }
+        return null;
     }
 
     @Override

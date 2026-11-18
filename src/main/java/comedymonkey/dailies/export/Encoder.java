@@ -238,7 +238,8 @@ public final class Encoder {
 
     /**
      * Unpacks the encoder and works out what this machine can encode, on a thread of its own, so the first export
-     * does not wait for it on the game's thread. Once a session, after the graphics card has been named. Never throws
+     * does not wait for it on the game's thread; then puts the usual export sizes in line for the side-by-side trial
+     * ({@link #warmParallel}). Once a session, after the graphics card has been named. Never throws
      */
     static void warmUp() {
         if (warming || !bundled()) {
@@ -247,7 +248,7 @@ public final class Encoder {
         warming = true;
         Thread warm = new Thread(() -> {
             try {
-                choices();
+                warmParallel(choices());
             } catch (Throwable t) {
                 Host.LOGGER.info("Dailies: the video encoder could not be made ready ahead of the first export ({})", t.toString());
             }
@@ -446,6 +447,8 @@ public final class Encoder {
 
     /**
      * As above, written to another file than the export's own: the soundless video that sound is joined to afterwards.
+     * Several encoders side by side write the export's own file all the same, putting the sound in as they join their
+     * parts ({@link comedymonkey.dailies.sound.ExportSound#joinInto}), and the soundless file is never written.
      *
      * @param i420 the frames can be converted to the encoder's own format on the graphics card; the sink takes them
      *             that way where its encoder writes that format (see {@link FrameSink#layout()})
@@ -485,11 +488,17 @@ public final class Encoder {
         boolean split = Host.get().setting("exportSplitEncoding", true);
         // A soundless video that sound is joined to afterwards is written once more by that join, which puts the index
         // at the front itself: moving it there in this file too would only write the whole file again for nothing
-        boolean faststart = settings.output == null || output.toAbsolutePath().normalize().equals(settings.output.toAbsolutePath().normalize());
+        boolean soundAfter = settings.output != null && !output.toAbsolutePath().normalize().equals(settings.output.toAbsolutePath().normalize());
+        boolean faststart = !soundAfter;
+        // A trial of encoders side by side running now could be failed by this export's own encoder
+        TRIALS.exportStarting();
         for (Codecs.Choice choice : order) {
             boolean takesI420 = i420 && scale == 1 && Codecs.takesI420(choice.encoder(), settings.transparent);
             if (takesI420 && Codecs.parallel(choice.encoder())) {
-                FrameSink parallel = parallelSink(settings, choice.encoder(), container, output, faststart);
+                // Their parts are joined by one more run of the encoder at the end, and the sound goes into that same run:
+                // the picture is then written once, straight into the export's own file, and never as a soundless file
+                // that a join of its own copies again (EXP-7)
+                FrameSink parallel = parallelSink(settings, choice.encoder(), container, soundAfter ? settings.output : output, soundAfter ? JOIN_SOUND : null);
                 if (parallel != null) {
                     return parallel;
                 }
@@ -511,15 +520,97 @@ public final class Encoder {
 
     /** The most memory the frames held for side-by-side encoders may take, however much the game has spare */
     private static final long PARALLEL_MEMORY = 2L * 1024 * 1024 * 1024;
-    /** Encoder, size and number of encoders that were tried side by side this session, and whether they all started */
-    private static final Map<String, Boolean> PARALLEL_TRIED = new ConcurrentHashMap<>();
+    /** The most sizes tried side by side when the game starts */
+    private static final int WARM_SIZES = 8;
+
+    /**
+     * Which encoder, size and number of encoders start side by side, tried on a worker and never on the game's thread
+     * (EXP-6). The export is asked whether it is under way only when a trial is due, so the tests that unpack the
+     * encoder without a game never load it
+     */
+    private static final ParallelTrials TRIALS = new ParallelTrials(Encoder::tryTogether, trialWorker(), () -> Export.active());
+
+    /**
+     * The sound put into the file as the parts of several encoders are joined (EXP-7). A cancel that comes before that
+     * run has begun leaves the sound out, and the picture is joined alone, as a cancel while sound is joined to a single
+     * encoder's file keeps the picture without it; once the run has begun it is let finish, since stopping it would
+     * cost the picture too, and the sound adds next to nothing to its time
+     */
+    private static final ParallelVideoSink.Sound JOIN_SOUND = (parts, output, cancelled) -> comedymonkey.dailies.sound.ExportSound.joinInto(new JoinCommand.Picture() {
+        @Override
+        public List<String> arguments() {
+            return parts.arguments();
+        }
+
+        @Override
+        public @Nullable String run(List<String> command) {
+            return Export.stopping() ? "stopped, as the export was cancelled" : parts.run(command);
+        }
+    }, output, cancelled || Export.stopping());
+
+    /** One thread, one trial at a time, gone again when there is nothing left to try */
+    private static java.util.concurrent.Executor trialWorker() {
+        java.util.concurrent.ThreadPoolExecutor worker = new java.util.concurrent.ThreadPoolExecutor(1, 1, 30, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), work -> {
+            Thread thread = new Thread(work, "Dailies-Encoder-Trial-Sizes");
+            thread.setDaemon(true);
+            thread.setPriority(Thread.MIN_PRIORITY);
+            return thread;
+        });
+        worker.allowCoreThreadTimeOut(true);
+        return worker;
+    }
+
+    /** No export is under way any more: sizes an export could not wait to try are tried now, beside the game. Never waits */
+    static void exportEnded() {
+        TRIALS.idle();
+    }
+
+    /**
+     * Puts the sizes exports are usually made at in line for the side-by-side trial, and starts trying them, so the
+     * first export at one of them finds its answer waiting. The warming thread. Never throws
+     */
+    private static void warmParallel(List<Codecs.Choice> working) {
+        try {
+            int processes = Host.get().setting("exportParallelEncoders", 3);
+            // Side by side is only ever used for frames converted on the graphics card
+            if (processes < 2 || !Host.get().setting("exportGpuColour", true)) {
+                return;
+            }
+            List<int[]> presets = new ArrayList<>();
+            try {
+                for (ExportPreset preset : Export.presets().all()) {
+                    presets.add(new int[]{preset.width(), preset.height()});
+                }
+            } catch (RuntimeException e) {
+                // The usual sizes alone
+            }
+            List<int[]> sizes = ParallelTrials.warmSizes(presets, WARM_SIZES);
+            for (Codecs.Choice choice : working) {
+                if (Codecs.parallel(choice.encoder()) && Codecs.takesI420(choice.encoder(), false)) {
+                    for (int[] size : sizes) {
+                        TRIALS.want(machine, choice.encoder(), size[0], size[1], processes);
+                    }
+                }
+            }
+            if (!Export.active()) {
+                TRIALS.idle();
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.info("Dailies: encoders side by side could not be tried ahead of the first export ({})", t.toString());
+        }
+    }
 
     /**
      * An export made by several encoders at once ({@link ParallelVideoSink}), as many as the NVIDIA H.264 Encoders at
      * Once setting says; or null, and the caller goes on to a single encoder, when the setting is 1, when there is too
-     * little memory spare for the frames they must hold, or when they cannot all start on this card. Never throws.
+     * little memory spare for the frames they must hold, when they cannot all start on this card, or when that has not
+     * been tried yet at this size: the trial is never waited for here, but made once the export is done. Never throws.
+     *
+     * @param output the export's own file
+     * @param sound  the sound to put into it as the parts are joined, or null for none
      */
-    private static @Nullable FrameSink parallelSink(Export.Settings settings, String encoder, String container, Path output, boolean faststart) {
+    private static @Nullable FrameSink parallelSink(Export.Settings settings, String encoder, String container, Path output, ParallelVideoSink.@Nullable Sound sound) {
         int processes = Host.get().setting("exportParallelEncoders", 3);
         int width = settings.width;
         int height = settings.height;
@@ -536,16 +627,21 @@ public final class Encoder {
             Host.LOGGER.info("Dailies: one {} encoder, not {}: {} MB of memory spare is too little to hold the frames they would need", encoder, processes, spare >> 20);
             return null;
         }
+        Boolean together = TRIALS.answer(machine, encoder, width, height, processes);
+        if (together == null) {
+            Host.LOGGER.info("Dailies: {} {} encoders side by side have not been tried at {}x{} yet; one is used for this export, and they are tried once it is done",
+                processes, encoder, width, height);
+            return null;
+        }
+        if (!together) {
+            Host.LOGGER.info("Dailies: {} {} encoders could not all start at once on this card at {}x{}; one is used", processes, encoder, width, height);
+            return null;
+        }
         try {
-            Path ffmpeg = program();
-            if (!parallelTrial(ffmpeg.toString(), encoder, width, height, processes)) {
-                Host.LOGGER.info("Dailies: {} {} encoders could not all start at once on this card at {}x{}; one is used", processes, encoder, width, height);
-                return null;
-            }
-            FrameSink sink = new ParallelVideoSink(ffmpeg, width, height, settings.framesPerSecond, Codecs.videoArguments(encoder, settings.bitrate, false, -1),
-                container, output, faststart, processes, plan.chunk(), plan.buffers(), line -> Host.LOGGER.info("Dailies: {}", line));
-            Host.LOGGER.info("Dailies: {} {} encoders side by side, in chunks of {} frames, each holding up to {} frames ({} MB in all at most)",
-                processes, encoder, plan.chunk(), plan.buffers(), (long) processes * plan.buffers() * frameBytes >> 20);
+            FrameSink sink = new ParallelVideoSink(program(), width, height, settings.framesPerSecond, Codecs.videoArguments(encoder, settings.bitrate, false, -1),
+                container, output, sound, processes, plan.chunk(), plan.buffers(), line -> Host.LOGGER.info("Dailies: {}", line));
+            Host.LOGGER.info("Dailies: {} {} encoders side by side, in chunks of {} frames, each holding up to {} frames ({} MB in all at most){}",
+                processes, encoder, plan.chunk(), plan.buffers(), (long) processes * plan.buffers() * frameBytes >> 20, sound != null ? ", the sound joined in with the parts" : "");
             return sink;
         } catch (IOException e) {
             Host.LOGGER.info("Dailies: {} {} encoders side by side could not start ({}); one is used", processes, encoder, e.getMessage());
@@ -557,14 +653,15 @@ public final class Encoder {
      * Whether this many encoders start at once on this card at this size. An encoder only opens on the card when its
      * first frame comes, which for an export is after it has begun; a card or driver that allows fewer encoders at
      * once than asked for (or other programs using some) would then fail the export a few seconds in. So they are
-     * tried together first, a few frames each, and the answer kept for the session. Tried outside the map's own lock,
-     * so a trial of one size never holds up the answer for another
+     * tried together first, a few frames each, on the trial worker and never on the game's thread
+     * ({@link ParallelTrials}). Null when the trial says nothing about the card
      */
-    private static boolean parallelTrial(String ffmpeg, String encoder, int width, int height, int processes) {
-        String key = encoder + " " + width + "x" + height + " x" + processes + " on " + machine;
-        Boolean known = PARALLEL_TRIED.get(key);
-        if (known != null) {
-            return known;
+    private static @Nullable Boolean tryTogether(String encoder, int width, int height, int processes) {
+        String ffmpeg;
+        try {
+            ffmpeg = program().toString();
+        } catch (IOException e) {
+            return null;
         }
         boolean all = true;
         List<Process> started = new ArrayList<>();
@@ -584,14 +681,14 @@ public final class Encoder {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             started.forEach(Process::destroyForcibly);
-            // Not kept: an interrupted trial says nothing about the card
-            return false;
+            // An interrupted trial says nothing about the card
+            return null;
         } catch (IOException | RuntimeException e) {
             started.forEach(Process::destroyForcibly);
             all = false;
         }
-        Boolean first = PARALLEL_TRIED.putIfAbsent(key, all);
-        return first != null ? first : all;
+        Host.LOGGER.info("Dailies: {} {} encoders side by side at {}x{} {}", processes, encoder, width, height, all ? "all start on this card" : "do not all start on this card");
+        return all;
     }
 
     /**

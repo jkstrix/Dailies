@@ -515,11 +515,17 @@ public final class Export {
         }
         cancelRequested = true;
         // Finishing, the picture is always completed, being all there is to keep; joining the sound to it, which can
-        // take minutes, is stopped, and the picture kept without it
+        // take minutes, is stopped, and the picture kept without it. Where the parts of several encoders are joined with
+        // the sound in one run, a cancel before that run leaves the sound out, and the run itself is let finish (EXP-7)
         Thread finishing = finisher;
         if (finishing != null && soundStage) {
             finishing.interrupt();
         }
+    }
+
+    /** Whether the export under way has been asked to stop. Any thread */
+    static boolean stopping() {
+        return active && cancelRequested;
     }
 
     /** Whether the export has taken all its pictures and is finishing its file: joining parts, joining the sound */
@@ -1034,6 +1040,8 @@ public final class Export {
         finisher = null;
         // Said last: by the time anyone hears the export is over, playback is already on its way back
         active = false;
+        // Encoders side by side at a size this export could not wait to try are tried now, beside the game (EXP-6)
+        Encoder.exportEnded();
     }
 
 }
