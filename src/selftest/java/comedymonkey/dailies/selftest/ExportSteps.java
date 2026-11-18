@@ -214,10 +214,11 @@ final class ExportSteps {
         run(Encoder.programPath().toString(), "-v", "error", "-y", "-i", file.toString(), "-vf", "select=eq(n\\,14)", "-frames:v", "1", frame.toString());
         BufferedImage picture = ImageIO.read(frame.toFile());
         check(picture != null && picture.getWidth() == 1920 && spread(picture) > 12.0, "a frame taken back out of the video is missing or blank");
-        // Upright: the sky is above the grass
-        int top = picture.getRGB(960, 40) & 0xFF;
-        int bottom = picture.getRGB(960, 1040) & 0xFF;
-        check(top > bottom, "the video is upside down or scrambled: blue at the top is " + top + " and at the bottom " + bottom);
+        // Upright: the sky is above the grass. Across the whole width of a band at the top and one at the bottom, so that a
+        // block or a craft over one spot (the machines' platform hung right over the middle of the top once) does not decide it
+        int top = (int) blueOfBand(picture, 0, 120);
+        int bottom = (int) blueOfBand(picture, picture.getHeight() - 120, picture.getHeight());
+        check(top > bottom, "the video is upside down or scrambled: blue across the top is " + top + " and across the bottom " + bottom);
         double against = difference(picture, reference);
         check(against < 8.0, "frame 14 of the video differs from the same moment exported as a picture by " + String.format(java.util.Locale.ROOT, "%.2f", against) + " a colour");
         test.log("exported " + expected + " frames of 1920x1080 " + choice.label() + " in " + String.format(java.util.Locale.ROOT, "%.1f", took) + " s, " + Files.size(file) / 1024
@@ -308,6 +309,19 @@ final class ExportSteps {
         String said = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         check(process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS), "a check of the video did not finish");
         return said;
+    }
+
+    /** The mean blue of the rows from {@code fromRow} up to {@code toRow}, every eighth pixel across the width */
+    private static double blueOfBand(BufferedImage image, int fromRow, int toRow) {
+        long sum = 0;
+        int count = 0;
+        for (int y = Math.max(0, fromRow); y < Math.min(image.getHeight(), toRow); y += 4) {
+            for (int x = 0; x < image.getWidth(); x += 8) {
+                sum += image.getRGB(x, y) & 0xFF;
+                count++;
+            }
+        }
+        return count == 0 ? 0.0 : (double) sum / count;
     }
 
     /** How much the colours of a picture vary: near zero for a blank one */
