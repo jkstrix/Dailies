@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 /**
  * A server never tells a player about their own arm swings, or the sounds their own body makes (footsteps, landing,
  * eating, splashing), so recording has to see them where they start. The game plays those sounds straight to its own
@@ -33,8 +35,13 @@ public abstract class LocalPlayerMixin {
     private void dailies$ownSound(Level level, double x, double y, double z, SoundEvent sound, SoundSource source, float volume, float pitch, boolean distanceDelay,
                                   Operation<Void> original) {
         original.call(level, x, y, z, sound, source, volume, pitch, distanceDelay);
+        if (!Capture.capturing()) {
+            return;
+        }
+        // The seed picks which of the sound's variants playback plays. It is drawn from a random of its own: drawing from
+        // the level's, for every footstep, changed what the game itself went on to pick at random
         LocalPlayer self = (LocalPlayer) (Object) this;
-        Capture.ownSound(self, null, x, y, z, BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), source, volume, pitch, level.getRandom().nextLong());
+        Capture.ownSound(self, null, x, y, z, BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), source, volume, pitch, ThreadLocalRandom.current().nextLong());
     }
 
 }

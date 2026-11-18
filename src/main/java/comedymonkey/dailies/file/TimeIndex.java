@@ -68,10 +68,13 @@ public final class TimeIndex {
             this.any = false;
         }
 
-        public void read(byte[] payload, int length) {
-            long[] at = {0};
-            this.real += unzigzag(getVarLong(payload, length, at));
-            this.game += unzigzag(getVarLong(payload, length, at));
+        /** @throws RecordingFormatException when the record does not hold two whole numbers */
+        public void read(byte[] payload, int length) throws RecordingFormatException {
+            BoundedReader in = new BoundedReader(payload, 0, length);
+            long real = unzigzag(in.readVarLong());
+            long game = unzigzag(in.readVarLong());
+            this.real += real;
+            this.game += game;
             this.any = true;
         }
 
@@ -92,40 +95,64 @@ public final class TimeIndex {
     /** The times of every tick of one segment */
     public static final class Table {
 
+        /**
+         * The most ticks of one segment whose times are kept: six hours, twelve times the longest a segment is ever
+         * recorded (REC-20). A segment whose part headers claim more has been tampered with, and its later ticks go
+         * without times rather than have room made for billions
+         */
+        static final int MOST_TICKS = 20 * 60 * 60 * 6;
+
         private final int startTick;
-        private final long[] real;
-        private final long[] game;
-        private final boolean[] known;
+        /** The most ticks the segment can have times for: one more than its length */
+        private final long span;
+        private long[] real = new long[0];
+        private long[] game = new long[0];
+        private boolean[] known = new boolean[0];
+        /** How many ticks from the start have room made for them: every tick with times is among them */
+        private int size = 0;
         private boolean any = false;
 
-        private Table(int startTick, int ticks) {
+        private Table(int startTick, long ticks) {
             this.startTick = startTick;
-            this.real = new long[ticks + 1];
-            this.game = new long[ticks + 1];
-            this.known = new boolean[ticks + 1];
+            this.span = Math.min(ticks, MOST_TICKS) + 1;
+        }
+
+        /** Notes the times of the tick so far into the segment. Room is made as times turn up, never for the whole span at once */
+        private void put(long index, long realTime, long gameTime) {
+            if (index < 0 || index >= this.span) {
+                return;
+            }
+            int at = (int) index;
+            if (at >= this.known.length) {
+                int room = (int) Math.min(this.span, Math.max(at + 1L, Math.max(64L, this.known.length * 2L)));
+                this.real = Arrays.copyOf(this.real, room);
+                this.game = Arrays.copyOf(this.game, room);
+                this.known = Arrays.copyOf(this.known, room);
+            }
+            this.real[at] = realTime;
+            this.game[at] = gameTime;
+            this.known[at] = true;
+            this.size = Math.max(this.size, at + 1);
+            this.any = true;
         }
 
         /**
-         * Reads a segment's times from its records.
+         * Reads a segment's times from its records. A segment damaged part way keeps the times read before the damage.
          *
          * @param endTick the tick the segment reaches
          */
         public static Table read(InputStream segment, int startTick, int endTick) throws IOException {
-            Table table = new Table(startTick, Math.max(0, endTick - startTick));
+            Table table = new Table(startTick, Math.max(0L, (long) endTick - startTick));
             Decoder decoder = new Decoder();
-            int position = 0;
+            // Counted in a long, so that no number of ticks a damaged segment claims can wrap round
+            long position = 0;
             try (Records.Reader reader = new Records.Reader(segment)) {
                 while (reader.next()) {
                     if (reader.kind() == Records.TICK) {
                         position += reader.number();
                     } else if (reader.kind() == Records.TIME) {
                         decoder.read(reader.payload(), reader.length());
-                        if (position < table.known.length) {
-                            table.real[position] = decoder.realTime();
-                            table.game[position] = decoder.gameTime();
-                            table.known[position] = true;
-                            table.any = true;
-                        }
+                        table.put(position, decoder.realTime(), decoder.gameTime());
                     }
                 }
             } catch (RecordingFormatException damaged) {
@@ -142,18 +169,18 @@ public final class TimeIndex {
         /** The times of this very tick, or null when the segment has none for it */
         public @Nullable Sample exactly(int tick) {
             int index = tick - this.startTick;
-            return index >= 0 && index < this.known.length && this.known[index] ? new Sample(this.real[index], this.game[index]) : null;
+            return index >= 0 && index < this.size && this.known[index] ? new Sample(this.real[index], this.game[index]) : null;
         }
 
         /** The times of a tick, or of the nearest tick before it that has any; null when there is none */
         public @Nullable Sample at(int tick) {
-            int index = Math.min(this.known.length - 1, tick - this.startTick);
+            int index = Math.min(this.size - 1, tick - this.startTick);
             for (; index >= 0; index--) {
                 if (this.known[index]) {
                     return new Sample(this.real[index], this.game[index]);
                 }
             }
-            for (index = 0; index < this.known.length; index++) {
+            for (index = 0; index < this.size; index++) {
                 if (this.known[index]) {
                     return new Sample(this.real[index], this.game[index]);
                 }
@@ -168,7 +195,7 @@ public final class TimeIndex {
          */
         public int tickAtGame(long gameTime) {
             int before = -1;
-            for (int index = 0; index < this.known.length; index++) {
+            for (int index = 0; index < this.size; index++) {
                 if (!this.known[index]) {
                     continue;
                 }
@@ -188,7 +215,7 @@ public final class TimeIndex {
         /** The tick of this segment whose real time is closest to the one given, or null when the segment has no times */
         public @Nullable Nearest nearest(long realTime) {
             Nearest best = null;
-            for (int index = 0; index < this.known.length; index++) {
+            for (int index = 0; index < this.size; index++) {
                 if (!this.known[index]) {
                     continue;
                 }
@@ -216,20 +243,6 @@ public final class TimeIndex {
         }
         bytes[at++] = (byte) value;
         return at;
-    }
-
-    private static long getVarLong(byte[] bytes, int length, long[] at) {
-        long value = 0;
-        int shift = 0;
-        while (at[0] < length && shift < 64) {
-            byte current = bytes[(int) at[0]++];
-            value |= (long) (current & 0x7F) << shift;
-            if ((current & 0x80) == 0) {
-                break;
-            }
-            shift += 7;
-        }
-        return value;
     }
 
 }

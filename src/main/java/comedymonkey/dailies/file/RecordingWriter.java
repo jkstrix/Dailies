@@ -31,11 +31,16 @@ public final class RecordingWriter implements Closeable {
         }
         Files.createDirectories(file.toAbsolutePath().getParent());
         Container container = Container.create(file);
-        RecordingWriter writer = new RecordingWriter(container, manifest);
-        manifest.finished = false;
-        container.append(Container.MANIFEST, 0, 0, 0, manifest.toBytes());
-        container.force();
-        return writer;
+        try {
+            manifest.finished = false;
+            container.append(Container.MANIFEST, 0, 0, 0, manifest.toBytes());
+            container.force();
+        } catch (IOException | RuntimeException e) {
+            // Left open, the file would stay locked on Windows until the game closed; it holds nothing worth keeping
+            container.closeAndDelete();
+            throw e;
+        }
+        return new RecordingWriter(container, manifest);
     }
 
     public Path file() {
@@ -76,12 +81,29 @@ public final class RecordingWriter implements Closeable {
      * @return the name to ask for it by
      */
     public String putShared(byte[] data) throws IOException {
-        byte[] hash = Packing.hash(data);
+        return this.putShared(data, hashOf(data));
+    }
+
+    /**
+     * Stores shared data whose name the caller has already worked out with {@link #hashOf}, so that it is not worked out
+     * twice. The name is trusted: one that is not the data's own would make playback find the wrong bytes.
+     *
+     * @return the name to ask for it by
+     */
+    public String putShared(byte[] data, byte[] hash) throws IOException {
+        if (hash.length != Container.HASH_BYTES) {
+            throw new IllegalArgumentException("A name of shared data is " + Container.HASH_BYTES + " bytes, not " + hash.length);
+        }
         String name = HexFormat.of().formatHex(hash);
         if (!this.container.shared.containsKey(name)) {
             this.container.appendShared(name, Packing.pack(hash, data, 0, data.length));
         }
         return name;
+    }
+
+    /** The name shared data is stored by: the SHA-256 of its bytes. Any thread */
+    public static byte[] hashOf(byte[] data) {
+        return Packing.hash(data);
     }
 
     /** How much of a stored file is read, and written, at a time */

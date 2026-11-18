@@ -10,7 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A recording on disk, for playback and for the editor. Segments are read one at a time and independently, so a
@@ -21,7 +20,7 @@ public final class RecordingFile implements Closeable {
 
     public static final String EXTENSION = ".dailies";
 
-    private Container container;
+    private final Container container;
     private RecordingManifest manifest;
     private final boolean writable;
 
@@ -462,47 +461,6 @@ public final class RecordingFile implements Closeable {
             live += Container.HEADER_BYTES + 32;
         }
         return live;
-    }
-
-    /**
-     * Rewrites the file without its dead blocks. This copies the whole recording, so it is for the rare moment when
-     * {@link #deadBytes} has grown large, never for an ordinary save.
-     */
-    public synchronized void compact() throws IOException {
-        this.requireWritable();
-        Path file = this.container.path;
-        Path temporary = file.resolveSibling(file.getFileName() + ".compacting");
-        Files.deleteIfExists(temporary);
-        Container fresh = Container.create(temporary);
-        try {
-            fresh.append(Container.MANIFEST, 0, 0, 0, this.manifest.toBytes());
-            synchronized (this.container) {
-                for (Container.Entry part : this.container.parts) {
-                    fresh.append(Container.SEGMENT_PART, part.a(), part.b(), part.c(), this.container.read(part));
-                }
-                for (Map.Entry<String, Container.Entry> blob : this.container.shared.entrySet()) {
-                    fresh.appendShared(blob.getKey(), this.container.read(blob.getValue()));
-                }
-            }
-            byte[] preview = this.preview();
-            if (preview != null) {
-                fresh.append(Container.PREVIEW, 0, 0, 0, preview);
-            }
-            byte[] edit = this.editState();
-            if (edit != null) {
-                fresh.append(Container.EDIT, 0, 0, 0, edit);
-            }
-            fresh.appendIndex();
-            fresh.appendTrailer();
-        } catch (IOException | RuntimeException e) {
-            fresh.close();
-            Files.deleteIfExists(temporary);
-            throw e;
-        }
-        fresh.close();
-        this.container.close();
-        Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
-        this.container = Container.open(file, true);
     }
 
     private void requireWritable() {
