@@ -45,9 +45,10 @@ public final class CameraSteps {
         double lastTick = Double.NaN;
     }
 
-    // Weak identity keys: the state goes away together with the track it belongs to
-    private static final Map<Track, Tether> TETHERS = new MapMaker().weakKeys().makeMap();
-    private static Track steppedTrack = null;
+    // By the track's id, which every copy of it keeps, so an edit (which copies the tracks) does not start the springs
+    // again in the middle of a shot. Weak identity keys: the state goes away together with the last copy of the track
+    private static final Map<Track.Id, Tether> TETHERS = new MapMaker().weakKeys().makeMap();
+    private static Track.Id steppedTrack = null;
     private static int steppedPosition = Integer.MIN_VALUE;
     /** Whether that step found what it films; when not (a world being swapped through a portal) it is tried again */
     private static boolean steppedWithPose = false;
@@ -114,10 +115,10 @@ public final class CameraSteps {
                 }
                 return;
             }
-            if (track == steppedTrack && position == steppedPosition && steppedWithPose) {
+            if (track.id() == steppedTrack && position == steppedPosition && steppedWithPose) {
                 return;
             }
-            steppedTrack = track;
+            steppedTrack = track.id();
             steppedPosition = position;
             boolean applied = EditorSession.followCamera() || EditorSession.exporting();
             steppedWithPose = switch (track.kind()) {
@@ -161,7 +162,7 @@ public final class CameraSteps {
     // ------------------------------------------------------------------ Follow entity
 
     private static boolean follow(Minecraft minecraft, Scene scene, Track track, double tick) {
-        Tether tether = TETHERS.computeIfAbsent(track, key -> new Tether());
+        Tether tether = TETHERS.computeIfAbsent(track.id(), key -> new Tether());
         Evaluator.FollowValue follow = Evaluator.follow(scene, tick);
         Entity entity = follow == null ? null : find(minecraft, follow.entityUuid(), follow.entityId());
         if (entity == null) {
@@ -198,7 +199,7 @@ public final class CameraSteps {
 
     private static boolean orbit(Minecraft minecraft, Scene scene, Track track, double tick) {
         Evaluator.OrbitValue orbit = Evaluator.orbit(scene, tick);
-        Tether tether = TETHERS.computeIfAbsent(track, key -> new Tether());
+        Tether tether = TETHERS.computeIfAbsent(track.id(), key -> new Tether());
         Entity entity = orbit == null || !orbit.onEntity() ? null : find(minecraft, orbit.entityUuid(), orbit.entityId());
         if (entity == null) {
             // Round a fixed point the keyframes say exactly where the camera is, frame by frame
@@ -234,7 +235,7 @@ public final class CameraSteps {
      * been stepped near it (then the caller works the pose out directly).
      */
     static @Nullable Evaluator.CameraPose pose(Track track, double tick) {
-        Tether tether = TETHERS.get(track);
+        Tether tether = TETHERS.get(track.id());
         PoseBlend.Pose pose = tether == null ? null : tether.blend.at(tick);
         return pose == null ? null : new Evaluator.CameraPose(pose.x(), pose.y() - EYE_HEIGHT, pose.z(), pose.yaw(), pose.pitch(), 0.0);
     }

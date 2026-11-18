@@ -23,7 +23,9 @@ import java.util.function.Function;
  * <p>
  * A step is worked out on a copy of the state, so a change that fails with an {@link IllegalArgumentException}
  * changes nothing at all. {@link #state()} therefore returns a different object after every change: ask for it each
- * time and only read from it. Listeners hear of every change (for saving, EDIT-7), and {@link #revision()} goes up by
+ * time and only read from it. The copy is made as the step goes ({@link EditState#draft}): the scenes, tracks and
+ * looks the step does not touch are shared with the state before, so each step that is kept for undo holds only what
+ * it changed. A track the step did not touch is therefore the very same object before and after it. Listeners hear of every change (for saving, EDIT-7), and {@link #revision()} goes up by
  * one with each.
  * <p>
  * Track and keyframe operations work on the current scene. Not thread safe: call from one thread.
@@ -196,8 +198,9 @@ public final class EditHistory {
 
     /** Like {@link #edit}, for a change that only knows how to describe itself once it is made */
     private void step(Function<EditState, String> change) {
-        EditState next = this.state.copy();
+        EditState next = this.state.draft();
         String description = change.apply(next);
+        next.seal();
         if (this.groupDepth == 0) {
             this.undoSteps.push(new Step(description, this.state));
         }
@@ -224,8 +227,8 @@ public final class EditHistory {
     public int addScene(@Nullable String name) {
         this.step(next -> {
             Scene scene = new Scene(name == null || name.isBlank() ? next.freeSceneName() : name.trim());
-            next.addScene(next.scenes().size(), scene);
-            next.selectScene(next.scenes().size() - 1);
+            next.addScene(next.sceneCount(), scene);
+            next.selectScene(next.sceneCount() - 1);
             return "Add scene \"" + scene.name() + "\"";
         });
         return this.state.currentSceneIndex();
@@ -240,8 +243,9 @@ public final class EditHistory {
             this.state.scene(index);
             return;
         }
-        EditState next = this.state.copy();
+        EditState next = this.state.draft();
         next.selectScene(index);
+        next.seal();
         if (this.groupBefore == this.state) {
             this.groupBefore = next;
         }
@@ -285,8 +289,8 @@ public final class EditHistory {
         this.step(next -> {
             Scene copy = scene.copy();
             copy.setName(restoredName(next, scene.name()));
-            next.addScene(next.scenes().size(), copy);
-            next.selectScene(next.scenes().size() - 1);
+            next.addScene(next.sceneCount(), copy);
+            next.selectScene(next.sceneCount() - 1);
             return "Restore scene \"" + copy.name() + "\"";
         });
         return this.state.currentSceneIndex();
@@ -294,7 +298,7 @@ public final class EditHistory {
 
     /** The name a scene put back is given: its own, or one beside it that no scene has */
     public static String restoredName(EditState state, String name) {
-        java.util.function.Predicate<String> taken = wanted -> state.scenes().stream().anyMatch(other -> other.name().equals(wanted));
+        java.util.function.Predicate<String> taken = wanted -> state.sceneNames().contains(wanted);
         if (!taken.test(name)) {
             return name;
         }

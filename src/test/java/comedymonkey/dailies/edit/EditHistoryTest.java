@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -477,6 +478,67 @@ class EditHistoryTest {
         assertEquals(List.of(25), ticks(history, 0));
         history.setKeyframe(fov(1, 30));
         assertEquals("Add field of view keyframe at tick 1", history.undoDescription());
+    }
+
+    @Test
+    void aTrackKeepsItsIdThroughEveryChange() {
+        EditHistory history = new EditHistory();
+        int track = history.setKeyframe(fov(10, 30));
+        Track.Id id = history.scene().track(track).id();
+        history.setKeyframe(track, fov(20, 40));
+        history.addTrack(KeyframeKind.CAMERA);
+        history.updateTrack(track, "Zoom", null);
+        history.moveTrack(track, 1);
+        assertSame(id, history.scene().track(1).id());
+        assertNotSame(id, history.scene().track(0).id());
+        history.undo();
+        assertSame(id, history.scene().track(track).id());
+        // A copy keeps it, a track made afresh has its own
+        Track original = new Track(KeyframeKind.FIELD_OF_VIEW);
+        assertSame(original.id(), original.copy().id());
+        assertNotSame(original.id(), new Track(KeyframeKind.FIELD_OF_VIEW).id());
+    }
+
+    @Test
+    void aStepCopiesOnlyWhatItChanges() {
+        EditHistory history = new EditHistory();
+        int zoom = history.setKeyframe(fov(10, 30));
+        int camera = history.setKeyframe(camera(20));
+        history.addScene("Other");
+        history.selectScene(0);
+        Track zoomBefore = history.scene().track(zoom);
+        Track cameraBefore = history.scene().track(camera);
+        Looks looksBefore = history.scene().looks();
+        Scene otherBefore = history.state().scene(1);
+
+        history.setKeyframe(camera, camera(50));
+        // The track changed is a new one; the other track, the looks and the other scene are shared with the step before
+        assertNotSame(cameraBefore, history.scene().track(camera));
+        assertSame(zoomBefore, history.scene().track(zoom));
+        assertSame(looksBefore, history.scene().looks());
+        assertSame(otherBefore, history.state().scene(1));
+        // And the step before is as it was
+        assertEquals(1, cameraBefore.size());
+        assertEquals(2, history.scene().track(camera).size());
+
+        history.setLooksText("{\"sky\": false}");
+        assertNotSame(looksBefore, history.scene().looks());
+        assertTrue(looksBefore.sky);
+        assertSame(zoomBefore, history.scene().track(zoom));
+
+        // A change that fails part way leaves the shared tracks alone
+        assertThrows(IllegalStateException.class, () -> history.edit("Break", state -> {
+            state.currentScene().track(zoom).clear();
+            throw new IllegalStateException("half way");
+        }));
+        assertEquals(1, zoomBefore.size());
+        assertSame(zoomBefore, history.scene().track(zoom));
+
+        // Undo gives back the very state of the step before
+        history.undo();
+        history.undo();
+        assertSame(cameraBefore, history.scene().track(camera));
+        assertSame(looksBefore, history.scene().looks());
     }
 
     @Test

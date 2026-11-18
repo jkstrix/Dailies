@@ -556,6 +556,20 @@ public final class Export {
         }
     }
 
+    /**
+     * The tick at which to sample a track that keeps moving while the world is frozen (the camera's, see the freeze
+     * keyframe) for the frame being drawn. The recording's own tick when no export is running or the export is one
+     * picture.
+     */
+    public static double cameraTick(comedymonkey.dailies.edit.Track track, double tick) {
+        TimeMap map = timeMap;
+        Settings current = settings;
+        if (!active || map == null || current == null || current.still) {
+            return tick;
+        }
+        return map.cameraTickAt(frame / current.framesPerSecond, track);
+    }
+
     private static void prepareFrame(Minecraft minecraft) {
         try {
             if (writerFailure != null) {

@@ -8,10 +8,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Everything the editor knows about one recording: its scenes and which of them is being worked on (specification
@@ -30,6 +34,8 @@ public final class EditState {
 
     private final List<Scene> scenes = new ArrayList<>();
     private int currentScene = 0;
+    /** While this is a draft (see {@link #draft}): the scenes that are its own and may be changed. Null otherwise */
+    private @Nullable Set<Scene> ownScenes = null;
 
     /** A fresh state: one empty scene called "Scene 1" */
     public EditState() {
@@ -38,7 +44,22 @@ public final class EditState {
 
     /** The scenes in order. The list cannot be changed through this view */
     public List<Scene> scenes() {
+        if (this.ownScenes != null) {
+            for (int i = 0; i < this.scenes.size(); i++) {
+                this.own(i);
+            }
+        }
         return Collections.unmodifiableList(this.scenes);
+    }
+
+    /** How many scenes there are */
+    public int sceneCount() {
+        return this.scenes.size();
+    }
+
+    /** The names of the scenes in order, read without making a draft's scenes its own */
+    List<String> sceneNames() {
+        return this.scenes.stream().map(Scene::name).toList();
     }
 
     /** @throws IllegalArgumentException when there is no scene with this index */
@@ -46,7 +67,18 @@ public final class EditState {
         if (index < 0 || index >= this.scenes.size()) {
             throw new IllegalArgumentException("'index' must be the index of a scene, from 0 to " + (this.scenes.size() - 1) + ", got " + index);
         }
-        return this.scenes.get(index);
+        return this.own(index);
+    }
+
+    /** The scene at the index, first made a draft of its own when this is a draft that does not have one yet */
+    private Scene own(int index) {
+        Scene scene = this.scenes.get(index);
+        if (this.ownScenes != null && !this.ownScenes.contains(scene)) {
+            scene = scene.draft();
+            this.scenes.set(index, scene);
+            this.ownScenes.add(scene);
+        }
+        return scene;
     }
 
     public int currentSceneIndex() {
@@ -55,7 +87,7 @@ public final class EditState {
 
     /** The scene being worked on */
     public Scene currentScene() {
-        return this.scenes.get(this.currentScene);
+        return this.own(this.currentScene);
     }
 
     public void selectScene(int index) {
@@ -79,6 +111,9 @@ public final class EditState {
             throw new IllegalArgumentException("'index' must be a whole number from 0 to " + this.scenes.size() + ", got " + index);
         }
         this.scenes.add(index, scene);
+        if (this.ownScenes != null) {
+            this.ownScenes.add(scene);
+        }
         if (index <= this.currentScene && this.scenes.size() > 1) {
             this.currentScene++;
         }
@@ -101,7 +136,31 @@ public final class EditState {
         return scene;
     }
 
-    /** A separate state with the same content */
+    /**
+     * A draft for {@link EditHistory} to make one step on: a separate state with the same content that shares its
+     * scenes, their tracks and their looks with this one, each copied only once it is asked for. So a step copies just
+     * what it touches, and this state is never altered. Call {@link #seal} once the step is made.
+     */
+    EditState draft() {
+        EditState draft = new EditState();
+        draft.scenes.clear();
+        draft.scenes.addAll(this.scenes);
+        draft.currentScene = this.currentScene;
+        draft.ownScenes = Collections.newSetFromMap(new IdentityHashMap<>());
+        return draft;
+    }
+
+    /** The step is made: from now on the state is only read, and hands out what it holds as it is */
+    void seal() {
+        if (this.ownScenes != null) {
+            for (Scene scene : this.ownScenes) {
+                scene.seal();
+            }
+            this.ownScenes = null;
+        }
+    }
+
+    /** A separate state with the same content, sharing nothing that can change */
     public EditState copy() {
         EditState copy = new EditState();
         copy.scenes.clear();

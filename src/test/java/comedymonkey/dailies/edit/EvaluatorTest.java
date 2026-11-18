@@ -80,6 +80,10 @@ class EvaluatorTest {
             for (Keyframe keyframe : track.keyframes()) {
                 assertEquals(((Keyframe.FieldOfView) keyframe).fov(), value(track, keyframe.tick()), EXACT, mode.id());
             }
+            if (mode == Interpolation.HERMITE) {
+                // The one mode that may swing past a keyframe, see hermiteIsACatmullRomCurveThatMayOvershoot
+                continue;
+            }
             for (double tick = 0; tick <= 100; tick += 0.125) {
                 double value = value(track, tick);
                 Keyframe.FieldOfView from = (Keyframe.FieldOfView) track.atOrBefore(tick);
@@ -198,18 +202,155 @@ class EvaluatorTest {
         assertEquals(15.0, half.distance(), EXACT);
         assertEquals(5.0, half.height(), EXACT);
 
-        // Yaw 0 looks towards +Z, so the camera stands on the -Z side of the centre
-        Evaluator.CameraPose pose = new Evaluator.OrbitValue(100, 64, 200, 10, 10, 0).pose();
+        // Yaw 0 looks towards +Z, so the camera stands on the -Z side of the centre. Its feet are 8.38 above the
+        // centre, so its eyes 10 above and 10 away along the ground: it looks down at 45 degrees, through the centre
+        Evaluator.CameraPose pose = new Evaluator.OrbitValue(100, 64, 200, 10, 8.38, 0).pose();
         assertEquals(100.0, pose.x(), EXACT);
-        assertEquals(74.0, pose.y(), EXACT);
+        assertEquals(72.38, pose.y(), EXACT);
         assertEquals(190.0, pose.z(), EXACT);
         assertEquals(0.0, pose.yaw(), EXACT);
         assertEquals(45.0, pose.pitch(), EXACT);
-        // Yaw 90 looks towards -X, so the camera stands on the +X side
-        pose = new Evaluator.OrbitValue(100, 64, 200, 10, 0, 90).pose();
+        // Yaw 90 looks towards -X, so the camera stands on the +X side; with its eyes level with the centre it looks
+        // straight ahead
+        pose = new Evaluator.OrbitValue(100, 64, 200, 10, -Evaluator.EYE_HEIGHT, 90).pose();
         assertEquals(110.0, pose.x(), EXACT);
         assertEquals(200.0, pose.z(), EXACT);
         assertEquals(0.0, pose.pitch(), EXACT);
+        // Feet level with the centre: the eyes are 1.62 above it, so the camera looks down a little, not straight ahead
+        pose = new Evaluator.OrbitValue(100, 64, 200, 8, 0, 0).pose();
+        assertEquals(Math.toDegrees(Math.atan(1.62 / 8.0)), pose.pitch(), EXACT);
+        assertTrue(pose.pitch() > 11.0 && pose.pitch() < 12.0);
+    }
+
+    @Test
+    void hermiteIsACatmullRomCurveThatMayOvershoot() {
+        assertEquals(Interpolation.HERMITE, Interpolation.parse("Hermite"));
+        assertTrue(Interpolation.allowed().endsWith("smooth, hermite"));
+        Track hermite = fov(Interpolation.HERMITE, 0, 1, 10, 11, 20, 11);
+        Track smooth = fov(Interpolation.SMOOTH, 0, 1, 10, 11, 20, 11);
+        // At tick 10 the slope is that of the line from tick 0 to tick 20: (11 - 1) / 20 = 0.5 a tick. At the ends it
+        // is that of the stretch itself. Half way along a stretch a cubic gives (y1 + y2) / 2 + (m1 - m2) / 8, with
+        // m1 and m2 the slopes times the stretch's length: (1 + 11) / 2 + (10 - 5) / 8 and (11 + 11) / 2 + (5 - 0) / 8
+        assertEquals(6.625, value(hermite, 5), EXACT);
+        assertEquals(11.625, value(hermite, 15), EXACT);
+        // So it swings above 11 after tick 10, where the smooth curve stays level (a peak there gives it slope 0)
+        assertEquals(11.0, value(smooth, 15), EXACT);
+        // Through every keyframe, and without a corner at tick 10
+        assertEquals(11.0, value(hermite, 10), EXACT);
+        double before = (value(hermite, 10) - value(hermite, 9.999)) / 0.001;
+        double after = (value(hermite, 10.001) - value(hermite, 10)) / 0.001;
+        assertEquals(0.5, before, 1e-3);
+        assertEquals(0.5, after, 1e-3);
+    }
+
+    @Test
+    void hermiteYawCrossesTheSeamWithoutSpinning() {
+        Track track = new Track(KeyframeKind.CAMERA);
+        double[] yaws = {150, 170, -170, -150, -130};
+        for (int i = 0; i < yaws.length; i++) {
+            track.put(new Keyframe.Camera(i * 10, Interpolation.HERMITE, 0, 0, 0, yaws[i], 0, 0));
+        }
+        Scene scene = scene(track);
+        // Every slope is two degrees a tick, so the curve is the steady turn itself, seam or no seam
+        for (double tick = 0; tick <= 40; tick += 0.5) {
+            double expected = Keyframe.wrapDegrees(150 + 2 * tick);
+            assertEquals(0.0, Keyframe.wrapDegrees(Evaluator.camera(scene, tick).yaw() - expected), 1e-6, "at " + tick);
+        }
+    }
+
+    @Test
+    void aCurveTakesTheSlopeOfAStraightOrEasedNeighbour() {
+        // Smooth from 1 to 11, then straight on to 31: the curve arrives at the line's slope, 2 a tick, so with m1 = 10
+        // and m2 = 20 half way is (1 + 11) / 2 + (10 - 20) / 8
+        Track track = new Track(KeyframeKind.FIELD_OF_VIEW);
+        track.put(new Keyframe.FieldOfView(0, Interpolation.SMOOTH, 1));
+        track.put(new Keyframe.FieldOfView(10, Interpolation.LINEAR, 11));
+        track.put(new Keyframe.FieldOfView(20, Interpolation.LINEAR, 31));
+        assertEquals(4.75, value(track, 5), EXACT);
+        double before = (value(track, 10) - value(track, 9.999)) / 0.001;
+        assertEquals(2.0, before, 1e-3);
+        assertEquals(2.0, (value(track, 10.001) - value(track, 10)) / 0.001, 1e-9);
+
+        // Before a stretch that eases in and out the curve arrives at rest: m2 = 0, so half way is 6 + 10 / 8
+        track.put(new Keyframe.FieldOfView(10, Interpolation.EASE_IN_OUT, 11));
+        assertEquals(7.25, value(track, 5), EXACT);
+    }
+
+    @Test
+    void aCurveAfterAHoldStartsAsAtTheFirstKeyframe() {
+        // The jump at tick 10 says nothing of how the curve should leave it: with no keyframe after tick 20 either,
+        // the stretch from 10 to 20 is a straight line
+        Track track = new Track(KeyframeKind.FIELD_OF_VIEW);
+        track.put(new Keyframe.FieldOfView(0, Interpolation.HOLD, 100));
+        track.put(new Keyframe.FieldOfView(10, Interpolation.SMOOTH, 1));
+        track.put(new Keyframe.FieldOfView(20, Interpolation.SMOOTH, 11));
+        assertEquals(100.0, value(track, 5), EXACT);
+        assertEquals(6.0, value(track, 15), EXACT);
+        assertEquals(3.5, value(track, 12.5), EXACT);
+    }
+
+    @Test
+    void theTimeOfDayGoesForwardsRoundMidnight() {
+        Track track = new Track(KeyframeKind.TIME_OF_DAY);
+        track.put(new Keyframe.TimeOfDay(0, Interpolation.LINEAR, 22000));
+        track.put(new Keyframe.TimeOfDay(40, Interpolation.LINEAR, 2000));
+        // 4000 ticks forwards through midnight, not 20000 back through noon
+        assertEquals(23000.0, value(track, 10), EXACT);
+        assertEquals(0.0, value(track, 20), EXACT);
+        assertEquals(1000.0, value(track, 30), EXACT);
+        assertEquals(2000.0, value(track, 40), EXACT);
+
+        // From morning to evening the day also goes forwards
+        Track day = new Track(KeyframeKind.TIME_OF_DAY);
+        day.put(new Keyframe.TimeOfDay(0, Interpolation.LINEAR, 2000));
+        day.put(new Keyframe.TimeOfDay(40, Interpolation.LINEAR, 22000));
+        assertEquals(12000.0, value(day, 20), EXACT);
+
+        // A smooth curve through keyframes 1000 ticks apart, midnight among them, is a steady 100 ticks a tick
+        Track smooth = new Track(KeyframeKind.TIME_OF_DAY);
+        double[] times = {22000, 23000, 0, 1000};
+        for (int i = 0; i < times.length; i++) {
+            smooth.put(new Keyframe.TimeOfDay(i * 10, Interpolation.SMOOTH, times[i]));
+        }
+        assertEquals(22500.0, value(smooth, 5), EXACT);
+        assertEquals(23500.0, value(smooth, 15), EXACT);
+        assertEquals(500.0, value(smooth, 25), EXACT);
+    }
+
+    private static Track shake(Interpolation mode, double... tickThenFrequency) {
+        Track track = new Track(KeyframeKind.CAMERA_SHAKE);
+        for (int i = 0; i < tickThenFrequency.length; i += 2) {
+            track.put(new Keyframe.CameraShake((int) tickThenFrequency[i], mode, 1, tickThenFrequency[i + 1]));
+        }
+        return track;
+    }
+
+    @Test
+    void theShakePhaseAddsTheFrequencyUpOverTime() {
+        // Frequency 2 rising to 4 over a second: by half way it has come 2 * 0.5 + 0.5 * 0.5 * 1 = 1.25, by the end
+        // (2 + 4) / 2 = 3, and a second at 4 after that brings it to 7
+        Track ramp = shake(Interpolation.LINEAR, 0, 2, 20, 4);
+        assertEquals(0.0, Evaluator.shakePhase(ramp, 0), EXACT);
+        assertEquals(1.25, Evaluator.shakePhase(ramp, 10), EXACT);
+        assertEquals(3.0, Evaluator.shakePhase(ramp, 20), EXACT);
+        assertEquals(7.0, Evaluator.shakePhase(ramp, 40), EXACT);
+
+        // The same ramp late in a recording gives the same: only the time since the first keyframe counts
+        Track late = shake(Interpolation.LINEAR, 10000, 2, 10020, 4);
+        assertEquals(0.0, Evaluator.shakePhase(late, 9999), EXACT);
+        assertEquals(1.25, Evaluator.shakePhase(late, 10010), EXACT);
+
+        // A hold changes the speed at the next keyframe without a jump in the phase
+        Track hold = shake(Interpolation.HOLD, 0, 2, 20, 4);
+        assertEquals(2.0, Evaluator.shakePhase(hold, 20), EXACT);
+        assertEquals(1.9999, Evaluator.shakePhase(hold, 19.999), 1e-9);
+        assertEquals(4.0, Evaluator.shakePhase(hold, 30), EXACT);
+
+        // Easing in: 2 + 2 t^2 over the second adds up to 2 + 2 / 3
+        assertEquals(8.0 / 3.0, Evaluator.shakePhase(shake(Interpolation.EASE_IN, 0, 2, 20, 4), 20), EXACT);
+        // A frequency of 0 still wobbles at the slowest rate, 0.1 a second
+        assertEquals(0.1, Evaluator.shakePhase(shake(Interpolation.LINEAR, 0, 0), 20), EXACT);
+        assertEquals(0.0, Evaluator.shakePhase(fov(Interpolation.LINEAR, 0, 70), 20), EXACT);
     }
 
     @Test

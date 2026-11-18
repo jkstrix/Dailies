@@ -285,6 +285,30 @@ class TimeMapTest {
     }
 
     @Test
+    void theCameraPoseKeepsChangingFrameByFrameThroughAFreeze() {
+        // A camera moving one block a tick from tick 0 to tick 40, and a freeze of a second on tick 20: two seconds of
+        // motion and one held, so the camera takes all three seconds over its forty blocks, 40 / 3 a second
+        Track camera = new Track(KeyframeKind.CAMERA);
+        camera.put(new Keyframe.Camera(0, Interpolation.LINEAR, 0, 64, 0, 0, 0, 0));
+        camera.put(new Keyframe.Camera(40, Interpolation.LINEAR, 40, 64, 0, 0, 0, 0));
+        TimeMap map = new TimeMap(scene(camera, freeze(20, 1.0)), 0, 40);
+        assertEquals(3.0, map.totalRealSeconds(), CLOSE);
+        double last = -1.0;
+        for (long frame = 0; frame <= 30; frame++) {
+            double seconds = frame / 10.0;
+            double x = Evaluator.camera(camera, map.cameraTickAt(seconds, camera)).x();
+            assertEquals(40.0 * seconds / 3.0, x, CLOSE, "frame " + frame);
+            assertTrue(x > last, "frame " + frame);
+            last = x;
+        }
+        // While the world stands still on tick 20
+        assertEquals(20.0, map.tickAt(1.2), CLOSE);
+        assertEquals(20.0, map.tickAt(1.8), CLOSE);
+        assertEquals(16.0, Evaluator.camera(camera, map.cameraTickAt(1.2, camera)).x(), CLOSE);
+        assertEquals(24.0, Evaluator.camera(camera, map.cameraTickAt(1.8, camera)).x(), CLOSE);
+    }
+
+    @Test
     void theCameraCarriesOnMovingThroughAFreeze() {
         Track camera = new Track(KeyframeKind.CAMERA);
         camera.put(new Keyframe.Camera(0, Interpolation.LINEAR, 0, 64, 0, 0, 0, 0));

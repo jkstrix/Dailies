@@ -21,7 +21,8 @@ import java.util.UUID;
  */
 public final class SmartCameraSolver {
 
-    // Weak identity keys: the state goes away together with the track it belongs to
+    // Weak identity keys: the state goes away together with the key it belongs to. The editor keys it by the track's
+    // id, which every copy of the track keeps, so an edit that copies the track does not start the shots again
     private static final Map<Object, SmartCameraSolver> SOLVERS = new MapMaker().weakKeys().makeMap();
 
     public static SmartCameraSolver forTrack(Object stateKey) {
