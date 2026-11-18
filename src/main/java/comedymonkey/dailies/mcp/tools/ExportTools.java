@@ -16,8 +16,13 @@ import comedymonkey.dailies.mcp.McpToolException;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -73,7 +78,7 @@ final class ExportTools {
                 .bool("burn_captions", "Draw what was said into the picture, in the font, size, colour, outline and place the caption settings give (default false)")
                 .string("caption_style", "lines or word_by_word, for captions drawn into the picture (default: the captionStyle setting)")
                 .required("output_path"),
-            ExportTools::start);
+            McpTool.ThreadMode.HTTP, 90, ExportTools::startFromHttp);
 
         registrar.add("export_status", "Whether an export is running and how far it has got: frames done and to do, speed, time left. Afterwards, the file the last export wrote, or why it failed.",
             McpSchema.object(), comedymonkey.dailies.mcp.McpTool.ThreadMode.HTTP, 10, args -> {
@@ -183,6 +188,39 @@ final class ExportTools {
                 begin(settings);
                 return status();
             });
+    }
+
+    /**
+     * export_start: the encoder is unpacked and tried here on the HTTP thread, the first time it is needed, and only
+     * then is the export started on the client thread, so the game never waits for the encoder
+     */
+    private static JsonElement startFromHttp(McpArgs args) throws Exception {
+        if (Encoder.bundled() && !"png_sequence".equalsIgnoreCase(args.optString("container"))) {
+            try {
+                Encoder.choices();
+            } catch (IOException e) {
+                // Said by the export's own start, with what it was asked for
+            }
+        }
+        try {
+            return Minecraft.getInstance().submit(() -> {
+                try {
+                    return start(args);
+                } catch (RuntimeException e) {
+                    throw e;
+                } catch (Exception e) {
+                    throw new CompletionException(e);
+                }
+            }).get(30, TimeUnit.SECONDS);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause() instanceof CompletionException wrapped && wrapped.getCause() != null ? wrapped.getCause() : e.getCause();
+            if (cause instanceof Exception exception) {
+                throw exception;
+            }
+            throw e;
+        } catch (TimeoutException e) {
+            throw new McpToolException("The game did not get to the export in time. Call export_status to see whether it started");
+        }
     }
 
     private static JsonElement start(McpArgs args) throws Exception {

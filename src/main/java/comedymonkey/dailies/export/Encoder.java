@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -246,16 +247,14 @@ public final class Encoder {
             return;
         }
         warming = true;
-        Thread warm = new Thread(() -> {
-            try {
-                warmParallel(choices());
-            } catch (Throwable t) {
-                Host.LOGGER.info("Dailies: the video encoder could not be made ready ahead of the first export ({})", t.toString());
+        // The same asking an export started now would wait on, so the encoder is only ever asked once
+        ready().whenComplete((working, failure) -> {
+            if (failure != null) {
+                Host.LOGGER.info("Dailies: the video encoder could not be made ready ahead of the first export ({})", failure.toString());
+            } else {
+                warmParallel(working);
             }
-        }, "Dailies-Encoder-Warm");
-        warm.setDaemon(true);
-        warm.setPriority(Thread.MIN_PRIORITY);
-        warm.start();
+        });
     }
 
     private static volatile boolean warming = false;
@@ -406,6 +405,64 @@ public final class Encoder {
         return TRIED.get(Boolean.getBoolean(SOFTWARE_ONLY) ? machine + ", hardware encoders left out" : machine);
     }
 
+    private static final Object READYING = new Object();
+    /** The asking of {@link #choices()} under way on a thread of its own, or done; null before the first ask */
+    private static @Nullable CompletableFuture<List<Codecs.Choice>> ready = null;
+    /** Why the last ask failed, said by {@link #choicesNow()} until an ask succeeds */
+    private static volatile @Nullable String failedBecause = null;
+
+    /**
+     * The choices, worked out on a thread of their own the first time: done at once when they are known, otherwise
+     * when the encoder has been unpacked and tried. An ask that failed is asked again by the next call. Never waits,
+     * so it is for the client thread, which watches the answer come rather than waiting for it
+     */
+    public static CompletableFuture<List<Codecs.Choice>> ready() {
+        List<Codecs.Choice> known = choicesIfKnown();
+        if (known != null) {
+            return CompletableFuture.completedFuture(known);
+        }
+        synchronized (READYING) {
+            if (ready == null || ready.isCompletedExceptionally() || (ready.isDone() && choicesIfKnown() == null)) {
+                CompletableFuture<List<Codecs.Choice>> asking = new CompletableFuture<>();
+                Thread thread = new Thread(() -> {
+                    try {
+                        List<Codecs.Choice> found = choices();
+                        failedBecause = null;
+                        asking.complete(found);
+                    } catch (Throwable t) {
+                        failedBecause = t.getMessage() == null ? t.toString() : t.getMessage();
+                        asking.completeExceptionally(t);
+                    }
+                }, "Dailies-Encoder-Ready");
+                thread.setDaemon(true);
+                thread.start();
+                ready = asking;
+            }
+            return ready;
+        }
+    }
+
+    /**
+     * The choices as they stand, never waiting for them: what the client thread uses when an export starts. Every way
+     * an export is started has the choices worked out first, away from the client thread ({@link #ready()}, or
+     * {@link #choices()} on another thread), so this only refuses when an export is started before that is done.
+     *
+     * @throws IOException           when the encoder could not be asked, with why
+     * @throws IllegalStateException when it is still being asked; the asking is started if it was not
+     */
+    public static List<Codecs.Choice> choicesNow() throws IOException {
+        List<Codecs.Choice> known = choicesIfKnown();
+        if (known != null) {
+            return known;
+        }
+        String failure = failedBecause;
+        CompletableFuture<List<Codecs.Choice>> asking = ready();
+        if (failure != null && !asking.isDone()) {
+            throw new IOException("The video encoder could not be made ready: " + failure);
+        }
+        throw new IllegalStateException("The video encoder is still being made ready (it is unpacked and tried once a session). Try again in a moment");
+    }
+
     private static boolean trial(String ffmpeg, String encoder) {
         try {
             Process process = new ProcessBuilder(Codecs.trialArguments(ffmpeg, encoder)).redirectErrorStream(true).start();
@@ -457,7 +514,8 @@ public final class Encoder {
         if (!bundled()) {
             throw new IOException(noEncoderWords());
         }
-        List<Codecs.Choice> working = choices();
+        // The client thread: the choices were worked out before the export was started, and are never waited for here
+        List<Codecs.Choice> working = choicesNow();
         String codec = settings.videoCodec.toLowerCase(Locale.ROOT);
         List<Codecs.Choice> forCodec = Codecs.forCodec(working, codec);
         List<String> can = working.stream().map(Codecs.Choice::codec).distinct().toList();

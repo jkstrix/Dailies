@@ -723,7 +723,16 @@ final class ExportForms {
         boolean replace = overwrite;
         String recording = Playback.recordingId();
         Path[] free = new Path[1];
+        boolean pictures = still || "png_sequence".equals(settings.container);
         Controls.offThread(() -> {
+            if (!pictures && Encoder.bundled()) {
+                // Unpacked and tried here, away from the client thread, so starting the export never waits for it
+                try {
+                    Encoder.choices();
+                } catch (java.io.IOException e) {
+                    // Said when the export starts
+                }
+            }
             Files.createDirectories(target);
             // A folder of pictures is added to, never replaced; a file is replaced only when that was ticked
             free[0] = target.resolve(replace && !Files.isDirectory(target.resolve(wanted)) ? wanted : NamePattern.unused(wanted, name -> Files.exists(target.resolve(name))));

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -59,6 +60,8 @@ public final class QueueRunner {
     private static boolean waitingForFile = false;
     private static @Nullable ExportQueue.Job current = null;
     private static long stepSince = 0;
+    /** The video encoder being made ready away from this thread while the job's recording opens; null when there is none */
+    private static @Nullable CompletableFuture<List<Codecs.Choice>> encoderReady = null;
     private static long progressAt = 0;
     private static long heartbeatAt = 0;
     private static int done = 0;
@@ -525,6 +528,8 @@ public final class QueueRunner {
         }
         stepSince = System.currentTimeMillis();
         step = Step.OPENING;
+        // Asked beside the opening of the recording, so the export never waits for it on this thread
+        encoderReady = Encoder.bundled() ? Encoder.ready() : null;
         if (Playback.loaded() && Playback.file() != null && Playback.file().file().toAbsolutePath().normalize().equals(recording.normalize())) {
             return;
         }
@@ -553,6 +558,10 @@ public final class QueueRunner {
             return;
         }
         if (!Playback.loaded() || Playback.jumping() || !EditorSession.open()) {
+            return;
+        }
+        CompletableFuture<List<Codecs.Choice>> encoder = encoderReady;
+        if (encoder != null && !encoder.isDone()) {
             return;
         }
         try {
@@ -887,7 +896,8 @@ public final class QueueRunner {
         if (!Encoder.bundled()) {
             throw new IllegalStateException(Encoder.noEncoderWords());
         }
-        List<Codecs.Choice> working = Encoder.choices();
+        // Worked out while the recording opened (see opening): never waited for on this thread
+        List<Codecs.Choice> working = Encoder.choicesNow();
         Codecs.Pick pick = Codecs.pick(preset.codecs(), preset.container(), working);
         if (pick.codec() == null) {
             throw new IllegalStateException(pick.words(working));
