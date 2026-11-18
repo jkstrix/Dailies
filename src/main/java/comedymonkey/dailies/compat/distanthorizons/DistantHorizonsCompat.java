@@ -104,6 +104,7 @@ public final class DistantHorizonsCompat {
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, (LevelEvent.Load event) -> {
             if (event.getLevel() instanceof ClientLevel) {
                 folderRecording = Playback.active() ? Playback.recordingId() : null;
+                bindFolders(folderRecording != null);
                 forgetLevel();
             }
         });
@@ -124,8 +125,37 @@ public final class DistantHorizonsCompat {
             waiting.clear();
             unconfirmed.clear();
             folderRecording = null;
+            bindFolders(false);
             forgetLevel();
         });
+    }
+
+    /** The folder override, made once; bound to Distant Horizons only while a playback world is open */
+    private static @Nullable Object folderOverride = null;
+    private static Method unbind;
+    private static boolean folderBound = false;
+
+    /**
+     * Binds the folder override for a playback world and takes it away again for every other. Distant Horizons 3.3
+     * takes any bound folder override, even one that answers null, as the folder of old (2.3) data too, and then moves
+     * that folder onto itself as it opens a server's world, which fails on Windows: no far terrain, and "Client level
+     * loading failed" in the chat every frame, on every server (the owner, 18 November). So outside playback nothing of
+     * Dailies' is bound, and Distant Horizons works as if Dailies were not there
+     */
+    private static void bindFolders(boolean wanted) {
+        if (!working || folderOverride == null || wanted == folderBound) {
+            return;
+        }
+        try {
+            if (wanted) {
+                bind.invoke(overrides, saveStructure, folderOverride);
+            } else {
+                unbind.invoke(overrides, saveStructure, folderOverride);
+            }
+            folderBound = wanted;
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies: could not {} the Distant Horizons folder for playback: {}", wanted ? "set" : "take away", t.toString());
+        }
     }
 
     private static void setUp() {
@@ -181,9 +211,11 @@ public final class DistantHorizonsCompat {
                 case "toString" -> "Dailies: a playback world's own Distant Horizons folder";
                 default -> method.isDefault() ? InvocationHandler.invokeDefault(proxy, method, arguments) : null;
             };
-            Object override = Proxy.newProxyInstance(saveStructure.getClassLoader(), new Class<?>[]{saveStructure}, folders);
-            bind.invoke(overrides, saveStructure, override);
+            // Made now, bound only while a playback world is open (see bindFolders)
+            folderOverride = Proxy.newProxyInstance(saveStructure.getClassLoader(), new Class<?>[]{saveStructure}, folders);
+            unbind = dhApi.getField("overrides").getType().getMethod("unbind", Class.class, overrideable);
             working = true;
+            bindFolders(Playback.active());
             Host.LOGGER.info("Dailies: Distant Horizons {} found; playback keeps its far terrain in {}, apart from your own worlds' data", version, folderRoot());
         } catch (Throwable t) {
             Host.LOGGER.warn("Dailies: this Distant Horizons has not the API Dailies knows (that of 3.3), so playback leaves it alone and shows no far terrain of its own: {}", t.toString());
