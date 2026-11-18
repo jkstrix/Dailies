@@ -49,7 +49,8 @@ jobs:
 
       - name: Tools (macOS)
         if: runner.os == 'macOS'
-        run: brew install nasm ninja pkgconf
+        # yasm as well: libaom prefers it, and does not recognise NASM 3, which Homebrew has
+        run: brew install nasm yasm ninja pkgconf
 
       - name: Build
         run: tools/ffmpeg/build.sh build ${{ matrix.platform }}

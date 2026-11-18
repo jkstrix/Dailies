@@ -142,7 +142,7 @@ setup_platform() {
                 --enable-w32threads --enable-ffnvcodec --enable-nvenc --enable-amf --enable-libvpl
                 --enable-mediafoundation --enable-d3d11va --enable-dxva2
                 --extra-ldflags=-static --extra-ldflags=-static-libgcc --extra-ldflags=-static-libstdc++
-                --extra-libs=-lstdc++)
+                --extra-libs=-lstdc++ --extra-libs=-lssp)
             ;;
         linux-x86_64|linux-arm64)
             [ "$os" = Linux ] || die "$PLATFORM is built on Linux"
@@ -192,10 +192,11 @@ build_zlib() {
 }
 
 build_opus() {
-    # Cross-built for Windows, the stack protector Opus turns on wants libssp, which a static MinGW link has not got, and
+    # Cross-built for Windows, the stack protector and _FORTIFY_SOURCE that Opus turns on want libssp (__memcpy_chk and
+    # the like), which FFmpeg's link tests do not bring in (the Windows FFmpeg links libssp as well, to be sure), and
     # FFmpeg's configure then finds no usable Opus ("opus not found using pkg-config")
     local src; src="$(unpack opus)"
-    (cd "$src" && ./configure ${HOST:+--host=$HOST} ${HOST:+--disable-stack-protector} --prefix="$PREFIX" --disable-shared --enable-static --with-pic \
+    (cd "$src" && env ${HOST:+CPPFLAGS=-D_FORTIFY_SOURCE=0} ./configure ${HOST:+--host=$HOST} ${HOST:+--disable-stack-protector} --prefix="$PREFIX" --disable-shared --enable-static --with-pic \
         --disable-doc --disable-extra-programs && make -j "$JOBS_N" && make install)
 }
 
