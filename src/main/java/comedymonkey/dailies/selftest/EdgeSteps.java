@@ -222,6 +222,7 @@ final class EdgeSteps {
         c("gamerule keepInventory false");
         fillInventory();
         waitTicks(5);
+        sayRules(test, "the void");
         c("tp @s 2.5 -90 2.5 0 60");
         int at = mark("the recorder falls out of the world");
         still("edges-void-falling", at + 10, 8.5, -80.0, 8.5, 2.5, -100.0, 2.5, false);
@@ -240,10 +241,52 @@ final class EdgeSteps {
         });
         test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn");
         waitTicks(10);
+        checkEmptied(test, minecraft, "dying in the void");
         at = mark("the recorder respawned");
         still("edges-respawned", at + 10, 6.5, Y + 3.0, 6.5, 0.5, Y + 1.0, 0.5, false);
         waitTicks(40);
         groundFall(test, minecraft);
+    }
+
+    /**
+     * After a respawn with keepInventory off, nothing carried comes back: the bag, the hotbar, the off hand and armour are
+     * all empty (the owner, 18 November: "check the inventory after respawn"). What the recorder's hotbar showed is in the
+     * recorded HUD, which playback is compared with at every tick
+     */
+    private static void checkEmptied(SelfTest test, Minecraft minecraft, String after) throws Exception {
+        String left = test.onClient(() -> {
+            StringBuilder kept = new StringBuilder();
+            net.minecraft.world.entity.player.Inventory inventory = minecraft.player.getInventory();
+            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                net.minecraft.world.item.ItemStack stack = inventory.getItem(slot);
+                if (!stack.isEmpty()) {
+                    kept.append(kept.isEmpty() ? "" : ", ").append(stack.getCount()).append(' ').append(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()));
+                }
+            }
+            return kept.toString();
+        });
+        if (left.isEmpty()) {
+            test.log("edges: the inventory was empty after " + after);
+        } else {
+            problems.add("the inventory was not empty after " + after + ": " + left);
+        }
+    }
+
+    /** What the server holds of the rule and the game mode that decide whether a death spills what is carried, for the log */
+    private static void sayRules(SelfTest test, String before) throws Exception {
+        BestiarySteps.server("the rules before " + before, (level, player) -> test.log("edges: before " + before + " keepInventory is "
+            + level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY) + ", the recorder is in "
+            + ((net.minecraft.server.level.ServerPlayer) player).gameMode.getGameModeForPlayer() + " carrying " + (36 - countEmpty(((net.minecraft.server.level.ServerPlayer) player).getInventory())) + " stacks"));
+    }
+
+    private static int countEmpty(net.minecraft.world.entity.player.Inventory inventory) {
+        int empty = 0;
+        for (int slot = 0; slot < 36; slot++) {
+            if (inventory.getItem(slot).isEmpty()) {
+                empty++;
+            }
+        }
+        return empty;
     }
 
     /** A full inventory to spill: the bag, the hotbar and armour */
@@ -271,6 +314,7 @@ final class EdgeSteps {
         c("gamemode survival");
         fillInventory();
         waitTicks(5);
+        sayRules(test, "the sixty block fall");
         c(String.format(java.util.Locale.ROOT, "tp @s %.1f %d %.1f 0 60", landX, Y + 60, landZ));
         int at = mark("the recorder falls sixty blocks");
         try {
@@ -288,7 +332,9 @@ final class EdgeSteps {
             minecraft.setScreen(null);
         });
         test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn after the fall");
-        waitTicks(40);
+        waitTicks(10);
+        checkEmptied(test, minecraft, "the sixty block fall");
+        waitTicks(30);
         c("gamemode creative");
     }
 

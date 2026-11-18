@@ -792,6 +792,16 @@ final class Census {
     private static final Map<String, Double> CLOCK_SLACK = Map.of("emerge", 300.0, "beam", 0.11, "swell", 0.001, "fangs", 0.051,
         "shownX", 0.011, "shownY", 0.011, "shownZ", 0.011, "shownScale", 0.011);
 
+    /**
+     * Whether a dead recorder is at the very end of dying, about to go in a puff of smoke. Their death reaches playback
+     * with the recorded state of their own player, sometimes on the tick their own game took it and sometimes on the next,
+     * so the body goes on the same tick or one apart: noted, not counted
+     */
+    private static boolean dyingOut(Thing thing) {
+        java.util.regex.Matcher dying = java.util.regex.Pattern.compile("deathTime=(\\d+)").matcher(thing.clocks());
+        return dying.find() && Integer.parseInt(dying.group(1)) >= 18;
+    }
+
     /** The live ticks on which the recorder respawned */
     static final Set<Integer> respawnTicks = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
@@ -817,7 +827,7 @@ final class Census {
             if (is == null) {
                 // A lightning bolt lasts as long as its own dice say, on each game: it must be there on its first tick, no more
                 if (!was.type.equals("minecraft:lightning_bolt") || live.get(tick - 1) == null || !live.get(tick - 1).things.containsKey(entry.getKey())) {
-                    tally.add(mode, was.label, "is missing in playback", tick, "entity " + entry.getKey() + " " + was.type, false);
+                    tally.add(mode, was.label, "is missing in playback", tick, "entity " + entry.getKey() + " " + was.type, own && dyingOut(was));
                 }
                 continue;
             }
@@ -871,7 +881,8 @@ final class Census {
         }
         for (Map.Entry<Integer, Thing> entry : now.things.entrySet()) {
             if (!then.things.containsKey(entry.getKey()) && !(entry.getValue().type.equals("minecraft:lightning_bolt") && lately(entry.getKey(), tick))) {
-                tally.add(mode, entry.getValue().label, "is in playback and was not in the live game", tick, "entity " + entry.getKey() + " " + entry.getValue().type, false);
+                tally.add(mode, entry.getValue().label, "is in playback and was not in the live game", tick, "entity " + entry.getKey() + " " + entry.getValue().type,
+                    entry.getKey() == then.recorderId && dyingOut(entry.getValue()));
             }
         }
 
