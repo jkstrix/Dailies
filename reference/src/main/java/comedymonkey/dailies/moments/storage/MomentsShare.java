@@ -118,7 +118,8 @@ public final class MomentsShare {
         }
         for (Path folder : folders) {
             String original = folder.getFileName().toString();
-            String base = original + "-" + sanitize(recorderName.isBlank() ? "friend" : recorderName);
+            // A plain name whatever the pack says, short enough to be a session id here (see MomentsStorage.sessionDir)
+            String base = clip(sanitize(original), 40) + "-" + clip(sanitize(recorderName.isBlank() ? "friend" : recorderName), 30);
             String id = base;
             int suffix = 2;
             while (Files.exists(storage.root().resolve(id))) {
@@ -141,6 +142,7 @@ public final class MomentsShare {
             meta.addProperty("imported_real_time", now);
             meta.addProperty("imported_real_time_iso", MJson.iso(now));
             Files.writeString(sessionFile, MJson.PRETTY.toJson(meta), StandardCharsets.UTF_8);
+            settleDialogue(target.resolve("dialogue.jsonl"));
             ids.add(id);
         }
         return ids;
@@ -149,6 +151,39 @@ public final class MomentsShare {
     /** Whether a session is a friend's, taken in from a shared session */
     public static boolean theirs(MomentsSession session) {
         return MJson.bool(session.meta(), "imported");
+    }
+
+    /**
+     * A friend's lines that came untranscribed stay that way: they are marked failed, so nothing here ever sends their
+     * audio to this player's transcription server, whatever the record names as its audio.
+     */
+    static void settleDialogue(Path dialogue) throws IOException {
+        if (!Files.isRegularFile(dialogue)) {
+            return;
+        }
+        StringBuilder settled = new StringBuilder();
+        for (String line : Files.readAllLines(dialogue, StandardCharsets.UTF_8)) {
+            if (line.isBlank()) {
+                continue;
+            }
+            try {
+                JsonObject record = JsonParser.parseString(line).getAsJsonObject();
+                String status = MJson.str(record, "status", "pending");
+                if (status.equals("pending") || status.equals("failed")) {
+                    record.addProperty("status", "failed");
+                    record.addProperty("error", "Came untranscribed in a shared session, and is not transcribed here");
+                    line = record.toString();
+                }
+            } catch (RuntimeException ignored) {
+                // A torn line stays as it was, and is skipped by whatever reads it
+            }
+            settled.append(line).append('\n');
+        }
+        Files.writeString(dialogue, settled.toString(), StandardCharsets.UTF_8);
+    }
+
+    private static String clip(String text, int length) {
+        return text.length() <= length ? text : text.substring(0, length);
     }
 
     private static void copyTree(Path from, Path to) throws IOException {

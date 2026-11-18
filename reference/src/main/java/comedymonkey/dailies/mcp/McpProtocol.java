@@ -24,7 +24,7 @@ import java.util.concurrent.TimeoutException;
  * JSON-RPC 2.0 handling for MCP plus the tool registry. Transport independent: takes the request body as a
  * string and returns the response body (or null when there is nothing to reply with).
  */
-public class McpProtocol {
+public class McpProtocol implements McpHttpServer.Endpoint {
 
     private static final List<String> SUPPORTED_PROTOCOL_VERSIONS = List.of("2025-06-18", "2025-03-26", "2024-11-05");
     private static final String FALLBACK_PROTOCOL_VERSION = "2025-03-26";
@@ -33,6 +33,12 @@ public class McpProtocol {
     private static final int INVALID_REQUEST = -32600;
     private static final int METHOD_NOT_FOUND = -32601;
     private static final int INVALID_PARAMS = -32602;
+
+    /**
+     * A tool that runs on the HTTP thread and may take longer than this is a long one: its call is answered from a
+     * thread of its own, so it never holds one of the few threads that read requests (combine, trim, sharing)
+     */
+    static final int LONG_TOOL_SECONDS = 90;
 
     // Compact output. Special floats can show up in editor state (eg. NaN in a keyframe) and shouldn't break a reply
     private static final Gson GSON = new GsonBuilder().serializeSpecialFloatingPointValues().disableHtmlEscaping().create();
@@ -64,6 +70,7 @@ public class McpProtocol {
     /**
      * @return the JSON to reply with, or null if the message only contained notifications/responses
      */
+    @Override
     @Nullable
     public String handleMessage(String body) {
         JsonElement parsed;
@@ -101,6 +108,10 @@ public class McpProtocol {
 
         JsonElement id = message.get("id");
         boolean isNotification = id == null;
+        if (!isNotification && !validId(id)) {
+            // JSON-RPC ids are a string, a number or null; anything else is not echoed back into the reply
+            return error(JsonNull.INSTANCE, INVALID_REQUEST, "The id must be a string, a number or null");
+        }
 
         JsonElement methodElement = message.get("method");
         if (methodElement == null) {
@@ -139,6 +150,44 @@ public class McpProtocol {
         } catch (RpcError e) {
             return error(id, e.code, e.getMessage());
         }
+    }
+
+    static boolean validId(JsonElement id) {
+        return id.isJsonNull() || (id.isJsonPrimitive() && (id.getAsJsonPrimitive().isString() || id.getAsJsonPrimitive().isNumber()));
+    }
+
+    /** Whether the message calls a tool that runs on the HTTP thread for a long time, see {@link #LONG_TOOL_SECONDS} */
+    @Override
+    public boolean callsLongTool(String body) {
+        JsonElement parsed;
+        try {
+            parsed = JsonParser.parseString(body);
+        } catch (Exception e) {
+            return false;
+        }
+        JsonArray messages = new JsonArray();
+        if (parsed.isJsonArray()) {
+            messages = parsed.getAsJsonArray();
+        } else {
+            messages.add(parsed);
+        }
+        for (JsonElement element : messages) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject message = element.getAsJsonObject();
+            JsonElement method = message.get("method");
+            JsonElement params = message.get("params");
+            if (method == null || !method.isJsonPrimitive() || !method.getAsString().equals("tools/call") || params == null || !params.isJsonObject()) {
+                continue;
+            }
+            JsonElement name = params.getAsJsonObject().get("name");
+            McpTool tool = name != null && name.isJsonPrimitive() ? this.tools.get(name.getAsString()) : null;
+            if (tool != null && tool.thread() == McpTool.ThreadMode.HTTP && tool.timeoutSeconds() >= LONG_TOOL_SECONDS) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private JsonObject initialize(JsonObject params) {

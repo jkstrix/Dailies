@@ -924,6 +924,9 @@ public final class MomentsTools {
 
     private static JsonObject transcribePending(McpArgs args) {
         MomentsSession session = session(args);
+        if (comedymonkey.dailies.moments.storage.MomentsShare.theirs(session)) {
+            throw new McpToolException("Session " + session.id + " was shared by someone else; their voice is not sent to this computer's transcription server");
+        }
         if (!MomentsConfig.whisperConfigured()) {
             int waiting = 0;
             for (JsonObject segment : session.list(MomentsSession.Kind.DIALOGUE)) {
@@ -937,7 +940,7 @@ public final class MomentsTools {
             json.addProperty("queued", 0);
             json.addProperty("untranscribed", waiting);
             json.addProperty("whisper_configured", false);
-            json.addProperty("note", "Nothing was queued: transcription is optional and switched off. Turn on momentsAiEnabled (config_set) and call this again; the audio of these segments is kept");
+            json.addProperty("note", "Nothing was queued: transcription is optional and switched off. Set momentsWhisperUrl to a transcription server and turn on momentsAiEnabled (config_set), then call this again; the audio of these segments is kept");
             return json;
         }
         int pending = 0, failed = 0;

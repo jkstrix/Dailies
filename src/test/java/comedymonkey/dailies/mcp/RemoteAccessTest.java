@@ -245,6 +245,19 @@ class RemoteAccessTest {
     }
 
     @Test
+    void theCertificateIsAServersOwnAndCanSignNoOther() throws Exception {
+        X509Certificate made = ServerCertificate.create(List.of("localhost"), List.of(address("127.0.0.1")), Instant.now()).certificate();
+        // Not a certificate authority: someone who trusts it trusts this server and nothing it might sign
+        assertEquals(-1, made.getBasicConstraints());
+        assertTrue(made.getCriticalExtensionOIDs().contains("2.5.29.19"), "basicConstraints is critical");
+        assertTrue(made.getExtendedKeyUsage().contains("1.3.6.1.5.5.7.3.1"), "for a TLS server");
+        boolean[] usage = made.getKeyUsage();
+        assertTrue(usage[0], "digitalSignature");
+        assertFalse(usage[5], "keyCertSign");
+        assertFalse(usage[6], "cRLSign");
+    }
+
+    @Test
     void aCertificateLastsTenYears() throws Exception {
         Instant now = Instant.parse("2026-11-17T12:00:00Z");
         ServerCertificate made = ServerCertificate.create(List.of("localhost"), List.of(address("127.0.0.1")), now);

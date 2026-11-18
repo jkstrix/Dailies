@@ -28,7 +28,7 @@ public final class MomentsConfig {
     }
 
     public static String whisperUrl() {
-        return baseUrl(Host.get().setting("momentsWhisperUrl", "http://192.168.188.50:8000"));
+        return baseUrl(Host.get().setting("momentsWhisperUrl", ""));
     }
 
     /** The one switch for everything that talks to an AI service (Whisper, Ollama). Off by default */
@@ -64,7 +64,7 @@ public final class MomentsConfig {
     }
 
     public static String ollamaUrl() {
-        return baseUrl(Host.get().setting("momentsOllamaUrl", "http://192.168.188.50:11434"));
+        return baseUrl(Host.get().setting("momentsOllamaUrl", ""));
     }
 
     public static String ollamaModel() {

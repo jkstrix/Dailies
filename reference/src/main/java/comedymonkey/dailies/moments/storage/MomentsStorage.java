@@ -148,11 +148,8 @@ public class MomentsStorage {
         if (session != null) {
             return session;
         }
-        if (id.isEmpty() || id.contains("/") || id.contains("\\") || id.contains("..") || id.equals("firsts")) {
-            return null;
-        }
-        Path dir = this.root.resolve(id);
-        if (!Files.isDirectory(dir)) {
+        Path dir = sessionDir(this.root, id);
+        if (dir == null || !Files.isDirectory(dir)) {
             return null;
         }
         synchronized (this) {
@@ -163,6 +160,23 @@ public class MomentsStorage {
             }
             return session;
         }
+    }
+
+    /** What a session id may be made of: the date and time it started, and for a friend's, their name after it */
+    private static final java.util.regex.Pattern SESSION_ID = java.util.regex.Pattern.compile("[A-Za-z0-9._-]{1,80}");
+
+    /**
+     * The folder of the session with this id, or null when the id could lead anywhere else. Ids come from tools and
+     * from pages, so nothing but plain names is let through: no separators, no drive ("D:x" is another drive on
+     * Windows), no "." or "..", and not the firsts folder.
+     */
+    static @Nullable Path sessionDir(Path root, String id) {
+        if (!SESSION_ID.matcher(id).matches() || id.equals(".") || id.equals("..") || id.equals("firsts")) {
+            return null;
+        }
+        Path base = root.toAbsolutePath().normalize();
+        Path dir = base.resolve(id).normalize();
+        return base.equals(dir.getParent()) ? dir : null;
     }
 
     /**

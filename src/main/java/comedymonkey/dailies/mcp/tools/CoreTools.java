@@ -35,13 +35,14 @@ public final class CoreTools {
             McpSchema.object(), McpTool.ThreadMode.CLIENT, McpTool.DEFAULT_TIMEOUT_SECONDS, CoreTools::status);
 
         registrar.add("config_get",
-            "Read Dailies' settings. Returns every setting with its group, type, range, default and current value, or just one when 'key' is given.",
+            "Read Dailies' settings. Returns every setting with its group, type, range, default and current value, or just one when 'key' is given. "
+                + "A password (mcpToken) is never shown: it says only whether it is set.",
             McpSchema.object().string("key", "Name of one setting, eg. 'autoStart'. Leave out for all of them"),
             McpTool.ThreadMode.HTTP, McpTool.DEFAULT_TIMEOUT_SECONDS, CoreTools::configGet);
 
         registrar.add("config_set",
             "Change one of Dailies' settings and save the settings file. Use config_get for the names, types and ranges. "
-                + "Changing mcpPort or mcpEnabled restarts or stops this server after the reply.",
+                + "The settings of this server itself (the ones whose names start with mcp) are changed on the settings screen only.",
             McpSchema.object()
                 .string("key", "Name of the setting, from config_get")
                 .any("value", "The new value: true or false, a number, text, or the name of a choice")
@@ -134,6 +135,9 @@ public final class CoreTools {
     private static JsonElement configSet(McpArgs args) {
         allowOnly(args, "key", "value");
         Setting<?> setting = find(args.string("key"));
+        if (!changeableOverMcp(setting)) {
+            throw new McpToolException("'" + setting.name() + "' decides who can reach this server and with what password, so it is changed on the settings screen and not over MCP");
+        }
         if (!DailiesConfig.loaded()) {
             throw new McpToolException("The settings file has not loaded yet. Try again in a moment");
         }
@@ -159,7 +163,21 @@ public final class CoreTools {
         return setting;
     }
 
+    /**
+     * Whether config_set may change a setting. The server's own settings are not: one call could open the game to the
+     * network or change its password, and an agent can be talked into making it by text it reads.
+     */
+    static boolean changeableOverMcp(Setting<?> setting) {
+        return !screenOnly(setting.name(), setting.secret());
+    }
+
+    /** Whether a setting is changed on the settings screen only: the server's own, and any password */
+    static boolean screenOnly(String name, boolean secret) {
+        return name.startsWith("mcp") || secret;
+    }
+
     private static JsonObject describe(Setting<?> setting) {
+        Object value = setting.get();
         JsonObject json = new JsonObject();
         json.addProperty("key", setting.name());
         json.addProperty("group", setting.group());
@@ -170,8 +188,7 @@ public final class CoreTools {
             case TEXT -> "string";
             case CHOICE -> "choice";
         });
-        addValue(json, "value", setting.get());
-        addValue(json, "default", setting.fallback());
+        describeValue(json, setting.name(), setting.secret(), value, setting.fallback());
         if (setting.min() != null) {
             json.addProperty("min", setting.min());
         }
@@ -188,6 +205,22 @@ public final class CoreTools {
         }
         json.addProperty("description", setting.comment());
         return json;
+    }
+
+    /**
+     * The value and default config_get shows. A password says only whether there is one: what it is stays out of
+     * agents' transcripts and the logs of the models behind them.
+     */
+    static void describeValue(JsonObject json, String name, boolean secret, Object value, Object fallback) {
+        if (secret) {
+            json.addProperty("set", value != null && !String.valueOf(value).isBlank());
+        } else {
+            addValue(json, "value", value);
+            addValue(json, "default", fallback);
+        }
+        if (screenOnly(name, secret)) {
+            json.addProperty("settings_screen_only", true);
+        }
     }
 
     private static void addValue(JsonObject json, String name, Object value) {

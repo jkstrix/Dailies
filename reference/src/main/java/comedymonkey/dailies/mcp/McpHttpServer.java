@@ -3,6 +3,7 @@ package comedymonkey.dailies.mcp;
 import comedymonkey.dailies.Host;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,7 +15,9 @@ import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -25,6 +28,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,20 +46,50 @@ import java.util.concurrent.atomic.AtomicInteger;
  * of its own, to the addresses of mcpAllowedClients only, and wants the token of mcpToken on every HTTPS request but
  * the page itself, which has to load before it can ask for one. This computer's own agents and page carry on as they
  * were, over plain HTTP at 127.0.0.1 without a token: {@link McpConnection} tells the two kinds of connection apart.
+ * <p>
+ * Nobody can hold the server up for long: each request has one deadline to arrive in full, one address may hold only
+ * some of the workers ({@link ClientShare}), and tools that run for minutes answer from threads of their own.
  */
 public class McpHttpServer {
 
     private static final int MAX_HEADER_BYTES = 16 * 1024;
     private static final int MAX_BODY_BYTES = 1024 * 1024;
+    /** How long one read may wait. A client that sends a byte now and then never meets it, hence the deadlines below */
     private static final int SOCKET_TIMEOUT_MILLIS = 15_000;
     private static final int WORKER_THREADS = 4;
+    /** One address may hold this many of the workers at once, so there is always one left for another */
+    static final int WORKERS_PER_ADDRESS = WORKER_THREADS - 1;
+    /** And this many more of its connections may wait for their turn before the next is closed */
+    static final int WAITING_PER_ADDRESS = 16;
+    /** The threads that answer calls of long tools ({@link McpProtocol#LONG_TOOL_SECONDS}), and how many may wait for one */
+    private static final int LONG_THREADS = 2;
+    private static final int LONG_WAITING = 8;
+    /** How long what a client still sends after the reply is read and thrown away, at most */
+    private static final long DRAIN_MILLIS = 2_000;
     private static final String ENDPOINT = "/mcp";
     private static final String LIVE = "/live";
     private static final String PICTURES = "/pictures/";
     private static final long LIVE_KEEP_ALIVE_SECONDS = 15;
 
     /** Everything a running server was started with; a change to any of it means starting again */
-    private record Config(int port, String bind, boolean remote, String token, String allowedClients) {}
+    record Config(int port, String bind, boolean remote, String token, String allowedClients) {}
+
+    /**
+     * The deadlines a connection is held to: one for the whole request to arrive, the HTTPS greeting included, and one
+     * for the reply to be taken. A connection still at it when its deadline passes is closed.
+     */
+    record Limits(int requestMillis, int replyMillis) {
+        static final Limits NORMAL = new Limits(20_000, 30_000);
+    }
+
+    /** What answers the MCP endpoint: {@link McpProtocol} in the game, something smaller in the tests */
+    public interface Endpoint {
+        /** The reply to a request body, or null when there is nothing to reply with */
+        @Nullable String handleMessage(String body);
+
+        /** Whether answering the body may take minutes, so it is answered from a thread of its own */
+        boolean callsLongTool(String body);
+    }
 
     private static McpHttpServer instance = null;
 
@@ -105,7 +140,8 @@ public class McpHttpServer {
         }
 
         if (enabled && instance == null) {
-            McpHttpServer server = new McpHttpServer(wanted);
+            Path certificate = Host.get().dataDirectory().resolve("mcp").resolve("certificate.p12");
+            McpHttpServer server = new McpHttpServer(wanted, Limits.NORMAL, new McpProtocol(), certificate);
             try {
                 server.start();
                 instance = server;
@@ -138,41 +174,60 @@ public class McpHttpServer {
     }
 
     private final Config config;
-    private final McpProtocol protocol = new McpProtocol();
+    private final Limits limits;
+    private final Endpoint endpoint;
+    private final Path certificateFile;
     private ServerSocket serverSocket;
     /** With remote access on a single address: the listener at 127.0.0.1 that this computer's own clients go on using */
     private @Nullable ServerSocket loopbackSocket = null;
     private @Nullable javax.net.ssl.SSLContext tls = null;
     private ExecutorService workers;
+    private ClientShare share;
+    private ExecutorService longWork;
+    /** Closes connections whose deadline has passed */
+    private ScheduledThreadPoolExecutor deadlines;
     private volatile boolean stopped = false;
     private HostRules hostRules = HostRules.local();
     private AddressRules addressRules = AddressRules.parse("");
     private @Nullable TokenGuard guard = null;
     private @Nullable ServerCertificate certificate = null;
+    /** The connections of the live feed, by their plain socket: closing that frees a thread stuck writing over HTTPS too */
     private final Set<Socket> liveSockets = ConcurrentHashMap.newKeySet();
     private final Set<String> turnedAway = ConcurrentHashMap.newKeySet();
     private final AtomicInteger liveCount = new AtomicInteger();
 
-    private McpHttpServer(Config config) {
+    /**
+     * @param certificateFile where the certificate for HTTPS is kept, used when the server listens beyond this computer
+     */
+    McpHttpServer(Config config, Limits limits, Endpoint endpoint, Path certificateFile) {
         this.config = config;
+        this.limits = limits;
+        this.endpoint = endpoint;
+        this.certificateFile = certificateFile;
     }
 
-    private void start() throws Exception {
+    /** The port listened on: the one asked for, unless that was 0 */
+    int port() {
+        return this.serverSocket.getLocalPort();
+    }
+
+    void start() throws Exception {
         if (this.config.remote) {
             this.startRemote();
         } else {
             this.serverSocket = new ServerSocket(this.config.port, 16, InetAddress.getByAddress(new byte[]{127, 0, 0, 1}));
         }
 
-        AtomicInteger threadCount = new AtomicInteger();
         // Bounded queue: if something floods the port we drop connections instead of piling up memory
-        ThreadPoolExecutor executor = new ThreadPoolExecutor(WORKER_THREADS, WORKER_THREADS, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(64), runnable -> {
-            Thread thread = new Thread(runnable, "Dailies-MCP-Worker-" + threadCount.incrementAndGet());
+        this.workers = pool("Dailies-MCP-Worker-", WORKER_THREADS, 64);
+        this.share = new ClientShare(WORKERS_PER_ADDRESS, WAITING_PER_ADDRESS, this.workers);
+        this.longWork = pool("Dailies-MCP-Long-", LONG_THREADS, LONG_WAITING);
+        this.deadlines = new ScheduledThreadPoolExecutor(1, runnable -> {
+            Thread thread = new Thread(runnable, "Dailies-MCP-Deadlines");
             thread.setDaemon(true);
             return thread;
         });
-        executor.allowCoreThreadTimeOut(true);
-        this.workers = executor;
+        this.deadlines.setRemoveOnCancelPolicy(true);
 
         Thread acceptThread = new Thread(() -> this.acceptLoop(this.serverSocket), "Dailies-MCP-Accept");
         acceptThread.setDaemon(true);
@@ -183,6 +238,17 @@ public class McpHttpServer {
             localThread.setDaemon(true);
             localThread.start();
         }
+    }
+
+    private static ThreadPoolExecutor pool(String name, int threads, int waiting) {
+        AtomicInteger threadCount = new AtomicInteger();
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(threads, threads, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(waiting), runnable -> {
+            Thread thread = new Thread(runnable, name + threadCount.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
     }
 
     /** Beyond this computer: HTTPS, the allowed addresses, the token, and Host and Origin widened to the bound address */
@@ -222,15 +288,14 @@ public class McpHttpServer {
         }
         this.guard = new TokenGuard(this.config.token);
 
-        Path file = Host.get().dataDirectory().resolve("mcp").resolve("certificate.p12");
-        this.certificate = ServerCertificate.loadOrCreate(file, names, own, wildcard ? null : address);
+        this.certificate = ServerCertificate.loadOrCreate(this.certificateFile, names, own, wildcard ? null : address);
         this.tls = this.certificate.context();
         // A plain listener: each connection says by its first byte whether it is HTTPS or this computer's plain HTTP
         this.serverSocket = new ServerSocket(this.config.port, 16, address);
         if (!wildcard) {
             // Bound to one network address, the port is not open at 127.0.0.1 at all, and that is where local clients look
             try {
-                this.loopbackSocket = new ServerSocket(this.config.port, 16, InetAddress.getByAddress(new byte[]{127, 0, 0, 1}));
+                this.loopbackSocket = new ServerSocket(this.serverSocket.getLocalPort(), 16, InetAddress.getByAddress(new byte[]{127, 0, 0, 1}));
             } catch (IOException e) {
                 this.serverSocket.close();
                 throw e;
@@ -238,7 +303,7 @@ public class McpHttpServer {
         }
     }
 
-    private void stop() {
+    void stop() {
         this.stopped = true;
         try {
             this.serverSocket.close();
@@ -253,6 +318,9 @@ public class McpHttpServer {
         }
         // Let requests that are already running finish (config_set can stop the server it was called through)
         this.workers.shutdown();
+        this.longWork.shutdown();
+        // Deadlines already set still close their connections when they come
+        this.deadlines.shutdown();
     }
 
     private void acceptLoop(ServerSocket listener) {
@@ -277,17 +345,38 @@ public class McpHttpServer {
                 continue;
             }
 
-            try {
-                this.workers.execute(() -> this.handleConnection(socket));
-            } catch (RuntimeException e) { // RejectedExecutionException: too busy or shutting down
+            // Served when its address has a worker to spare; closed when that address has too many waiting already
+            if (!this.share.submit(socket.getInetAddress(), () -> this.handleConnection(socket), () -> closeQuietly(socket))) {
                 closeQuietly(socket);
             }
+        }
+    }
+
+    /**
+     * Closes a connection once a deadline passes, unless the returned handle is cancelled first. The plain socket is
+     * the one closed: that never waits, and whatever is reading or writing over it, HTTPS included, gives up at once.
+     */
+    private @Nullable ScheduledFuture<?> deadline(Socket raw, int millis) {
+        try {
+            return this.deadlines.schedule(() -> closeQuietly(raw), millis, TimeUnit.MILLISECONDS);
+        } catch (RuntimeException stopping) {
+            // The server is stopping, and closes everything anyway
+            return null;
+        }
+    }
+
+    private static void cancel(@Nullable ScheduledFuture<?> deadline) {
+        if (deadline != null) {
+            deadline.cancel(false);
         }
     }
 
     private void handleConnection(Socket accepted) {
         boolean handedOver = false;
         Socket socket = accepted;
+        // One deadline for the whole request, the HTTPS greeting included: the read timeout only counts each pause, so
+        // a client sending a byte now and then would otherwise keep this worker for as long as it liked
+        ScheduledFuture<?> deadline = this.deadline(accepted, this.limits.requestMillis());
         try {
             accepted.setSoTimeout(SOCKET_TIMEOUT_MILLIS);
             accepted.setTcpNoDelay(true);
@@ -295,7 +384,7 @@ public class McpHttpServer {
             javax.net.ssl.SSLContext context = this.tls;
             McpConnection connection = context == null ? McpConnection.plain(accepted) : McpConnection.open(accepted, context);
             socket = connection.socket();
-            InputStream in = connection.in();
+            InputStream in = new BufferedInputStream(connection.in());
             OutputStream out = connection.out();
 
             Response response;
@@ -309,23 +398,86 @@ public class McpHttpServer {
                 response = Response.text(e.status, e.getMessage());
                 response.headers.putAll(e.headers);
             } catch (IOException e) {
-                // The client went away, timed out, or never finished its side of the HTTPS greeting
+                // The client went away, timed out, ran out of time, or never finished its side of the HTTPS greeting
                 return;
             } catch (Throwable t) {
                 Host.LOGGER.error("Error handling MCP request", t);
                 response = Response.text(500, "Internal server error");
             }
+            // The request is in; answering it is not held to the deadline for reading it
+            cancel(deadline);
 
             if (response.live) {
                 LiveHub.Listener listener = LiveHub.listen();
                 if (listener != null) {
                     handedOver = true;
-                    this.startLive(socket, out, listener);
+                    this.startLive(accepted, socket, out, listener);
                     return;
                 }
                 response = Response.text(503, "Too many pages are already listening");
             }
 
+            if (response.call != null) {
+                if (this.endpoint.callsLongTool(response.call)) {
+                    // Minutes of work: a thread of its own answers, and this worker goes back to reading requests
+                    if (this.answerLater(accepted, socket, in, out, response.call)) {
+                        handedOver = true;
+                        return;
+                    }
+                    response = Response.text(503, "Too many long tasks are running already. Try again when one has finished");
+                } else {
+                    response = this.answer(response.call);
+                }
+            }
+
+            this.reply(accepted, socket, in, out, response);
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Client went away, nothing to do
+        } finally {
+            cancel(deadline);
+            if (!handedOver) {
+                closeQuietly(socket);
+            }
+        }
+    }
+
+    /** The reply of the MCP endpoint to a request body */
+    private Response answer(String call) {
+        try {
+            String responseJson = this.endpoint.handleMessage(call);
+            if (responseJson == null) {
+                return new Response(202, null, null); // Only notifications/responses, nothing to reply with
+            }
+            return new Response(200, "application/json", responseJson.getBytes(StandardCharsets.UTF_8));
+        } catch (Throwable t) {
+            Host.LOGGER.error("Error handling MCP request", t);
+            return Response.text(500, "Internal server error");
+        }
+    }
+
+    /** @return false when the threads for long work are all busy and enough calls wait for them already */
+    private boolean answerLater(Socket raw, Socket socket, InputStream in, OutputStream out, String call) {
+        try {
+            this.longWork.execute(() -> {
+                try {
+                    this.reply(raw, socket, in, out, this.answer(call));
+                } catch (IOException | UnsupportedOperationException ignored) {
+                    // The client gave up waiting
+                } finally {
+                    closeQuietly(socket);
+                }
+            });
+            return true;
+        } catch (RuntimeException busy) { // RejectedExecutionException
+            return false;
+        }
+    }
+
+    /** Writes the reply, then takes what the client still sends, for a short while at most, before the connection closes */
+    private void reply(Socket raw, Socket socket, InputStream in, OutputStream out, Response response) throws IOException {
+        // A client that will not take the reply gets as long as this, and no longer
+        ScheduledFuture<?> deadline = this.deadline(raw, this.limits.replyMillis());
+        try {
             writeResponse(out, response);
 
             // Error replies can be sent before the body was read. Closing with unread data makes the OS reset the
@@ -333,24 +485,24 @@ public class McpHttpServer {
             socket.shutdownOutput();
             socket.setSoTimeout(1000);
 
+            long until = System.currentTimeMillis() + DRAIN_MILLIS;
             long drained = 0;
             byte[] scratch = new byte[4096];
             int read;
-            while (drained < MAX_BODY_BYTES && (read = in.read(scratch)) >= 0) {
+            while (drained < MAX_BODY_BYTES && System.currentTimeMillis() < until && (read = in.read(scratch)) >= 0) {
                 drained += read;
             }
-        } catch (IOException | UnsupportedOperationException ignored) {
-            // Client went away, nothing to do
         } finally {
-            if (!handedOver) {
-                closeQuietly(socket);
-            }
+            cancel(deadline);
         }
     }
 
     /** The page's live feed: the connection stays open on a thread of its own and gets a line whenever a moment changes */
-    private void startLive(Socket socket, OutputStream out, LiveHub.Listener listener) {
-        this.liveSockets.add(socket);
+    private void startLive(Socket raw, Socket socket, OutputStream out, LiveHub.Listener listener) {
+        this.liveSockets.add(raw);
+        // A page that stopped reading leaves this thread stuck in a write, which has no timeout: once the feed lets the
+        // page go, the connection is closed, and the write gives up
+        listener.whenDropped(() -> closeQuietly(raw));
         Thread thread = new Thread(() -> {
             try {
                 socket.setSoTimeout(0);
@@ -368,7 +520,8 @@ public class McpHttpServer {
                 // The page was closed
             } finally {
                 LiveHub.leave(listener);
-                this.liveSockets.remove(socket);
+                this.liveSockets.remove(raw);
+                closeQuietly(raw);
                 closeQuietly(socket);
             }
         }, "Dailies-MCP-Live-" + this.liveCount.incrementAndGet());
@@ -437,14 +590,7 @@ public class McpHttpServer {
 
         // The moments page: a plain static page that talks to the MCP endpoint below from the same origin
         if (page) {
-            try (InputStream resource = McpHttpServer.class.getResourceAsStream("/assets/dailies/web/moments.html")) {
-                if (resource == null) {
-                    throw new HttpError(404, "The moments page is missing from this build");
-                }
-                Response response = new Response(200, "text/html; charset=utf-8", resource.readAllBytes());
-                response.headers.put("Cache-Control", "no-store");
-                return response;
-            }
+            return page();
         }
 
         if (method.equals("GET") && path.equals(LIVE)) {
@@ -464,6 +610,12 @@ public class McpHttpServer {
             Response response = Response.text(405, "Method not allowed. Use POST " + ENDPOINT);
             response.allow = "POST";
             return response;
+        }
+
+        // A web page may send text/plain to any address without asking first; JSON it may only send after a question
+        // this server never answers yes to. MCP clients send JSON anyway
+        if (!isJson(headers.get("content-type"))) {
+            throw new HttpError(415, "Send the request body as JSON, with 'Content-Type: application/json'");
         }
 
         if (headers.containsKey("transfer-encoding")) {
@@ -490,12 +642,56 @@ public class McpHttpServer {
         if (body.length != contentLength) {
             throw new HttpError(400, "Request body shorter than Content-Length");
         }
+        return Response.call(new String(body, StandardCharsets.UTF_8));
+    }
 
-        String responseJson = this.protocol.handleMessage(new String(body, StandardCharsets.UTF_8));
-        if (responseJson == null) {
-            return new Response(202, null, null); // Only notifications/responses, nothing to reply with
+    /** Whether a Content-Type header says JSON: application/json, with or without a charset after it */
+    static boolean isJson(@Nullable String contentType) {
+        if (contentType == null) {
+            return false;
         }
-        return new Response(200, "application/json", responseJson.getBytes(StandardCharsets.UTF_8));
+        int semicolon = contentType.indexOf(';');
+        String type = (semicolon < 0 ? contentType : contentType.substring(0, semicolon)).trim().toLowerCase(Locale.ROOT);
+        return type.equals("application/json");
+    }
+
+    private static Response page() throws IOException, HttpError {
+        String html;
+        try (InputStream resource = McpHttpServer.class.getResourceAsStream("/assets/dailies/web/moments.html")) {
+            if (resource == null) {
+                throw new HttpError(404, "The moments page is missing from this build");
+            }
+            // Browsers read every line ending as \n before they check the script against its hash, so it is sent that way too
+            html = new String(resource.readAllBytes(), StandardCharsets.UTF_8).replace("\r\n", "\n").replace('\r', '\n');
+        }
+        Response response = new Response(200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8));
+        response.headers.put("Cache-Control", "no-store");
+        // The page drives the game, so no other page may show it in a frame and trick a click out of someone
+        response.headers.put("Content-Security-Policy", pagePolicy(html));
+        response.headers.put("X-Frame-Options", "DENY");
+        response.headers.put("Referrer-Policy", "no-referrer");
+        return response;
+    }
+
+    /**
+     * The Content-Security-Policy of the moments page: only its own script runs (named by its hash), it talks only to
+     * this server, shows only its own pictures, and nobody may put it in a frame. Its style is inline, and stays so.
+     */
+    static String pagePolicy(String html) {
+        String script = "'none'";
+        int open = html.indexOf("<script>");
+        int close = open < 0 ? -1 : html.indexOf("</script>", open);
+        if (close >= 0) {
+            String code = html.substring(open + "<script>".length(), close);
+            try {
+                byte[] digest = MessageDigest.getInstance("SHA-256").digest(code.getBytes(StandardCharsets.UTF_8));
+                script = "'sha256-" + Base64.getEncoder().encodeToString(digest) + "'";
+            } catch (Exception e) {
+                throw new IllegalStateException("SHA-256 is missing from this Java", e);
+            }
+        }
+        return "default-src 'self'; script-src " + script + "; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; "
+            + "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
     }
 
     /** An event's picture: /pictures/<session id>/<event id>.jpg, from the session's own folder and nowhere else */
@@ -548,6 +744,7 @@ public class McpHttpServer {
         head.append("HTTP/1.1 ").append(response.status).append(' ').append(reasonPhrase(response.status)).append("\r\n");
         if (response.contentType != null) {
             head.append("Content-Type: ").append(response.contentType).append("\r\n");
+            head.append("X-Content-Type-Options: nosniff\r\n");
         }
         if (response.allow != null) {
             head.append("Allow: ").append(response.allow).append("\r\n");
@@ -577,6 +774,7 @@ public class McpHttpServer {
             case 405 -> "Method Not Allowed";
             case 411 -> "Length Required";
             case 413 -> "Content Too Large";
+            case 415 -> "Unsupported Media Type";
             case 431 -> "Request Header Fields Too Large";
             default -> "Internal Server Error";
         };
@@ -595,6 +793,8 @@ public class McpHttpServer {
         @Nullable String allow = null;
         final Map<String, String> headers = new LinkedHashMap<>();
         boolean live = false;
+        /** Not a reply yet: the body of a request to the MCP endpoint, answered once it is known how long that takes */
+        @Nullable String call = null;
 
         Response(int status, @Nullable String contentType, byte @Nullable [] body) {
             this.status = status;
@@ -606,6 +806,12 @@ public class McpHttpServer {
         static Response goLive() {
             Response response = new Response(200, null, null);
             response.live = true;
+            return response;
+        }
+
+        static Response call(String body) {
+            Response response = new Response(200, null, null);
+            response.call = body;
             return response;
         }
 
