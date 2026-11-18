@@ -1,0 +1,269 @@
+> Task :createMinecraftArtifacts UP-TO-DATE
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :companion:createMinecraftArtifacts UP-TO-DATE
+> Task :companion:compileJava UP-TO-DATE
+> Task :companion:processResources UP-TO-DATE
+> Task :companion:classes UP-TO-DATE
+> Task :companion:jarJar NO-SOURCE
+> Task :companion:jar UP-TO-DATE
+> Task :companion:assemble UP-TO-DATE
+> Task :companion:compileTestJava NO-SOURCE
+> Task :companion:processTestResources NO-SOURCE
+> Task :companion:testClasses UP-TO-DATE
+> Task :companion:test NO-SOURCE
+> Task :companion:check UP-TO-DATE
+> Task :companion:build UP-TO-DATE
+> Task :buildCompanion
+> Task :jarJar NO-SOURCE
+> Task :jar
+> Task :installTestMods
+> Task :installPlayMods
+> Task :downloadAssets UP-TO-DATE
+> Task :writePlayModdedLegacyClasspath UP-TO-DATE
+> Task :preparePlayModdedRun UP-TO-DATE
+
+> Task :runPlayModded
+WARN StatusConsoleListener Advanced terminal features are not available in this environment
+[22:46:47] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeclientdev, --version, 21.1.266, --assetIndex, 17, --assetsDir, C:\\Users\\bones\\.gradle\\caches\\neoformruntime\\assets, --gameDir, ., --fml.fmlVersion, 4.0.45, --fml.mcVersion, 1.21.1, --fml.neoForgeVersion, 21.1.266, --fml.neoFormVersion, 20240808.144430, --width, 1920, --height, 1080]
+[22:46:47] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: JVM identified as Eclipse Adoptium OpenJDK 64-Bit Server VM 21.0.4+7-LTS
+[22:46:47] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher 11.0.5+main.901c6ea8 starting: java version 21.0.4 by Eclipse Adoptium; OS Windows 11 arch amd64 version 10.0
+[22:46:47] [main/INFO] [Sodium-GraphicsAdapterProbe/]: Searching for graphics cards...
+[22:46:47] [main/INFO] [Sodium-GraphicsAdapterProbe/]: Found graphics adapter: AdapterInfo{vendor=NVIDIA, description='NVIDIA GeForce RTX 5090', adapterType=0x0000031B, openglIcdFilePath='C:\WINDOWS\System32\DriverStore\FileRepository\nv_dispig.inf_amd64_cc526ccc3287f5cd\nvoglv64.dll', openglIcdVersion=32.0.16.1088}
+[22:46:47] [main/WARN] [Sodium-Workarounds/]: Sodium has applied one or more workarounds to prevent crashes or other issues on your system: [NVIDIA_THREADED_OPTIMIZATIONS_BROKEN]
+[22:46:47] [main/WARN] [Sodium-Workarounds/]: This is not necessarily an issue, but it may result in certain features or optimizations being disabled. You can sometimes fix these issues by upgrading your graphics driver.
+[22:46:47] [main/INFO] [Sodium-NvidiaWorkarounds/]: Modifying process environment to apply workarounds for the NVIDIA graphics driver...
+[22:46:47] [main/INFO] [ne.ne.fm.lo.ImmediateWindowHandler/]: Loading ImmediateWindowProvider fmlearlywindow
+[22:46:47] [main/INFO] [EARLYDISPLAY/]: Trying GL version 4.6
+[22:46:48] [main/INFO] [EARLYDISPLAY/]: Requested GL version 4.6 got version 4.6
+[22:46:48] [main/INFO] [mixin/]: SpongePowered MIXIN Subsystem Version=0.8.7 Source=union:/C:/Users/bones/.gradle/caches/modules-2/files-2.1/net.fabricmc/sponge-mixin/0.16.4+mixin.0.8.7/26d01f0567ab46e9ca0d2ed89d0ecc11aadbd433/sponge-mixin-0.16.4+mixin.0.8.7.jar%23138!/ Service=ModLauncher Env=CLIENT
+[22:46:48] [pool-2-thread-1/INFO] [EARLYDISPLAY/]: GL info: NVIDIA GeForce RTX 5090/PCIe/SSE2 GL version 4.6.0 NVIDIA 610.88, NVIDIA Corporation
+[22:46:48] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select two dependency jars from JarJar which have the same identification: Nested Mod File  in Mod File: E:\Youtube\Dailies\run-play\mods\create-1.21.1-6.0.10.jar and Nested Mod File  in Mod File: E:\Youtube\Dailies\run-play\mods\iris-flywheel-compat-NeoForge-2.4.0.jar. Using Nested Mod File  in Mod File: E:\Youtube\Dailies\run-play\mods\create-1.21.1-6.0.10.jar
+[22:46:48] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_api_base. Using Mod File: 
+[22:46:48] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_renderer_api_v1. Using Mod File: 
+[22:46:48] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_rendering_data_attachment_v1. Using Mod File: 
+[22:46:48] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_block_view_api_v2. Using Mod File: 
+[22:46:48] [main/INFO] [ne.ne.fm.lo.mo.lo.JarInJarDependencyLocator/]: Found 15 dependencies adding them to mods collection
+[22:46:48] [main/INFO] [ne.ne.fm.lo.mo.ModDiscoverer/]: 
+     Mod List:
+		Name Version (Mod Id)
+
+		Colorful Lighting Sodium/Iris Edition 2.6.0 (colorful_lighting)
+		Create 6.0.10 (create)
+		Create Aeronautics 1.3.2 (aeronautics)
+		Create Aeronautics 1.3.2 (aeronautics_bundled)
+		Create Offroad 1.3.2 (offroad)
+		Create Simulated 1.3.2 (simulated)
+		Dailies 0.1.0 (dailies)
+		Dailies Companion 0.2.0 (dailies_companion)
+		Flywheel 1.0.6 (flywheel)
+		Forgified Fabric API Base 0.4.42+d1308ded19 (fabric_api_base)
+		Forgified Fabric BlockView API (v2) 1.0.10+9afaaf8c19 (fabric_block_view_api_v2)
+		Forgified Fabric Renderer API (v1) 3.4.1+9125b6dc19 (fabric_renderer_api_v1)
+		Forgified Fabric Rendering Data Attachment (v1) 0.3.48+73761d2e19 (fabric_rendering_data_attachment_v1)
+		Iris 1.8.14-beta.1+mc1.21.1 (iris)
+		Iris Flywheel Compat 2.4.0 (irisflw)
+		McpCraft 0.2.0 (mcpcraft)
+		Minecraft 1.21.1 (minecraft)
+		NeoForge 21.1.266 (neoforge)
+		Ponder 1.0.82+mc1.21.1 (ponder)
+		Reese's Sodium Options 2.2.4+mc1.21.1 (reeses_sodium_options)
+		Sable 2.0.6 (sable)
+		Sable Companion 1.6.0 (sablecompanion)
+		Simple Voice Chat 1.21.1-2.6.22 (voicechat)
+		Sodium 0.8.13+mc1.21.1 (sodium)
+		Veil 4.3.2 (veil)
+[22:46:48] [main/ERROR] [ne.ne.fm.lo.mo.ModFile/LOADING]: Access transformer file accesstransformer.cfg provided by mod irisflw does not exist!
+[22:46:49] [main/INFO] [mixin/]: Compatibility level set to JAVA_21
+[22:46:49] [main/INFO] [cp.mo.mo.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgeclientdev' with arguments [--version, 21.1.266, --gameDir, ., --assetsDir, C:\Users\bones\.gradle\caches\neoformruntime\assets, --assetIndex, 17, --width, 1920, --height, 1080]
+[22:46:49] [main/WARN] [mixin/]: Reference map 'aeronautics.refmap.json' for aeronautics.mixins.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Reference map 'ponder.refmap.json' for ponder-common.mixins.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/INFO] [de.ry.sa.mi.AbstractSableMixinPlugin/]: Using Sodium renderer mixins
+[22:46:49] [main/INFO] [de.ry.sa.mi.AbstractSableMixinPlugin/]: Using Sodium renderer mixins
+[22:46:49] [main/WARN] [mixin/]: Reference map 'iris.refmap.json' for mixins.iris.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Reference map 'iris.refmap.json' for mixins.iris.fantastic.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Reference map 'iris.refmap.json' for mixins.iris.vertexformat.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Reference map 'iris.refmap.json' for iris-batched-entity-rendering.mixins.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Reference map 'iris.refmap.json' for mixins.iris.compat.sodium.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Reference map 'simulated.refmap.json' for simulated.mixins.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/INFO] [Sodium/]: Loaded configuration file for Sodium: 45 options available, 1 override(s) found
+[22:46:49] [main/WARN] [mixin/]: Reference map 'offroad.refmap.json' for offroad.mixins.json could not be read. If this is a development environment you can ignore this message
+[22:46:49] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$FrameCounter (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$FrameCounter)
+[22:46:49] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:46:49] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: com/portingdeadmods/cable_facades/events/GameClientEvents$2 (java.lang.ClassNotFoundException: com.portingdeadmods.cable_facades.events.GameClientEvents$2)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: com/direwolf20/justdirethings/client/renderers/OurRenderTypes (java.lang.ClassNotFoundException: com.direwolf20.justdirethings.client.renderers.OurRenderTypes)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: mekanism/client/render/entity/RenderFlame (java.lang.ClassNotFoundException: mekanism.client.render.entity.RenderFlame)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: mekanism/client/render/armor/MekaSuitArmor (java.lang.ClassNotFoundException: mekanism.client.render.armor.MekaSuitArmor)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: mekanism/client/render/lib/effect/BillboardingEffectRenderer (java.lang.ClassNotFoundException: mekanism.client.render.lib.effect.BillboardingEffectRenderer)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: blusunrize/immersiveengineering/client/utils/IEGLShaders (java.lang.ClassNotFoundException: blusunrize.immersiveengineering.client.utils.IEGLShaders)
+[22:46:50] [main/WARN] [Sodium/]: Force-disabling mixin 'features.render.world.sky.ClientLevelMixin' as rule 'mixin.features.render.world.sky' (added by mods [iris]) disables it and children
+[22:46:50] [main/WARN] [Sodium/]: Force-disabling mixin 'features.render.world.sky.FogRendererMixin' as rule 'mixin.features.render.world.sky' (added by mods [iris]) disables it and children
+[22:46:50] [main/WARN] [Sodium/]: Force-disabling mixin 'features.render.world.sky.LevelRendererMixin' as rule 'mixin.features.render.world.sky' (added by mods [iris]) disables it and children
+[22:46:50] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$FrameCounter (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$FrameCounter)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$FrameCounter (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$FrameCounter)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:46:50] [main/WARN] [mixin/]: Error loading class: org/jetbrains/annotations/ApiStatus$ScheduledForRemoval (java.lang.ClassNotFoundException: org.jetbrains.annotations.ApiStatus$ScheduledForRemoval)
+[22:46:50] [main/INFO] [MixinExtras|Service/]: Initializing MixinExtras via com.llamalad7.mixinextras.service.MixinExtrasServiceImpl(version=0.5.5).
+[22:46:51] [Datafixer Bootstrap/INFO] [mojang/DataFixerBuilder]: 229 Datafixer optimizations took 269 milliseconds
+[22:46:55] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, location] and [teleport, destination] with inputs: [0.1 -0.5 .9, 0 0 0]
+[22:46:55] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, location] and [teleport, targets] with inputs: [0.1 -0.5 .9, 0 0 0]
+[22:46:55] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, destination] and [teleport, targets] with inputs: [Player, 0123, @e, dd12be42-52a9-4a91-a8a1-11c01849e498]
+[22:46:55] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, targets] and [teleport, destination] with inputs: [Player, 0123, dd12be42-52a9-4a91-a8a1-11c01849e498]
+[22:46:55] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, targets, location] and [teleport, targets, destination] with inputs: [0.1 -0.5 .9, 0 0 0]
+[22:46:55] [Render thread/WARN] [minecraft/VanillaPackResourcesBuilder]: Assets URL 'union:/E:/Youtube/Dailies/build/moddev/artifacts/neoforge-21.1.266.jar%23201!/assets/.mcassetsroot' uses unexpected schema
+[22:46:55] [Render thread/WARN] [minecraft/VanillaPackResourcesBuilder]: Assets URL 'union:/E:/Youtube/Dailies/build/moddev/artifacts/neoforge-21.1.266.jar%23201!/data/.mcassetsroot' uses unexpected schema
+[22:46:55] [Render thread/INFO] [mojang/YggdrasilAuthenticationService]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, name=PROD]
+[22:46:55] [Render thread/INFO] [minecraft/Minecraft]: Setting user: Dev
+[22:46:55] [Render thread/INFO] [minecraft/Minecraft]: Backend library: LWJGL version 3.3.3+5
+[22:46:55] [Render thread/INFO] [mojang/Window]: OpenGL Vendor: NVIDIA Corporation
+[22:46:55] [Render thread/INFO] [mojang/Window]: OpenGL Renderer: NVIDIA GeForce RTX 5090/PCIe/SSE2
+[22:46:55] [Render thread/INFO] [mojang/Window]: OpenGL Version: 4.6.0 NVIDIA 610.88
+[22:46:55] [Render thread/INFO] [Sodium-NvidiaWorkarounds/]: Modifying OpenGL context to apply workarounds for the NVIDIA graphics driver...
+[22:46:55] [Render thread/INFO] [Sodium-NvidiaWorkarounds/]: Enabling GL_DEBUG_OUTPUT_SYNCHRONOUS to force the NVIDIA driver to disable threaded command submission
+[22:46:55] [Render thread/INFO] [Iris/]: Debug functionality is disabled.
+[22:46:55] [Render thread/INFO] [Iris/]: OpenGL 4.5 detected, enabling DSA.
+[22:46:55] [Render thread/INFO] [Iris/]: Shaders are disabled because enableShaders is set to false in iris.properties
+[22:46:56] [modloading-worker-0/INFO] [Veil/]: Veil is initializing.
+[22:46:56] [modloading-worker-0/INFO] [ne.ne.ne.co.NeoForgeMod/NEOFORGE-MOD]: NeoForge mod loading, version 21.1.266, for MC 1.21.1
+[22:46:56] [modloading-worker-0/INFO] [irisflw/]: IrisFLW backends initialized: dev.engine_room.flywheel.lib.backend.SimpleBackend@2a7bc880
+[22:46:56] [modloading-worker-0/INFO] [Dailies/]: McpCraft compatibility: this version of McpCraft has no job board events for client mods, they will not be tracked
+[22:46:56] [modloading-worker-0/INFO] [co.si.cr.Create/]: Create 6.0.10 initializing! Commit hash: ac0c444d9828da3453ae8cc65338e8de063286fb
+[22:46:56] [ForkJoinPool.commonPool-worker-28/WARN] [Iris/]: [Iris Update Check] This version doesn't have an update index, skipping.
+[22:46:56] [modloading-worker-0/INFO] [Dailies/]: Dailies: Sable found, physics craft will be recorded
+[22:46:57] [modloading-worker-0/INFO] [de.ry.sa.Sable/]: Sable loaded!
+[22:46:57] [modloading-worker-0/WARN] [de.ry.sa.Sable/]: NOTE: Sable is loaded with Flywheel. Sable contains extensive shader overrides and a full light-storage replacement. Expect this to cause compatibility issues. If issues arise, please report them to the Sable issue tracker (https://github.com/ryanhcode/sable/issues) instead of the Flywheel issue tracker.
+[22:46:58] [modloading-sync-worker/WARN] [ne.ne.fm.co.ConfigTracker/CONFIG]: Configuration file E:\Youtube\Dailies\run-play\config\dailies-client.toml is not correct. Correcting
+[22:46:58] [modloading-sync-worker/INFO] [Dailies/]: Dailies MCP server listening on http://127.0.0.1:25595/mcp
+[22:46:58] [Render thread/INFO] [Veil/]: GL Debug supported
+[22:46:59] [Render thread/INFO] [Iris/]: Hardware information:
+[22:46:59] [Render thread/INFO] [Iris/]: CPU: 32x AMD Ryzen 9 7950X3D 16-Core Processor 
+[22:46:59] [Render thread/INFO] [Iris/]: GPU: NVIDIA GeForce RTX 5090/PCIe/SSE2 (Supports OpenGL 4.6.0 NVIDIA 610.88)
+[22:46:59] [Render thread/INFO] [Iris/]: OS: Windows 11 (10.0)
+[22:46:59] [Render thread/INFO] [ne.ne.ne.ga.GameTestHooks/]: Enabled Gametest Namespaces: []
+[22:46:59] [Render thread/INFO] [minecraft/ReloadableResourceManager]: Reloading ResourceManager: vanilla, mod_resources, mod/sodium, mod/voicechat,voicechat_api, mod/fabric_api_base, mod/fabric_renderer_api_v1, mod/irisflw, mod/dailies_companion, mod/aeronautics, mod/aeronautics_bundled, mod/reeses_sodium_options, mod/dailies, mod/sablecompanion, mod/flywheel, mod/ponder, mod/create, mod/sable, mod/neoforge, mod/fabric_block_view_api_v2, mod/iris, mod/veil, mod/simulated, mod/fabric_rendering_data_attachment_v1, mod/colorful_lighting, mod/mcpcraft, mod/offroad
+[22:46:59] [Worker-Main-3/WARN] [voicechat/]: [voicechat/Voicechat] Running in debug mode - Don't leave this enabled in production!
+[22:46:59] [Worker-Main-3/INFO] [voicechat/]: [voicechat/Voicechat] Compatibility version 20
+[22:46:59] [NeoForge Version Check/INFO] [ne.ne.fm.VersionChecker/]: [voicechat] Starting version check at https://update.maxhenkel.de/neoforge/voicechat
+[22:46:59] [Worker-Main-3/INFO] [voicechat/]: [voicechat/PluginManager] Loading plugins
+[22:46:59] [Worker-Main-14/INFO] [minecraft/UnihexProvider]: Found unifont_all_no_pua-15.1.05.hex, loading
+[22:46:59] [Worker-Main-29/INFO] [minecraft/UnihexProvider]: Found unifont_jp_patch-15.1.05.hex, loading
+[22:46:59] [Worker-Main-3/INFO] [voicechat/]: [voicechat/PluginManager] Loaded 1 plugin(s)
+[22:46:59] [Worker-Main-3/INFO] [voicechat/]: [voicechat/PluginManager] Initializing plugins
+[22:46:59] [Worker-Main-3/INFO] [voicechat/]: [voicechat/PluginManager] Initialized 1 plugin(s)
+[22:46:59] [Worker-Main-3/INFO] [voicechat/]: [voicechat/PluginManager] Registering events for 'dailies'
+[22:47:00] [Render thread/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$FrameCounter (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$FrameCounter)
+[22:47:00] [Render thread/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:47:00] [Render thread/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:47:00] [Render thread/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$FrameCounter (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$FrameCounter)
+[22:47:00] [Render thread/WARN] [mixin/]: Error loading class: net/coderbot/iris/uniforms/SystemTimeUniforms$Timer (java.lang.ClassNotFoundException: net.coderbot.iris.uniforms.SystemTimeUniforms$Timer)
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Initializing Opus
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Successfully initialized Opus
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Initializing RNNoise
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Successfully initialized RNNoise
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Initializing Speex
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Successfully initialized Speex
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Initializing LAME
+[22:47:00] [Worker-Main-28/INFO] [voicechat/]: [voicechat/NativeValidator] Successfully initialized LAME
+[22:47:00] [NeoForge Version Check/INFO] [ne.ne.fm.VersionChecker/]: [voicechat] Found status: OUTDATED Current: 1.21.1-2.6.22 Target: 1.21.1-2.6.27
+[22:47:00] [NeoForge Version Check/INFO] [ne.ne.fm.VersionChecker/]: [create] Starting version check at https://api.modrinth.com/updates/create/forge_updates.json?neoforge=only
+[22:47:00] [Render thread/INFO] [de.mc.McpCraft/]: McpCraft MCP server: http://127.0.0.1:25599/mcp (220 tools). Claude Code: claude mcp add --transport http mcpcraft http://127.0.0.1:25599/mcp
+[22:47:00] [NeoForge Version Check/INFO] [ne.ne.fm.VersionChecker/]: [create] Found status: OUTDATED Current: 6.0.10 Target: 6.0.10+mc1.21.1
+[22:47:01] [Render thread/INFO] [Veil/]: Loaded 0 shader redirects, 0 replacements
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 29 shaders from: pinwheel/shaders/program
+[22:47:02] [Worker-Main-7/INFO] [me.er.co.ColorfulLighting/]: Colorful Lighting Sodium/Iris Edition 2.6.0 | Sodium: 0.8.13+mc1.21.1 (compat active) | Iris: 1.8.14-beta.1+mc1.21.1 | Dynamic lights: absent
+[22:47:02] [Worker-Main-7/INFO] [me.er.co.ColorfulLighting/]: Colored light engine reset
+[22:47:02] [Worker-Main-7/INFO] [me.er.co.ColorfulLighting/]: Loaded light overrides: 0 blocks, 0 items, 0 entities
+[22:47:02] [Worker-Main-11/INFO] [PonderIndex/]: Registering Ponder Scenes took 73.72 ms
+[22:47:02] [Worker-Main-11/INFO] [PonderIndex/]: Registering Ponder Tags took 4.368 ms
+[22:47:02] [Render thread/WARN] [minecraft/SoundEngine]: Missing sound for event: minecraft:item.goat_horn.play
+[22:47:02] [Render thread/WARN] [minecraft/SoundEngine]: Missing sound for event: minecraft:entity.goat.screaming.horn_break
+[22:47:02] [Render thread/INFO] [mojang/Library]: OpenAL initialized on device OpenAL Soft on Speakers (VB-Audio Voicemeeter VAIO)
+[22:47:02] [Render thread/INFO] [minecraft/SoundEngine]: Sound engine started
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 2048x1024x4 minecraft:textures/atlas/blocks.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 256x256x4 minecraft:textures/atlas/signs.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 512x512x4 minecraft:textures/atlas/shield_patterns.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 512x512x4 minecraft:textures/atlas/banner_patterns.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 2048x1024x4 minecraft:textures/atlas/armor_trims.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 128x64x4 minecraft:textures/atlas/decorated_pot.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 256x256x4 minecraft:textures/atlas/chest.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 512x256x4 minecraft:textures/atlas/shulker_boxes.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 512x256x4 minecraft:textures/atlas/beds.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 512x512x0 minecraft:textures/atlas/particles.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 512x256x0 minecraft:textures/atlas/paintings.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 256x128x0 minecraft:textures/atlas/mob_effects.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 64x64x0 minecraft:textures/atlas/map_decorations.png-atlas
+[22:47:02] [Render thread/INFO] [minecraft/TextureAtlas]: Created: 1024x512x0 minecraft:textures/atlas/gui.png-atlas
+[22:47:02] [Render thread/WARN] [minecraft/ShaderInstance]: Shader rendertype_entity_translucent_emissive could not find sampler named Sampler2 in the specified shader program.
+[22:47:02] [Render thread/INFO] [me.er.co.ColorfulLighting/]: Adapted core vertex shader create:glowing_shader from mod/create to colored packed light
+[22:47:02] [Render thread/INFO] [me.er.co.ColorfulLighting/]: Adapted core vertex shader neoforge:rendertype_entity_unlit_translucent from mod/neoforge to colored packed light
+[22:47:02] [Render thread/INFO] [flywheel/backend/shaders/]: Loaded 82 shader sources in 30.920 ms
+[22:47:02] [Render thread/INFO] [Veil/]: Compiled 58 vanilla shaders in 350.0 ms
+[22:47:02] [Render thread/INFO] [co.si.cr.Create/]: Loaded 58 train hat configurations.
+[22:47:02] [Render thread/INFO] [ne.ne.ne.cl.en.an.js.AnimationLoader/]: Loaded 0 entity animations
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 3 framebuffers
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 6 post pipelines
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 4 render types
+[22:47:02] [Render thread/INFO] [Veil/]: Enabled bloom pipeline
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 0 quasar particles
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 0 templates
+[22:47:02] [Render thread/INFO] [Veil/]: Loaded 0 modules
+[22:47:02] [Render thread/INFO] [me.er.co.ColorfulLighting/]: Loaded 93 light emitter entries (2 state-specific), 32 filter entries (0 state-specific), 10 entity and 15 item light entries
+[22:47:02] [Render thread/WARN] [flywheel/]: Flywheel backend fell back from 'irisflw:iris_instancing' to 'flywheel:indirect'
+[22:47:02] [Render thread/INFO] [Iris/]: Creating pipeline for dimension minecraft:overworld
+[22:47:03] [Render thread/INFO] [Veil/]: Finished uploading vanilla shaders
+[22:47:05] [Dailies-MCP-Worker-3/INFO] [Dailies/]: Dailies: on unknown graphics the encoder offers [h264_nvenc (NVIDIA hardware), h264_mf (Windows hardware), hevc_nvenc (NVIDIA hardware), hevc_mf (Windows hardware), av1_nvenc (NVIDIA hardware), libsvtav1 (software (SVT-AV1)), libaom-av1 (software (libaom, slow)), libvpx-vp9 (software (libvpx)), prores_ks (software (FFmpeg)), dnxhd (software (FFmpeg))]
+[22:47:07] [Dailies-MCP-Worker-3/INFO] [Dailies/]: Dailies: on NVIDIA GeForce RTX 5090/PCIe/SSE2, 4.6.0 NVIDIA 610.88 the encoder offers [h264_nvenc (NVIDIA hardware), h264_mf (Windows hardware), hevc_nvenc (NVIDIA hardware), hevc_mf (Windows hardware), av1_nvenc (NVIDIA hardware), libsvtav1 (software (SVT-AV1)), libaom-av1 (software (libaom, slow)), libvpx-vp9 (software (libvpx)), prores_ks (software (FFmpeg)), dnxhd (software (FFmpeg))]
+[22:47:23] [Render thread/INFO] [Iris/]: Reloading pipeline on dimension change: minecraft:overworld => minecraft:overworld
+[22:47:23] [Render thread/INFO] [Iris/]: Destroying pipeline minecraft:overworld
+[22:47:23] [Render thread/INFO] [Iris/]: Creating pipeline for dimension minecraft:overworld
+[22:47:23] [Render thread/WARN] [flywheel/]: Flywheel backend fell back from 'irisflw:iris_instancing' to 'flywheel:indirect'
+[22:47:23] [Render thread/INFO] [ChunkBuilder/]: Started 10 worker threads
+[22:47:23] [Render thread/INFO] [voicechat/]: [voicechat/ClientManager] Sending secret request to the server
+[22:47:23] [Render thread/INFO] [flywheel/]: Started 10 worker threads
+[22:47:23] [Render thread/INFO] [Dailies/]: Dailies: opened recording 2026-11-17 22.22.18.dailies (1496 ticks)
+[22:47:24] [Render thread/DEBUG] [voicechat/]: [voicechat/ClientPlayerStateManager] Sent own state to server: disabled=false
+[22:47:24] [Render thread/INFO] [me.er.co.ColorfulLighting/]: Enabled optional Create contraption light integration
+[22:47:24] [Render thread/INFO] [Veil/]: Multi-Bind supported, using core
+[22:47:24] [Render thread/INFO] [ChunkBuilder/]: Stopping worker threads
+[22:47:24] [Render thread/INFO] [ChunkBuilder/]: Started 10 worker threads
+[22:47:24] [Render thread/WARN] [flywheel/]: Flywheel backend fell back from 'irisflw:iris_instancing' to 'flywheel:indirect'
+[22:47:24] [Render thread/INFO] [me.er.co.ColorfulLighting/]: Nearby initial colored-light propagation complete; rebuilt render sections
+[22:47:49] [Render thread/WARN] [Sodium-VertexConsumerTracker/]: Class com.mojang.blaze3d.vertex.BufferBuilder does not support optimized vertex writing code paths, which may cause reduced rendering performance
+[22:49:22] [ColorfulLighting-LightPropagator/ERROR] [me.er.co.ColorfulLighting/]: Colored light propagation failed
+java.lang.NullPointerException: Cannot invoke "me.erykczy.colorfullighting.common.accessors.BlockStateAccessor.getLightEmission(me.erykczy.colorfullighting.common.accessors.LevelAccessor, net.minecraft.core.BlockPos)" because "blockState" is null
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.common.Config.getColorEmission(Config.java:147) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:mixin,re:classloading}
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.common.Config.getColorEmission(Config.java:145) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:mixin,re:classloading}
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.common.ColoredLightEngine$LightPropagator.lambda$propagateLight$0(ColoredLightEngine.java:600) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:classloading}
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.accessors.LevelWrapper.lambda$findLightSources$2(LevelWrapper.java:74) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.chunk.ChunkAccess.findBlocks(ChunkAccess.java:344) ~[neoforge-21.1.266.jar%23201!/:?] {re:mixin,re:classloading}
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.accessors.LevelWrapper.findLightSources(LevelWrapper.java:66) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:classloading}
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.common.ColoredLightEngine$LightPropagator.propagateLight(ColoredLightEngine.java:599) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:classloading}
+	at TRANSFORMER/colorful_lighting@2.6.0/me.erykczy.colorfullighting.common.ColoredLightEngine$LightPropagator.run(ColoredLightEngine.java:448) ~[colorful_lighting-1.21.1-2.6.0.jar%23208!/:?] {re:classloading}
+	at java.base/java.lang.Thread.run(Thread.java:1583) [?:?] {}
+[22:49:58] [Render thread/WARN] [Sodium-VertexConsumerTracker/]: Class com.mojang.blaze3d.vertex.VertexMultiConsumer$Double does not support optimized vertex writing code paths, which may cause reduced rendering performance
+[22:50:22] [Render thread/WARN] [minecraft/SoundEngine]: Missing sound for event: minecraft:item.goat_horn.play
+[22:50:22] [Render thread/WARN] [minecraft/SoundEngine]: Missing sound for event: minecraft:entity.goat.screaming.horn_break
+[22:50:22] [Render thread/INFO] [mojang/Library]: OpenAL initialized on device OpenAL Soft
+[22:50:22] [Render thread/INFO] [minecraft/SoundEngine]: Sound engine started
+[22:50:22] [Render thread/INFO] [Dailies/]: Dailies: export started, 4488 frames of 3840x2160 to .\dailies\exports\2026-11-17_22.50.21.mp4
+[22:50:56] [Render thread/INFO] [Dailies/]: Dailies: export timings (3840x2160 av1, converted on the graphics card) over 4488 frames at 130.7 a second, milliseconds a frame: ticks 0.62, draw 1.47, convert 0.10, readback wait 0.00, copy 0.84, queue wait 3.76, sound 0.09, rest of loop 0.75, pipe write 7.56, writer idle 0.09
+[22:50:57] [Render thread/INFO] [Dailies/]: Dailies: joining sound and picture: E:\Youtube\Dailies\run-play\dailies\encoder\windows-x86_64\ffmpeg.exe -hide_banner -loglevel error -y -i E:\Youtube\Dailies\run-play\.\dailies\exports\2026-11-17_22.50.21.dailies-picture.mp4 -f s16le -ar 48000 -ac 2 -i E:\Youtube\Dailies\run-play\.\dailies\exports\2026-11-17_22.50.21.dailies-sound.pcm -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart E:\Youtube\Dailies\run-play\.\dailies\exports\2026-11-17_22.50.21.mp4
+[22:50:59] [Render thread/INFO] [Dailies/]: Dailies: export finished after 4488 of 4488 frames: E:\Youtube\Dailies\run-play\.\dailies\exports\2026-11-17_22.50.21.mp4
+[22:50:59] [Render thread/WARN] [minecraft/SoundEngine]: Missing sound for event: minecraft:item.goat_horn.play
+[22:50:59] [Render thread/WARN] [minecraft/SoundEngine]: Missing sound for event: minecraft:entity.goat.screaming.horn_break
+[22:50:59] [Render thread/INFO] [mojang/Library]: OpenAL initialized on device OpenAL Soft on Speakers (VB-Audio Voicemeeter VAIO)
+[22:50:59] [Render thread/INFO] [minecraft/SoundEngine]: Sound engine started
+[22:53:32] [Render thread/INFO] [me.er.co.ColorfulLighting/]: Colored light engine reset
+[22:53:32] [Render thread/INFO] [voicechat/]: [voicechat/ClientVoicechat] Clearing audio channels
+[22:53:32] [Render thread/DEBUG] [voicechat/]: [voicechat/ClientPlayerStateManager] Sent own state to server: disabled=true
+[22:53:32] [Render thread/INFO] [ChunkBuilder/]: Stopping worker threads
+[22:54:45] [Render thread/INFO] [minecraft/Minecraft]: Stopping!
+
+BUILD SUCCESSFUL in 8m 3s
+11 actionable tasks: 5 executed, 6 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.1/userguide/configuration_cache_enabling.html
