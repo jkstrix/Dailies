@@ -99,6 +99,7 @@
   "dailies.configuration.defaultFileName": "Default File Name",
   "dailies.configuration.throwawayFrames": "Throwaway Frames",
   "dailies.configuration.exportSplitEncoding": "Use Every NVIDIA Encoder",
+  "dailies.configuration.exportParallelEncoders": "NVIDIA H.264 Encoders at Once",
   "dailies.configuration.exportGpuColour": "Convert Colours on the Graphics Card",
   "dailies.configuration.exportQueueNotify": "Notify When the Queue Is Done",
   "dailies.configuration.captionStyle": "Caption Style",

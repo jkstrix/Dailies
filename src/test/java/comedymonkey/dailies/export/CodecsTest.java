@@ -131,6 +131,16 @@ class CodecsTest {
     }
 
     @Test
+    void onlyNvidiaH264IsMadeByEncodersSideBySide() {
+        assertTrue(Codecs.parallel("h264_nvenc"), "H.264 cannot be split, so it is run several times over instead");
+        assertFalse(Codecs.parallel("hevc_nvenc"), "HEVC splits its frames");
+        assertFalse(Codecs.parallel("av1_nvenc"));
+        assertFalse(Codecs.parallel("h264_amf"));
+        assertTrue(String.join(" ", Codecs.trialArguments("ffmpeg", "h264_nvenc", 3840, 2160)).contains("color=c=gray:s=3840x2160:r=30"));
+        assertTrue(String.join(" ", Codecs.trialArguments("ffmpeg", "h264_nvenc")).contains("s=640x360"));
+    }
+
+    @Test
     void bitratesAreReadAndWritten() {
         assertEquals(20_000_000L, Codecs.parseBitrate("20m"));
         assertEquals(800_000L, Codecs.parseBitrate(" 800K "));

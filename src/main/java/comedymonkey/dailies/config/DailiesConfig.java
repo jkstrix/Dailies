@@ -63,6 +63,7 @@ public final class DailiesConfig {
             text("defaultFileName", "{date}_{time}", "Default name of an exported file. {date} and {time} are filled in when the export starts");
             integer("throwawayFrames", 0, 0, 240, "Extra frames rendered and thrown away before each captured one, for shader packs that build up their image over time");
             bool("exportSplitEncoding", true, "Let an NVIDIA card encode HEVC and AV1 on all of its encoding units at once, each taking a strip of the frame. Much faster at high resolutions on cards with several; turn off for the last bit of quality");
+            integer("exportParallelEncoders", 3, 1, 8, "How many H.264 encoders an NVIDIA card runs at once for an export, each taking every so many seconds of the video, which are joined at the end. H.264 frames cannot be split between a card's encoding units as HEVC and AV1 frames are, so this is how H.264 uses them all. It holds frames in memory while it runs, up to about 1.5 GB at 4K, less when the game has less to spare. 1 uses a single encoder");
             bool("exportGpuColour", true,"Convert video frames to the encoder's colour format on the graphics card, which makes exports faster. Turn off if exported colours ever look wrong");
             bool("exportQueueNotify", true, "Show a notification on the desktop when the export queue is done");
             choice("captionStyle", CaptionStyle.LINES, "How captions drawn into the video show what was said: a line at a time, or each word as it is said, as short videos have them");
