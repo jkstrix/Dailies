@@ -202,7 +202,9 @@ public final class Recorder {
             ServerData server = minecraft.getCurrentServer();
             manifest.worldName = server == null ? "" : server.name == null || server.name.isBlank() ? server.ip : server.name;
         }
-        ModList.get().getMods().forEach(mod -> manifest.mods.add(new RecordingManifest.ModEntry(mod.getModId(), mod.getVersion().toString())));
+        // The self test is a mod of the test games only: it is no part of what a recording needs to play back
+        ModList.get().getMods().stream().filter(mod -> !mod.getModId().equals(comedymonkey.dailies.ScriptedRun.SELF_TEST_MOD))
+            .forEach(mod -> manifest.mods.add(new RecordingManifest.ModEntry(mod.getModId(), mod.getVersion().toString())));
 
         Path file = folder().resolve(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")) + WORKING_EXTENSION);
         this.spool = new Spool(RecordingWriter.create(file, manifest));

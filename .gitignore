@@ -12,3 +12,5 @@ run-modded/
 tools/ffmpeg/work/
 tools/ffmpeg/out/
 run-play/
+# Logs written by the game runs and the scripted tests
+*.log

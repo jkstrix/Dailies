@@ -322,7 +322,10 @@ final class MomentsExtrasSteps {
         String bind = "127.0.0.2";
         try {
             Host.get().saveSetting("mcpToken", "");
-            test.tool("config_set", args("key", "mcpBind", "value", bind));
+            // The server's own settings are the settings screen's alone: a tool may not open the server to the network
+            test.toolError("config_set", args("key", "mcpBind", "value", bind));
+            check(Host.get().setting("mcpBind", "").equals(oldBind), "config_set changed mcpBind, which only the settings screen may");
+            Host.get().saveSetting("mcpBind", bind);
             McpHttpServer.applyConfig();
             test.waitFor(() -> McpHttpServer.isRemote() && McpHttpServer.getListeningPort() == port, 20, "the MCP server to restart for remote access");
 

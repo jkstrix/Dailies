@@ -132,6 +132,9 @@ public final class ModDifferences {
         }
         Map<String, String> installed = new TreeMap<>();
         ModList.get().getMods().forEach(mod -> installed.put(mod.getModId(), mod.getVersion().toString()));
+        // The self test of the test games is never a difference worth telling anyone about
+        installed.remove(comedymonkey.dailies.ScriptedRun.SELF_TEST_MOD);
+        recorded.remove(comedymonkey.dailies.ScriptedRun.SELF_TEST_MOD);
 
         List<Mod> missing = new ArrayList<>();
         List<Mod> extra = new ArrayList<>();
