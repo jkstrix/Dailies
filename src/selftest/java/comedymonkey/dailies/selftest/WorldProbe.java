@@ -406,8 +406,21 @@ final class WorldProbe {
             found.add("dimension: live " + live.dimension + ", playback " + played.dimension);
             return found;
         }
+        chunksHeld(live, played, found);
+        chunkContents(live, played, found);
+        blockEntityData(live, played, found);
+        boxes(live, played, found);
+        entities(live, played, found);
+        named(live, played, found);
+        recorder(live, played, found);
+        sky(live, played, found);
+        facts(live, played, found);
+        hud(live, played, found);
+        return found;
+    }
 
-        // Chunks: none missing, none left over
+    /** Chunks: none missing, none left over */
+    private static void chunksHeld(WorldProbe live, WorldProbe played, List<String> found) {
         TreeSet<String> missing = new TreeSet<>();
         TreeSet<String> extra = new TreeSet<>();
         int leftovers = 0;
@@ -434,7 +447,10 @@ final class WorldProbe {
         if (!extra.isEmpty()) {
             found.add("chunks: " + extra.size() + " in playback that the live game did not hold: " + some(extra));
         }
+    }
 
+    /** In each chunk both hold: its blocks section by section, its biomes, its light and the kinds of block entity in it */
+    private static void chunkContents(WorldProbe live, WorldProbe played, List<String> found) {
         List<String> wrongBlocks = new ArrayList<>();
         List<String> wrongBiomes = new ArrayList<>();
         List<String> wrongLight = new ArrayList<>();
@@ -484,6 +500,10 @@ final class WorldProbe {
         if (!wrongBlockEntities.isEmpty()) {
             found.add("block entities: " + wrongBlockEntities.size() + " chunks differ: " + some(wrongBlockEntities));
         }
+    }
+
+    /** The data each block entity near the recorder holds, where both games hold it */
+    private static void blockEntityData(WorldProbe live, WorldProbe played, List<String> found) {
         List<String> wrongData = new ArrayList<>();
         live.blockEntityData.forEach((what, said) -> {
             String there = played.blockEntityData.get(what);
@@ -494,8 +514,10 @@ final class WorldProbe {
         if (!wrongData.isEmpty()) {
             found.add("block entity data: " + wrongData.size() + " differ: " + some(wrongData));
         }
+    }
 
-        // Watched boxes, place by place
+    /** Watched boxes, place by place */
+    private static void boxes(WorldProbe live, WorldProbe played, List<String> found) {
         for (Map.Entry<Region, int[]> entry : live.regionBlocks.entrySet()) {
             Region region = entry.getKey();
             int[] ours = entry.getValue();
@@ -522,8 +544,10 @@ final class WorldProbe {
                 found.add("box '" + region.name() + "': light differs at " + wrongLit.size() + " of " + ours.length + " places: " + some(wrongLit));
             }
         }
+    }
 
-        // Entities: the same ones, of the same kinds
+    /** Entities: the same ones, of the same kinds */
+    private static void entities(WorldProbe live, WorldProbe played, List<String> found) {
         List<String> wrongEntities = new ArrayList<>();
         live.entities.forEach((id, kind) -> {
             String there = played.entities.get(id);
@@ -539,6 +563,10 @@ final class WorldProbe {
         if (!wrongEntities.isEmpty()) {
             found.add("entities: " + wrongEntities.size() + " differ (live " + live.entities.size() + ", playback " + played.entities.size() + "): " + some(wrongEntities));
         }
+    }
+
+    /** The named entities being followed: each there, near its live place, in the same state */
+    private static void named(WorldProbe live, WorldProbe played, List<String> found) {
         live.named.forEach((name, ours) -> {
             Tracked theirs = played.named.get(name);
             if (theirs == null) {
@@ -554,6 +582,10 @@ final class WorldProbe {
                 found.add("'" + name + "' live: " + ours.state() + "; playback: " + theirs.state());
             }
         });
+    }
+
+    /** The recorder: there, near their live place, in the same state */
+    private static void recorder(WorldProbe live, WorldProbe played, List<String> found) {
         if (live.recorder != null) {
             if (played.recorder == null) {
                 found.add("the recorder is missing in playback");
@@ -569,8 +601,10 @@ final class WorldProbe {
                 }
             }
         }
+    }
 
-        // The sky
+    /** The sky: the time of day, the weather and the sky's colour */
+    private static void sky(WorldProbe live, WorldProbe played, List<String> found) {
         if (Math.abs(live.dayTime - played.dayTime) > 2) {
             found.add("time of day: live " + live.dayTime + ", playback " + played.dayTime);
         }
@@ -585,13 +619,20 @@ final class WorldProbe {
                 }
             }
         }
+    }
 
+    /** The answers the steps asked of the game, such as the cracks in a block being mined */
+    private static void facts(WorldProbe live, WorldProbe played, List<String> found) {
         live.facts.forEach((what, ours) -> {
             String theirs = played.facts.get(what);
             if (!ours.equals(theirs)) {
                 found.add(what + ": live " + ours + ", playback " + theirs);
             }
         });
+    }
+
+    /** The HUD's numbers: health, hunger, air, experience and the game mode */
+    private static void hud(WorldProbe live, WorldProbe played, List<String> found) {
         if (live.hud != null) {
             if (played.hud == null) {
                 found.add("HUD: playback has none");
@@ -600,7 +641,6 @@ final class WorldProbe {
                     + ", playback " + java.util.Arrays.toString(played.hud));
             }
         }
-        return found;
     }
 
     /** A spawner counts down to its next mob on every tick of each game for itself; the count is left out */
