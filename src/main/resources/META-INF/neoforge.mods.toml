@@ -1,0 +1,44 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies"
+version = "${version}"
+displayName = "Dailies"
+logoFile = "dailies.png"
+logoBlur = false
+authors = "James Knight"
+description = '''Records what you played, plays it back from any angle, and tells you which moments are worth cutting into a video. Client only: never needed on a server.'''
+
+[[mixins]]
+config = "dailies.mixins.json"
+
+[[mixins]]
+config = "dailies.sable.mixins.json"
+
+[[mixins]]
+config = "dailies.extras.mixins.json"
+
+[[mixins]]
+config = "dailies.sound.mixins.json"
+
+[[mixins]]
+config = "dailies.looks.mixins.json"
+
+[[mixins]]
+config = "dailies.renderers.mixins.json"
+
+[[dependencies.dailies]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.dailies]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "CLIENT"

@@ -1,0 +1,7 @@
+SVT-AV1 (Alliance for Open Media)
+
+Licence: BSD 3-clause clear licence, with the Alliance for Open Media Patent License 1.0 (PATENTS.md).
+Source: https://gitlab.com/AOMediaCodec/SVT-AV1 (the exact version and its sha256 are in sources.lock)
+Used for: Fast AV1 video in software, built into ffmpeg.
+
+The licence text, as the project publishes it in its own source, is in licenses/svt-av1/.

@@ -1,0 +1,16 @@
+.gradle/
+build/
+bin/
+run/
+run-test/
+run-server/
+.eclipse/
+.vscode/
+*.class
+.claude/
+run-modded/
+tools/ffmpeg/work/
+tools/ffmpeg/out/
+run-play/
+# Logs written by the game runs and the scripted tests
+*.log

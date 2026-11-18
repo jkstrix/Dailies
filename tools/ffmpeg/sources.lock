@@ -1,0 +1,30 @@
+# The exact sources the encoder is built from (specification EXP-8). One per line: name|version|url|sha256
+#
+# Every download is checked against its sha256 before it is used, and the build stops on any difference.
+# A line whose sha256 is "-" has not been pinned yet: run "./build.sh lock" once, on a machine you trust, to
+# download each such source, print its sha256 and write it here. Commit the result; from then on the build is
+# pinned. Changing a version means changing its url, setting its sha256 back to "-" and locking again.
+#
+# Licences (all allow an LGPL build with no GPL and no non-free parts):
+#   ffmpeg            LGPL 2.1 or later, as configured here (no --enable-gpl, no --enable-nonfree, no --enable-version3)
+#   zlib              zlib licence
+#   opus              BSD 3-clause
+#   libvpx            BSD 3-clause, with Google's patent grant
+#   libaom            BSD 2-clause, with the Alliance for Open Media patent licence
+#   svt-av1           BSD 3-clause clear, with the Alliance for Open Media patent licence
+#   nv-codec-headers  MIT (headers only; the NVIDIA driver supplies the encoder at run time)
+#   amf               MIT (headers only; the AMD driver supplies the encoder at run time)
+#   libvpl            MIT (Intel's dispatcher; the Intel driver supplies the encoder at run time)
+#   libva             MIT (Linux only, shipped as shared libraries beside ffmpeg; the drivers are the system's)
+#
+# Never added: x264, x265 (GPL), OpenH264 (its patent licence only covers Cisco's own binaries), fdk-aac (non-free).
+ffmpeg|8.1.2|https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz|464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c
+zlib|1.3.1|https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz|9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+opus|1.5.2|https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz|65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+libvpx|1.15.2|https://github.com/webmproject/libvpx/archive/refs/tags/v1.15.2.tar.gz|26fcd3db88045dee380e581862a6ef106f49b74b6396ee95c2993a260b4636aa
+libaom|3.12.1|https://storage.googleapis.com/aom-releases/libaom-3.12.1.tar.gz|9e9775180dec7dfd61a79e00bda3809d43891aee6b2e331ff7f26986207ea22e
+svt-av1|3.0.2|https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/v3.0.2/SVT-AV1-v3.0.2.tar.gz|5af7f4376aa00a4dee32df04be1cdd1983c9940bcc019ee6b29bb8a216bae2f8
+nv-codec-headers|13.0.19.0|https://github.com/FFmpeg/nv-codec-headers/archive/refs/tags/n13.0.19.0.tar.gz|86d15d1a7c0ac73a0eafdfc57bebfeba7da8264595bf531cf4d8db1c22940116
+amf|1.4.36|https://github.com/GPUOpen-LibrariesAndSDKs/AMF/archive/refs/tags/v1.4.36.tar.gz|240a42033babc7920e5476506d5ac0c5628f67908833168e746406808d0ef146
+libvpl|2.15.0|https://github.com/intel/libvpl/archive/refs/tags/v2.15.0.tar.gz|7218c3b8206b123204c3827ce0cf7c008d5c693c1f58ab461958d05fe6f847b3
+libva|2.22.0|https://github.com/intel/libva/archive/refs/tags/2.22.0.tar.gz|467c418c2640a178c6baad5be2e00d569842123763b80507721ab87eb7af8735

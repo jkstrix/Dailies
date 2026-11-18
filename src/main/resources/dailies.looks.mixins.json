@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "package": "comedymonkey.dailies.mixin.looks",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "EntityRenderDispatcherMixin",
+    "GlowMixin",
+    "CapeLayerMixin",
+    "ArmourLayerMixin",
+    "HorseArmourLayerMixin",
+    "WolfArmourLayerMixin",
+    "WeatherMixin",
+    "SkyMixin",
+    "CloudsOptionMixin",
+    "LightTextureMixin",
+    "ParticleDropMixin",
+    "TerrainMixin",
+    "BlockEntityMixin",
+    "BeamMixin",
+    "ProjectionMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

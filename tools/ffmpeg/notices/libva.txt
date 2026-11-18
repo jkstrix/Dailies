@@ -1,0 +1,7 @@
+libva (VA-API)
+
+Licence: MIT licence.
+Source: https://github.com/intel/libva (the exact version and its sha256 are in sources.lock)
+Used for: Linux only, shipped as libva.so.2 and libva-drm.so.2 beside ffmpeg: lets ffmpeg use AMD and Intel hardware encoders through the machine's own VA-API drivers.
+
+The licence text, as the project publishes it in its own source, is in licenses/libva/.

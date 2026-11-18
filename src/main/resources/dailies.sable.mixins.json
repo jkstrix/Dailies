@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "package": "comedymonkey.dailies.mixin.sable",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "SableMotionMixin",
+    "SableTimingMixin",
+    "SableSmootherMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
