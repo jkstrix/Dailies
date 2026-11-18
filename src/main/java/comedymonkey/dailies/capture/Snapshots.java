@@ -619,7 +619,18 @@ public final class Snapshots {
                     // Its blocks as stored, then its light as it is now: in this order, by the writer, with the chunks below
                     try {
                         java.util.concurrent.atomic.AtomicReference<byte[]> lightName = new java.util.concurrent.atomic.AtomicReference<>();
-                        Packet<? super ClientGamePacketListener> lightPacket = new net.minecraft.network.protocol.game.ClientboundLightUpdatePacket(chunk.getPos(), level.getLightEngine(), null, null);
+                        net.minecraft.network.protocol.game.ClientboundLightUpdatePacket lightPacket = new net.minecraft.network.protocol.game.ClientboundLightUpdatePacket(chunk.getPos(), level.getLightEngine(), null, null);
+                        // A section with no block light keeps none, and the packet leaves it out; the stored chunk it goes on
+                        // may have had some there, from a light that has gone, and that stayed (a dried-out laboratory left
+                        // block light 2 in playback where the live game had none). Said outright to be dark, it is cleared.
+                        // Sky light is left as it is: a section without it is lit from above, not dark
+                        java.util.BitSet blocks = lightPacket.getLightData().getBlockYMask();
+                        java.util.BitSet dark = lightPacket.getLightData().getEmptyBlockYMask();
+                        for (int section = 0; section < level.getLightEngine().getLightSectionCount(); section++) {
+                            if (!blocks.get(section)) {
+                                dark.set(section);
+                            }
+                        }
                         fresh.add(null);
                         freshNames.add(stored.name());
                         fresh.add(lightPacket);
