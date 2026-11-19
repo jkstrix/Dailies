@@ -20,6 +20,35 @@ for server-driven windows that are play screens but draw wrongly in playback.
 
 Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessions.
 
+## Progress (19 November 2026)
+
+**Done** means the code, its spec rows and its tests are in and pass. **Not started** means nothing is built yet.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1.1 Record windows | Done | `dailies:windows` records (`windows/WindowCapture`, `WindowState`); REC-25, and REC-11 names the exception |
+| 1.2 Draw them | Done | `windows/WindowLayer`; PLAY-20, EXP-16. Deny list: the stonecutter (its recipes need packets REC-11 drops) |
+| 1.3 Jumps, trim and combine | Done | The whole window in each snapshot; unit tests only (`WindowStateTest`) |
+| 1.4 The "Open windows" look | Done | `showWindows`, on by default, under Show HUD |
+| 1.5 Companion plugin API | Done | `CompanionPlugins` on `dailies_companion:compat`, client side `compat/companion/CompanionCompat`; SRV-6 to 8. First use: the server's list of plugins |
+| 1.6 Spec and tests | Done | Display test `WindowSteps`, group `windows`: chest, furnace, villager trades and inventory drawn in first person, absent in third person and flying free. Passed in game |
+| 2.1 Client compat API | Not started | |
+| 2.2 Server API | Not started | Builds on 1.5 |
+| 2.3 Template compat project | Not started | |
+| 3 Post Rider | Not started | Hooks go into `E:/Repos/Pony Express` |
+| 4.1 Create | Not started | Every machine setting first |
+| 4.2 The owner's mods (Create Addons, McpCraft) | Not started | Hooks in the mods themselves |
+| 4.3 Jade | Not started | |
+| 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
+
+Known limits of stage 1, for a compat or a later fix:
+- other mods' listeners on window draw events still fire in playback;
+- a mod window may write into the playback world's blocks as it is filled;
+- the recipe book panel is never shown;
+- a mod window already open when recording starts is left out;
+- the creative inventory is not recorded;
+- the companion has no unit tests of its own (its routing is tested in the core, `CompatRoutesTest`).
+
 ---
 
 ## What the modpack draws during play
@@ -69,7 +98,7 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
 
 ---
 
-## Stage 1: standard windows in the core and the companion (Spec + core, L)
+## Stage 1: standard windows in the core and the companion (Spec + core, L) — Done
 
 1. **Record windows (REC).** The player's own window packets, which REC-11 drops today, are recorded into a stream of
    their own and never replayed into the playback world's packet handling: open screen, container contents, slot
@@ -97,7 +126,7 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
      recording, then check in first-person playback with the HUD on that each window is drawn, and in third person
      that it is not. Jumps, trim and snapshots are covered by unit tests.
 
-## Stage 2: the compat API and a template (Spec + core + companion, M)
+## Stage 2: the compat API and a template (Spec + core + companion, M) — Not started
 
 1. **Client API (`comedymonkey.dailies.api.compat`).** A compat registers:
    - an id and a version;
@@ -115,7 +144,7 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
 3. **A template compat project:** Gradle, the client and server halves, one example screen and one overlay, and a test
    step. It is copied to start each compat.
 
-## Stage 3: Post Rider as the first compat (Owner's mod, M)
+## Stage 3: Post Rider as the first compat (Owner's mod, M) — Not started
 
 Post Rider has one window and two screens, which makes it a good first test. It is the owner's own mod (source in `E:/Repos/Pony Express`), so its hooks go into the mod itself, implementing the compat API directly, rather than into a separate compat jar.
 
@@ -130,7 +159,7 @@ Post Rider has one window and two screens, which makes it a good first test. It 
 5. **Test:** Post Rider joins the modded test's mods. A small display test opens a mailbox, reads a letter and writes
    one while recording, and checks each screen is drawn in first-person playback.
 
-## Stage 4: the rest of the pack, by value (Compat, L)
+## Stage 4: the rest of the pack, by value (Compat, L) — Not started
 
 In order of how often they appear in a Create let's play:
 
