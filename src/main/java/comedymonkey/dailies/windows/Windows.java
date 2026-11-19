@@ -1,5 +1,7 @@
 package comedymonkey.dailies.windows;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.protocol.Packet;
 import net.neoforged.bus.api.IEventBus;
 
@@ -32,6 +34,23 @@ public final class Windows {
     /** The recorder's game is about to apply a packet: an open-screen packet says what the next window is. Client thread */
     public static void seen(Packet<?> packet) {
         WindowCapture.seen(packet);
+    }
+
+    /**
+     * Whether the screen open now is a play screen the recording keeps: one a compat records whole, Dailies' own books
+     * and signs among them, or a window Dailies records itself. While one pauses the game the recording keeps time
+     * (REC-36). Client thread
+     */
+    public static boolean recordsScreen(Minecraft minecraft) {
+        Screen screen = minecraft.screen;
+        if (screen == null || minecraft.player == null) {
+            return false;
+        }
+        try {
+            return CompatCapture.records(screen) || WindowCapture.records(minecraft.player, screen);
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
 }

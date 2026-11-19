@@ -103,6 +103,22 @@ final class WindowCapture {
         }
     }
 
+    /** What the rules for which windows are kept go by, for a screen and its menu, if it has one */
+    private static WindowRules.Facts facts(LocalPlayer player, Screen screen, AbstractContainerMenu menu) {
+        if (menu == null) {
+            return WindowRules.Facts.notAWindow();
+        }
+        Opened known = opened != null && opened.containerId() == menu.containerId ? opened : null;
+        return new WindowRules.Facts(true, screen instanceof InventoryScreen && menu == player.inventoryMenu, screen instanceof HorseInventoryScreen,
+            menu == player.containerMenu, menu.containerId, menuType(menu), known != null && known.horse(), Compats.claims(screen));
+    }
+
+    /** Whether this screen is a window the recording keeps, without reading what it holds. Client thread */
+    static boolean records(LocalPlayer player, Screen screen) {
+        AbstractContainerMenu menu = screen instanceof MenuAccess<?> access ? access.getMenu() : null;
+        return WindowRules.decide(facts(player, screen, menu)) != null;
+    }
+
     /** The window on the recorder's screen now, if it is one a recording keeps; null otherwise */
     private static Window current(Minecraft minecraft, LocalPlayer player) {
         Screen screen = minecraft.screen;
@@ -110,15 +126,7 @@ final class WindowCapture {
             return null;
         }
         AbstractContainerMenu menu = screen instanceof MenuAccess<?> access ? access.getMenu() : null;
-        WindowRules.Facts facts;
-        if (menu == null) {
-            facts = WindowRules.Facts.notAWindow();
-        } else {
-            String type = menuType(menu);
-            Opened known = opened != null && opened.containerId() == menu.containerId ? opened : null;
-            facts = new WindowRules.Facts(true, screen instanceof InventoryScreen && menu == player.inventoryMenu, screen instanceof HorseInventoryScreen,
-                menu == player.containerMenu, menu.containerId, type, known != null && known.horse(), Compats.claims(screen));
-        }
+        WindowRules.Facts facts = facts(player, screen, menu);
         WindowState.Source source = WindowRules.decide(facts);
         if (source == null) {
             if (facts.menuType() != null && WindowRules.denied(facts.menuType()) && SAID.add("denied " + facts.menuType())) {

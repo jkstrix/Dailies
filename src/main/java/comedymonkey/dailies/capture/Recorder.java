@@ -77,6 +77,7 @@ public final class Recorder {
     private static final int PART_TICKS = 40;
     private static final int PART_BYTES = 1024 * 1024;
     private static final DateTimeFormatter NAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss");
+    private static final byte[] NOTHING = new byte[0];
 
     private static final Recorder INSTANCE = new Recorder();
     private static final List<Runnable> TICK_HOOKS = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -512,7 +513,13 @@ public final class Recorder {
             Snapshots.forget();
             return;
         }
-        if (minecraft.isPaused() || this.settling) {
+        if (this.settling) {
+            return;
+        }
+        // In singleplayer a book pauses the game as the pause menu does. Under a play screen the recording keeps time with
+        // the world standing still; under any other the recording's clock stops with the world's (REC-36)
+        StillTicks.Kind kind = StillTicks.of(minecraft.isPaused(), () -> comedymonkey.dailies.windows.Windows.recordsScreen(minecraft));
+        if (kind == StillTicks.Kind.NONE) {
             return;
         }
         if (!this.spool.hasRoom()) {
@@ -524,12 +531,20 @@ public final class Recorder {
         if (this.waitingForSnapshot || this.tick - this.segmentStartTick >= this.segmentTicks) {
             this.beginSegment(minecraft, listener);
         }
-        this.own.tick(minecraft.player, 20 / Math.max(1, Math.min(20, Host.get().setting("recorderUpdatesPerSecond", 20))), this::write);
-        if (this.own.takeJumped()) {
-            LocalPlayer player = minecraft.player;
-            java.nio.ByteBuffer snap = java.nio.ByteBuffer.allocate(4 + 24 + 8);
-            snap.putInt(player.getId()).putDouble(player.getX()).putDouble(player.getY()).putDouble(player.getZ()).putFloat(player.getYRot()).putFloat(player.getXRot());
-            this.writeExtension(SNAP, snap.array());
+        if (kind == StillTicks.Kind.STILL) {
+            // The world was not ticked, so nothing of it has changed, the recorder's own body included: it is not looked at,
+            // and its count of ticks, which times how a watching game eases it into place, waits with the world. The
+            // record says so where the body's records would be, ahead of the tick's count, so playback reads it just before
+            // it would tick its own world for this tick
+            this.writeExtension(StillTicks.ID, NOTHING);
+        } else {
+            this.own.tick(minecraft.player, 20 / Math.max(1, Math.min(20, Host.get().setting("recorderUpdatesPerSecond", 20))), this::write);
+            if (this.own.takeJumped()) {
+                LocalPlayer player = minecraft.player;
+                java.nio.ByteBuffer snap = java.nio.ByteBuffer.allocate(4 + 24 + 8);
+                snap.putInt(player.getId()).putDouble(player.getX()).putDouble(player.getY()).putDouble(player.getZ()).putFloat(player.getYRot()).putFloat(player.getXRot());
+                this.writeExtension(SNAP, snap.array());
+            }
         }
 
         this.tick++;

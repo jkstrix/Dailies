@@ -9,7 +9,8 @@ public interface ScreenPart {
 
     /**
      * What the screen shows, while recording: called at the end of each recorded tick while the recorder's game shows
-     * the claimed screen. Client thread.
+     * the claimed screen, and once more for a claimed screen first seen while the game stands paused, whose answer says
+     * whether the recording keeps time under it (specification REC-36). Client thread.
      *
      * @param screen the screen as the recorder's game holds it; only read it
      * @return the whole state, the least that draws the screen again, or null to leave this screen out of the recording

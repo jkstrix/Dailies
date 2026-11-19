@@ -36,6 +36,13 @@ final class CompatCapture {
     /** How many snapshots the recorder had taken at the last recorded tick */
     private static int snapshotsSeen = -1;
 
+    /**
+     * The screen whose claim was last asked for its state, and whether it gave one: held weakly, so a screen closed is let
+     * go. Client thread
+     */
+    private static java.lang.ref.WeakReference<Screen> asked = new java.lang.ref.WeakReference<>(null);
+    private static boolean askedGave = false;
+
     private CompatCapture() {
     }
 
@@ -43,13 +50,47 @@ final class CompatCapture {
         Recorder.everyRecordedTick(CompatCapture::tick);
     }
 
+    private static void remember(Screen screen, boolean gave) {
+        if (asked.get() != screen) {
+            asked = new java.lang.ref.WeakReference<>(screen);
+        }
+        askedGave = gave;
+    }
+
+    /**
+     * Whether a compat records this screen whole: a claim matches it and gives a state for it, so a mod's screen built on
+     * a claimed one, which the claim turns down, is not counted. While the game stands paused under such a screen the
+     * recording keeps time (REC-36), and every tick it keeps asks the claim again, so the answer is known from the last
+     * one. A screen not yet asked about, one that opened while the game already stood paused, is asked here once.
+     * Client thread
+     */
+    static boolean records(Screen screen) {
+        if (asked.get() == screen) {
+            return askedGave;
+        }
+        CompatClaims.Claim claim;
+        try {
+            claim = Compats.screenClaim(screen);
+        } catch (Throwable t) {
+            claim = null;
+        }
+        CompatClaims.Claim found = claim;
+        boolean gave = found != null && capture(found, () -> ((ScreenPart) found.part()).capture(screen)) != null;
+        remember(screen, gave);
+        return gave;
+    }
+
     /** Every claim showing on the recorder's screen now, by compat id */
     private static Map<String, List<CompatWrites.Showing>> showing(Minecraft minecraft) {
         Map<String, List<CompatWrites.Showing>> now = new LinkedHashMap<>();
         Screen screen = minecraft.screen;
         CompatClaims.Claim screenClaim = screen == null ? null : Compats.screenClaim(screen);
+        if (screen != null) {
+            remember(screen, false);
+        }
         if (screenClaim != null) {
             byte[] state = capture(screenClaim, () -> ((ScreenPart) screenClaim.part()).capture(screen));
+            remember(screen, state != null);
             if (state != null) {
                 int[] corner = corner(screenClaim, screen);
                 now.computeIfAbsent(screenClaim.compatId(), id -> new ArrayList<>()).add(new CompatWrites.Showing(screenClaim.name(), state, pointer(minecraft, corner), corner == null, ticksBetween(screenClaim)));
