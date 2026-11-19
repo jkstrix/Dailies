@@ -14,7 +14,10 @@ public final class Records {
     public static final int TICK = 1;
     /** One game packet as the game encodes it for the wire (packet id, then body) */
     public static final int PACKET = 2;
-    /** A game packet kept as shared data, such as a chunk. Payload: the name of the shared data (32 bytes) */
+    /**
+     * A game packet kept as shared data, such as a chunk. Payload: the name (32 bytes) of the shared data that is its piece
+     * list, which puts it back together from bytes and other shared data ({@link PacketPieces})
+     */
     public static final int SHARED_PACKET = 3;
     /** A mod's message. Payload: its id as text (varint length, UTF-8), then the whole packet as for PACKET */
     public static final int PAYLOAD = 4;
@@ -42,6 +45,13 @@ public final class Records {
      * numbers, each the change since the TIME record before it in the same segment; see {@link TimeIndex}
      */
     public static final int TIME = 14;
+    /**
+     * Inside a snapshot: the chunks the snapshot names go here, each its stored chunk ({@link #SHARED_PACKET} as it was) and
+     * then any stored light on top, in the order of {@link ChunkListing}. No payload: the chunks are in the segment's listing
+     * block, read with {@link RecordingFile#listing}, so a jump finds them without unpacking the records and a snapshot
+     * costs only the chunks that changed since the one before
+     */
+    public static final int CHUNKS = 15;
 
     private Records() {
     }

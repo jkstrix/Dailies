@@ -18,19 +18,28 @@ public final class RecordingWriter implements Closeable {
     private int segment = -1;
     private int segmentStartTick = 0;
     private boolean closed = false;
+    private final Container.ListingChain listings = new Container.ListingChain();
 
     private RecordingWriter(Container container, RecordingManifest manifest) {
         this.container = container;
         this.manifest = manifest;
     }
 
-    /** Starts a new file. The manifest must have its id; it is written at once so that a crash leaves a file that says what it is */
+    /**
+     * Starts a new file, packed with the mod's own dictionaries, which go into it first. The manifest must have its id; it
+     * is written at once so that a crash leaves a file that says what it is
+     */
     public static RecordingWriter create(Path file, RecordingManifest manifest) throws IOException {
+        return create(file, manifest, Packing.Dictionaries.current());
+    }
+
+    /** The same, packed with other dictionaries: for the tests, which write recordings as another version of Dailies would */
+    static RecordingWriter create(Path file, RecordingManifest manifest, Packing.Dictionaries dictionaries) throws IOException {
         if (manifest.id == null || manifest.id.isEmpty()) {
             throw new IllegalArgumentException("A recording needs an id");
         }
         Files.createDirectories(file.toAbsolutePath().getParent());
-        Container container = Container.create(file);
+        Container container = Container.create(file, dictionaries);
         try {
             manifest.finished = false;
             container.append(Container.MANIFEST, 0, 0, 0, manifest.toBytes());
@@ -72,7 +81,19 @@ public final class RecordingWriter implements Closeable {
         if (this.segment < 0) {
             throw new IllegalStateException("beginSegment has not been called");
         }
-        this.container.append(Container.SEGMENT_PART, this.segment, this.segmentStartTick, endTick, Packing.pack(new byte[0], data, from, length));
+        this.container.append(Container.SEGMENT_PART, this.segment, this.segmentStartTick, endTick, this.container.packPart(data, from, length));
+    }
+
+    /**
+     * Stores the chunks the current segment's snapshot names, apart from its records (file.ChunkListing): whole for the
+     * first snapshot and every {@link ChunkListing#FULL_EVERY}th, and as the changes from the snapshot before for the rest.
+     * Call it once a segment, before the part whose records hold {@link Records#CHUNKS}, once every chunk it names is stored
+     */
+    public void putListing(ChunkListing listing) throws IOException {
+        if (this.segment < 0) {
+            throw new IllegalStateException("beginSegment has not been called");
+        }
+        this.listings.append(this.container, this.segment, listing, false);
     }
 
     /**
@@ -91,12 +112,17 @@ public final class RecordingWriter implements Closeable {
      * @return the name to ask for it by
      */
     public String putShared(byte[] data, byte[] hash) throws IOException {
+        return this.putShared(data, 0, data.length, hash);
+    }
+
+    /** The same, for a stretch of an array: a section of a chunk packet, say, stored without being copied out first */
+    public String putShared(byte[] data, int from, int length, byte[] hash) throws IOException {
         if (hash.length != Container.HASH_BYTES) {
             throw new IllegalArgumentException("A name of shared data is " + Container.HASH_BYTES + " bytes, not " + hash.length);
         }
         String name = HexFormat.of().formatHex(hash);
         if (!this.container.shared.containsKey(name)) {
-            this.container.appendShared(name, Packing.pack(hash, data, 0, data.length));
+            this.container.appendShared(name, this.container.packShared(hash, data, from, length));
         }
         return name;
     }

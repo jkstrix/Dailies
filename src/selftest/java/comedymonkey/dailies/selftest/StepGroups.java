@@ -21,14 +21,16 @@ final class StepGroups {
     static final Map<String, List<String>> NEEDS = Map.ofEntries(
         Map.entry("recording", List.of("world")),
         Map.entry("watching", List.of("world", "recording")),
-        Map.entry("moments", List.of("world", "recording")),
+        // Its owner-feature steps cue moments from the title screen, where the playback steps leave the game
+        Map.entry("moments", List.of("world", "recording", "playback")),
         Map.entry("packs", List.of("world")),
         Map.entry("playback", List.of("recording")),
         Map.entry("balloon", List.of("playback")),
         Map.entry("export", List.of("playback")),
         Map.entry("editor", List.of("export")),
         Map.entry("renderer", List.of("playback")),
-        Map.entry("library", List.of("recording", "packs")));
+        // The library cues the kill through its clip, which the moments steps make (OwnerFeatureSteps)
+        Map.entry("library", List.of("recording", "packs", "moments")));
 
     private StepGroups() {
     }

@@ -182,6 +182,17 @@ dependencies {
         encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
     }
 
+    // Zstandard (zstd-jni, BSD 2-Clause, with the native zstd for every platform Dailies ships for), which every block of a
+    // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
+    // The runs that load Dailies from its classes need it on the classpath that is not loaded as boot modules, as MDG asks
+    // of libraries for 1.21.1. Only those: the runs that load the built jar (testModded, playModded, manualShots) get it
+    // from inside the jar, and a second copy on their classpath stopped the game ("reads more than one module named
+    // com.github.luben.zstd_jni")
+    jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
+    for (run in ['client', 'testClient', 'handsOn', 'kitShots']) {
+        add("${run}AdditionalRuntimeClasspath", 'com.github.luben:zstd-jni:1.5.7-25')
+    }
+
     // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
     compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
     selftestCompileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
@@ -192,13 +203,34 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // The game brings its own copy when it runs; unit tests run without the game
     testImplementation 'com.google.code.gson:gson:2.10.1'
+    // Only for the compression benchmark (ZstdBenchmarkTest), which also weighs aircompressor (Apache 2.0), a pure-Java
+    // zstd, against the zstd-jni recordings are packed with. Never packed into the mod
+    testImplementation 'io.airlift:aircompressor:2.0.3'
 }
 
 test {
     useJUnitPlatform {
-        // Timings that say as much about the machine as the code; run by themselves with the task below
-        excludeTags 'benchmark'
+        // Timings that say as much about the machine as the code, and the training of the dictionaries, which writes
+        // into the sources; each run by itself with a task below
+        excludeTags 'benchmark', 'dictionaries'
     }
+}
+
+tasks.register('trainDictionaries', Test) {
+    description = 'Trains the Zstandard dictionaries recordings are packed with on real recordings, into src/main/resources/assets/dailies/zstd'
+    group = 'build'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'dictionaries'
+    }
+    maxHeapSize = '6g'
+    // The recordings to train on, as for the benchmark: -Pdailies.bench.recordings=a.dailies,b.dailies
+    providers.gradlePropertiesPrefixedBy('dailies.bench.').get().each { key, value -> systemProperty key, value }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
 }
 
 tasks.register('benchmarks', Test) {
@@ -209,9 +241,22 @@ tasks.register('benchmarks', Test) {
     useJUnitPlatform {
         includeTags 'benchmark'
     }
+    // The compression benchmark holds two long recordings' data unpacked
+    maxHeapSize = '6g'
+    // Settings for the benchmarks passed on from the command line, such as -Pdailies.bench.recordings=a.dailies,b.dailies
+    providers.gradlePropertiesPrefixedBy('dailies.bench.').get().each { key, value -> systemProperty key, value }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
 }
 
 processResources {
+    if (encoderSource == 'bytedeco') {
+        // The JavaCPP Presets' build carries libraries of its own (OpenH264, freetype, lame and others), whose licence texts
+        // go in only with it; our own build brings its own texts (licenses/ffmpeg-build, below)
+        from('src/encoder-licenses/bytedeco') { into 'licenses' }
+    }
     from(encoderJars) {
         into 'encoder'
         // Either kind becomes encoder/ffmpeg-<platform>.jar, which is where Encoder looks

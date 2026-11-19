@@ -909,8 +909,12 @@ public final class QueueRunner {
         job.preset = presetName(preset);
         Path place = exportsFolder();
         if (folder != null && !folder.isBlank()) {
-            Path given = Path.of(folder.trim());
-            place = given.isAbsolute() ? given : place.resolve(given);
+            // A full path as given, or a folder inside dailies/exports; never a drive-relative D:clips or a .. leading out
+            place = comedymonkey.dailies.file.SafePaths.absoluteOrWithin(place, folder);
+            if (place == null) {
+                throw new IllegalArgumentException("'output_folder' must be a full path or a folder inside dailies/exports"
+                    + " (no drive without a slash after it, no leading slash, no .. leading out of it): " + folder);
+            }
         }
         String wanted = name == null || name.isBlank()
             ? "Point of view - " + (job.recorder.isBlank() ? job.recordingName : job.recorder) + " - ticks " + job.startTick + " to " + job.endTick

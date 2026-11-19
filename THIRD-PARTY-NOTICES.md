@@ -1,81 +1,65 @@
 # Third-party notices
 
-Dailies itself is under the MIT licence (see `LICENSE`). Its jar also carries the video encoder below, unchanged, as
-a separate program, and the weights of a small sound classifier (see "YAMNet" at the end). This file and the licence texts it names are inside the jar too: this file at the top, the texts
+Dailies itself is under the MIT licence (see `LICENSE`). Its jar also carries the video encoder below, run as
+a separate program, the Zstandard library recordings are packed with (see "Zstandard"), and the weights of a small
+sound classifier (see "YAMNet" at the end). This file and the licence texts it names are inside the jar too: this file at the top, the texts
 in the `licenses` folder.
 
 ## Platforms
 
-A video encoder is packed in for **Windows on 64-bit Intel or AMD processors (windows-x86_64)** only, for now.
-On Linux and macOS, and on Windows on ARM, Dailies says so in the Export tab and exports numbered PNG pictures;
-everything else in the mod works the same. A build of our own for every platform is written but not yet packed in
-(see "Rebuilding" below).
+A video encoder is packed in for **Windows (64-bit Intel or AMD), Linux (64-bit Intel or AMD, and ARM) and macOS
+(Apple silicon and Intel)**: `windows-x86_64`, `linux-x86_64`, `linux-arm64`, `macosx-arm64` and `macosx-x86_64`. On
+any other platform (Windows on ARM, say) Dailies says so in the Export tab and exports numbered PNG pictures;
+everything else in the mod works the same.
 
 ## FFmpeg
 
-- **What:** the FFmpeg libraries and the `ffmpeg` and `ffprobe` programs, used to encode exported video and sound.
-- **Version:** FFmpeg 8.1.2, as packaged by the JavaCPP Presets, artifact `org.bytedeco:ffmpeg:8.1.2-1.5.14`,
-  platform `windows-x86_64`. This is the build without the `-gpl` classifier: it is configured with
-  `--enable-version3` and without `--enable-gpl` or `--enable-nonfree`.
-- **Licence:** GNU Lesser General Public License, version 3 or later (FFmpeg is LGPL 2.1 or later; `--enable-version3`
-  makes this build LGPL 3 or later). FFmpeg's own statement is `licenses/FFmpeg-LICENSE.md`; the licence is
-  `licenses/FFmpeg-COPYING.LGPLv3`, which adds to the GNU General Public License, version 3,
-  `licenses/FFmpeg-COPYING.GPLv3`.
-- **Where it is:** `encoder/ffmpeg-windows-x86_64.jar` inside the Dailies jar. On first export its files are unpacked
-  to `<game>/dailies/encoder/windows-x86_64/`.
+- **What:** the `ffmpeg` and `ffprobe` programs, used to encode exported video and sound.
+- **Version:** FFmpeg 8.1.2, built for Dailies by `tools/ffmpeg/build.sh` from the release tarball, every source pinned
+  by its sha256 in `tools/ffmpeg/sources.lock`. Configured without `--enable-gpl`, `--enable-nonfree` and
+  `--enable-version3`, and with `--disable-autodetect`, so nothing is built in that is not named; each platform's
+  exact configuration is in `META-INF/BUILDINFO-<platform>.txt` inside its encoder jar.
+- **Licence:** GNU Lesser General Public License, version 2.1 or later. FFmpeg's own statement and licence texts are in
+  `licenses/ffmpeg-build/ffmpeg/` (`LICENSE.md`, `COPYING.LGPLv2.1`, with the other texts FFmpeg ships beside them).
+- **Where it is:** `encoder/ffmpeg-<platform>.jar` inside the Dailies jar, one per platform. On first export the
+  programs for the running platform are unpacked to `<game>/dailies/encoder/<platform>/`.
 - **Replacing it:** Dailies runs the encoder as a separate program and does not link against it. Any FFmpeg build can
   be used in its place by replacing the unpacked files in that folder, which is what the LGPL asks to be possible.
-- **Source:** https://ffmpeg.org/ and https://github.com/bytedeco/javacpp-presets/tree/master/ffmpeg (the build
-  script `cppbuild.sh` there names the version of every library below and fetches its source).
+- **Source:** https://ffmpeg.org/, and this repository's `tools/ffmpeg/` for how it is built (see "Rebuilding").
 
 ## Libraries built into that FFmpeg
 
-The list is taken from the build's own configuration line (`ffmpeg -version`) and from the JavaCPP Presets' build
-script. Each library is under the licence named. The text in the `licenses` folder is that project's own licence
-file, copyright notice included, as its official repository publishes it.
+Each is under the licence named. Its own licence files, copyright notices included, are in
+`licenses/ffmpeg-build/<name>/`, taken from the source it was built from, with a short notice for each in
+`licenses/ffmpeg-build/notices/`.
 
-| Library | Used for | Licence | Text in `licenses/` |
+| Library | Version | Used for | Licence |
 |---|---|---|---|
-| SVT-AV1 (Alliance for Open Media) | AV1 video, software | BSD 3-Clause Clear, with the Alliance for Open Media Patent License 1.0 | `SVT-AV1-LICENSE.md`, `SVT-AV1-PATENTS.md` |
-| libaom (Alliance for Open Media) | AV1 video, software | BSD 2-Clause, with the Alliance for Open Media Patent License 1.0 | `libaom-LICENSE`, `libaom-PATENTS` |
-| libvpx (The WebM Project) | VP8 and VP9 video | BSD 3-Clause, with Google's additional patent grant | `libvpx-LICENSE`, `libvpx-PATENTS` |
-| Opus (Xiph.Org and others) | Opus sound | BSD 3-Clause | `opus-COPYING` |
-| OpenH264 (Cisco Systems) | Not used by Dailies, see below | BSD 2-Clause | `openh264-LICENSE` |
-| LAME (libmp3lame) | Not used by Dailies | GNU Library General Public License, version 2 or later | `lame-COPYING` |
-| Speex (Xiph.Org and others) | Not used by Dailies | BSD 3-Clause | `speex-COPYING` |
-| OpenCORE AMR | Not used by Dailies | Apache License 2.0 | `opencore-amr-LICENSE` |
-| VisualOn AMR-WB encoder | Not used by Dailies | Apache License 2.0 | `vo-amrwbenc-COPYING` |
-| OpenSSL | Not used by Dailies (network protocols) | Apache License 2.0 | `openssl-LICENSE.txt` |
-| SRT (Haivision) | Not used by Dailies (network protocols) | Mozilla Public License 2.0 | `srt-LICENSE` |
-| FreeType | Not used by Dailies (text drawing) | FreeType License (the project offers that or GPL 2; the FreeType License is taken) | `freetype-LICENSE.TXT`, `freetype-FTL.TXT` |
-| HarfBuzz | Not used by Dailies (text drawing) | "Old MIT" | `harfbuzz-COPYING` |
-| libxml2 | Not used by Dailies | MIT | `libxml2-Copyright` |
-| libwebp (Google) | Not used by Dailies | BSD 3-Clause, with Google's additional patent grant | `libwebp-COPYING`, `libwebp-PATENTS` |
-| zimg | Not used by Dailies | WTFPL, version 2 | `zimg-COPYING` |
-| zlib | Compression inside file formats | zlib licence | `zlib-LICENSE` |
-| Intel Media SDK dispatcher (mfx_dispatch) | Intel Quick Sync hardware encoding | BSD 3-Clause | `mfx_dispatch-LICENSE` |
-| NVIDIA codec headers (nv-codec-headers) | NVIDIA hardware encoding | MIT | `nv-codec-headers-LICENSE.txt` |
-| mingw-w64 winpthreads (`libwinpthread-1.dll`) | Threads on Windows | MIT and BSD 3-Clause | `winpthreads-COPYING` |
-| GCC runtime libraries, linked in | The C and C++ runtime | GNU General Public License, version 3 or later, with the GCC Runtime Library Exception 3.1 | `FFmpeg-COPYING.GPLv3`, `gcc-COPYING.RUNTIME` |
-| JavaCPP Presets glue (`jni*.dll`, Bytedeco) | Not used by Dailies; unpacked with the rest | Apache License 2.0 (or GPL 2 with the Classpath exception; Apache is taken) | `javacpp-presets-LICENSE.txt` |
+| SVT-AV1 (Alliance for Open Media) | 3.0.2 | AV1 video, software | BSD 3-Clause Clear, with the Alliance for Open Media Patent License 1.0 |
+| libaom (Alliance for Open Media) | 3.12.1 | AV1 video, software | BSD 2-Clause, with the Alliance for Open Media Patent License 1.0 |
+| libvpx (The WebM Project) | 1.15.2 | VP9 video | BSD 3-Clause, with Google's additional patent grant |
+| Opus (Xiph.Org and others) | 1.5.2 | Opus sound | BSD 3-Clause |
+| zlib | 1.3.1 | Compression inside file formats | zlib licence |
+| NVIDIA codec headers (nv-codec-headers) | 13.0.19.0 | NVIDIA hardware encoding (Windows, Linux) | MIT |
+| AMD AMF headers | 1.4.36 | AMD hardware encoding (Windows, Linux x86_64) | MIT |
+| Intel oneVPL dispatcher (libvpl) | 2.15.0 | Intel Quick Sync hardware encoding (Windows, Linux x86_64) | MIT |
+| libva | 2.22.0 | VA-API hardware encoding (Linux), shipped beside `ffmpeg` as shared libraries | MIT |
 
-FreeType asks for this acknowledgement: portions of this software are copyright The FreeType Project
-(https://freetype.org). All rights reserved.
+On Windows the C and C++ runtime of the MinGW compiler is linked in: the GCC runtime libraries, under the GNU General
+Public License, version 3 or later, with the GCC Runtime Library Exception 3.1 (`licenses/gcc-COPYING.RUNTIME`; the GPL
+text is `licenses/ffmpeg-build/ffmpeg/COPYING.GPLv3`), and mingw-w64's winpthreads, under the MIT and BSD 3-Clause
+licences (`licenses/winpthreads-COPYING`).
 
-The licence files were taken from each project's official repository in November 2026, from its main branch. The
-versions built into the packaged FFmpeg may be a little older, and their copyright years with them.
-
-The hardware encoders (NVIDIA, Intel, and Windows Media Foundation) are part of the graphics driver or of Windows;
-Dailies carries only the open headers needed to call them. This build has no AMD AMF, so an AMD card's H.264 and
-H.265 come through Media Foundation. The build is also configured with Vulkan (`--enable-vulkan`), which Dailies does
-not use.
+The hardware encoders themselves (NVIDIA, AMD, Intel, Windows Media Foundation, Apple VideoToolbox and the Linux VA-API
+drivers) are part of the graphics driver or of the operating system; Dailies carries only the open headers and
+dispatchers needed to call them.
 
 ## H.264 and H.265
 
 Dailies makes H.264 and H.265 only through hardware encoders. It carries no software encoder for either: x264 and
-x265 would need a GPL build, and Cisco's patent licence for OpenH264 covers only binaries fetched from Cisco. The
-packaged FFmpeg above happens to contain OpenH264; **Dailies never uses it**, neither by default nor when asked for it
-by name. A computer without a hardware H.264 encoder is offered AV1, VP9, or an editing master (ProRes or DNxHR).
+x265 would need a GPL build, and Cisco's patent licence for OpenH264 covers only binaries fetched from Cisco, so none
+of the three is built in. A computer without a hardware H.264 encoder is offered AV1, VP9, or an editing master
+(ProRes or DNxHR).
 
 ## What Dailies offers
 
@@ -84,17 +68,27 @@ machine before it is listed. Nothing is offered that the build does not contain 
 
 ## Rebuilding
 
-The LGPL asks that anyone can rebuild the encoder. Today the natives are the JavaCPP Presets' own, and their build
-script is at the address above.
+The LGPL asks that anyone can rebuild the encoder. Everything needed is kept with this source: `tools/ffmpeg/build.sh`,
+with every source pinned by its sha256 in `tools/ffmpeg/sources.lock`, and the workflow `.github/workflows/ffmpeg.yml`,
+which builds, checks and packs every platform on GitHub's machines. `./tools/ffmpeg/build.sh build <platform>` then
+`pack` does the same on a machine of your own. Dailies can also be built with the JavaCPP Presets' Windows-only build
+(`-Pdailies.encoderSource=bytedeco`), whose licence texts then go into the jar's `licenses` folder instead.
 
-A build of our own is written and kept with this source: `tools/ffmpeg/build.sh`, with every source pinned by its
-sha256 in `tools/ffmpeg/sources.lock`, and the workflow `.github/workflows/ffmpeg.yml` that runs it. It builds
-FFmpeg 8.1.2 for Windows (64-bit Intel or AMD), Linux (x86_64 and arm64) and macOS (Apple silicon and Intel), under
-the LGPL 2.1 or later, with the hardware encoders of every graphics vendor and without OpenH264, x264 or x265. It is
-**not switched on yet**: the jar packs the build above unless Dailies is built with
-`-Pdailies.encoderSource=dailies`. When it is switched on, this file changes with it, and that build's own licence
-texts and notices go into the jar under `licenses/ffmpeg-build`.
+## Zstandard
 
+- **What:** zstd-jni, Java bindings for Zstandard, with the native Zstandard library built for each platform. Every
+  block of a recording is packed with it.
+- **Version:** zstd-jni 1.5.7-25 (Zstandard 1.5.7), unchanged, from Maven Central (`com.github.luben:zstd-jni`).
+- **Where it is:** `META-INF/jarjar/zstd-jni-1.5.7-25.jar` inside the Dailies jar, which NeoForge loads as a library.
+  It carries the native library for many platforms, among them all five Dailies ships for; the one for the running
+  platform is unpacked to `<game>/dailies/natives/` and loaded from there.
+- **Licence:** zstd-jni is under the BSD 2-Clause licence, Copyright (c) 2015-present, Luben Karavelov
+  (`licenses/zstd-jni-LICENSE`). Zstandard is under the BSD licence, Copyright (c) Meta Platforms, Inc. and affiliates
+  (`licenses/zstd-LICENSE`); it is also offered under the GPL version 2, which Dailies does not use.
+- **Source:** https://github.com/luben/zstd-jni and https://github.com/facebook/zstd
+
+The two dictionaries Dailies packs recordings with, `assets/dailies/zstd/shared.dict` and `parts.dict`, are Dailies'
+own, trained by Zstandard's trainer on recordings made in testing (`gradlew trainDictionaries`).
 
 ## YAMNet
 

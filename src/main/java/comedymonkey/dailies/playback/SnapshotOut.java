@@ -1,8 +1,12 @@
 package comedymonkey.dailies.playback;
 
+import comedymonkey.dailies.Host;
+import comedymonkey.dailies.capture.ChunkPieces;
 import comedymonkey.dailies.capture.GameCodec;
 import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.file.Assembler;
+import comedymonkey.dailies.file.ChunkListing;
+import comedymonkey.dailies.file.PacketPieces;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.Records;
 import net.minecraft.network.protocol.Packet;
@@ -12,7 +16,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Where the snapshot writer puts a description of a playback world: into memory, as the records of a snapshot, with
@@ -25,6 +31,9 @@ final class SnapshotOut implements Recorder.Out {
     private final RecordingFile source;
     private final Records.Writer records = new Records.Writer();
     private final Map<String, byte[]> shared = new HashMap<>();
+    /** The chunks the snapshot names, once it has named them */
+    private ChunkListing chunks = null;
+    private boolean chunkFailed = false;
 
     SnapshotOut(GameCodec codec, RecordingFile source) {
         this.codec = codec;
@@ -32,7 +41,7 @@ final class SnapshotOut implements Recorder.Out {
     }
 
     Assembler.Snapshot finish() {
-        return new Assembler.Snapshot(this.records.take(), this.shared);
+        return new Assembler.Snapshot(this.records.take(), this.shared, this.chunks);
     }
 
     private byte[] keep(byte[] data) {
@@ -60,10 +69,44 @@ final class SnapshotOut implements Recorder.Out {
     }
 
     @Override
-    public byte[] sharedPacket(byte[] encoded) {
-        byte[] hash = this.keep(encoded);
-        this.records.record(Records.SHARED_PACKET, hash);
-        return hash;
+    public byte[] sharedPacket(byte[] encoded, ChunkPieces.Shape shape) {
+        byte[] name = this.stored(encoded, shape);
+        this.records.record(Records.SHARED_PACKET, name);
+        return name;
+    }
+
+    /**
+     * Keeps a packet in its pieces, as the recording being made stores it: those the recording being played already holds
+     * (the sections of a chunk that has not changed since, say) are named, not kept again
+     *
+     * @return the name of its piece list
+     */
+    private byte[] stored(byte[] encoded, ChunkPieces.Shape shape) {
+        PacketPieces.Split split = ChunkPieces.split(encoded, shape);
+        for (PacketPieces.Blob blob : split.blobs()) {
+            String name = blob.hex();
+            if (!this.source.hasShared(name) && !this.shared.containsKey(name)) {
+                this.shared.put(name, blob.copy());
+            }
+        }
+        return split.name();
+    }
+
+    @Override
+    public void chunks(List<NamedChunk> chunks, List<Packet<? super ClientGamePacketListener>> packets, List<AtomicReference<byte[]>> names, GameCodec codec) {
+        for (int i = 0; i < packets.size(); i++) {
+            try {
+                names.get(i).set(this.stored(codec.encode(packets.get(i)), Recorder.Out.shapeOf(packets.get(i))));
+            } catch (Throwable t) {
+                // Left out of the described world, as the recording being made leaves out a chunk it cannot turn into bytes
+                if (!this.chunkFailed) {
+                    this.chunkFailed = true;
+                    Host.LOGGER.warn("Dailies: a chunk of the world being played could not be described and is left out of the trimmed recording's first snapshot", t);
+                }
+            }
+        }
+        this.chunks = Recorder.Out.listing(chunks);
+        this.records.record(Records.CHUNKS);
     }
 
     @Override

@@ -29,7 +29,12 @@ final class FixtureRules {
         "comedymonkey/dailies/sound/VoiceCapture",
         "comedymonkey/dailies/extras/HudCapture",
         "comedymonkey/dailies/extras/SkinCapture",
-        "comedymonkey/dailies/extras/EntityClocks");
+        "comedymonkey/dailies/extras/EntityClocks",
+        "comedymonkey/dailies/windows/WindowCapture",
+        "comedymonkey/dailies/windows/WindowState",
+        "comedymonkey/dailies/windows/WindowCodec",
+        "comedymonkey/dailies/compat/companion/CompanionCompat",
+        "comedymonkey/dailies/compat/companion/CompatRoutes");
 
     /** What a fixture says of itself: the version of the staging that made it and the fingerprint of the code that wrote it */
     record Stored(int version, String fingerprint) {

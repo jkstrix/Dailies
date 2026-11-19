@@ -27,7 +27,7 @@ class LooksTest {
     void everySettingOfTheSpecificationIsThere() {
         List<String> names = Looks.fieldNames();
         for (String name : List.of(
-                "show_hud", "show_chat", "show_boss_bars", "show_titles", "show_name_tags", "show_particles", "show_held_items", "show_block_outline",
+                "show_hud", "show_windows", "show_chat", "show_boss_bars", "show_titles", "show_name_tags", "show_particles", "show_held_items", "show_block_outline",
                 "show_own_shadow", "show_scoreboard", "show_action_bar", "show_hotbar", "show_blocks", "show_entities", "show_players", "show_beacon_beams",
                 "hidden_entity_types", "hidden_particle_types",
                 "weather", "fog_mode", "fog_start", "fog_end", "fog_colour", "sky", "background_colour", "night_vision",
@@ -35,13 +35,13 @@ class LooksTest {
                 "voice_chat", "shaders")) {
             assertTrue(names.contains(name), name);
         }
-        assertEquals(38, names.size());
+        assertEquals(39, names.size());
     }
 
     @Test
     void theDefaultsChangeNothingAboutTheRecording() {
         Looks looks = new Looks();
-        assertTrue(looks.showHud && looks.showChat && looks.showBossBars && looks.showTitles && looks.showNameTags && looks.showParticles
+        assertTrue(looks.showHud && looks.showWindows && looks.showChat && looks.showBossBars && looks.showTitles && looks.showNameTags && looks.showParticles
                 && looks.showHeldItems && looks.showBlockOutline && looks.showOwnShadow && looks.sky);
         assertEquals(Looks.Weather.AS_RECORDED, looks.weather);
         assertEquals(Looks.FogMode.AS_RECORDED, looks.fogMode);
@@ -132,7 +132,7 @@ class LooksTest {
         assertEquals(before, looks.toJsonText());
 
         String message = refused(looks, "{\"sky\": false, \"lens_flare\": true}");
-        assertTrue(message.startsWith("There is no visual setting called 'lens_flare'") && message.contains("show_hud, show_chat"), message);
+        assertTrue(message.startsWith("There is no visual setting called 'lens_flare'") && message.contains("show_hud, show_windows, show_chat"), message);
         assertEquals(before, looks.toJsonText());
 
         message = refused(looks, "{\"sky\": false, \"fog_start\": 300}");

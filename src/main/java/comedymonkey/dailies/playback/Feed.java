@@ -3,6 +3,7 @@ package comedymonkey.dailies.playback;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.PlayerInfoPackets;
 import comedymonkey.dailies.capture.WorldData;
+import comedymonkey.dailies.file.ChunkListing;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.file.Records;
@@ -617,7 +618,7 @@ final class Feed {
         }
         net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet;
         try {
-            byte[] shared = this.file.shared(stored);
+            byte[] shared = this.file.packet(stored);
             if (!(this.session.codec.decode(shared, 0, shared.length) instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket decoded)) {
                 return null;
             }
@@ -774,19 +775,13 @@ final class Feed {
                 Playback.settleLight(Minecraft.getInstance());
             }
             // The world is already as the next snapshot describes it, unless the recording says otherwise
-            boolean inSnapshot = false;
-            while (this.reader.next()) {
-                int kind = this.reader.kind();
-                if (kind == Records.SNAPSHOT_BEGIN) {
-                    inSnapshot = true;
-                } else if (kind == Records.DISCONTINUITY && inSnapshot) {
-                    this.reloadWanted = this.segmentIndex;
-                    return false;
-                } else if (kind == Records.SNAPSHOT_END) {
-                    break;
-                } else if (!inSnapshot) {
-                    return true;
-                }
+            SegmentCrossing.Next next = SegmentCrossing.enter(this.reader);
+            if (next == SegmentCrossing.Next.REBUILD) {
+                this.reloadWanted = this.segmentIndex;
+                return false;
+            }
+            if (next == SegmentCrossing.Next.PLAY_THIS) {
+                return true;
             }
         }
     }
@@ -795,19 +790,8 @@ final class Feed {
     private void handle(Minecraft minecraft) throws IOException {
         switch (this.reader.kind()) {
             case Records.PACKET -> this.packet(this.reader.payload(), 0, this.reader.length(), minecraft);
-            case Records.SHARED_PACKET -> {
-                String stored = HexFormat.of().formatHex(this.reader.payload(), 0, this.reader.length());
-                if (this.alreadyThere(stored, minecraft)) {
-                    return;
-                }
-                byte[] shared = this.file.shared(stored);
-                this.storedNow = this.bundle == null ? stored : null;
-                try {
-                    this.packet(shared, 0, shared.length, minecraft);
-                } finally {
-                    this.storedNow = null;
-                }
-            }
+            case Records.SHARED_PACKET -> this.stored(HexFormat.of().formatHex(this.reader.payload(), 0, this.reader.length()), minecraft);
+            case Records.CHUNKS -> this.chunks(minecraft);
             case Records.PAYLOAD -> {
                 String id = this.reader.name();
                 if (this.bundle != null && this.bundleSpawn != Integer.MIN_VALUE) {
@@ -875,6 +859,49 @@ final class Feed {
             }
             default -> {
                 // Snapshot markers, and kinds this version does not know
+            }
+        }
+    }
+
+    /** A stored packet, by its name: a chunk, or the light on top of one */
+    private void stored(String stored, Minecraft minecraft) throws IOException {
+        if (this.alreadyThere(stored, minecraft)) {
+            return;
+        }
+        // Put back together from its pieces, byte for byte the packet that was stored, so it is applied as any other
+        byte[] shared = this.file.packet(stored);
+        this.storedNow = this.bundle == null ? stored : null;
+        try {
+            this.packet(shared, 0, shared.length, minecraft);
+        } finally {
+            this.storedNow = null;
+        }
+    }
+
+    /**
+     * The chunks the snapshot names, from the segment's listing (file.ChunkListing), each as if it were named in the
+     * snapshot's records: its stored chunk, then any stored light on top. The listing is put together from the last whole
+     * one and the changes since, and the recording keeps it, so dragging the playhead back over the same stretch reads
+     * nothing again
+     */
+    private void chunks(Minecraft minecraft) throws IOException {
+        ChunkListing listing;
+        try {
+            listing = this.file.listing(this.segments.get(this.segmentIndex).number);
+        } catch (comedymonkey.dailies.file.RecordingFormatException e) {
+            this.warnOnce("the chunks of a damaged stretch of the recording", e);
+            return;
+        }
+        if (listing == null) {
+            // The segment says its chunks go here but the recording has no listing of them: it was damaged
+            this.warnOnce("the chunks of a damaged stretch of the recording", new IOException("Segment " + this.segments.get(this.segmentIndex).number + " has no listing of its chunks"));
+            return;
+        }
+        for (int i = 0; i < listing.size(); i++) {
+            this.stored(listing.chunkHex(i), minecraft);
+            String light = listing.lightHex(i);
+            if (light != null) {
+                this.stored(light, minecraft);
             }
         }
     }
@@ -980,7 +1007,7 @@ final class Feed {
         }
         this.chunksKept--;
         try {
-            byte[] chunk = this.file.shared(stored);
+            byte[] chunk = this.file.packet(stored);
             String now = this.storedNow;
             this.storedNow = stored;
             try {

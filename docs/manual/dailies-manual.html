@@ -659,7 +659,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 			<p>Dailies carries no software encoder for H.264 or H.265. The usual ones, x264 and x265, would force a GPL build of the encoder, which cannot ship inside a mod like this, and Cisco's patent licence for OpenH264 covers only copies downloaded from Cisco. So a computer without a hardware H.264 encoder is offered AV1, VP9 or an editing master, and the Export tab says why H.264 is missing. AV1 plays on YouTube and in current browsers.</p>
 		</div>
 		<div class="note"><b>The encoder</b>
-			<p>The encoder is FFmpeg 8.1.2 in its LGPL build, packed inside the jar for Windows on 64-bit Intel or AMD processors only, for now. On Linux, macOS and Windows on ARM, the Export tab says so and offers numbered PNG pictures instead; everything else works the same. <code>THIRD-PARTY-NOTICES.md</code> has the details.</p>
+			<p>The encoder is FFmpeg 8.1.2 in its LGPL build, packed inside the jar for Windows (64-bit Intel or AMD), Linux (64-bit Intel or AMD, and ARM) and macOS (Apple silicon and Intel). On any other platform, such as Windows on ARM, the Export tab says so and offers numbered PNG pictures instead; everything else works the same. <code>THIRD-PARTY-NOTICES.md</code> has the details.</p>
 		</div>
 
 		<div class="two">
@@ -825,6 +825,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 				<tr><td>Finish on Leaving</td><td>On</td><td>Finishes the recording on leaving. Off, the next world joined carries on the same recording.</td></tr>
 				<tr><td>Save Without Asking</td><td>Off</td><td>Saves under the date and time without asking for a name.</td></tr>
 				<tr><td>Show Notices</td><td>On</td><td>On-screen notices when a recording starts, pauses, resumes, finishes or fails.</td></tr>
+				<tr><td>Recording Timer</td><td>Top left</td><td>Where the lamp and the time recorded sit while recording: any corner, the lamp alone, or off.</td></tr>
 				<tr><td>Record Voice Chat</td><td>On</td><td>Keeps the voice chat you hear, per speaker (needs Simple Voice Chat).</td></tr>
 				<tr><td>Marker 1 to 4</td><td>Red, saves position</td><td>Each marker key's colour, words, and whether it stores where you stand.</td></tr>
 				<tr><td>Moment Key Label</td><td>Good moment</td><td>The words the moment key logs.</td></tr>

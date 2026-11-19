@@ -29,7 +29,7 @@ with Simple Voice Chat.
 | `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README. |
 | `docs/manual/` | The user manual and its pictures. |
 | `docs/` | Also the internal code review of 18 November 2026, and the brief for an outside reviewer (`reviewer-brief.md`). |
-| `tools/` | `tools/ffmpeg/`: our own encoder build, not yet switched on. `tools/ci/`: the scripted run for CI, and `check_spec.py`, which checks the design documents. |
+| `tools/` | `tools/ffmpeg/`: our own encoder build, the one the jar packs. `tools/ci/`: the scripted run for CI, and `check_spec.py`, which checks the design documents. |
 | `run-test/`, `run-modded/` | Game folders the scripted tests run in. Not kept in git. |
 
 ## Where the work comes from
@@ -53,6 +53,8 @@ Java 21. The Gradle wrapper fetches everything else.
 |---|---|
 | Build the mod jar (`build/libs/`) | `gradlew build` |
 | Unit tests | `gradlew test` |
+| The timings, among them the compression benchmark on the long fixtures (`build/reports/zstd-benchmark.md`) | `gradlew benchmarks` |
+| Train the Zstandard dictionaries recordings are packed with again, on the long fixtures, into `src/main/resources/assets/dailies/zstd` | `gradlew trainDictionaries` |
 | Start the game with the mod, for development | `gradlew runClient` |
 | The scripted test in a plain game (about 2 minutes) | `gradlew runTestClient` |
 | The scripted test with the built jar beside Create, Sable, Aeronautics, Sodium, Iris, Simple Voice Chat and the companion (about 3 minutes) | `gradlew runTestModded` |
@@ -70,8 +72,8 @@ does not work is a failure, not a skip. `runTestModded` also fails at once if a 
 
 The groups are `settings`, `world`, `watching`, `moments`, `recording`, `packs`, `playback`, `balloon`, `export`,
 `editor`, `renderer`, `library`, `library-screens`, `points-of-view`, `addon`, `trains`, `edges`, `bestiary`, `tour`,
-`camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`
-and `packs`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
+`camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`,
+`packs`, `moments` and `playback`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
 
 The steps that stage things in a world of their own and compare playback with the live game (the addon, trains, edges,
 the bestiary and the tour) keep their recordings as fixtures in `dailies/fixtures` and play them back on later runs.
@@ -88,11 +90,12 @@ a newer build of a mod, go in `dailies.modJars=<jar>,<jar>`. The modded runs sto
 set. The companion jar is taken from `companion/build/libs`, so build the
 companion first.
 
-Video is encoded by a bundled FFmpeg, LGPL build. Today that is the JavaCPP Presets' build
-(`org.bytedeco:ffmpeg:8.1.2-1.5.14`), for Windows on 64-bit Intel or AMD processors only; it contains OpenH264, which
-Dailies never uses. `tools/ffmpeg/build.sh` is our own LGPL build for every platform, without OpenH264. It is written
-but not switched on: `-Pdailies.encoderSource=dailies` packs it instead. `THIRD-PARTY-NOTICES.md` lists what is
-bundled and under which licences.
+Video is encoded by a bundled FFmpeg, our own LGPL build (`tools/ffmpeg/build.sh`), for Windows, Linux and macOS,
+with every vendor's hardware encoders and without x264, x265 or OpenH264. Its jars are not kept in git: build them with
+the "FFmpeg for Dailies" workflow (or `tools/ffmpeg/build.sh build <platform>` and `pack`) and put the
+`dailies-ffmpeg-jars` download in `tools/ffmpeg/out/jars` before `gradlew build`. `-Pdailies.encoderSource=bytedeco`
+packs the JavaCPP Presets' Windows-only build instead. `THIRD-PARTY-NOTICES.md` lists what is bundled and under which
+licences.
 
 ## Licence
 

@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A recording on disk, for playback and for the editor. Segments are read one at a time and independently, so a
@@ -159,7 +160,7 @@ public final class RecordingFile implements Closeable {
                     if (this.next >= parts.size()) {
                         return false;
                     }
-                    this.current = Packing.unpack(source.read(parts.get(this.next++)), 0);
+                    this.current = source.unpackPart(source.read(parts.get(this.next++)));
                     this.position = 0;
                 }
                 return true;
@@ -365,7 +366,186 @@ public final class RecordingFile implements Closeable {
         if (entry == null) {
             throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "The recording is missing shared data " + name);
         }
-        return Packing.unpack(this.container.read(entry), Container.HASH_BYTES);
+        return this.container.unpackShared(this.container.read(entry));
+    }
+
+    /**
+     * The packet a {@link Records#SHARED_PACKET} record names, put back together from its pieces ({@link PacketPieces}),
+     * byte for byte as it was stored
+     */
+    public byte[] packet(String name) throws IOException {
+        // The packet's own piece list is kept with its pieces: a jump names the same chunks as the jump before it
+        return PacketPieces.rebuild(this.piece(name), this::piece);
+    }
+
+    /**
+     * Every piece of shared data a stored packet is made of: its own piece list first, then the lists and parts it names
+     * and those its lists name, in order, each as often as it is named
+     */
+    public List<String> piecesOf(String name) throws IOException {
+        List<String> pieces = new ArrayList<>();
+        pieces.add(name);
+        for (PacketPieces.Reference reference : PacketPieces.references(this.shared(name))) {
+            pieces.add(reference.name());
+            if (reference.kind() == PacketPieces.LIST) {
+                for (PacketPieces.Reference inner : PacketPieces.references(this.piece(reference.name()))) {
+                    pieces.add(inner.name());
+                }
+            }
+        }
+        return pieces;
+    }
+
+    // --- The chunks each snapshot names (file.ChunkListing) ---
+
+    /**
+     * How many bytes of listings, put together, are kept: a few hundred snapshots of six hundred chunks, some forty of the
+     * four thousand a view distance of 32 holds. Dragging the playhead back and forth over the same stretch builds nothing
+     * twice, and stepping back one snapshot finds it already built on the way to the later one
+     */
+    private static final long LISTINGS_KEPT_BYTES = 8L * 1024 * 1024;
+    private final Map<Integer, ChunkListing> listingsKept = new java.util.LinkedHashMap<>(64, 0.75f, true);
+    /** How many listing blocks have been read and put together, for the tests that a jump reads each only once */
+    final java.util.concurrent.atomic.AtomicInteger listingBlocksRead = new java.util.concurrent.atomic.AtomicInteger();
+    private long listingsKeptBytes = 0;
+
+    /**
+     * The chunks a segment's snapshot names, or null when the segment has no listing: a snapshot that names no chunks, or a
+     * recording cut short before its snapshot got that far. Put together from the last whole listing at or before it and
+     * the changes stored after that, at most {@link ChunkListing#FULL_EVERY} blocks, starting from any of those already
+     * put together; each listing put together on the way is kept too.
+     *
+     * @throws RecordingFormatException when a listing it needs is damaged or missing
+     */
+    public @Nullable ChunkListing listing(int segment) throws IOException {
+        synchronized (this.listingsKept) {
+            ChunkListing kept = this.listingsKept.get(segment);
+            if (kept != null) {
+                return kept;
+            }
+        }
+        Container.Entry at;
+        synchronized (this.container) {
+            at = this.container.listings.get(segment);
+        }
+        if (at == null) {
+            return null;
+        }
+        // Back through the changes to a whole listing, or to one already put together
+        java.util.ArrayDeque<Container.Entry> chain = new java.util.ArrayDeque<>();
+        ChunkListing built = null;
+        while (true) {
+            chain.push(at);
+            if (at.b() < 0) {
+                break;
+            }
+            if (at.b() >= at.a()) {
+                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "A listing of chunks in the recording says it follows on from a later one");
+            }
+            synchronized (this.listingsKept) {
+                built = this.listingsKept.get(at.b());
+            }
+            if (built != null) {
+                break;
+            }
+            synchronized (this.container) {
+                at = this.container.listings.get(at.b());
+            }
+            if (at == null) {
+                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "The recording is missing a listing of chunks that a later one follows on from");
+            }
+        }
+        while (!chain.isEmpty()) {
+            Container.Entry next = chain.pop();
+            built = ChunkListing.decode(Container.unpackListing(this.container.read(next)), next.b() < 0 ? null : built);
+            this.listingBlocksRead.incrementAndGet();
+            if (built.size() != next.c()) {
+                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "A listing of chunks in the recording does not come to what it says");
+            }
+            this.keepListing(next.a(), built);
+        }
+        return built;
+    }
+
+    private void keepListing(int segment, ChunkListing listing) {
+        synchronized (this.listingsKept) {
+            ChunkListing was = this.listingsKept.put(segment, listing);
+            this.listingsKeptBytes += listing.bytes() - (was == null ? 0 : was.bytes());
+            java.util.Iterator<ChunkListing> oldest = this.listingsKept.values().iterator();
+            while (this.listingsKeptBytes > LISTINGS_KEPT_BYTES && this.listingsKept.size() > 1 && oldest.hasNext()) {
+                this.listingsKeptBytes -= oldest.next().bytes();
+                oldest.remove();
+            }
+        }
+    }
+
+    /** Whether a segment's listing is put together and kept already: for the tests of the keeping */
+    boolean listingKept(int segment) {
+        synchronized (this.listingsKept) {
+            return this.listingsKept.containsKey(segment);
+        }
+    }
+
+    /**
+     * What the recording's chunk listings take on disk, block headers included: whole listings, and those that hold only
+     * the changes from the snapshot before
+     */
+    public record ListingWeight(int whole, long wholeBytes, int changes, long changeBytes) {
+    }
+
+    /** @param segments which segments' listings to count, by number */
+    public ListingWeight listingWeight(java.util.function.IntPredicate segments) {
+        int whole = 0;
+        int changes = 0;
+        long wholeBytes = 0;
+        long changeBytes = 0;
+        synchronized (this.container) {
+            for (Container.Entry entry : this.container.listings.values()) {
+                if (!segments.test(entry.a())) {
+                    continue;
+                }
+                if (entry.b() < 0) {
+                    whole++;
+                    wholeBytes += Container.HEADER_BYTES + entry.length();
+                } else {
+                    changes++;
+                    changeBytes += Container.HEADER_BYTES + entry.length();
+                }
+            }
+        }
+        return new ListingWeight(whole, wholeBytes, changes, changeBytes);
+    }
+
+    /**
+     * How many bytes of pieces are kept unpacked for {@link #packet}. Sections of air and all-lit light come up in nearly
+     * every chunk; and a jump that builds the world again builds every chunk of a snapshot, whose pieces come to some 19 MB
+     * unpacked on the generated-terrain tour (609 chunks, 12,000 pieces). Kept to 16 MB, each such jump read and unpacked
+     * nearly all of them again, 54 ms on average of reading alone over the budgets' run of jumps there; kept to 64 MB, 19 ms
+     */
+    static final long PIECES_KEPT_BYTES = 64L * 1024 * 1024;
+    private final Map<String, byte[]> piecesKept = new java.util.LinkedHashMap<>(256, 0.75f, true);
+    private long piecesKeptBytes = 0;
+
+    /** A piece list, part or inner list of a stored packet. Never handed out to be changed: {@link PacketPieces#rebuild} only reads it */
+    private byte[] piece(String name) throws IOException {
+        synchronized (this.piecesKept) {
+            byte[] kept = this.piecesKept.get(name);
+            if (kept != null) {
+                return kept;
+            }
+        }
+        byte[] piece = this.shared(name);
+        synchronized (this.piecesKept) {
+            if (this.piecesKept.put(name, piece) == null) {
+                this.piecesKeptBytes += piece.length;
+            }
+            java.util.Iterator<byte[]> oldest = this.piecesKept.values().iterator();
+            while (this.piecesKeptBytes > PIECES_KEPT_BYTES && oldest.hasNext()) {
+                this.piecesKeptBytes -= oldest.next().length;
+                oldest.remove();
+            }
+        }
+        return piece;
     }
 
     /**
@@ -451,13 +631,21 @@ public final class RecordingFile implements Closeable {
             for (Container.Entry blob : this.container.shared.values()) {
                 live += Container.HEADER_BYTES + blob.length();
             }
+            for (Container.Entry listing : this.container.listings.values()) {
+                live += Container.HEADER_BYTES + listing.length();
+            }
+            List<Container.Entry> dictionaries = this.container.dictionaryEntries();
+            for (Container.Entry dictionary : dictionaries) {
+                live += Container.HEADER_BYTES + dictionary.length();
+            }
             for (Container.Entry single : new Container.Entry[]{this.container.manifest, this.container.edit, this.container.preview}) {
                 if (single != null) {
                     live += Container.HEADER_BYTES + single.length();
                 }
             }
             // The index (25 bytes an entry, plus a hash for each shared blob) and the trailer
-            live += Container.HEADER_BYTES + 4 + (this.container.parts.size() + this.container.shared.size()) * 25L + this.container.shared.size() * (long) Container.HASH_BYTES;
+            live += Container.HEADER_BYTES + 4 + (dictionaries.size() + this.container.parts.size() + this.container.listings.size() + this.container.shared.size()) * 25L
+                + this.container.shared.size() * (long) Container.HASH_BYTES;
             live += Container.HEADER_BYTES + 32;
         }
         return live;

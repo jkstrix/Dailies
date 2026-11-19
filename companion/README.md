@@ -107,9 +107,35 @@ DailiesCompanion.listening(player);                                             
 
 `data` is a Gson `JsonObject` or null. Each call returns whether, or how many of, the players were listening.
 
-## The message
+## Server plugins
+
+For facts only the server knows, which a compat on the player's side records and draws again: the server half of a
+compat registers a plugin with an id and a version, and pushes data to players. Dailies routes what arrives by the id
+to the compat's client half and keeps it in the recording.
+
+```java
+CompanionPlugins.register(new CompanionPlugin() {
+    public String id() { return "postrider:mail"; }
+    public int version() { return 1; }
+    // What this plugin has for a player, when their game asks (a client half asks as it starts); null for nothing
+    public byte[] describe(ServerPlayer player, int clientVersion) { return mailFor(player); }
+});
+CompanionPlugins.push(player, "postrider:mail", bytes);  // one player; false when their game is not listening
+CompanionPlugins.pushAll(server, "postrider:mail", bytes); // everyone online
+```
+
+The data is the plugin's own format, up to 256 KiB. One plugin is built in, `dailies_companion:plugins`: the list of
+the server's plugins and their versions, which Dailies asks for as it joins, so a client half knows whether its
+server half is there.
+
+## The messages
 
 One optional NeoForge channel, `dailies_companion:event`, version `1`, server to client, carrying three strings: the
 type (up to 64 characters), the label (up to 256) and a JSON object (up to 32,767). When the companion is also in the
 player's own game, it posts each message it receives on the NeoForge event bus as
 `comedymonkey.dailiescompanion.MomentClientEvent`.
+
+The plugins share a second, `dailies_companion:compat`, version `1`, both ways: a varint kind (0 data, 1 ask), the
+plugin's id (up to 128 characters), a varint version (the plugin's, 0 when the server has no such plugin; or the
+asking client half's) and a byte string. When the companion is also in the player's own game, it posts each plugin's
+data as `comedymonkey.dailiescompanion.CompatClientEvent`.

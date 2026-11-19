@@ -127,11 +127,11 @@ public final class StretchRun {
 
         void play();
 
-        /** A jump to the tick that lands on it exactly as an export would, and stays paused there */
+        /**
+         * A jump to the tick that lands on it exactly as an export would, and stays paused there. Used both ways: going
+         * back with a quicker jump that keeps the world could leave loose parts of mod machines half a block out
+         */
         void jumpTo(int tick);
-
-        /** A jump back to where the person was, as their own jumps go, staying paused there */
-        void goBack(int tick);
 
         /**
          * Plays one tick at once, with the cameras stepped for it as in normal play.
@@ -296,7 +296,13 @@ public final class StretchRun {
         if (this.player.jumping()) {
             return;
         }
-        if (this.player.position() == this.backTo && this.player.paused() && this.playOn) {
+        if (this.player.position() != this.backTo) {
+            // The way back landed elsewhere: another jump replaced it, so whoever made that has the recording, and the run
+            // says it let go rather than claim to be back
+            this.abandon();
+            return;
+        }
+        if (this.player.paused() && this.playOn) {
             this.player.play();
         }
         this.phase = Phase.DONE;
@@ -304,7 +310,7 @@ public final class StretchRun {
 
     private void goBack() {
         this.phase = Phase.RETURNING;
-        this.player.goBack(this.backTo);
+        this.player.jumpTo(this.backTo);
     }
 
     private void abandon() {

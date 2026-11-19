@@ -102,6 +102,19 @@ class EncoderUnpackTest {
     }
 
     @Test
+    void whatAnEarlierEncoderLeftIsTakenAway(@TempDir Path folder) throws Exception {
+        // The JavaCPP Presets' build came as libraries beside its programs; our own build is one program and its inspector
+        Encoder.unpack(from(usual()), folder, PLATFORM, "1.0");
+        Map<String, String> own = new LinkedHashMap<>();
+        own.put("dailies/ffmpeg/" + PLATFORM + "/ffmpeg.exe", "our own encoder");
+        own.put("dailies/ffmpeg/" + PLATFORM + "/ffprobe.exe", "our own inspector");
+        Encoder.unpack(from(packed(own)), folder, PLATFORM, "1.0");
+        assertEquals("our own encoder", Files.readString(folder.resolve("ffmpeg.exe")));
+        assertFalse(Files.exists(folder.resolve("avcodec-61.dll")), "the earlier build's library was left behind");
+        assertTrue(Files.exists(folder.resolve(Encoder.STAMP)), "the stamp was taken away with the rest");
+    }
+
+    @Test
     void aMissingProgramIsUnpackedAgainWhateverTheStampSays(@TempDir Path folder) throws Exception {
         Encoder.unpack(from(usual()), folder, PLATFORM, "1.0");
         Files.delete(folder.resolve("ffmpeg.exe"));

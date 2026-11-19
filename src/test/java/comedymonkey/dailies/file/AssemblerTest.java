@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,9 @@ class AssemblerTest {
 
     @TempDir
     Path folder;
+
+    /** What the made-up recordings are packed with; null for the mod's own dictionaries, as a recording made now is */
+    private Packing.Dictionaries packWith = null;
 
     private static final Assembler.Progress QUIET = new Assembler.Progress() {
         @Override
@@ -69,12 +73,12 @@ class AssemblerTest {
         manifest.created = REAL_START + source;
         manifest.gameVersion = "1.21.1";
         manifest.worldName = "World " + source;
-        RecordingWriter writer = RecordingWriter.create(file, manifest);
+        RecordingWriter writer = this.packWith == null ? RecordingWriter.create(file, manifest) : RecordingWriter.create(file, manifest, this.packWith);
         Records.Writer part = new Records.Writer();
         TimeIndex.Encoder times = new TimeIndex.Encoder();
         int pauseEvery = afreshEvery * SEGMENT_TICKS;
         byte[] world = HexFormat.of().parseHex(writer.putShared(("world " + source).getBytes(StandardCharsets.UTF_8)));
-        byte[] still = HexFormat.of().parseHex(writer.putShared(("still chunk " + source).getBytes(StandardCharsets.UTF_8)));
+        byte[] still = stored(writer, PacketPieces.whole(("still chunk " + source).getBytes(StandardCharsets.UTF_8)));
         for (int segment = 0; segment < segments; segment++) {
             int start = segment * SEGMENT_TICKS;
             writer.beginSegment(start);
@@ -84,7 +88,7 @@ class AssemblerTest {
             }
             part.record(Records.WORLD, world);
             part.record(Records.SHARED_PACKET, still);
-            part.record(Records.SHARED_PACKET, HexFormat.of().parseHex(writer.putShared(("chunk " + source + " " + segment).getBytes(StandardCharsets.UTF_8))));
+            part.record(Records.SHARED_PACKET, stored(writer, PacketPieces.whole(("chunk " + source + " " + segment).getBytes(StandardCharsets.UTF_8))));
             part.record(Records.PACKET, ("snapshot s" + source + "t" + start).getBytes(StandardCharsets.UTF_8));
             part.record(Records.SNAPSHOT_END);
             if (timed) {
@@ -114,6 +118,14 @@ class AssemblerTest {
         writer.manifest().realEnd = timed ? realAt(source, segments * SEGMENT_TICKS, pauseEvery) : 0;
         writer.finish();
         return file;
+    }
+
+    /** Stores a packet's pieces as the recorder's writer does, and gives the name to record */
+    private static byte[] stored(RecordingWriter writer, PacketPieces.Split split) throws IOException {
+        for (PacketPieces.Blob blob : split.blobs()) {
+            writer.putShared(blob.bytes(), blob.from(), blob.length(), blob.name());
+        }
+        return split.name();
     }
 
     /** What a recording would show at each tick: the last packet applied on reaching it, or the snapshot's own when it starts there */
@@ -160,7 +172,7 @@ class AssemblerTest {
                         case Records.WORLD -> worlds.add(new String(recording.shared(HexFormat.of().formatHex(reader.payload(), 0, reader.length())), StandardCharsets.UTF_8));
                         case Records.SHARED_PACKET -> {
                             if (inSnapshot) {
-                                chunks.add(segment.startTick + ":" + new String(recording.shared(HexFormat.of().formatHex(reader.payload(), 0, reader.length())), StandardCharsets.UTF_8));
+                                chunks.add(segment.startTick + ":" + new String(recording.packet(HexFormat.of().formatHex(reader.payload(), 0, reader.length())), StandardCharsets.UTF_8));
                             }
                         }
                         case Records.PACKET -> atTick.set(position, new String(reader.payload(), 0, reader.length(), StandardCharsets.UTF_8));
@@ -345,6 +357,54 @@ class AssemblerTest {
         }
     }
 
+    /**
+     * A source packed with other dictionaries, as one made by a Dailies whose dictionaries were trained afresh: combined
+     * whole, trimmed on segment boundaries and cut inside a segment, every new recording is packed with the mod's own
+     * dictionaries and plays the same
+     */
+    @Test
+    void sourcesPackedWithOtherDictionariesArePackedAgainWithTheModsOwn() throws IOException {
+        this.packWith = TestDictionaries.other();
+        // Every segment starts afresh, so a cut on a boundary copies the segment after it, renumbered
+        Path older = this.record("older", 1, 4, 1, true);
+        this.packWith = null;
+        Path now = this.record("now", 2, 2, 0, true);
+        Path joined = this.folder.resolve("joined both" + RecordingFile.EXTENSION);
+        Path trimmed = this.folder.resolve("trimmed older" + RecordingFile.EXTENSION);
+        try (RecordingFile first = RecordingFile.open(older); RecordingFile second = RecordingFile.open(now)) {
+            assertTrue(first.container().dictionaries().same(TestDictionaries.other()));
+            Assembler.write(joined, newManifest("joined both"), List.of(new Assembler.Piece(first, 0, 400, null), new Assembler.Piece(second, 0, 200, null)), null, null, QUIET);
+            // A cut on a boundary (the segment after it renumbered) and a cut inside a segment's records
+            Assembler.write(trimmed, newManifest("trimmed older"), List.of(new Assembler.Piece(first, 0, 150, null), new Assembler.Piece(first, 300, 400, null)), null, null, QUIET);
+        }
+        for (Path file : List.of(joined, trimmed)) {
+            try (RecordingFile result = RecordingFile.open(file)) {
+                assertTrue(result.container().dictionaries().same(Packing.Dictionaries.current()), file.getFileName().toString());
+            }
+        }
+        try (RecordingFile result = RecordingFile.open(joined)) {
+            assertEquals(600, result.totalTicks());
+            Played played = play(result);
+            assertEquals("s1t1", played.atTick().get(1));
+            assertEquals("s1t399", played.atTick().get(399));
+            assertEquals("snapshot s2t0", played.atTick().get(400));
+            assertEquals("s2t200", played.atTick().get(600));
+            assertEquals(List.of("world 1", "world 1", "world 1", "world 1", "world 2", "world 2"), played.worlds());
+            assertTrue(played.chunksAtStart().contains("300:chunk 1 3"));
+            assertEquals(List.of(0, 100, 200, 300, 400), played.afreshAt());
+            assertEquals(realAt(1, 250, 100), result.timeAt(250).realTime());
+        }
+        try (RecordingFile result = RecordingFile.open(trimmed)) {
+            assertEquals(250, result.totalTicks());
+            Played played = play(result);
+            assertEquals("s1t149", played.atTick().get(149));
+            assertEquals("snapshot s1t300", played.atTick().get(150));
+            assertEquals("s1t400", played.atTick().get(250));
+            assertEquals(List.of(0, 100, 150), played.afreshAt());
+            assertTrue(played.chunksAtStart().contains("150:chunk 1 3"));
+        }
+    }
+
     @Test
     void combiningARecordingWithItselfStoresItsSharedDataOnce() throws IOException {
         Path a = this.record("a", 1, 2, 0, true);
@@ -396,7 +456,8 @@ class AssemblerTest {
         Path a = this.record("a", 1, 4, 0, true);
         Path target = this.folder.resolve("inside" + RecordingFile.EXTENSION);
         byte[] freshChunk = "chunk as playback had it at 263".getBytes(StandardCharsets.UTF_8);
-        String freshName = HexFormat.of().formatHex(Packing.hash(freshChunk));
+        PacketPieces.Split fresh = PacketPieces.whole(freshChunk);
+        String freshName = HexFormat.of().formatHex(fresh.name());
         try (RecordingFile source = RecordingFile.open(a)) {
             // What playback would hand over: the world it holds at tick 263, as the records of a snapshot
             Records.Writer described = new Records.Writer();
@@ -408,7 +469,7 @@ class AssemblerTest {
             }
             described.record(Records.SHARED_PACKET, HexFormat.of().parseHex(freshName));
             described.record(Records.PACKET, "snapshot s1t263".getBytes(StandardCharsets.UTF_8));
-            Assembler.Snapshot snapshot = new Assembler.Snapshot(described.take(), Map.of(freshName, freshChunk));
+            Assembler.Snapshot snapshot = new Assembler.Snapshot(described.take(), Map.of(freshName, fresh.blobs().get(0).copy()));
 
             // Without the snapshot the piece cannot be written, and nothing is left behind
             assertThrows(IllegalArgumentException.class, () -> Assembler.write(target, newManifest("inside"),
@@ -435,7 +496,7 @@ class AssemblerTest {
             // Segments: 0-100, 100-137, 137-174 (from the fresh snapshot), 174-274
             assertEquals(List.of(0, 100, 137, 174), trimmed.segments().stream().map(segment -> segment.startTick).toList());
             assertTrue(played.chunksAtStart().contains("137:chunk as playback had it at 263"));
-            assertArrayEquals(freshChunk, trimmed.shared(freshName));
+            assertArrayEquals(freshChunk, trimmed.packet(freshName));
             // The times carry straight on from the cut: tick 137 here is tick 263 of the source
             assertEquals(realAt(1, 136, 0), trimmed.timeAt(136).realTime());
             assertEquals(realAt(1, 263, 0), trimmed.timeAt(137).realTime());
@@ -467,6 +528,199 @@ class AssemblerTest {
             assertEquals("snapshot s1t300", played.atTick().get(50));
             assertEquals("s1t400", played.atTick().get(150));
             assertEquals(List.of(0, 50), played.afreshAt());
+        }
+    }
+
+    // --- Chunks stored in pieces (FILE-5) ---
+
+    private static final String AIR = "air section ".repeat(4);
+    private static final String LIT = "#".repeat(64);
+
+    /**
+     * A made-up chunk cut up as a real one is: a head of bytes, heightmaps, a list of eight sections, block entities and a
+     * list of light. Every section is air but one, which says what it holds; all its light is all lit
+     */
+    private static PacketPieces.Split chunk(int x, String section, Map<String, byte[]> expected) {
+        List<String> sections = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            sections.add(i == 3 ? section : AIR);
+        }
+        StringBuilder whole = new StringBuilder("chunk " + x + "|heights " + x + "|8|");
+        sections.forEach(whole::append);
+        whole.append("entities ").append(x).append("|masks|");
+        for (int i = 0; i < 10; i++) {
+            whole.append(LIT);
+        }
+        byte[] packet = whole.toString().getBytes(StandardCharsets.UTF_8);
+        PacketPieces.Builder builder = new PacketPieces.Builder();
+        int at = ("chunk " + x + "|").length();
+        builder.bytes(packet, 0, at);
+        int heights = ("heights " + x + "|").length();
+        builder.part(packet, at, heights);
+        int sectionsAt = at + heights;
+        builder.list(list -> {
+            list.bytes(packet, sectionsAt, 2);
+            int from = sectionsAt + 2;
+            for (String each : sections) {
+                list.part(packet, from, each.length());
+                from += each.length();
+            }
+        });
+        int entities = sectionsAt + 2 + sections.stream().mapToInt(String::length).sum();
+        int entitiesLength = ("entities " + x + "|").length();
+        builder.part(packet, entities, entitiesLength);
+        int lightAt = entities + entitiesLength;
+        builder.list(list -> {
+            list.bytes(packet, lightAt, "masks|".length());
+            for (int i = 0; i < 10; i++) {
+                list.part(packet, lightAt + "masks|".length() + i * LIT.length(), LIT.length());
+            }
+        });
+        PacketPieces.Split split = builder.finish();
+        expected.put(HexFormat.of().formatHex(split.name()), packet);
+        return split;
+    }
+
+    /**
+     * A recording of whole segments of 100 ticks whose snapshots name two chunks in pieces: one that never changes and one
+     * whose odd section is different in every segment
+     */
+    private Path recordPieces(String name, int source, int segments, Map<String, byte[]> expected) throws IOException {
+        Path file = this.folder.resolve(name + RecordingFile.EXTENSION);
+        RecordingWriter writer = RecordingWriter.create(file, newManifest("id-" + name));
+        Records.Writer part = new Records.Writer();
+        byte[] world = HexFormat.of().parseHex(writer.putShared(("world " + source).getBytes(StandardCharsets.UTF_8)));
+        byte[] still = stored(writer, chunk(source * 10, "stone section " + source, expected));
+        for (int segment = 0; segment < segments; segment++) {
+            int start = segment * SEGMENT_TICKS;
+            writer.beginSegment(start);
+            part.number(Records.SNAPSHOT_BEGIN, start);
+            if (segment == 0) {
+                part.record(Records.DISCONTINUITY);
+            }
+            part.record(Records.WORLD, world);
+            part.record(Records.SHARED_PACKET, still);
+            part.record(Records.SHARED_PACKET, stored(writer, chunk(source * 10 + 1, "section of segment " + source + "." + segment, expected)));
+            part.record(Records.SNAPSHOT_END);
+            for (int tick = start + 1; tick <= start + SEGMENT_TICKS; tick++) {
+                part.number(Records.TICK, 1);
+                part.record(Records.PACKET, packet(source, tick));
+            }
+            byte[] bytes = part.take();
+            writer.appendToSegment(bytes, 0, bytes.length, start + SEGMENT_TICKS);
+        }
+        writer.finish();
+        return file;
+    }
+
+    /**
+     * Every stored packet a recording names is there with every piece it is made of, and puts back together exactly as
+     * it was made
+     *
+     * @return the names of every piece of every stored packet the recording names
+     */
+    private static java.util.Set<String> everyPieceThere(RecordingFile recording, Map<String, byte[]> expected) throws IOException {
+        java.util.Set<String> pieces = new java.util.HashSet<>();
+        int named = 0;
+        for (RecordingManifest.Segment segment : recording.segments()) {
+            try (Records.Reader reader = new Records.Reader(recording.openSegment(segment.number))) {
+                while (reader.next()) {
+                    if (reader.kind() != Records.SHARED_PACKET) {
+                        continue;
+                    }
+                    String name = HexFormat.of().formatHex(reader.payload(), 0, reader.length());
+                    named++;
+                    for (String piece : recording.piecesOf(name)) {
+                        assertTrue(recording.hasShared(piece), "a piece of a stored packet is missing");
+                        pieces.add(piece);
+                    }
+                    assertArrayEquals(expected.get(name), recording.packet(name));
+                }
+            }
+        }
+        assertTrue(named > 0);
+        return pieces;
+    }
+
+    private static String partName(String text) {
+        return HexFormat.of().formatHex(Packing.hash(text.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void aChunkInPiecesSharesItsUnchangedSectionsAndLight() throws IOException {
+        Map<String, byte[]> expected = new HashMap<>();
+        Path a = this.recordPieces("pieces", 1, 4, expected);
+        try (RecordingFile recording = RecordingFile.open(a)) {
+            java.util.Set<String> pieces = everyPieceThere(recording, expected);
+            // One air section and one all-lit stretch of light for every chunk in every snapshot
+            assertTrue(pieces.contains(partName(AIR)));
+            assertTrue(pieces.contains(partName(LIT)));
+            // The world; the chunk that never changes, with its own list, heightmaps, block entities, stone section and
+            // list of sections; the air, the light and the list of light both chunks share; and the other chunk's
+            // heightmaps and block entities once, with its own list, its list of sections and its odd section for each of
+            // the four segments
+            assertEquals(1 + 5 + 3 + 2 + 4 * 3, recording.sharedCount());
+        }
+    }
+
+    @Test
+    void trimmingAndCombiningCarryEveryPieceAChunkIsMadeOf() throws IOException {
+        Map<String, byte[]> expected = new HashMap<>();
+        Path a = this.recordPieces("pieces a", 1, 4, expected);
+        Path b = this.recordPieces("pieces b", 2, 2, expected);
+
+        // Whole segments: the second and third
+        Path copied = this.folder.resolve("copied" + RecordingFile.EXTENSION);
+        try (RecordingFile source = RecordingFile.open(a)) {
+            Assembler.write(copied, newManifest("copied"), List.of(new Assembler.Piece(source, 100, 300, null)), null, null, QUIET);
+        }
+        try (RecordingFile result = RecordingFile.open(copied)) {
+            java.util.Set<String> pieces = everyPieceThere(result, expected);
+            assertTrue(pieces.contains(partName("section of segment 1.1")) && pieces.contains(partName("section of segment 1.2")));
+            // The sections of the segments that were cut stay behind
+            assertFalse(result.hasShared(partName("section of segment 1.0")));
+            assertFalse(result.hasShared(partName("section of segment 1.3")));
+        }
+
+        // A cut inside a segment, with a fresh snapshot whose chunk is made partly of pieces the source holds and partly of new ones
+        Path inside = this.folder.resolve("inside pieces" + RecordingFile.EXTENSION);
+        try (RecordingFile source = RecordingFile.open(a)) {
+            PacketPieces.Split fresh = chunk(11, "section as playback had it at 250", expected);
+            Map<String, byte[]> kept = new HashMap<>();
+            for (PacketPieces.Blob blob : fresh.blobs()) {
+                if (!source.hasShared(blob.hex())) {
+                    kept.put(blob.hex(), blob.copy());
+                }
+            }
+            // The air, the light and the chunk's heightmaps and block entities are the source's already
+            assertTrue(kept.size() < fresh.blobs().stream().map(PacketPieces.Blob::hex).distinct().count());
+            Records.Writer described = new Records.Writer();
+            try (Records.Reader original = new Records.Reader(source.openSegment(2))) {
+                while (original.next() && original.kind() != Records.WORLD) {
+                    // Find the name of the world the source uses
+                }
+                described.record(Records.WORLD, original.payload(), 0, original.length());
+            }
+            described.record(Records.SHARED_PACKET, fresh.name());
+            Assembler.write(inside, newManifest("inside pieces"), List.of(new Assembler.Piece(source, 0, 150, null),
+                new Assembler.Piece(source, 250, 400, new Assembler.Snapshot(described.take(), kept))), null, null, QUIET);
+        }
+        try (RecordingFile result = RecordingFile.open(inside)) {
+            java.util.Set<String> pieces = everyPieceThere(result, expected);
+            assertTrue(pieces.contains(partName("section as playback had it at 250")));
+            assertTrue(pieces.contains(partName("section of segment 1.0")) && pieces.contains(partName("section of segment 1.3")));
+        }
+
+        // Combining a recording with a trimmed one
+        Path joined = this.folder.resolve("joined pieces" + RecordingFile.EXTENSION);
+        try (RecordingFile first = RecordingFile.open(inside); RecordingFile second = RecordingFile.open(b)) {
+            Assembler.write(joined, newManifest("joined pieces"), List.of(new Assembler.Piece(second, 0, 200, null), new Assembler.Piece(first, 0, first.totalTicks(), null)),
+                null, null, QUIET);
+        }
+        try (RecordingFile result = RecordingFile.open(joined)) {
+            java.util.Set<String> pieces = everyPieceThere(result, expected);
+            assertTrue(pieces.contains(partName("stone section 2")) && pieces.contains(partName("stone section 1")));
+            assertTrue(pieces.contains(partName("section as playback had it at 250")));
         }
     }
 

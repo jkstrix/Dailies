@@ -248,9 +248,9 @@ public final class Snapshots {
     }
 
     /**
-     * A whole chunk has arrived and been stored in the recording exactly as the server sent it. Until a packet changes
-     * it, the snapshots that follow name those bytes instead of describing the chunk again: travelling brings hundreds
-     * of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
+     * A whole chunk has arrived and been stored in the recording exactly as the server sent it, in its pieces. Until a
+     * packet changes it, the snapshots that follow name it instead of describing the chunk again: travelling brings
+     * hundreds of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
      */
     static void arrived(int x, int z, byte[] name) {
         CHUNKS.put(ChunkPos.asLong(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
@@ -589,9 +589,13 @@ public final class Snapshots {
         Set<Long> present = new HashSet<>();
         List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();
         // The chunks to describe afresh: their packets are made here, from the world as it is on this tick, and turned into
-        // bytes, named and stored by the recorder's writer, off the game's thread (Recorder.Out.sharedPackets)
+        // bytes, cut up by section, named and stored by the recorder's writer, off the game's thread (Recorder.Out.chunks).
+        // A chunk described afresh costs the recording only the sections, light and block entities that are not as stored
+        // before: the rest keeps its name
         List<Packet<? super ClientGamePacketListener>> fresh = new ArrayList<>();
         List<java.util.concurrent.atomic.AtomicReference<byte[]>> freshNames = new ArrayList<>();
+        // Every chunk the snapshot names, by the names it has or will have: the listing the recording keeps for the snapshot
+        List<Recorder.Out.NamedChunk> named = new ArrayList<>();
         int count = 0;
         for (int x = centre.x - radius; x <= centre.x + radius; x++) {
             for (int z = centre.z - radius; z <= centre.z + radius; z++) {
@@ -619,14 +623,12 @@ public final class Snapshots {
                     byte[] light = stored.light() == null ? null : stored.light().get();
                     boolean lightWanted = stored.lightChanged() || (stored.light() != null && light == null);
                     if (!lightWanted) {
-                        out.sharedRef(Records.SHARED_PACKET, known);
-                        if (light != null) {
-                            // The light it was given at an earlier snapshot, still as it is
-                            out.sharedRef(Records.SHARED_PACKET, light);
-                        }
+                        // With the light it was given at an earlier snapshot, if any, still as it is
+                        named.add(new Recorder.Out.NamedChunk(key, new java.util.concurrent.atomic.AtomicReference<>(known),
+                            light == null ? null : new java.util.concurrent.atomic.AtomicReference<>(light)));
                         continue;
                     }
-                    // Its blocks as stored, then its light as it is now: in this order, by the writer, with the chunks below
+                    // Its blocks as stored, then its light as it is now, stored by the writer with the chunks below
                     try {
                         java.util.concurrent.atomic.AtomicReference<byte[]> lightName = new java.util.concurrent.atomic.AtomicReference<>();
                         net.minecraft.network.protocol.game.ClientboundLightUpdatePacket lightPacket = new net.minecraft.network.protocol.game.ClientboundLightUpdatePacket(chunk.getPos(), level.getLightEngine(), null, null);
@@ -641,15 +643,14 @@ public final class Snapshots {
                                 dark.set(section);
                             }
                         }
-                        fresh.add(null);
-                        freshNames.add(stored.name());
                         fresh.add(lightPacket);
                         freshNames.add(lightName);
+                        named.add(new Recorder.Out.NamedChunk(key, new java.util.concurrent.atomic.AtomicReference<>(known), lightName));
                         CHUNKS.put(key, new Stored(stored.name(), stored.asked(), stored.said(), false, lightName));
                         REASONS.merge("only its light, from a block next door or a light packet", 1, Integer::sum);
                     } catch (Throwable t) {
                         warnOnce("chunk light", t);
-                        out.sharedRef(Records.SHARED_PACKET, known);
+                        named.add(new Recorder.Out.NamedChunk(key, new java.util.concurrent.atomic.AtomicReference<>(known), null));
                     }
                     continue;
                 }
@@ -660,6 +661,7 @@ public final class Snapshots {
                     java.util.concurrent.atomic.AtomicReference<byte[]> name = new java.util.concurrent.atomic.AtomicReference<>();
                     fresh.add(ownHeightmaps(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null)));
                     freshNames.add(name);
+                    named.add(new Recorder.Out.NamedChunk(key, name, null));
                     CHUNKS.put(key, new Stored(name, true, said));
                     encoded++;
                 } catch (Throwable t) {
@@ -668,9 +670,8 @@ public final class Snapshots {
             }
         }
         WHY.clear();
-        if (!fresh.isEmpty()) {
-            out.sharedPackets(fresh, freshNames, codec);
-        }
+        // Every snapshot has its listing, one that names no chunks too, so each listing follows on from the one before
+        out.chunks(named, fresh, freshNames, codec);
         CHUNKS.keySet().retainAll(present);
         lids.forEach(out::packet);
         return count;
@@ -750,6 +751,9 @@ public final class Snapshots {
     /** The chunks of a playback world. One that nothing has touched since it was built is named again, not stored again */
     private static int writePlaybackChunks(Recorder.Out out, ClientLevel level, GameCodec codec, PlaybackWorld playback) {
         List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();
+        List<Packet<? super ClientGamePacketListener>> fresh = new ArrayList<>();
+        List<java.util.concurrent.atomic.AtomicReference<byte[]>> freshNames = new ArrayList<>();
+        List<Recorder.Out.NamedChunk> named = new ArrayList<>();
         int count = 0;
         for (long key : playback.chunks()) {
             LevelChunk chunk = level.getChunkSource().getChunk(ChunkPos.getX(key), ChunkPos.getZ(key), ChunkStatus.FULL, false);
@@ -761,20 +765,22 @@ public final class Snapshots {
             // As in a live snapshot, a chunk with block entities is described afresh: mods change those in ways no packet shows
             byte[] stored = chunk.getBlockEntities().isEmpty() ? playback.storedChunk(key) : null;
             if (stored != null) {
-                out.sharedRef(Records.SHARED_PACKET, stored);
+                // With its light as it is now on top, as a live snapshot names such a chunk
                 byte[] light = playback.storedLight(key);
-                if (light != null) {
-                    // Its light as it is now, straight after it, as a live snapshot names such a chunk
-                    out.sharedRef(Records.SHARED_PACKET, light);
-                }
+                named.add(new Recorder.Out.NamedChunk(key, new java.util.concurrent.atomic.AtomicReference<>(stored),
+                    light == null ? null : new java.util.concurrent.atomic.AtomicReference<>(light)));
                 continue;
             }
             try {
-                out.sharedPacket(codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null)));
+                java.util.concurrent.atomic.AtomicReference<byte[]> name = new java.util.concurrent.atomic.AtomicReference<>();
+                fresh.add(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+                freshNames.add(name);
+                named.add(new Recorder.Out.NamedChunk(key, name, null));
             } catch (Throwable t) {
                 warnOnce("chunk", t);
             }
         }
+        out.chunks(named, fresh, freshNames, codec);
         lids.forEach(out::packet);
         return count;
     }
