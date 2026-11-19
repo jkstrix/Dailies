@@ -39,7 +39,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 3 Post Rider | Done | Post Rider 1.2.2 carries its own hooks (`client/dailies`), compiled against a copy of the API jar, loaded only with Dailies present. Mailbox drawn by the generic path plus window extras (tab, address, scroll); reading a letter (hand, page, checked against the held letter); writing a letter (text, page, cursor, read-only screen). Display test group `postrider`, passed in game |
 | 4.1 Create | Done | `compats/create` (mod id `dailies_create`), a jar of its own beside Create. Every play-time screen, overlay and in-world mark Create 6.0.10 draws: the value settings board, value boxes and their tip, the goggles readout; the sequenced gearshift, threshold switch, elevator contact, station and train assembly, display link, factory gauge, symmetry wand, worldshaper, schematic naming and schematic edit screens; the toolbox and wrench selection wheels; the clipboard; remaining air, the train HUD, the linked controller's bind HUD, toolbox hotbar marks, the blueprint and table cloth row, the track placement hint, Create's status-line messages; the held schematic (tool bar, placed box, deploy preview) and a placed schematic's blocks, stored once in the recording (REC-28, PLAY-23, CPT-7); every outline Create draws in the world (super glue selection and glued areas, the schematic and quill selection, arm, ejector and port targets, chain conveyor, track and zapper previews), placement helper arrows and ghost blocks, and the symmetry mirror. Stage 1 alone: schematic table, schematicannon, linked controller binding, toolbox, crafting blueprint, package port. Stage 1 plus extras: list and attribute filters, package filter, package port address, redstone requester, the schedule with its entry editor, the stock keeper's search, address, order and scroll. Display test group `create`: 29 displays, passed in game. **Not drawn:** Create's client-side particles (the wand's end-rod particles and others), which are not recorded state |
 | 4.2 The owner's mods (Create Addons, McpCraft) | Done | Hooks in the mods themselves (see "Stage 4.2 in detail"). **Create Addons:** its windows by stage 1, with extras putting back its Sort and quick-move buttons; the Electric Motor, Clockwork Dynamo, Geothermal Turbine, Splitter, Trade Bot and Trade Master screens claimed, with the server's power settings recorded; the jetpack gauge, villager goggles, encased lines seen through goggles and the container-picking line claimed. Display test group `createaddons`: 19 displays. **McpCraft:** the job board (each tab, the post draft), Job Storage, the job and factory prompts, the confirm over the board or a storage, the track markers and job beacon, and the markers' toggle line, all claimed; the board's JSON stored once in the recording. Display test group `mcpcraft`: 9 displays. Both passed in game. **Left out:** McpCraft's job board faces (world appearance from a message playback holds back, so boards look bare), its sync screen (a pause-menu screen), Create Addons' Juggernaut camera shake (not interface) |
-| 4.3 Jade | Not started | |
+| 4.3 Jade | Underway | See "Stage 4.3 in detail" |
 | 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
 
 Known limits of stage 1, for a compat or a later fix:
@@ -208,6 +208,31 @@ In order of how often they appear in a Create let's play:
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a small display test.
+
+### Stage 4.3 in detail: Jade (Compat, M)
+
+Jade is another person's mod, so its compat is a jar of its own, `compats/jade` (mod id `dailies_jade`), built with
+Dailies like the Create compat, and loaded only when both Dailies and Jade are installed. Compiled against the Jade in
+the owner's pack, 15.10.6 for NeoForge 1.21.1.
+
+- **The tooltip box:** what the player looks at, as Jade drew it: the lines and every element in them (text, item
+  icons, progress bars, fluid and energy gauges, armour and health rows, the mod name), the box's place, size, colours
+  and theme, the block or entity icon, and its fade. Recorded from what Jade drew on the recorder's game, never worked
+  out again from the playback world, since a server's data (a chest's contents, a furnace's progress) came from the
+  server and the world may differ.
+- **Jade's other play-time drawing:** found by a sweep of the jar (every GUI layer, world drawing and action-bar
+  message), each covered or left out with the reason. Jade's config screens, its plugin list and its key bindings are
+  not play.
+- **Drawn again** with Jade's own drawing code where it can be handed the recorded elements, under the owner's rule
+  (Show HUD, first person riding the recorder), as an overlay: it shows with the HUD, not under "Open windows".
+- **Where Jade sits beside the other compats:** the Create compat records Create's goggles separately; Jade's box and
+  Create's goggles can both show, and each records its own.
+- **A small display test** in a `jade` group: looking at a chest with items in it, a furnace burning, a mob with
+  health, and a Create machine, each checked drawn in first person and not in third person. Jade joins the modded
+  test's mods.
+- The lessons from Create's tests apply: check Jade's own conditions for showing the box (its config, the look
+  distance, sneaking for details), turn the player by yaw and pitch, wait for block entities, log a command that does
+  not run.
 
 ### Stage 4.2 in detail: ComedyMonkey's Create Addons and McpCraft (Owner's mods, M each)
 
