@@ -32,6 +32,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 1.4 The "Open windows" look | Done | `showWindows`, on by default, under Show HUD |
 | 1.5 Companion plugin API | Done | `CompanionPlugins` on `dailies_companion:compat`, client side `compat/companion/CompanionCompat`; SRV-6 to 8. First use: the server's list of plugins |
 | 1.6 Spec and tests | Done | Display test `WindowSteps`, group `windows`: chest, furnace, villager trades and inventory drawn in first person, absent in third person and flying free. Passed in game |
+| 1.7 Books, lecterns and signs | Underway | The owner's choice, 19 November: reading a written book, a book on a lectern, writing in a book and quill, and editing a sign or hanging sign are play screens and are recorded. The creative inventory stays out |
 | 2.1 Client compat API | Done | `api/compat`: a mod registers a `DailiesCompat` and claims screens, menus, window extras, overlays and a server half; Dailies records each claim's state on change and in every snapshot. Claims win over the generic path. The manifest lists the compats used; a missing one is said once. REC-26, REC-27, PLAY-21, PLAY-22, EXP-17, CPT-1 to 3. `gradlew apiJar` builds the API jar (CPT-4) |
 | 2.2 Server API | Done | `Claims.serverHalf` on the companion plugin API; the companion's `disabledPlugins` setting; the privacy rule in SRV-9 |
 | 2.3 Template compat project | Done | `compats/template` (mod id `dailies_template`): an example screen, an overlay, a server half and a display test; builds with Dailies, not in the game test (CPT-5) |
@@ -46,7 +47,7 @@ Known limits of stage 1, for a compat or a later fix:
 - a mod window may write into the playback world's blocks as it is filled;
 - the recipe book panel is never shown;
 - a mod window already open when recording starts is left out;
-- the creative inventory is not recorded;
+- the creative inventory is not recorded (the owner's choice);
 - the companion has no unit tests of its own (its routing is tested in the core, `CompatRoutesTest`);
 - a letter read in playback is drawn only if the recorder's held letter matches the one recorded;
 - the template compat is not in the game test;
@@ -136,6 +137,24 @@ the compasses' biome lists (menus, not play screens), statistics, the recipe boo
    - One small display test, not a full one: open a chest, a furnace, a villager's trades and the inventory while
      recording, then check in first-person playback with the HUD on that each window is drawn, and in third person
      that it is not. Jumps, trim and snapshots are covered by unit tests.
+
+7. **Books, lecterns and signs (the owner's choice, 19 November).** The spec left these out by an earlier choice that
+   was never the owner's; they are opened by using something in the world during play, so they count as play.
+   - Reading a written book from the hand: which hand, the page shown, and the book's pages (stored once in the
+     recording, as compats store large data), drawn with the game's own book screen.
+   - A book on a lectern: the lectern window (a server window) with its page, drawn by stage 1's path or claimed if
+     that cannot draw it right.
+   - Writing in a book and quill: the pages as typed, the page, the cursor and selection, and the signing screen with
+     its title, a few times a second while open, drawn read-only.
+   - Editing a sign or a hanging sign: which sign (its place, wood and side), the lines as typed and the line being
+     typed on, drawn with the game's own sign editing screen, read-only, sending nothing.
+   - Shown under the owner's rule (Show HUD, first person riding the recorder, the "Open windows" look) like every
+     window. Jumps, trim and combine as for every other recorded screen.
+   - Built into Dailies, through the same compat API the mods use (a compat of Dailies' own), so snapshots and jumps
+     work as for the rest.
+   - Display entries in the `windows` group: a written book read (two pages turned), a lectern, a book and quill being
+     written and then the signing screen, a sign and a hanging sign being edited.
+   - Spec: REC-25 no longer leaves out books and signs (the creative inventory stays out), rows for each, TEST-8.
 
 ## Stage 2: the compat API and a template (Spec + core + companion, M) — Done
 
