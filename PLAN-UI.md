@@ -1,6 +1,6 @@
 # Dailies: plan for interface in recordings
 
-Players see windows and overlays while they play: a chest they open, a machine's screen, a minimap, the hunger bar. A
+Players see windows and overlays while they play: a chest they open, a machine's screen, the engineer's goggles' readout. A
 recording does not hold any of them today (the spec drops the player's own screens and windows at record time), so an
 export shows the world but never what was on the player's screen. This plan records what is drawn during play and draws
 it again in playback and exports.
@@ -137,10 +137,11 @@ a test step.
 
 ---
 
-## Decisions to make
+## Decisions (made 19 November 2026)
 
-| Decision | Options |
+| Decision | Chosen |
 |---|---|
-| Where compat jars live | In this repository as subprojects (one build, tested together), or separate repositories |
-| Stage 1 for modded windows | Try every server-driven window generically, with a deny list for ones that misdraw (proposed), or only an allow list |
-| The pointer | Draw the recorded mouse pointer and carried item (proposed), or the window alone |
+| Where compat jars live | Subprojects in this repository: one build, built and tested together with Dailies and the companion |
+| Stage 1 for modded windows | Every server-driven window is tried generically; one that misdraws goes on a deny list, or gets a compat |
+| The pointer | The recorded mouse pointer and the carried item are drawn over the window |
+| Left out | Xaero's Minimap and World Map, AppleSkin |
