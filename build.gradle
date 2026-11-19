@@ -113,7 +113,7 @@ neoForge {
             // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
             // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
             systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
-                'create,sable,aeronautics,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,dailies_companion,dailies_selftest')
+                'create,sable,aeronautics,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,dailies_companion,dailies_create,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -361,11 +361,14 @@ def checkModsFolder = {
 }
 
 tasks.register('installTestMods', Sync) {
-    description = 'Puts the built Dailies jar, the self test jar and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion'
+    description = 'Puts the built Dailies jar, the self test jar, the Create compat and the other test mods into run-modded/mods'
+    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar'
     doFirst { checkModsFolder() }
     from(tasks.named('jar'))
     from(tasks.named('selftestJar'))
+    // The Create compat (CPT-6), a mod of its own built here, which the create group tries beside Create. Looked up when
+    // the task runs: the subproject is set up after this file
+    from({ project(':compats:create').tasks.named('jar').get().archiveFile })
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
         exclude overriddenMods

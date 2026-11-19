@@ -212,6 +212,12 @@ public final class Compats {
         }
     }
 
+    /** See {@link comedymonkey.dailies.api.compat.DailiesCompats#overlaysShown} */
+    public static boolean overlaysShown() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return Playback.loaded() && minecraft.level != null && minecraft.player != null && WindowLayer.shown(minecraft, false);
+    }
+
     public static boolean askServer(String pluginId, int version) {
         return CompanionCompat.ask(pluginId, version);
     }

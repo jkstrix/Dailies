@@ -237,6 +237,10 @@ public final class SelfTest {
             // Post Rider's mailbox, a letter read and a letter written, through the compat in Post Rider itself (REC-26, PLAY-21):
             // the compat's own display test, in a world and a recording of its own; skipped with a line without Post Rider
             always("postrider", "CompatDisplaySteps.postRider", () -> CompatDisplaySteps.postRider(this)),
+            // Create's value settings board and value box and a sequenced gearshift, through the
+            // Create compat (compats/create, CPT-6): in a world and a recording of its own; skipped with a line without Create
+            // or the compat
+            always("create", "CompatDisplaySteps.create", () -> CompatDisplaySteps.create(this)),
             // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
             // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
             when(Boolean.getBoolean("dailies.test.bestiary"), "the bestiary was not asked for (dailies.test.bestiary)", "bestiary", "BestiarySteps.run", () -> BestiarySteps.run(this)),

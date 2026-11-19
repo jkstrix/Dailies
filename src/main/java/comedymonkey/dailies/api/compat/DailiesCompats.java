@@ -32,6 +32,18 @@ public final class DailiesCompats {
     }
 
     /**
+     * Whether overlays are drawn at this moment in playback: the viewer rides along with the recorder in first person and
+     * the scene's recorder's HUD look is on. {@link OverlayPart#draw} is only called while they are; this is for the part
+     * of an overlay a compat draws into the world rather than over it (an outline on a block, from the compat's own
+     * drawing of the world), so that part follows the same rule. False outside playback. Client thread. Added after
+     * the first API jar of 1.1.0 (Post Rider's copy has it not), so a compat that calls it catches the
+     * {@code LinkageError} a Dailies without it throws.
+     */
+    public static boolean overlaysShown() {
+        return Compats.overlaysShown();
+    }
+
+    /**
      * Asks the server's plugin of this id, through the Dailies Companion, for what it has for this player; the answer
      * arrives at the {@link ServerHalf} registered for the id. Does nothing in playback or on a server without the
      * companion. Client thread

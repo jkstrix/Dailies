@@ -65,6 +65,7 @@ Java 21. The Gradle wrapper fetches everything else.
 | Build the companion (`companion/build/libs/`) | `gradlew build` in `companion/` |
 | Build the compat API jar for other mods to compile against (`build/libs/dailies-api-*.jar`) | `gradlew apiJar` |
 | Build the template compat (`compats/template/build/libs/`), the start of a compat for another mod | `gradlew :compats:template:build` |
+| Build the Create compat (`compats/create/build/libs/`), which the modded test loads beside Create | `gradlew :compats:create:build` |
 
 The scripted test drives the real game through its own MCP tools and prints `DAILIES TEST PASSED`, or
 `DAILIES TEST FAILED:` and the reason, with the number of checks skipped. Steps that could not run (a mod not
@@ -74,7 +75,7 @@ does not work is a failure, not a skip. `runTestModded` also fails at once if a 
 
 The groups are `settings`, `world`, `watching`, `moments`, `recording`, `packs`, `playback`, `balloon`, `export`,
 `editor`, `renderer`, `library`, `library-screens`, `points-of-view`, `addon`, `trains`, `edges`, `windows`, `postrider`,
-`bestiary`, `tour`, `camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`,
+`create`, `bestiary`, `tour`, `camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`,
 `packs`, `moments` and `playback`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
 
 The steps that stage things in a world of their own and compare playback with the live game (the addon, trains, edges,

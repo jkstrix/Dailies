@@ -39,6 +39,18 @@ final class CompatDisplaySteps {
         run(test, "postrider", "Post Rider", "postrider:screens", "Dailies Post Rider");
     }
 
+    /**
+     * Create's value settings board, a value box and a sequenced gearshift's screen, through the
+     * Create compat, a mod of its own (compats/create): -PdailiesOnly=create
+     */
+    static void create(SelfTest test) throws Exception {
+        if (Host.get().isModLoaded("create") && !Host.get().isModLoaded("dailies_create")) {
+            test.skip("the Dailies Create compat (dailies_create) is not installed: Create's screens in recordings were not tried");
+            return;
+        }
+        run(test, "create", "Create", "dailies_create:create", "Dailies Create");
+    }
+
     static void run(SelfTest test, String modId, String modName, String compatId, String world) throws Exception {
         if (!Host.get().isModLoaded(modId)) {
             test.skip(modName + " is not installed: its screens in recordings were not tried");
@@ -46,7 +58,7 @@ final class CompatDisplaySteps {
         }
         DisplayTest display = Compats.displayTest(compatId);
         if (display == null) {
-            test.skip("this version of " + modName + " registers no Dailies compat " + compatId + " with a display test (compats registered: "
+            test.skip("no Dailies compat " + compatId + " with a display test is registered for this version of " + modName + " (compats registered: "
                 + Compats.registered() + "): its screens in recordings were not tried");
             return;
         }

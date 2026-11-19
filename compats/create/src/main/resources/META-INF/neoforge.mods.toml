@@ -1,0 +1,48 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies_create"
+version = "${version}"
+displayName = "Dailies Create Compat"
+authors = "James Knight"
+description = '''
+Create's play screens and overlays in Dailies recordings: the value settings board and the value box a block shows, the
+machine screens, the engineer's goggles, the clipboard and the remaining air, recorded and drawn again in playback.
+Does nothing unless both Dailies and Create are installed.
+'''
+# Only the player's game has anything to do: a server never needs it, and a game with it joins a server without it
+displayTest = "IGNORE_ALL_VERSION"
+
+[[mixins]]
+config = "dailies_create.mixins.json"
+
+[[dependencies.dailies_create]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.dailies_create]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+# Both soft: the compat stands down without either
+[[dependencies.dailies_create]]
+modId = "dailies"
+type = "optional"
+versionRange = "[1.1.0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.dailies_create]]
+modId = "create"
+type = "optional"
+versionRange = "[6.0.10,)"
+ordering = "AFTER"
+side = "BOTH"
