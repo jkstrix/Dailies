@@ -225,6 +225,10 @@ Amendments 2.2.7 (on Moonlight 3.8.3).
 - Windows (stage 1, extras where needed): presents, notice board, pulley, cannon, red merchant, and any other.
 - Client-only screens: blackboard, sign post, doormat, speaker, Amendments' lectern book editing and anything else.
 - Overlays: the cannon's aiming, the slimed overlay, the selected-item overlays, and anything else the sweep finds.
+- **Placed items (the owner's word):** a stack of skulls and Supplementaries' placeable items (books, bottles, jars and
+  the rest of its list), placed as a player places them while recording, must be in playback at the same place with the
+  same block state and block entity data, and drawn as live, after plain play and after a jump. A world check beside the
+  display test, fixed in core if a snapshot does not describe them fully.
 
 **4.4c, `compats/createextras` (`dailies_createextras`), group `createextras`:** Create's add-ons in the pack that the
 Create compat does not cover: Create Deep Seas (`create_submarine` 3.3.0: boat engine, electrolyzer, sonar), Create
