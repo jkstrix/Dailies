@@ -1,0 +1,106 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies_extras"
+version = "${version}"
+displayName = "Dailies Extras Compat"
+authors = "James Knight"
+description = '''
+The rest of the pack's play screens and overlays in Dailies recordings: the lines Explorer's Compass and Nature's Compass
+show while held, Vista's viewfinder and signal projector, Emotecraft's emote wheel, Sophisticated Backpacks' backpacks with
+their upgrade tabs, Curios' pages, a corpse's pages, Pipez' pipe and filter windows, VanillaBackport's nautilus inventory
+and the lines these mods put above the hotbar, recorded and drawn again in playback. Does nothing unless Dailies and those
+mods are installed.
+'''
+# Only the player's game has anything to do: a server never needs it, and a game with it joins a server without it
+displayTest = "IGNORE_ALL_VERSION"
+
+[[mixins]]
+config = "dailies_extras.mixins.json"
+
+[[dependencies.dailies_extras]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+# All soft: the compat stands down without Dailies, and leaves out the part of each mod that is missing
+[[dependencies.dailies_extras]]
+modId = "dailies"
+type = "optional"
+versionRange = "[1.1.0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.dailies_extras]]
+modId = "explorerscompass"
+type = "optional"
+versionRange = "[1.21.1-3.4.0-neoforge,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "naturescompass"
+type = "optional"
+versionRange = "[1.21.1-3.4.0-neoforge,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "vista"
+type = "optional"
+versionRange = "[1.21-3.1.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "emotecraft"
+type = "optional"
+versionRange = "[2.4.12,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "sophisticatedbackpacks"
+type = "optional"
+versionRange = "[3.26.21,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "curios"
+type = "optional"
+versionRange = "[9.5.1+1.21.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "corpse"
+type = "optional"
+versionRange = "[1.21.1-1.1.22,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "pipez"
+type = "optional"
+versionRange = "[1.21.1-1.2.31,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_extras]]
+modId = "vanillabackport"
+type = "optional"
+versionRange = "[1.2.2,)"
+ordering = "AFTER"
+side = "BOTH"

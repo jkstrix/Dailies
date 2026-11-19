@@ -343,6 +343,11 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
         // The window's menu belongs to a stand-in player who is never in the world: what fills its slots fills the
         // stand-in's inventory, not the viewer's
         RemotePlayer owner = new RemotePlayer(minecraft.level, OWNER);
+        if (Viewer.riding() instanceof Entity recorder) {
+            // Where the recorder stands, turned as they are: a mod's window that looks for its block or entity near the
+            // player opening it (a corpse, say) finds it near the stand-in too. The stand-in is still never in the world
+            owner.moveTo(recorder.getX(), recorder.getY(), recorder.getZ(), recorder.getYRot(), recorder.getXRot());
+        }
         Inventory inventory = owner.getInventory();
         Component title = codec.title(state.title);
         AbstractContainerMenu menu;

@@ -13,7 +13,7 @@ pluginManagement {
 rootProject.name = 'dailies'
 
 // Compats for other people's mods, each a mod of its own built with Dailies (specification CPT-5): the template that
-// each is started from, Create's, Jade's and Create Aeronautics'
+// each is started from, Create's, Jade's, Create Aeronautics' and the rest of the pack's
 include 'compats:template'
 include 'compats:create'
 include 'compats:jade'
@@ -21,3 +21,4 @@ include 'compats:aeronautics'
 // Supplementaries' and Amendments' (CPT-10)
 include 'compats:supplementaries'
 include 'compats:createextras'
+include 'compats:extras'

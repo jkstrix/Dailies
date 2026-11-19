@@ -258,6 +258,10 @@ public final class SelfTest {
             // Create's other add-ons, through the compat for them (compats/createextras, CPT-11): in a world and a recording of
             // their own; skipped with a line without the add-ons or the compat
             always("createextras", "CompatDisplaySteps.createExtras", () -> CompatDisplaySteps.createExtras(this)),
+            // The rest of the pack (the compasses, Vista, Emotecraft, Sophisticated Backpacks, Curios, Corpse, Pipez, VanillaBackport),
+            // through the extras compat (compats/extras, CPT-12): in a world and a recording of their own; skipped with a line
+            // without the mods or the compat
+            always("extras", "CompatDisplaySteps.extras", () -> CompatDisplaySteps.extras(this)),
             // The owner's own mods, each through the compat in the mod itself, in a world and a recording of its own; skipped
             // with a line without the mod, or a version of it without the compat
             always("createaddons", "CompatDisplaySteps.createAddons", () -> CompatDisplaySteps.createAddons(this)),

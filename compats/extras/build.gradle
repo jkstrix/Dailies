@@ -1,0 +1,93 @@
+// The compat for the rest of the owner's pack (specification CPT-12): a small mod of its own, dailies_extras, that records
+// the play screens and overlays of Explorer's Compass, Nature's Compass, Vista, Emotecraft, Sophisticated Backpacks,
+// Curios, Corpse, Pipez and VanillaBackport through Dailies' compat API, and draws them again in playback. Like the Create
+// compat it has only a client half: everything it records is on the player's own screen. It loads and runs without
+// Dailies or any of those mods, doing nothing: each is a soft dependency, only compiled against (or, for the compasses,
+// named only), and each part is claimed only when its mod is loaded.
+//
+// Built with Dailies (gradlew build in the repository builds it too); the modded test loads its jar (installTestMods).
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+version = '1.0.0'
+group = 'comedymonkey.dailiescompat'
+
+base {
+    archivesName = 'dailies-compat-extras-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    // The mods as Modrinth publishes them: the same jars, byte for byte, as the ones in the owner's pack
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies_extras {
+            sourceSet sourceSets.main
+        }
+    }
+    // No runs: the compat is tried in game beside Dailies and the mods, in the modded test (its extras group)
+}
+
+// The versions in the owner's pack and the modded test. VanillaBackport and Moonlight publish the same version number for
+// several loaders on Modrinth, so they are named by the NeoForge file's version id
+def vistaVersion = '1.21-3.1.2-neoforge'
+def moonlightVersion = 'yBea1yLM'
+def emotecraftVersion = '2.4.12+1.21.1-forge'
+def backpacksVersion = '1.21.1-3.26.21.2249'
+def sophisticatedCoreVersion = '1.21.1-1.5.35.2473'
+def curiosVersion = '9.5.1+1.21.1'
+def corpseVersion = 'neoforge-1.21.1-1.1.22'
+def pipezVersion = 'neoforge-1.21.1-1.2.31'
+def vanillaBackportVersion = 'mGS7BxD4'
+
+dependencies {
+    // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
+    compileOnly project(path: ':', configuration: 'dailiesApi')
+    // The mods whose classes the compat builds its playback screens from: the same, so the mod runs without any of them.
+    // Moonlight is what Vista's blocks are built on. Explorer's Compass and Nature's Compass are not compiled against: the
+    // compat's mixins name the compasses' drawing by name
+    compileOnly("maven.modrinth:vista_tv:${vistaVersion}") { transitive = false }
+    compileOnly("maven.modrinth:moonlight:${moonlightVersion}") { transitive = false }
+    compileOnly("maven.modrinth:emotecraft:${emotecraftVersion}") { transitive = false }
+    compileOnly("maven.modrinth:sophisticated-backpacks:${backpacksVersion}") { transitive = false }
+    compileOnly("maven.modrinth:sophisticated-core:${sophisticatedCoreVersion}") { transitive = false }
+    compileOnly("maven.modrinth:curios:${curiosVersion}") { transitive = false }
+    compileOnly("maven.modrinth:corpse:${corpseVersion}") { transitive = false }
+    compileOnly("maven.modrinth:pipez:${pipezVersion}") { transitive = false }
+    compileOnly("maven.modrinth:vanillabackport:${vanillaBackportVersion}") { transitive = false }
+
+    // The states' unit tests need neither the game nor the mods: the states are plain bytes
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
