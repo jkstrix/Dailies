@@ -338,7 +338,16 @@ public final class VanillaCompat implements DailiesCompat {
             for (int i = 0; i < lines.length; i++) {
                 lines[i] = Component.literal(recorded.line(i));
             }
-            sign.setText(new SignText(lines, lines.clone(), DyeColor.byName(recorded.colour(), DyeColor.BLACK), recorded.glowing()), recorded.front());
+            // Loaded as a saved sign is, which tells no world: setText would, and the copy is in none
+            SignText text = new SignText(lines, lines.clone(), DyeColor.byName(recorded.colour(), DyeColor.BLACK), recorded.glowing());
+            net.minecraft.core.HolderLookup.Provider registries = Minecraft.getInstance().level == null ? null : Minecraft.getInstance().level.registryAccess();
+            if (registries == null) {
+                return null;
+            }
+            net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+            tag.put(recorded.front() ? "front_text" : "back_text",
+                SignText.DIRECT_CODEC.encodeStart(registries.createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), text).getOrThrow());
+            sign.loadCustomOnly(tag, registries);
             Screen screen = sign instanceof HangingSignBlockEntity
                 ? new PlaybackScreens.HangingSign(sign, recorded.front(), recorded.cursor(), recorded.selection())
                 : new PlaybackScreens.Sign(sign, recorded.front(), recorded.cursor(), recorded.selection());
