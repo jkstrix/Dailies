@@ -12,7 +12,7 @@ the HUD off.
 **What counts as play (the owner's rule):** a screen opened by using something in the world (a block, an item or an
 entity) or by the inventory key, during normal play, and the overlays drawn over play. **Everything else is left
 out:** settings and configuration, statistics, advancements, the recipe book panel, the pause menu and every other
-menu, selection wheels, and title, login, setup and debug screens.
+menu, and title, login, setup and debug screens. Selection wheels used in play (Create's toolbox and wrench wheels) count as play.
 
 Recording works from an allow list, not a block list: a screen is recorded only when Dailies (stage 1) or a compat
 (stages 2 to 4) says it is a play screen. The deny list in the decisions below applies only within that allow list,
@@ -36,7 +36,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 2.2 Server API | Done | `Claims.serverHalf` on the companion plugin API; the companion's `disabledPlugins` setting; the privacy rule in SRV-9 |
 | 2.3 Template compat project | Done | `compats/template` (mod id `dailies_template`): an example screen, an overlay, a server half and a display test; builds with Dailies, not in the game test (CPT-5) |
 | 3 Post Rider | Done | Post Rider 1.2.2 carries its own hooks (`client/dailies`), compiled against a copy of the API jar, loaded only with Dailies present. Mailbox drawn by the generic path plus window extras (tab, address, scroll); reading a letter (hand, page, checked against the held letter); writing a letter (text, page, cursor, read-only screen). Display test group `postrider`, passed in game |
-| 4.1 Create | Mostly done | `compats/create` (mod id `dailies_create`), a jar of its own beside Create. Claimed: the value settings board, value boxes and their tip, the goggles readout, the sequenced gearshift, threshold switch, elevator contact, station and train assembly, display link, factory gauge, symmetry wand and schematic naming screens, the clipboard, remaining air, the train HUD, the linked controller's bind HUD, Create's status-line messages, the held schematic (tool bar, placed box, deploy preview) and every other outline Create draws in the world (super glue selection and glued areas, the schematic and quill selection, arm, ejector and port targets, chain conveyor, track and zapper previews). Stage 1 alone: schematic table, schematicannon, linked controller binding, toolbox, crafting blueprint, stock keeper, package port. Stage 1 plus extras: list and attribute filters, package filter, package port address, redstone requester, the schedule. Display test group `create`: 15 displays, passed in game. **Not yet:** the blocks of a placed schematic (only its box is drawn: a compat's state goes into every snapshot, so the schematic's contents can't be stored once until the API can hold data once per recording), zapper and worldshaper screens, the schematic edit screen, toolbox hotbar marks, the blueprint and table cloth overlays, the track placement hint, placement helper arrows and ghost blocks, the symmetry mirror in the world, the stock keeper's search and order; the train HUD has no display entry. **Left out under the owner's rule:** the toolbox and wrench selection wheels |
+| 4.1 Create | Mostly done | `compats/create` (mod id `dailies_create`), a jar of its own beside Create. Claimed: the value settings board, value boxes and their tip, the goggles readout, the sequenced gearshift, threshold switch, elevator contact, station and train assembly, display link, factory gauge, symmetry wand and schematic naming screens, the clipboard, remaining air, the train HUD, the linked controller's bind HUD, Create's status-line messages, the held schematic (tool bar, placed box, deploy preview) and every other outline Create draws in the world (super glue selection and glued areas, the schematic and quill selection, arm, ejector and port targets, chain conveyor, track and zapper previews). Stage 1 alone: schematic table, schematicannon, linked controller binding, toolbox, crafting blueprint, stock keeper, package port. Stage 1 plus extras: list and attribute filters, package filter, package port address, redstone requester, the schedule. Display test group `create`: 15 displays, passed in game. **Not yet:** the blocks of a placed schematic (only its box is drawn: a compat's state goes into every snapshot, so the schematic's contents can't be stored once until the API can hold data once per recording), zapper and worldshaper screens, the schematic edit screen, toolbox hotbar marks, the blueprint and table cloth overlays, the track placement hint, placement helper arrows and ghost blocks, the symmetry mirror in the world, the stock keeper's search and order; the train HUD has no display entry. The toolbox and wrench selection wheels are being added |
 | 4.2 The owner's mods (Create Addons, McpCraft) | Not started | Hooks in the mods themselves |
 | 4.3 Jade | Not started | |
 | 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
@@ -100,8 +100,8 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 
 **Left out on purpose:** Xaero's Minimap and World Map and AppleSkin (the owner does not want them in videos), FPS
 Overlay, Dynamic FPS, JEI and Inventory Profiles Next buttons and panels, shulker box tooltips, Iris, Simple Voice
-Chat's group and setup screens (its icons are already a scene look), Better Advancements, Emotecraft's emote wheel
-and the compasses' biome lists (menus, not play screens), statistics, the recipe book panel, and every config screen.
+Chat's group and setup screens (its icons are already a scene look), Better Advancements,
+the compasses' biome lists (menus, not play screens), statistics, the recipe book panel, and every config screen.
 
 ---
 
@@ -173,7 +173,7 @@ In order of how often they appear in a Create let's play:
 1. Create: every machine setting first (the value settings board and value box, and the machine screens, so a viewer sees what speed, direction or amount was set), then the goggles overlay, then train schedules and the clipboard.
 2. ComedyMonkey's Create Addons (its screens and overlays) and McpCraft (the job board, the prompts and job storage): the owner's own mods. These need no compat jar: the owner can add hooks to the mods themselves, so each implements the compat API directly as a soft dependency (found through `DailiesApi`, as McpCraft already does for playback), records exactly what its screens need, and sends any server-side facts from its own server code.
 3. Jade.
-4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
+4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses, Emotecraft's emote wheel.
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a small display test.
