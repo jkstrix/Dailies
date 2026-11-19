@@ -413,10 +413,21 @@ final class BestiarySteps {
     }
 
     static Function<Item, String> heard(String sound) {
-        return new Need("heard " + sound, item -> {
-            long times = Census.liveSounds.stream().filter(line -> line.endsWith(" " + sound) && Integer.parseInt(line.substring(0, line.indexOf(' '))) >= item.from
+        return heard(sound, new String[0]);
+    }
+
+    /**
+     * Heard as the sound, or as one a mod plays in its place: Amendments, in the owner's pack, gives the ghast fireball's
+     * explosion a sound of its own (amendments:explosion.fireball) instead of the game's
+     */
+    static Function<Item, String> heard(String sound, String... insteadOf) {
+        java.util.List<String> any = new java.util.ArrayList<>(java.util.List.of(insteadOf));
+        any.add(0, sound);
+        return new Need("heard " + String.join(" or ", any), item -> {
+            long times = Census.liveSounds.stream().filter(line -> any.stream().anyMatch(name -> line.endsWith(" " + name))
+                && Integer.parseInt(line.substring(0, line.indexOf(' '))) >= item.from
                 && Integer.parseInt(line.substring(0, line.indexOf(' '))) <= item.to).count();
-            return times == 0 ? null : sound + " heard " + times + " times";
+            return times == 0 ? null : String.join(" or ", any) + " heard " + times + " times";
         });
     }
 
