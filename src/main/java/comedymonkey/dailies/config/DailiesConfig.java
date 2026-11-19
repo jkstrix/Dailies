@@ -35,6 +35,11 @@ public final class DailiesConfig {
         BOTTOM, MIDDLE, TOP
     }
 
+    /** Where the recording timer and its lamp sit while recording, or the lamp alone, or nothing */
+    public enum RecordingTimer {
+        TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT, LAMP_ONLY, OFF
+    }
+
     /** The shortest token remote access accepts when one is typed in; the one the mod makes is 43 characters */
     public static final int MCP_TOKEN_MIN_LENGTH = 24;
 
@@ -49,6 +54,7 @@ public final class DailiesConfig {
             bool("autoStart", false, "Start a recording by itself on joining any world or server");
             bool("autoFinish", true, "Finish the recording by itself on leaving. When off, the next world joined continues the same recording");
             bool("showNotices", true, "Show an on-screen notice when a recording starts, pauses, resumes, finishes or fails");
+            choice("recordingTimer", RecordingTimer.TOP_LEFT, "Where the recording timer and its lamp sit while recording: a corner of the screen, the lamp alone (top left), or off");
             bool("saveWithoutAsking", false, "Finish a recording under its default name without asking for one");
             choice("controlsLocation", Side.RIGHT, "The side of the pause menu the recording buttons sit on");
             bool("markDimensionChanges", true, "Drop a marker on every change of dimension");

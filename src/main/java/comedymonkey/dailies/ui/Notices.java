@@ -25,7 +25,21 @@ public final class Notices {
     private static volatile long since = 0;
     private static volatile boolean hidden = false;
 
+    /** The recording timer's plate: its height, and how far it keeps from the screen's edges */
+    private static final int PLATE_HEIGHT = 14;
+    private static final int MARGIN = 4;
+
     private Notices() {
+    }
+
+    /**
+     * Where the timer's plate goes for the recordingTimer setting, as its top left corner: a corner of the screen, kept
+     * clear of its edges; the lamp alone sits top left. Anything not a corner is taken as top left
+     */
+    static int[] place(String where, int screenWidth, int screenHeight, int width, int height) {
+        boolean right = where.endsWith("RIGHT");
+        boolean bottom = where.startsWith("BOTTOM");
+        return new int[]{right ? screenWidth - MARGIN - width : MARGIN, bottom ? screenHeight - MARGIN - height : MARGIN};
     }
 
     public static void register(RegisterGuiLayersEvent event) {
@@ -56,19 +70,27 @@ public final class Notices {
         }
         Font font = minecraft.font;
         Recorder.State state = Recorder.get().state();
-        if (state != Recorder.State.IDLE) {
-            // A walnut plate with a lamp: lit and blinking while recording, dim while paused
+        String where = Host.get().setting("recordingTimer", "TOP_LEFT").toUpperCase(java.util.Locale.ROOT);
+        if (state != Recorder.State.IDLE && !where.equals("OFF")) {
+            // A walnut plate with a lamp, lit and blinking while recording, dim while paused, and the time recorded beside
+            // it unless the setting asks for the lamp alone
+            boolean lampOnly = where.equals("LAMP_ONLY");
             int seconds = Math.max(0, Recorder.get().recordingTick()) / 20;
             String time = String.format("%d:%02d", seconds / 60, seconds % 60);
-            int width = 16 + font.width(time) + 6;
-            Kit.shadow(graphics, 4, 4, 4 + width, 18, 3);
-            graphics.fill(4, 4, 4 + width, 18, Controls.PLATE);
-            graphics.renderOutline(4, 4, width, 14, Controls.BRASS);
+            int width = lampOnly ? 14 : 16 + font.width(time) + 6;
+            int[] at = place(where, graphics.guiWidth(), graphics.guiHeight(), width, PLATE_HEIGHT);
+            int x = at[0];
+            int y = at[1];
+            Kit.shadow(graphics, x, y, x + width, y + PLATE_HEIGHT, 3);
+            graphics.fill(x, y, x + width, y + PLATE_HEIGHT, Controls.PLATE);
+            graphics.renderOutline(x, y, width, PLATE_HEIGHT, Controls.BRASS);
             boolean lit = state == Recorder.State.RECORDING && (System.currentTimeMillis() / 600) % 2 == 0;
             int lamp = state == Recorder.State.PAUSED ? 0xFF8A7A5A : lit ? 0xFFE0483A : 0xFF7A2A22;
-            graphics.fill(9, 8, 13, 14, lamp);
-            graphics.fill(8, 9, 14, 13, lamp);
-            graphics.drawString(font, time, 18, 7, Controls.PARCHMENT, false);
+            graphics.fill(x + 5, y + 4, x + 9, y + 10, lamp);
+            graphics.fill(x + 4, y + 5, x + 10, y + 9, lamp);
+            if (!lampOnly) {
+                graphics.drawString(font, time, x + 14, y + 3, Controls.PARCHMENT, false);
+            }
         }
         if (!(minecraft.screen instanceof KitScreen)) {
             // A Dailies screen draws the notice itself, over its plate and sharp, where this one would be blurred behind it
