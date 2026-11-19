@@ -106,6 +106,27 @@ class StatesTest {
     }
 
     @Test
+    void aClipboardKeepsThePageOpenAndTheCursor() {
+        States.Clipboard clipboard = new States.Clipboard(List.of(new States.Entry(true, "Shafts", "create:shaft", 32),
+            new States.Entry(false, "Speed: 64", "", 0)), 2, 4, 1, 9, 3, false);
+        States.Clipboard read = States.readClipboard(States.clipboard(clipboard));
+        assertEquals(clipboard, read);
+        assertEquals("create:shaft", read.entries().get(0).item());
+        assertEquals(1, read.editing());
+        assertEquals(9, read.cursor());
+        assertEquals(3, read.selection());
+    }
+
+    @Test
+    void theRemainingAirFlashesBelowAMinuteEveryOtherSecond() {
+        States.Air air = new States.Air(58, "create:copper_backtank", false);
+        assertEquals(air, States.readAir(States.air(air)));
+        assertTrue(air.flashing());
+        assertFalse(new States.Air(59, "", false).flashing());
+        assertFalse(new States.Air(120, "", true).flashing());
+    }
+
+    @Test
     void filterExtrasKeepModesListsAndTheAddress() {
         States.Filter filter = new States.Filter(new int[]{1, 0}, List.of(), "");
         States.Filter attributes = new States.Filter(new int[]{2}, List.of("{\"text\":\"Selected\"}", "{\"text\":\"- is smeltable\"}"), "");
@@ -124,10 +145,21 @@ class StatesTest {
     }
 
     @Test
+    void aScheduleKeepsItsSavedBytesAndScroll() {
+        States.Schedule schedule = new States.Schedule(new byte[]{10, 0, 0, 9, 0, 7, 'E', 'n', 't', 'r', 'i', 'e', 's', 0}, 42.5F);
+        States.Schedule read = States.readSchedule(States.schedule(schedule));
+        assertEquals(schedule, read);
+        assertEquals(42.5F, read.scroll());
+        assertArrayEquals(schedule.saved(), read.saved());
+    }
+
+    @Test
     void aDamagedRecordIsRefused() {
         byte[] whole = States.board(new States.Board(SPEED, List.of(), 1, 1, 0, 0, "", List.of(), List.of()));
         assertThrows(IllegalArgumentException.class, () -> States.readBoard(Arrays.copyOf(whole, whole.length - 3)));
         assertThrows(IllegalArgumentException.class, () -> States.readBoxes(new byte[]{0x7F, 0, 0, 0}));
+        byte[] schedule = States.schedule(new States.Schedule(new byte[40], 1.0F));
+        assertThrows(IllegalArgumentException.class, () -> States.readSchedule(Arrays.copyOf(schedule, 20)), "a schedule cut short");
     }
 
     @Test

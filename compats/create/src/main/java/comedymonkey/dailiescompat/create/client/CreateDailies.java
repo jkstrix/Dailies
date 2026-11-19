@@ -1,6 +1,7 @@
 package comedymonkey.dailiescompat.create.client;
 
 import com.simibubi.create.content.contraptions.elevator.ElevatorContactScreen;
+import com.simibubi.create.content.equipment.clipboard.ClipboardScreen;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftScreen;
 import com.simibubi.create.content.redstone.thresholdSwitch.ThresholdSwitchScreen;
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueSettingsScreen;
@@ -36,7 +37,9 @@ import java.util.function.Supplier;
  * ({@link ValueBoxes}) and their tip ({@link ValueTip}), the sequenced gearshift, the threshold switch and the elevator
  * contact ({@link MachineScreens}), and extras for the filter windows and the windows with an address, which Dailies
  * draws itself ({@link FilterExtras});</li>
- * <li>the engineer's goggles' readout ({@link Goggles}).</li>
+ * <li>the engineer's goggles' readout ({@link Goggles});</li>
+ * <li>the clipboard ({@link ClipboardPart}), the backtank's remaining air ({@link RemainingAir}), and a train schedule's
+ * entries as they are edited ({@link ScheduleExtras}).</li>
  * </ul>
  * Create's other windows the server opens (the linked controller, the toolbox, the schematic table and cannon, the
  * crafting blueprint, the stock keeper and the rest) are recorded and drawn by Dailies itself and need nothing here.
@@ -99,6 +102,10 @@ public final class CreateDailies implements DailiesCompat {
         }
         // 2. The goggles
         claims.overlay(Goggles.NAME, overlay(Goggles::capture, Goggles::draw, SETTING_TICKS));
+        // 3. The clipboard, the remaining air and the schedule
+        claims.screen(ClipboardPart.NAME, ClipboardScreen.class, screen(ClipboardPart::capture, ClipboardPart::build, TYPING_TICKS));
+        claims.overlay(RemainingAir.NAME, overlay(RemainingAir::capture, RemainingAir::draw, 1));
+        claims.windowExtras(ScheduleExtras.NAME, "create:schedule", extras(ScheduleExtras::capture, ScheduleExtras::apply, TYPING_TICKS));
     }
 
     @Override

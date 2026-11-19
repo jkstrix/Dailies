@@ -269,6 +269,71 @@ public final class States {
         return read(data, in -> new Elevator(in.text(), in.text(), in.text()));
     }
 
+    // --- The clipboard ---
+
+    /** One line of a clipboard: ticked or not, its text, and the item shown beside it with its amount (empty for none) */
+    public record Entry(boolean checked, String text, String item, int amount) {
+    }
+
+    /**
+     * A clipboard being read or written: only the page open (its lines), which page it is of how many, the line being
+     * written (-1 for none) and where the cursor and the selection's other end are in it, and whether it is read only
+     */
+    public record Clipboard(List<Entry> entries, int page, int pages, int editing, int cursor, int selection, boolean readOnly) {
+    }
+
+    public static byte[] clipboard(Clipboard clipboard) {
+        return write(out -> {
+            out.count(clipboard.entries().size());
+            for (Entry entry : clipboard.entries()) {
+                out.out.writeBoolean(entry.checked());
+                out.text(entry.text());
+                out.text(entry.item());
+                out.out.writeInt(entry.amount());
+            }
+            out.out.writeInt(clipboard.page());
+            out.out.writeInt(clipboard.pages());
+            out.out.writeInt(clipboard.editing());
+            out.out.writeInt(clipboard.cursor());
+            out.out.writeInt(clipboard.selection());
+            out.out.writeBoolean(clipboard.readOnly());
+        });
+    }
+
+    public static Clipboard readClipboard(byte[] data) {
+        return read(data, in -> {
+            int count = in.count();
+            List<Entry> entries = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                entries.add(new Entry(in.in.readBoolean(), in.text(), in.text(), in.in.readInt()));
+            }
+            return new Clipboard(entries, in.in.readInt(), in.in.readInt(), in.in.readInt(), in.in.readInt(), in.in.readInt(), in.in.readBoolean());
+        });
+    }
+
+    // --- The backtank's remaining air ---
+
+    /** The backtank's air under water: the seconds left as Create counts them, and the backtank drawn, by id */
+    public record Air(int timeLeft, String backtank, boolean fireResistant) {
+
+        /** Whether the count is drawn reddened: below a minute, every other second, as Create flashes it */
+        public boolean flashing() {
+            return this.timeLeft < 60 && this.timeLeft % 2 == 0;
+        }
+    }
+
+    public static byte[] air(Air air) {
+        return write(out -> {
+            out.out.writeInt(air.timeLeft());
+            out.text(air.backtank());
+            out.out.writeBoolean(air.fireResistant());
+        });
+    }
+
+    public static Air readAir(byte[] data) {
+        return read(data, in -> new Air(in.in.readInt(), in.text(), in.in.readBoolean()));
+    }
+
     // --- Extras for Create's filter windows, which Dailies draws itself ---
 
     /**
@@ -308,6 +373,45 @@ public final class States {
                 modes[i] = in.in.readInt();
             }
             return new Filter(modes, in.texts(), in.text());
+        });
+    }
+
+    // --- Extras for a train schedule's window ---
+
+    /**
+     * A train schedule as its window holds it while it is edited (Create's own saved form of it, as bytes of the game's
+     * tag format, which only the game's side reads), and how far its list is scrolled
+     */
+    public record Schedule(byte[] saved, float scroll) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Schedule schedule && java.util.Arrays.equals(schedule.saved, this.saved) && schedule.scroll == this.scroll;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Arrays.hashCode(this.saved) * 31 + Float.hashCode(this.scroll);
+        }
+    }
+
+    public static byte[] schedule(Schedule schedule) {
+        return write(out -> {
+            out.count(schedule.saved().length);
+            out.out.write(schedule.saved());
+            out.out.writeFloat(schedule.scroll());
+        });
+    }
+
+    public static Schedule readSchedule(byte[] data) {
+        return read(data, in -> {
+            int length = in.in.readInt();
+            if (length < 0 || length > MOST * 16) {
+                throw new IOException("a schedule of " + length + " bytes");
+            }
+            byte[] saved = new byte[length];
+            in.in.readFully(saved);
+            return new Schedule(saved, in.in.readFloat());
         });
     }
 
