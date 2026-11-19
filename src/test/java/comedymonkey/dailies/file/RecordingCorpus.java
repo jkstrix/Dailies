@@ -24,9 +24,9 @@ import java.util.zip.Inflater;
  */
 final class RecordingCorpus {
 
-    /** The two long fixtures of the modded test game, read only */
-    static final String DEFAULT_RECORDINGS = "E:/Youtube/Dailies/run-modded/dailies/fixtures/realworld.dailies,"
-        + "E:/Youtube/Dailies/run-modded/dailies/fixtures/camera-route.dailies";
+    /** The two long fixtures of the modded test game, read only, from the project folder the tests run in */
+    static final String DEFAULT_RECORDINGS = "run-modded/dailies/fixtures/realworld.dailies,"
+        + "run-modded/dailies/fixtures/camera-route.dailies";
 
     /** Dictionaries are trained on about this many times their size of sample data, as zstd advises */
     static final int SAMPLE_TIMES_DICTIONARY = 100;

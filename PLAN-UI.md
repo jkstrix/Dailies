@@ -35,7 +35,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 2.1 Client compat API | Not started | |
 | 2.2 Server API | Not started | Builds on 1.5 |
 | 2.3 Template compat project | Not started | |
-| 3 Post Rider | Not started | Hooks go into `E:/Repos/Pony Express` |
+| 3 Post Rider | Not started | Hooks go into the Post Rider mod itself |
 | 4.1 Create | Not started | Every machine setting first |
 | 4.2 The owner's mods (Create Addons, McpCraft) | Not started | Hooks in the mods themselves |
 | 4.3 Jade | Not started | |
@@ -146,7 +146,7 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
 
 ## Stage 3: Post Rider as the first compat (Owner's mod, M) — Not started
 
-Post Rider has one window and two screens, which makes it a good first test. It is the owner's own mod (source in `E:/Repos/Pony Express`), so its hooks go into the mod itself, implementing the compat API directly, rather than into a separate compat jar.
+Post Rider has one window and two screens, which makes it a good first test. It is the owner's own mod, so its hooks go into the mod itself, implementing the compat API directly, rather than into a separate compat jar.
 
 1. **Mailbox:** a server-driven window, so stage 1 should already show it. The compat checks that and fixes what stage 1
    cannot.
@@ -182,4 +182,4 @@ a small display test.
 | The pointer | The recorded mouse pointer and the carried item are drawn over the window |
 | Tests | One small display test per compat and for the vanilla windows: the screens are drawn in first-person playback, not in third person. No full comparison tests |
 | Left out | Xaero's Minimap and World Map, AppleSkin |
-| The owner's mods: Post Rider (`E:/Repos/Pony Express`), ComedyMonkey's Create Addons (`E:/Repos/Flight Goggles Compat`), McpCraft (`E:/Repos/McpCraft`) | Hooks written into the mods themselves: each implements the compat API directly, as a soft dependency, instead of a separate compat jar. Separate compat jars, as subprojects here, are for other people's mods |
+| The owner's mods: Post Rider, ComedyMonkey's Create Addons, McpCraft | Hooks written into the mods themselves: each implements the compat API directly, as a soft dependency, instead of a separate compat jar. Separate compat jars, as subprojects here, are for other people's mods |
