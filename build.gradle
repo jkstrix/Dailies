@@ -113,7 +113,7 @@ neoForge {
             // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
             // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
             systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
-                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,supplementaries,amendments,moonlight,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_supplementaries,dailies_selftest')
+                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,supplementaries,amendments,moonlight,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_supplementaries,create_submarine,create_connected,createcasing,tracks,railways,create_jetpack,create_hypertube,dailies_createextras,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -330,9 +330,10 @@ def modsFolderSetting = providers.gradleProperty('dailies.modsFolder').orNull
 def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
 // The mods the scripted run needs or has to prove it works with; their own requirements are added as the game asks for them.
 // Matched as the jars are named, capitals, spaces and all: Jade's jar is Jade-1.21.1-NeoForge-<version>.jar, and Gyroscope
-// Stabilizers' is "Create Aeronautics Gyroscope Stabilizers.jar", with no version in its name
+// Stabilizers' is "Create Aeronautics Gyroscope Stabilizers.jar", with no version in its name. Create Encased's is
+// "Create Encased-<version>.jar", and Create Jetpack needs Kotlin for Forge (kotlinforforge-<version>-all.jar)
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
-    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*,supplementaries-1.21.1-*,amendments-1.21-*,moonlight-1.21.1-*').split(',')
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*,supplementaries-1.21.1-*,amendments-1.21-*,moonlight-1.21.1-*,create_submarine-*,create_connected-*,Create Encased-*,tracks-neoforge-*,create-steam-n-rails-*,create_jetpack-forge-*,kotlinforforge-*,create_hypertube-*').split(',')
 
 // The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
 tasks.register('buildCompanion', GradleBuild) {
@@ -363,8 +364,9 @@ def checkModsFolder = {
 }
 
 tasks.register('installTestMods', Sync) {
-    description = 'Puts the built Dailies jar, the self test jar, the Create, Jade and Create Aeronautics compats and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar'
+    description = 'Puts the built Dailies jar, the self test jar, the Create, Jade, Create Aeronautics and Create add-ons compats and the other test mods into run-modded/mods'
+    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar',
+        ':compats:createextras:jar'
     doFirst { checkModsFolder() }
     from(tasks.named('jar'))
     from(tasks.named('selftestJar'))
@@ -378,6 +380,8 @@ tasks.register('installTestMods', Sync) {
     // The Supplementaries compat (CPT-10), the same way, which the supplementaries group tries beside Supplementaries and Amendments
     dependsOn ':compats:supplementaries:jar'
     from({ project(':compats:supplementaries').tasks.named('jar').get().archiveFile })
+    // The compat for Create's other add-ons (CPT-11), the same way, which the createextras group tries beside them
+    from({ project(':compats:createextras').tasks.named('jar').get().archiveFile })
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
         exclude overriddenMods

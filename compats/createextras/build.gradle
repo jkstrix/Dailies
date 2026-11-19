@@ -1,0 +1,103 @@
+// The compat for Create's other add-ons (specification CPT-11): a small mod of its own, dailies_createextras, that records
+// the play screens and overlays of the add-ons in the owner's pack that the Create compat does not cover (Create Deep
+// Seas, Create Connected, Create Encased, Create: Tracks, Steam 'n' Rails, Create Jetpack and Create: Hypertubes)
+// through Dailies' compat API, and draws them again in playback. Like the Create compat it has only a client half:
+// everything it records is on the player's own screen. It loads and runs without Dailies or any of those mods, doing
+// nothing: each is a soft dependency, only compiled against, and each part is claimed only when its mod is loaded.
+//
+// Built with Dailies (gradlew build in the repository builds it too); the modded test loads its jar (installTestMods).
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+version = '1.0.0'
+group = 'comedymonkey.dailiescompat'
+
+base {
+    archivesName = 'dailies-compat-createextras-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    // Create, Ponder (with Catnip in it) and Flywheel, as Create's own README names them: the add-ons' screens are built
+    // on Create's and Catnip's
+    maven {
+        name = 'Create'
+        url = 'https://maven.createmod.net'
+        content {
+            includeGroup 'com.simibubi.create'
+            includeGroup 'net.createmod.ponder'
+            includeGroup 'dev.engine-room.flywheel'
+        }
+    }
+    // The add-ons as Modrinth publishes them: the same jars, byte for byte, as the ones in the owner's pack
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies_createextras {
+            sourceSet sourceSets.main
+        }
+    }
+    // No runs: the compat is tried in game beside Dailies and the mods, in the modded test (its createextras group)
+}
+
+// The versions in the owner's pack and the modded test. Hypertubes is named by its Modrinth version id: its NeoForge and
+// Forge builds share the version number 0.6.0
+def deepSeasVersion = '3.3.0'
+def connectedVersion = '1.3.3-mc1.21.1'
+def encasedVersion = '1.21.1-1.10.1'
+def railsVersion = '0.3.0-beta.2+neoforge-mc1.21.1'
+def hypertubeVersion = 'qYjOyvgW'
+def createVersion = '6.0.10-281'
+def ponderVersion = '1.0.82+mc1.21.1'
+def flywheelVersion = '1.0.6'
+
+dependencies {
+    // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
+    compileOnly project(path: ':', configuration: 'dailiesApi')
+    // Create and the libraries its classes are built on, and the add-ons whose classes the compat names: the same, so the
+    // mod runs without any of them. Create: Tracks and Create Jetpack are not compiled against: Tracks has nothing of its
+    // own to claim beyond its lines above the hotbar, and Create Jetpack's one overlay is found by name (it is written in
+    // Kotlin, on a library of its own)
+    compileOnly("com.simibubi.create:create-1.21.1:${createVersion}:slim") { transitive = false }
+    compileOnly("net.createmod.ponder:ponder-neoforge:${ponderVersion}") { transitive = false }
+    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1:${flywheelVersion}") { transitive = false }
+    compileOnly("maven.modrinth:create-deep-seas:${deepSeasVersion}") { transitive = false }
+    compileOnly("maven.modrinth:create-connected:${connectedVersion}") { transitive = false }
+    compileOnly("maven.modrinth:create-encased:${encasedVersion}") { transitive = false }
+    compileOnly("maven.modrinth:create-steam-n-rails-1.21.1:${railsVersion}") { transitive = false }
+    compileOnly("maven.modrinth:hypertube:${hypertubeVersion}") { transitive = false }
+
+    // The states' unit tests need neither the game nor the mods: the states are plain bytes
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

@@ -20,3 +20,4 @@ include 'compats:jade'
 include 'compats:aeronautics'
 // Supplementaries' and Amendments' (CPT-10)
 include 'compats:supplementaries'
+include 'compats:createextras'

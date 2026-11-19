@@ -95,6 +95,25 @@ final class CompatDisplaySteps {
     }
 
     /**
+     * Create's other add-ons: Create Deep Seas' electrolyzer and boat engine windows, the sonar, the PDA's message and its
+     * line above the hotbar, Create Connected's sequenced pulse generator, Create Encased's automatic clutch and recaser
+     * wheel, Steam 'n' Rails' bogey menu and tag wheel, Create Jetpack's controls and Create: Hypertubes' placement outline,
+     * through the compat for them, a mod of its own (compats/createextras): -PdailiesOnly=createextras
+     */
+    static void createExtras(SelfTest test) throws Exception {
+        String[] mods = {"create_submarine", "create_connected", "createcasing", "tracks", "railways", "create_jetpack", "create_hypertube"};
+        boolean installed = false;
+        for (String mod : mods) {
+            installed |= Host.get().isModLoaded(mod);
+        }
+        if (installed && !Host.get().isModLoaded("dailies_createextras")) {
+            test.skip("the Dailies Create add-ons compat (dailies_createextras) is not installed: the add-ons' screens in recordings were not tried");
+            return;
+        }
+        run(test, installed ? null : "create_submarine", "Create's other add-ons", "dailies_createextras:createextras", "Dailies Create Add-ons");
+    }
+
+    /**
      * ComedyMonkey's Create Addons' windows (with its buttons put back), its machines' settings screens, the stations, the
      * jetpack's gauge, the villager goggles, the encased lines seen through goggles and the line container picking puts up,
      * through the compat in the mod itself: -PdailiesOnly=createaddons

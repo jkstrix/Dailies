@@ -255,6 +255,9 @@ public final class SelfTest {
             // in place, in another; each skipped with a line without the mods or the compat
             always("supplementaries", "CompatDisplaySteps.supplementaries", () -> CompatDisplaySteps.supplementaries(this)),
             always("supplementaries", "SupplementariesPlacingSteps.run", () -> SupplementariesPlacingSteps.run(this)),
+            // Create's other add-ons, through the compat for them (compats/createextras, CPT-11): in a world and a recording of
+            // their own; skipped with a line without the add-ons or the compat
+            always("createextras", "CompatDisplaySteps.createExtras", () -> CompatDisplaySteps.createExtras(this)),
             // The owner's own mods, each through the compat in the mod itself, in a world and a recording of its own; skipped
             // with a line without the mod, or a version of it without the compat
             always("createaddons", "CompatDisplaySteps.createAddons", () -> CompatDisplaySteps.createAddons(this)),
