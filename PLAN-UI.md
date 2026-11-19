@@ -37,7 +37,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 2.3 Template compat project | Done | `compats/template` (mod id `dailies_template`): an example screen, an overlay, a server half and a display test; builds with Dailies, not in the game test (CPT-5) |
 | 3 Post Rider | Done | Post Rider 1.2.2 carries its own hooks (`client/dailies`), compiled against a copy of the API jar, loaded only with Dailies present. Mailbox drawn by the generic path plus window extras (tab, address, scroll); reading a letter (hand, page, checked against the held letter); writing a letter (text, page, cursor, read-only screen). Display test group `postrider`, passed in game |
 | 4.1 Create | Done | `compats/create` (mod id `dailies_create`), a jar of its own beside Create. Every play-time screen, overlay and in-world mark Create 6.0.10 draws: the value settings board, value boxes and their tip, the goggles readout; the sequenced gearshift, threshold switch, elevator contact, station and train assembly, display link, factory gauge, symmetry wand, worldshaper, schematic naming and schematic edit screens; the toolbox and wrench selection wheels; the clipboard; remaining air, the train HUD, the linked controller's bind HUD, toolbox hotbar marks, the blueprint and table cloth row, the track placement hint, Create's status-line messages; the held schematic (tool bar, placed box, deploy preview) and a placed schematic's blocks, stored once in the recording (REC-28, PLAY-23, CPT-7); every outline Create draws in the world (super glue selection and glued areas, the schematic and quill selection, arm, ejector and port targets, chain conveyor, track and zapper previews), placement helper arrows and ghost blocks, and the symmetry mirror. Stage 1 alone: schematic table, schematicannon, linked controller binding, toolbox, crafting blueprint, package port. Stage 1 plus extras: list and attribute filters, package filter, package port address, redstone requester, the schedule with its entry editor, the stock keeper's search, address, order and scroll. Display test group `create`: 29 displays, passed in game. **Not drawn:** Create's client-side particles (the wand's end-rod particles and others), which are not recorded state |
-| 4.2 The owner's mods (Create Addons, McpCraft) | Not started | Hooks in the mods themselves |
+| 4.2 The owner's mods (Create Addons, McpCraft) | Underway | Hooks in the mods themselves; see "Stage 4.2 in detail" |
 | 4.3 Jade | Not started | |
 | 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
 
@@ -179,6 +179,42 @@ In order of how often they appear in a Create let's play:
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a small display test.
+
+### Stage 4.2 in detail: ComedyMonkey's Create Addons and McpCraft (Owner's mods, M each)
+
+Both are the owner's own mods, so, as Post Rider did, each carries its own hooks (a `client/dailies` package) instead of
+a compat jar. Create Addons first, then McpCraft.
+
+**ComedyMonkey's Create Addons** (`comedymonkeysaddons`):
+- Screens: animal pen, auto harvester, chest upgrade, upgraded and large upgraded chests, fish tank, monster cage,
+  pointed dripstone generator, wellspring (server-driven windows: stage 1 should draw them; extras only for client-side
+  state such as a tab or a scroll); clockwork dynamo, electric motor, geothermal turbine, splitter, Trade Bot station and
+  Trade Master station (each checked: a client-only screen is claimed, a server window gets extras if needed).
+- Overlays: the jetpack HUD and the villager goggles, recorded as the recorder's game showed them.
+- Its blocks' Create value boxes and goggle lines are already recorded by the Create compat when both are installed.
+- A sweep of the mod for anything else drawn during play (every screen, GUI layer, world drawing and action-bar
+  message), each listed as covered, stage 1, or left out with the reason.
+
+**McpCraft** (`mcpcraft`):
+- Screens: the job board, the job prompt, the factory prompt, job storage, and the confirm screen where it is shown from
+  those during play.
+- A sweep, as for Create Addons, for any other play-time interface (HUD, messages, world marks).
+- Its playback check (`DailiesApi.isPlayback`, by reflection) keeps working. A screen that can't be opened in a test
+  world without an outside AI service is said so and left out of the test, not faked.
+
+**For both:**
+- Soft dependency as Post Rider: the hook package loads only when Dailies is loaded, catching `LinkageError`; compiled
+  against a copy of Dailies' API jar in the mod's `libs/` as `compileOnly`, never packed; no local paths in tracked
+  files. Each still builds, passes its tests and runs without Dailies.
+- The API jar has grown since Post Rider's copy (`overlaysShown`, `storeOnce`, both additive). The copies are taken from
+  a fresh `gradlew apiJar`; Dailies' version is bumped before its next release, so jars of different contents never
+  share a name.
+- A small display test in each mod, one display per screen and overlay and one per tab of a screen with tabs, in Dailies'
+  self test groups `createaddons` and `mcpcraft`. The modded test loads the hooked jars through `dailies.modJars`.
+- Lessons from Create's tests: turn the player by yaw and pitch, not `tp … facing`; check each mod's own conditions for
+  drawing, as a survival player may lack what a screen needs; wait for block entities after `setblock`; check block
+  state names against the mod's code; a test command that does not run is logged.
+- The owner's uncommitted work in either repository is never touched: hooks go on a branch in a worktree.
 
 ---
 
