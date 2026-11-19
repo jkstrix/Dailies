@@ -54,10 +54,23 @@ public final class Compats {
 
     /** See {@link comedymonkey.dailies.api.compat.DailiesCompats#register} */
     public static void register(DailiesCompat compat) {
+        register(compat, false);
+    }
+
+    /**
+     * Registers a compat of Dailies' own, in Dailies' namespace, which the API keeps for it: the game's own books, lectern
+     * and signs (REC-29), recorded through the same API as the mods' screens so snapshots, jumps, trims and combines
+     * carry them alike. Not for other mods
+     */
+    public static void registerOwn(DailiesCompat compat) {
+        register(compat, true);
+    }
+
+    private static void register(DailiesCompat compat, boolean own) {
         Objects.requireNonNull(compat, "compat");
         String id = compat.id();
         int version = compat.version();
-        CLAIMS.add(id, version, compat);
+        CLAIMS.add(id, version, compat, own);
         compat.claim(new Claims() {
             @Override
             public void screen(String name, Class<? extends Screen> screenClass, ScreenPart part) {

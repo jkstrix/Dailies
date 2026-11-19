@@ -67,10 +67,18 @@ final class CompatClaims {
      *                                  or the version is below 1
      */
     synchronized Compat add(String id, int version, Object compat) {
+        return this.add(id, version, compat, false);
+    }
+
+    /**
+     * @param own whether it is a compat of Dailies' own (the game's books and signs), the only kind allowed in Dailies'
+     *            namespace
+     */
+    synchronized Compat add(String id, int version, Object compat, boolean own) {
         if (id == null || !ID.matcher(id).matches()) {
             throw new IllegalArgumentException("A compat needs a namespaced id in lower case, such as 'mymod:screens', not '" + id + "'");
         }
-        if (RESERVED.contains(id.substring(0, id.indexOf(':')))) {
+        if (own ? !id.startsWith("dailies:") : RESERVED.contains(id.substring(0, id.indexOf(':')))) {
             throw new IllegalArgumentException("The compat id " + id + " is in a namespace of Dailies' own; use the mod's own");
         }
         if (version < 1) {

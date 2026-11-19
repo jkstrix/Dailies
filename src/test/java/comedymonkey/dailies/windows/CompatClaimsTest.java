@@ -41,6 +41,17 @@ class CompatClaimsTest {
     }
 
     @Test
+    void onlyDailiesOwnCompatsAreInItsNamespace() {
+        CompatClaims claims = new CompatClaims();
+        claims.add("dailies:vanilla", 1, new Object(), true);
+        assertEquals(1, claims.compat("dailies:vanilla").version());
+        assertThrows(IllegalArgumentException.class, () -> claims.add("dailies:vanilla", 1, new Object(), true));
+        // Dailies' own registering keeps to its namespace too
+        assertThrows(IllegalArgumentException.class, () -> claims.add("minecraft:books", 1, new Object(), true));
+        assertThrows(IllegalArgumentException.class, () -> claims.add("postrider:screens", 1, new Object(), true));
+    }
+
+    @Test
     void claimNamesAreCheckedAndKeptPerCompat() {
         CompatClaims claims = new CompatClaims();
         claims.add("postrider:screens", 1, new Object());

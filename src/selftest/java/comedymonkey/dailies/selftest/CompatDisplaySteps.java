@@ -9,6 +9,7 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
 import comedymonkey.dailies.windows.Compats;
 import comedymonkey.dailies.windows.WindowLayer;
+import comedymonkey.dailies.windows.vanilla.VanillaCompat;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.level.ServerPlayer;
@@ -68,8 +69,18 @@ final class CompatDisplaySteps {
         run(test, "mcpcraft", "McpCraft", "mcpcraft:screens", "Dailies McpCraft");
     }
 
+    /**
+     * The game's own books, lectern and signs, through Dailies' own compat (REC-29): a written book read, a lectern's book,
+     * a book and quill written in and signed, a sign and a hanging sign edited. Run by the windows group, after the
+     * windows, needing no other group
+     */
+    static void vanilla(SelfTest test) throws Exception {
+        run(test, null, "Books and signs", VanillaCompat.ID, "Dailies Books and Signs");
+    }
+
+    /** @param modId the mod the compat is for, skipped with a line when it is not installed; null for one of Dailies' own */
     static void run(SelfTest test, String modId, String modName, String compatId, String world) throws Exception {
-        if (!Host.get().isModLoaded(modId)) {
+        if (modId != null && !Host.get().isModLoaded(modId)) {
             test.skip(modName + " is not installed: its screens in recordings were not tried");
             return;
         }
