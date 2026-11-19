@@ -151,4 +151,4 @@ a test step.
 | Stage 1 for modded windows | Every server-driven window is tried generically; one that misdraws goes on a deny list, or gets a compat |
 | The pointer | The recorded mouse pointer and the carried item are drawn over the window |
 | Left out | Xaero's Minimap and World Map, AppleSkin |
-| The owner's mods: Post Rider (`E:/Repos/Pony Express`), ComedyMonkey's Create Addons (source location to confirm), McpCraft (`E:/Repos/McpCraft`) | Hooks written into the mods themselves: each implements the compat API directly, as a soft dependency, instead of a separate compat jar. Separate compat jars, as subprojects here, are for other people's mods |
+| The owner's mods: Post Rider (`E:/Repos/Pony Express`), ComedyMonkey's Create Addons (`E:/Repos/Flight Goggles Compat`), McpCraft (`E:/Repos/McpCraft`) | Hooks written into the mods themselves: each implements the compat API directly, as a soft dependency, instead of a separate compat jar. Separate compat jars, as subprojects here, are for other people's mods |
