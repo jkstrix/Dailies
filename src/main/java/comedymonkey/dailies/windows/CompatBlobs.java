@@ -39,6 +39,10 @@ final class CompatBlobs {
     private static final Map<String, byte[]> KEPT = new LinkedHashMap<>(16, 0.75f, true);
     private static long keptBytes = 0;
 
+    /** The array last stored and its hash; compats hand over arrays they no longer change (see storeOnce) */
+    private static byte @Nullable [] lastData = null;
+    private static byte @Nullable [] lastHash = null;
+
     private CompatBlobs() {
     }
 
@@ -48,7 +52,16 @@ final class CompatBlobs {
         if (data.length > MOST_BYTES) {
             throw new IllegalArgumentException("A compat's stored bytes are at most " + MOST_BYTES + " long, not " + data.length);
         }
-        byte[] hash = RecordingWriter.hashOf(data);
+        // The same array handed over again (a compat storing its file again so a recording started since gets it) is
+        // not hashed again: hashing up to 16 MB every couple of seconds would cost a frame now and then
+        byte[] hash;
+        if (data == lastData && lastHash != null) {
+            hash = lastHash;
+        } else {
+            hash = RecordingWriter.hashOf(data);
+            lastData = data;
+            lastHash = hash;
+        }
         String handle = HexFormat.of().formatHex(hash);
         Recorder recorder = Recorder.get();
         String id = recorder.recordingId();

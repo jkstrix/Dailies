@@ -52,7 +52,8 @@ public final class DailiesCompats {
      * and the handle is still returned. Client thread. Added after the first API jar of 1.1.0 (Post Rider's copy has it
      * not), so a compat that calls it catches the {@code LinkageError} a Dailies without it throws.
      *
-     * @param data at most 16 MiB; only read, and copied before this returns
+     * @param data at most 16 MiB; only read, and copied before this returns. Hand over an array that is not changed
+     *             afterwards: the same array handed over again is taken as the same bytes, and not hashed again
      * @return the handle: the SHA-256 of the bytes, as 64 lower-case hex digits
      * @throws IllegalArgumentException when the bytes are more than 16 MiB
      */
