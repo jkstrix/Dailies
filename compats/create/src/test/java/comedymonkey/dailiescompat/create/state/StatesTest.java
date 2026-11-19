@@ -81,6 +81,15 @@ class StatesTest {
     }
 
     @Test
+    void theGogglesKeepTheirLinesAndIcon() {
+        States.Goggles goggles = new States.Goggles(List.of("{\"text\":\"Kinetic Stats\"}", "{\"text\":\" 16 RPM\",\"color\":\"aqua\"}"), "create:goggles");
+        States.Goggles read = States.readGoggles(States.goggles(goggles));
+        assertEquals(goggles, read);
+        assertEquals(2, read.lines().size());
+        assertEquals("create:goggles", read.icon());
+    }
+
+    @Test
     void aGearshiftKeepsItsInstructionsInOrder() {
         States.Gearshift gearshift = new States.Gearshift(List.of(new States.Instruction("turn_angle", "forward", 90),
             new States.Instruction("delay", "forward_fast", 40), new States.Instruction("end", "forward", 1)));

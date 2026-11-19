@@ -180,6 +180,23 @@ public final class States {
         return read(data, in -> new Tip(in.texts(), in.in.readByte()));
     }
 
+    // --- The engineer's goggles ---
+
+    /** The goggles' readout as the recorder's game showed it: its lines, and the item drawn beside it, by id */
+    public record Goggles(List<String> lines, String icon) {
+    }
+
+    public static byte[] goggles(Goggles goggles) {
+        return write(out -> {
+            out.texts(goggles.lines());
+            out.text(goggles.icon());
+        });
+    }
+
+    public static Goggles readGoggles(byte[] data) {
+        return read(data, in -> new Goggles(in.texts(), in.text()));
+    }
+
     // --- The sequenced gearshift ---
 
     /** One instruction of a sequenced gearshift, as Create names it: its kind, its speed (forward, back) and its value */

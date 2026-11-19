@@ -18,7 +18,8 @@ import java.util.List;
 /**
  * The Create compat's display test, run by Dailies' scripted run (its create group): a creative motor with a shaft on
  * it and a sequenced gearshift beside the player. While recording, the motor's value settings board is opened and its
- * speed scrolled, the motor's value box is aimed at, and the gearshift's screen is opened. Dailies then checks each is drawn riding along in first person, and
+ * speed scrolled, the motor's value box is aimed at, the goggles are put on and the shaft looked at, and the
+ * gearshift's screen is opened. Dailies then checks each is drawn riding along in first person, and
  * nothing in third person or flying free.
  */
 final class CreateDisplayTest implements DisplayTest {
@@ -73,6 +74,11 @@ final class CreateDisplayTest implements DisplayTest {
                 }
             }),
             new Display("the motor's value box", CreateDailies.ID + "/" + ValueBoxes.NAME, CreateDisplayTest::aimAtMotor),
+            new Display("the goggles on the shaft", CreateDailies.ID + "/" + Goggles.NAME, stage -> {
+                stage.command("item replace entity @s armor.head with create:goggles");
+                stage.command("tp @s 2.5 -60 -3.5 facing 2.5 -59.5 -0.5");
+                stage.waitTicks(5);
+            }),
             new Display("a sequenced gearshift's screen", CreateDailies.ID + "/" + MachineScreens.GEARSHIFT, stage -> {
                 stage.command("tp @s -2.5 -60 2.5 facing -1.5 -59.5 0.5");
                 stage.waitTicks(3);

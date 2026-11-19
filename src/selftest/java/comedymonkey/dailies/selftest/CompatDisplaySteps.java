@@ -40,7 +40,7 @@ final class CompatDisplaySteps {
     }
 
     /**
-     * Create's value settings board, a value box and a sequenced gearshift's screen, through the
+     * Create's value settings board, a value box, the goggles and a sequenced gearshift's screen, through the
      * Create compat, a mod of its own (compats/create): -PdailiesOnly=create
      */
     static void create(SelfTest test) throws Exception {

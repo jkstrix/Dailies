@@ -17,7 +17,10 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.client.event.RenderTooltipEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,7 +35,8 @@ import java.util.function.Supplier;
  * <li>every machine setting: the value settings board ({@link ValueBoard}), the value boxes on a block looked at
  * ({@link ValueBoxes}) and their tip ({@link ValueTip}), the sequenced gearshift, the threshold switch and the elevator
  * contact ({@link MachineScreens}), and extras for the filter windows and the windows with an address, which Dailies
- * draws itself ({@link FilterExtras}).</li>
+ * draws itself ({@link FilterExtras});</li>
+ * <li>the engineer's goggles' readout ({@link Goggles}).</li>
  * </ul>
  * Create's other windows the server opens (the linked controller, the toolbox, the schematic table and cannon, the
  * crafting blueprint, the stock keeper and the rest) are recorded and drawn by Dailies itself and need nothing here.
@@ -46,7 +50,7 @@ public final class CreateDailies implements DailiesCompat {
     static final int VERSION = 1;
     /** Typing, and a value picked on the board, are written at most five times a second */
     private static final int TYPING_TICKS = 4;
-    /** A board's value, the boxes: at most ten times a second */
+    /** A board's value, the boxes, the goggles: at most ten times a second */
     private static final int SETTING_TICKS = 2;
 
     private CreateDailies() {
@@ -58,6 +62,11 @@ public final class CreateDailies implements DailiesCompat {
         // After Create's own work each tick, so the value boxes it worked out in playback can be taken out again
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, ClientTickEvent.Post.class, ValueBoxes::afterTick);
         NeoForge.EVENT_BUS.addListener(EventPriority.NORMAL, false, RenderLevelStageEvent.class, ValueBoxes::drawWorld);
+        // The goggles' layer is followed only when nothing has cancelled it, and the lines taken before anyone changes them
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Pre.class, Goggles::layerStarts);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Post.class, Goggles::layerEnds);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiEvent.Post.class, event -> Goggles.hudEnds());
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, false, RenderTooltipEvent.GatherComponents.class, Goggles::tooltip);
     }
 
     @Override
@@ -88,6 +97,8 @@ public final class CreateDailies implements DailiesCompat {
         for (String address : new String[]{FilterExtras.PACKAGE_FILTER, FilterExtras.PACKAGE_PORT, FilterExtras.REDSTONE_REQUESTER}) {
             claims.windowExtras(address, "create:" + address, extras(FilterExtras::captureAddress, FilterExtras::applyAddress, TYPING_TICKS));
         }
+        // 2. The goggles
+        claims.overlay(Goggles.NAME, overlay(Goggles::capture, Goggles::draw, SETTING_TICKS));
     }
 
     @Override
