@@ -4,12 +4,12 @@ import java.util.List;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-/** config/dailies_companion-common.toml: which built-in events the server raises, and their thresholds. */
+/** config/dailies_companion-common.toml: which built-in events the server raises, their thresholds, and which plugins send nothing. */
 final class CompanionConfig {
 	private CompanionConfig() {}
 
 	static final ModConfigSpec SPEC;
-	private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED;
+	private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED, DISABLED_PLUGINS;
 	private static final ModConfigSpec.DoubleValue CLOSE_CALL_HEALTH, BIG_FALL_DISTANCE, BOSS_HEALTH, NEARBY_RADIUS;
 	private static final ModConfigSpec.IntValue EXPLOSION_MIN_BLOCKS;
 
@@ -18,6 +18,9 @@ final class CompanionConfig {
 		DISABLED = b.comment("Built-in events the server should not raise. Names: " + String.join(", ", Detectors.EVENTS),
 			"Players can also ignore events on their own side; this turns them off for everyone.")
 			.defineListAllowEmpty("disabledEvents", List.of(), () -> "", o -> o instanceof String);
+		DISABLED_PLUGINS = b.comment("Server plugins (by id, such as postrider:mail) that send nothing to anyone: they are left out of the list of plugins,",
+			"a game asking for one is told the server has none, and what they push is dropped. dailies_companion:plugins cannot be switched off.")
+			.defineListAllowEmpty("disabledPlugins", List.of(), () -> "", o -> o instanceof String);
 		CLOSE_CALL_HEALTH = b.comment("close_call: a player survives a hit with this much health or less (2 = one heart)")
 			.defineInRange("closeCallHealth", 4.0, 0.5, 20.0);
 		BIG_FALL_DISTANCE = b.comment("big_fall: a player survives a fall of at least this many blocks")
@@ -33,6 +36,10 @@ final class CompanionConfig {
 
 	static boolean enabled(String event) {
 		return !SPEC.isLoaded() || !DISABLED.get().contains(event);
+	}
+
+	static boolean pluginEnabled(String id) {
+		return !SPEC.isLoaded() || !DISABLED_PLUGINS.get().contains(id);
 	}
 
 	static double closeCallHealth() {

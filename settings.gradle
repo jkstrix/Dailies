@@ -11,3 +11,7 @@ pluginManagement {
 
 // The Dailies Companion in companion/ is a separate build with its own settings file
 rootProject.name = 'dailies'
+
+// Compats for other people's mods, each a mod of its own built with Dailies (specification CPT-5): for now the template
+// that each is started from
+include 'compats:template'

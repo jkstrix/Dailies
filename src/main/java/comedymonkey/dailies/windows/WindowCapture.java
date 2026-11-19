@@ -117,7 +117,7 @@ final class WindowCapture {
             String type = menuType(menu);
             Opened known = opened != null && opened.containerId() == menu.containerId ? opened : null;
             facts = new WindowRules.Facts(true, screen instanceof InventoryScreen && menu == player.inventoryMenu, screen instanceof HorseInventoryScreen,
-                menu == player.containerMenu, menu.containerId, type, known != null && known.horse());
+                menu == player.containerMenu, menu.containerId, type, known != null && known.horse(), Compats.claims(screen));
         }
         WindowState.Source source = WindowRules.decide(facts);
         if (source == null) {

@@ -1,0 +1,56 @@
+// The template compat (specification CPT-5): a small mod of its own with both halves of a compat, copied to start a
+// compat for another person's mod. The client half records an example screen and an example overlay through Dailies'
+// compat API and draws them again in playback; the server half sends a fact only the server knows through the Dailies
+// Companion. It loads and runs without either: both are soft dependencies.
+//
+// Built with Dailies (gradlew build in the repository builds it too). To start a compat from it, copy this folder,
+// change the mod id (dailies_template), the package and the compat id, and in a repository of its own compile against
+// copies of the two jars instead of the projects here:
+//     compileOnly files('libs/dailies-api-<version>.jar')             (gradlew apiJar in Dailies' repository)
+//     compileOnly files('libs/dailies-companion-1.21.1-<version>.jar') (gradlew build in companion/)
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+version = '1.0.0'
+group = 'comedymonkey.dailiescompat'
+
+base {
+    archivesName = 'dailies-compat-template-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies_template {
+            sourceSet sourceSets.main
+        }
+    }
+    // No runs: a compat is tried in game beside Dailies and its mod (add a client run when making one)
+}
+
+// The companion's version, from its own build, so the jar it builds is the one compiled against
+def companionProperties = new Properties()
+rootProject.file('companion/gradle.properties').withInputStream { companionProperties.load(it) }
+
+dependencies {
+    // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
+    compileOnly project(path: ':', configuration: 'dailiesApi')
+    // The Dailies Companion's plugin API, for the server half: the same, so a server without the companion runs it too
+    compileOnly files(rootProject.file("companion/build/libs/dailies-companion-1.21.1-${companionProperties.mod_version}.jar")).builtBy(':buildCompanion')
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

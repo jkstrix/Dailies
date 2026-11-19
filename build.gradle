@@ -113,7 +113,7 @@ neoForge {
             // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
             // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
             systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
-                'create,sable,aeronautics,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,dailies_companion,dailies_selftest')
+                'create,sable,aeronautics,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,dailies_companion,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -295,6 +295,30 @@ tasks.register('selftestJar', Jar) {
     from sourceSets.selftest.output
 }
 
+// The API jar, dailies-api-<version>.jar (specification CPT-4): only the classes of comedymonkey.dailies.api and the compat
+// API under it, for other mods to compile against as compileOnly, so a mod that implements a compat builds on any machine
+// without Dailies' own workings. Copied into such a mod's own repository (libs/dailies-api-<version>.jar)
+def apiJar = tasks.register('apiJar', Jar) {
+    description = 'Builds the jar of the compat API (comedymonkey.dailies.api), for other mods to compile against'
+    group = 'build'
+    archiveBaseName = 'dailies-api'
+    from(sourceSets.main.output) {
+        include 'comedymonkey/dailies/api/**'
+    }
+    from(rootProject.file('LICENSE'))
+}
+
+// The compats in compats/ compile against the API jar, as a compat in another repository does
+configurations {
+    dailiesApi {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+}
+artifacts {
+    dailiesApi apiJar
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
@@ -306,7 +330,7 @@ def modsFolderSetting = providers.gradleProperty('dailies.modsFolder').orNull
 def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
 // The mods the scripted run needs or has to prove it works with; their own requirements are added as the game asks for them
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
-    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*').split(',')
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*').split(',')
 
 // The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
 tasks.register('buildCompanion', GradleBuild) {

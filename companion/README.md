@@ -90,6 +90,7 @@ and lost too; when both report the same thing within five seconds, they become o
 | Setting | Default | Meaning |
 |---|---|---|
 | `disabledEvents` | empty | Types from the table above that the server should not raise, for everyone. Players can also ignore types on their own side, in Dailies. |
+| `disabledPlugins` | empty | Server plugins (by id) that send nothing to anyone: left out of the list of plugins, answered as if the server had none, and what they push dropped. |
 | `closeCallHealth` | 4.0 | `close_call`: health at or below which a survived hit counts (2 is one heart). |
 | `bigFallDistance` | 15.0 | `big_fall`: the shortest fall, in blocks. |
 | `bossHealth` | 150.0 | `boss_fight`: the maximum health at which a mob counts as a boss. |
@@ -127,6 +128,11 @@ CompanionPlugins.pushAll(server, "postrider:mail", bytes); // everyone online
 The data is the plugin's own format, up to 256 KiB. One plugin is built in, `dailies_companion:plugins`: the list of
 the server's plugins and their versions, which Dailies asks for as it joins, so a client half knows whether its
 server half is there.
+
+What a plugin sends is kept in the player's recordings and can end up in a video, so send each player only facts
+about their own play, or what they could see for themselves in the world: never another player's inventory, mail,
+position or messages that were not meant for them. `disabledPlugins` switches any plugin off for everyone. A compat's
+client half is written with Dailies' compat API; `compats/template` in the Dailies repository has both halves, to copy.
 
 ## The messages
 

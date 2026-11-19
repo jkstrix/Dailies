@@ -60,6 +60,11 @@ public final class RecordingManifest {
      * (compat.distanthorizons.DistantHorizonsCompat). Empty without Distant Horizons
      */
     public java.util.Map<String, String> distantHorizonsFolders = new java.util.TreeMap<>();
+    /**
+     * The compats that wrote screens or overlays into the recording (specification REC-26), by id, with the version each
+     * wrote with (the newest, for a combined recording): playback says once when one is missing (PLAY-22)
+     */
+    public java.util.Map<String, Integer> compats = new java.util.TreeMap<>();
 
     public static final class SpanEntry {
         public String source = "";
@@ -259,6 +264,9 @@ public final class RecordingManifest {
             }
             if (manifest.players == null) {
                 manifest.players = new ArrayList<>();
+            }
+            if (manifest.compats == null) {
+                manifest.compats = new java.util.TreeMap<>();
             }
             if (manifest.spans == null) {
                 manifest.spans = new ArrayList<>();

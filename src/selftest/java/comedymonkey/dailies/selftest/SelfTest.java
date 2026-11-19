@@ -234,6 +234,9 @@ public final class SelfTest {
             // The recorder's windows (a chest, a furnace, a villager's trades, the inventory) drawn in playback, in a world and a
             // short recording of their own; each later compat adds a display step of the same shape
             always("windows", "WindowSteps.run", () -> WindowSteps.run(this)),
+            // Post Rider's mailbox, a letter read and a letter written, through the compat in Post Rider itself (REC-26, PLAY-21):
+            // the compat's own display test, in a world and a recording of its own; skipped with a line without Post Rider
+            always("postrider", "CompatDisplaySteps.postRider", () -> CompatDisplaySteps.postRider(this)),
             // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
             // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
             when(Boolean.getBoolean("dailies.test.bestiary"), "the bestiary was not asked for (dailies.test.bestiary)", "bestiary", "BestiarySteps.run", () -> BestiarySteps.run(this)),

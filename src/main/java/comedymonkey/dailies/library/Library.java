@@ -736,6 +736,9 @@ public final class Library {
                     source.distantHorizonsFolders.forEach(manifest.distantHorizonsFolders::putIfAbsent);
                 }
                 players.addAll(source.players);
+                if (source.compats != null) {
+                    source.compats.forEach((compat, version) -> manifest.compats.merge(compat, version, Math::max));
+                }
                 manifest.created = Math.min(manifest.created, source.created);
                 if (source.realStart > 0) {
                     manifest.realStart = manifest.realStart == 0 ? source.realStart : Math.min(manifest.realStart, source.realStart);

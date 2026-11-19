@@ -50,6 +50,16 @@ class WindowRulesTest {
     }
 
     @Test
+    void aScreenACompatClaimsIsLeftToTheCompat() {
+        // Every kind the generic path would take, claimed: the compat records it, and the generic path leaves it alone
+        assertNull(WindowRules.decide(new WindowRules.Facts(true, false, false, true, 4, "postrider:mailbox", false, true)));
+        assertNull(WindowRules.decide(new WindowRules.Facts(true, true, false, true, 0, null, false, true)));
+        assertNull(WindowRules.decide(new WindowRules.Facts(true, false, true, true, 3, null, true, true)));
+        // Unclaimed, the same window is the generic path's
+        assertEquals(WindowState.Source.SERVER, WindowRules.decide(new WindowRules.Facts(true, false, false, true, 4, "postrider:mailbox", false, false)));
+    }
+
+    @Test
     void windowsOnTheDenyListAreLeftOut() {
         assertTrue(WindowRules.denied("minecraft:stonecutter"));
         assertTrue(WindowRules.denied("Minecraft:Stonecutter"));

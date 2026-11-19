@@ -1,0 +1,7 @@
+{
+  "item.dailies_template.example_note": "Example Note",
+  "screen.dailies_template.example": "Example screen",
+  "screen.dailies_template.count": "Counted %s",
+  "overlay.dailies_template.home": "Home: %s, %s, %s",
+  "overlay.dailies_template.home_unknown": "Home: not known"
+}

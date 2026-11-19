@@ -9,7 +9,8 @@ import java.util.Set;
  * that is a window the server opened with a menu type (a chest, a furnace, a villager's trades, a mod's machine), a
  * horse's inventory, and the player's own inventory. Everything else is left out without being looked at: settings,
  * statistics, advancements, the pause menu and every other menu, the creative inventory, books, signs, chat, title
- * and loading screens, and anything a mod draws for itself. No game in here, so it is unit tested.
+ * and loading screens, and anything a mod draws for itself. A screen a compat claims whole (REC-26) is the compat's,
+ * and left out here. No game in here, so it is unit tested.
  */
 public final class WindowRules {
 
@@ -33,8 +34,14 @@ public final class WindowRules {
      * @param containerId     its menu's container id; 0 is the player's own inventory
      * @param menuType        its menu's type id, or null when the menu has none (the inventory, a horse, the creative inventory)
      * @param horseOpened     whether the server's packet opening a horse's inventory with this container id was seen
+     * @param claimed         whether a compat claims the screen whole, by its class or its menu type (REC-26)
      */
-    record Facts(boolean menuScreen, boolean inventoryScreen, boolean horseScreen, boolean playersMenu, int containerId, String menuType, boolean horseOpened) {
+    record Facts(boolean menuScreen, boolean inventoryScreen, boolean horseScreen, boolean playersMenu, int containerId, String menuType, boolean horseOpened,
+                 boolean claimed) {
+
+        Facts(boolean menuScreen, boolean inventoryScreen, boolean horseScreen, boolean playersMenu, int containerId, String menuType, boolean horseOpened) {
+            this(menuScreen, inventoryScreen, horseScreen, playersMenu, containerId, menuType, horseOpened, false);
+        }
 
         /** A screen that is not built on a menu at all: the pause menu, settings, statistics, a book, chat */
         static Facts notAWindow() {
@@ -47,6 +54,10 @@ public final class WindowRules {
 
     /** @return how the window is to be recorded, or null when the screen is not a play screen and is left out */
     static WindowState.Source decide(Facts facts) {
+        if (facts.claimed()) {
+            // A compat records it, and only the compat: the two would draw it twice
+            return null;
+        }
         if (facts.inventoryScreen()) {
             return WindowState.Source.INVENTORY;
         }

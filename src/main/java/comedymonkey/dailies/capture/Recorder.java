@@ -118,6 +118,8 @@ public final class Recorder {
     private long firstReal = 0;
     private long lastReal = 0;
     private final Set<String> players = new java.util.TreeSet<>();
+    /** The compats that have written into this recording, with their versions, for its manifest (REC-26) */
+    private final java.util.Map<String, Integer> compats = new java.util.concurrent.ConcurrentSkipListMap<>();
 
     private Recorder() {
     }
@@ -219,6 +221,7 @@ public final class Recorder {
         this.sharedSent.clear();
         this.warnedPayloads.clear();
         this.players.clear();
+        this.compats.clear();
         this.firstReal = 0;
         this.lastReal = 0;
         this.worldsStored = 0;
@@ -338,6 +341,7 @@ public final class Recorder {
         Path working = this.workingFile;
         Spool spool = this.spool;
         List<String> everyone = new ArrayList<>(this.players);
+        java.util.Map<String, Integer> compatsWritten = new java.util.TreeMap<>(this.compats);
         long realStart = this.firstReal;
         long realEnd = this.lastReal;
         this.state = State.IDLE;
@@ -355,6 +359,7 @@ public final class Recorder {
                     }
                     writer.manifest().name = wanted;
                     writer.manifest().players = everyone;
+                    writer.manifest().compats = compatsWritten;
                     writer.manifest().realStart = realStart;
                     writer.manifest().realEnd = realEnd;
                     writer.finish();
@@ -868,6 +873,13 @@ public final class Recorder {
         byte[] encoded = this.codec.encode(packet);
         this.flushTicks();
         this.part.record(Records.PACKET, encoded);
+    }
+
+    /** A compat has written into this recording, for the list its manifest keeps (specification REC-26). Client thread */
+    public void noteCompat(String id, int version) {
+        if (this.state != State.IDLE) {
+            this.compats.put(id, version);
+        }
     }
 
     /** Adds state from outside the vanilla world to the recording as it happens (specification chapter VII). Client thread */

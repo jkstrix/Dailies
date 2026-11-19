@@ -108,13 +108,8 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
     /** Windows that could not be built or drawn, by name: left out from then on, for a compat to take over */
     private final Set<String> leftOut = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-    // The pointer moves from where it was shown to where it was written next, over the time between the two
-    private float fromX;
-    private float fromY;
-    private double fromTick;
-    private double span = 1.0;
-    private boolean pointerKnown = false;
-    private double lastSample = 0.0;
+    /** The pointer moves from where it was shown to where it was written next, over the time between the two */
+    private final PointerMotion pointer = new PointerMotion();
 
     // What was last drawn, for the scripted test and anyone checking a window reaches the picture
     private static volatile @Nullable String lastDrawn = null;
@@ -158,34 +153,8 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
             this.refill = true;
         }
         if ((changed & WindowState.MOVED) != 0) {
-            this.moved(skipping || (changed & WindowState.OPENED) != 0);
+            this.pointer.moved(this.state.pointerX, this.state.pointerY, skipping || (changed & WindowState.OPENED) != 0);
         }
-    }
-
-    private void moved(boolean jump) {
-        double now = Playback.position();
-        if (jump || !this.pointerKnown) {
-            this.fromX = this.state.pointerX;
-            this.fromY = this.state.pointerY;
-            this.span = 1.0;
-        } else {
-            float[] shown = this.pointerNow(now);
-            this.fromX = shown[0];
-            this.fromY = shown[1];
-            this.span = Math.max(1.0, Math.min(WindowCapture.POINTER_TICKS, now - this.lastSample));
-        }
-        this.fromTick = now - 1.0;
-        this.lastSample = now;
-        this.pointerKnown = true;
-    }
-
-    /** Where the pointer is shown at a moment of the recording, in the units it was written in */
-    private float[] pointerNow(double time) {
-        if (!this.pointerKnown || Playback.paused()) {
-            return new float[]{this.state.pointerX, this.state.pointerY};
-        }
-        double t = Math.max(0.0, Math.min(1.0, (time - this.fromTick) / this.span));
-        return new float[]{(float) (this.fromX + (this.state.pointerX - this.fromX) * t), (float) (this.fromY + (this.state.pointerY - this.fromY) * t)};
     }
 
     /** The window open at this moment with everything in it, so the part after a cut starts with it */
@@ -201,7 +170,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
         this.state.clear();
         this.built = null;
         this.refill = true;
-        this.pointerKnown = false;
+        this.pointer.forget();
         this.tickedAt = Integer.MIN_VALUE;
     }
 
@@ -209,6 +178,14 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
 
     /** Whether a recorded window is shown now: the owner's rule, riding along with the recorder in first person, the HUD and windows looks on */
     static boolean shown(Minecraft minecraft) {
+        return shown(minecraft, true);
+    }
+
+    /**
+     * The owner's rule: riding along with the recorder in first person with the HUD look on, and for a window (not an
+     * overlay, which is part of the HUD) the "open windows" look too
+     */
+    static boolean shown(Minecraft minecraft, boolean window) {
         if (minecraft.options.hideGui || !minecraft.options.getCameraType().isFirstPerson()) {
             return false;
         }
@@ -219,7 +196,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
         }
         if (EditorSession.open()) {
             comedymonkey.dailies.edit.Looks looks = EditorSession.scene().looks();
-            return looks.showHud && looks.showWindows;
+            return looks.showHud && (!window || looks.showWindows);
         }
         return true;
     }
@@ -263,7 +240,9 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
                 this.tickedAt = Playback.position();
                 asViewer(minecraft, ((ContainerScreenAccess) window.screen)::dailies$containerTick);
             }
-            float[] pointer = this.pointerNow(Playback.frameTime());
+            // A compat's extras for this window: what its screen held that the server never sent (REC-26)
+            Compats.applyExtras(this.state.menuType, window.screen);
+            float[] pointer = this.pointer.at(Playback.frameTime());
             double x;
             double y;
             if (this.state.pointerShare || !(window.screen instanceof AbstractContainerScreen<?> container)) {
@@ -275,19 +254,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
             }
             int mouseX = (int) Math.floor(x);
             int mouseY = (int) Math.floor(y);
-            float partial = delta.getGameTimeDeltaPartialTick(false);
-            // As the game draws its screen: over everything drawn before, with nothing of the layers below in the way
-            graphics.flush();
-            RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-            recorder = Viewer.riding() instanceof LivingEntity living ? living : null;
-            drawing = true;
-            try {
-                asViewer(minecraft, () -> window.screen.renderWithTooltip(graphics, mouseX, mouseY, partial));
-            } finally {
-                drawing = false;
-                recorder = null;
-            }
-            graphics.flush();
+            drawScreen(graphics, minecraft, window.screen, mouseX, mouseY, delta.getGameTimeDeltaPartialTick(false));
             if (this.state.pointer) {
                 drawPointer(graphics, minecraft, x, y);
             }
@@ -297,6 +264,38 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
             this.built = null;
             this.leaveOut(name, "could not be drawn", t);
         }
+    }
+
+    /**
+     * Draws a screen built for playback as the game draws its screen: over everything drawn before, with nothing of the
+     * layers below in the way, as the viewer with the recorder's numbers, the recorder standing in for the game's player
+     * where the screen draws them. For the recorder's windows and a compat's screens
+     */
+    static void drawScreen(GuiGraphics graphics, Minecraft minecraft, Screen screen, int mouseX, int mouseY, float partial) {
+        graphics.flush();
+        RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+        recorder = Viewer.riding() instanceof LivingEntity living ? living : null;
+        drawing = true;
+        try {
+            asViewer(minecraft, () -> screen.renderWithTooltip(graphics, mouseX, mouseY, partial));
+        } finally {
+            drawing = false;
+            recorder = null;
+        }
+        graphics.flush();
+    }
+
+    /**
+     * Lays out a screen built for playback at this size without telling other mods it opened (ScreenAccess), so their
+     * buttons and panels stay out of it
+     */
+    static void layOut(Minecraft minecraft, Screen screen, int width, int height) {
+        ScreenAccess access = (ScreenAccess) screen;
+        access.dailies$setMinecraft(minecraft);
+        access.dailies$setFont(minecraft.font);
+        screen.width = width;
+        screen.height = height;
+        asViewer(minecraft, access::dailies$init);
     }
 
     private void leaveOut(String name, String what, Throwable t) {
@@ -391,12 +390,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
                 screen = (Screen) factory.get().create(menu, inventory, title);
             }
         }
-        ScreenAccess access = (ScreenAccess) screen;
-        access.dailies$setMinecraft(minecraft);
-        access.dailies$setFont(minecraft.font);
-        screen.width = width;
-        screen.height = height;
-        asViewer(minecraft, access::dailies$init);
+        layOut(minecraft, screen, width, height);
         return new Built(menu, screen, width, height);
     }
 
@@ -426,7 +420,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
      * and anvil colour their costs by), and what a window sets on it (the recipe book points the player's open menu at
      * its own) is put back as it was afterwards
      */
-    private static void asViewer(Minecraft minecraft, Runnable action) {
+    static void asViewer(Minecraft minecraft, Runnable action) {
         LocalPlayer viewer = minecraft.player;
         if (viewer == null) {
             action.run();
@@ -446,7 +440,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
         }
     }
 
-    private static void drawPointer(GuiGraphics graphics, Minecraft minecraft, double x, double y) {
+    static void drawPointer(GuiGraphics graphics, Minecraft minecraft, double x, double y) {
         double scale = minecraft.getWindow().getGuiScale();
         double unit = Math.max(1L, Math.round(graphics.guiHeight() * scale / 1080.0)) / scale;
         graphics.pose().pushPose();
