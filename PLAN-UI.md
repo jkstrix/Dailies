@@ -32,7 +32,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 1.4 The "Open windows" look | Done | `showWindows`, on by default, under Show HUD |
 | 1.5 Companion plugin API | Done | `CompanionPlugins` on `dailies_companion:compat`, client side `compat/companion/CompanionCompat`; SRV-6 to 8. First use: the server's list of plugins |
 | 1.6 Spec and tests | Done | Display test `WindowSteps`, group `windows`: chest, furnace, villager trades and inventory drawn in first person, absent in third person and flying free. Passed in game |
-| 1.7 Books, lecterns and signs | Underway | The owner's choice, 19 November: reading a written book, a book on a lectern, writing in a book and quill, and editing a sign or hanging sign are play screens and are recorded. The creative inventory stays out |
+| 1.7 Books, lecterns and signs | Done | A compat of Dailies' own (`dailies:vanilla`, `windows/vanilla/`): reading a written book, a lectern, writing in a book and quill (and signing it), editing a sign or hanging sign, drawn with the game's own screens, read-only; pages stored once. In singleplayer the book still pauses the game, but the recording keeps time with the world still (`dailies:still` ticks, REC-36), so playback shows the book as long as it was open. 6 displays in the `windows` group, passed in game; the recording, playback, moments and export groups pass with it. The creative inventory stays out |
 | 2.1 Client compat API | Done | `api/compat`: a mod registers a `DailiesCompat` and claims screens, menus, window extras, overlays and a server half; Dailies records each claim's state on change and in every snapshot. Claims win over the generic path. The manifest lists the compats used; a missing one is said once. REC-26, REC-27, PLAY-21, PLAY-22, EXP-17, CPT-1 to 3. `gradlew apiJar` builds the API jar (CPT-4) |
 | 2.2 Server API | Done | `Claims.serverHalf` on the companion plugin API; the companion's `disabledPlugins` setting; the privacy rule in SRV-9 |
 | 2.3 Template compat project | Done | `compats/template` (mod id `dailies_template`): an example screen, an overlay, a server half and a display test; builds with Dailies, not in the game test (CPT-5) |
@@ -50,6 +50,8 @@ Known limits of stage 1, for a compat or a later fix:
 - the creative inventory is not recorded (the owner's choice);
 - the companion has no unit tests of its own (its routing is tested in the core, `CompatRoutesTest`);
 - a letter read in playback is drawn only if the recorder's held letter matches the one recorded;
+- a jump that lands inside a book's still stretch may show the world up to one tick early; voice arriving under the pause menu still lands on one tick, as before;
+- only the game's exact book and sign screen classes are recorded: a mod's screen built on one is left out until a compat takes it.
 - the template compat is not in the game test;
 - the modded test now expects Post Rider loaded, from the pack or `dailies.modJars`.
 - the Create compat reads some of Create's private fields by their 6.0.10 names: a rename in a Create update loses that part, logged once;
