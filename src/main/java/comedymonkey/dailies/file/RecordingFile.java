@@ -160,7 +160,7 @@ public final class RecordingFile implements Closeable {
                     if (this.next >= parts.size()) {
                         return false;
                     }
-                    this.current = Packing.unpack(source.read(parts.get(this.next++)), 0);
+                    this.current = source.unpackPart(source.read(parts.get(this.next++)));
                     this.position = 0;
                 }
                 return true;
@@ -366,7 +366,7 @@ public final class RecordingFile implements Closeable {
         if (entry == null) {
             throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "The recording is missing shared data " + name);
         }
-        return Packing.unpack(this.container.read(entry), Container.HASH_BYTES);
+        return this.container.unpackShared(this.container.read(entry));
     }
 
     /**
@@ -505,13 +505,17 @@ public final class RecordingFile implements Closeable {
             for (Container.Entry blob : this.container.shared.values()) {
                 live += Container.HEADER_BYTES + blob.length();
             }
+            List<Container.Entry> dictionaries = this.container.dictionaryEntries();
+            for (Container.Entry dictionary : dictionaries) {
+                live += Container.HEADER_BYTES + dictionary.length();
+            }
             for (Container.Entry single : new Container.Entry[]{this.container.manifest, this.container.edit, this.container.preview}) {
                 if (single != null) {
                     live += Container.HEADER_BYTES + single.length();
                 }
             }
             // The index (25 bytes an entry, plus a hash for each shared blob) and the trailer
-            live += Container.HEADER_BYTES + 4 + (this.container.parts.size() + this.container.shared.size()) * 25L + this.container.shared.size() * (long) Container.HASH_BYTES;
+            live += Container.HEADER_BYTES + 4 + (dictionaries.size() + this.container.parts.size() + this.container.shared.size()) * 25L + this.container.shared.size() * (long) Container.HASH_BYTES;
             live += Container.HEADER_BYTES + 32;
         }
         return live;

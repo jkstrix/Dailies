@@ -1,6 +1,5 @@
 package comedymonkey.dailies.file;
 
-import com.github.luben.zstd.Zstd;
 import com.github.luben.zstd.ZstdCompressCtx;
 import com.github.luben.zstd.ZstdDecompressCtx;
 import com.github.luben.zstd.ZstdDictCompress;
@@ -27,54 +26,50 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Measurement only: how Zstandard would do against the deflate (level 3) that {@link Packing} gives every block of a
- * recording, on real recordings. Nothing here changes how the mod packs anything. Each block is packed by itself, as
- * the recording packs it, and the two kinds of block are weighed apart: shared blobs (chunk data, mostly) and segment
- * parts (the stream of small packets, 40 ticks a part).
+ * Measurement only: how {@link Packing}'s Zstandard (level 9, with the dictionaries packed into the mod) does against
+ * the deflate (level 3) recordings were packed with before, and against other levels and dictionaries, on real
+ * recordings. Nothing here changes how the mod packs anything. Each block is packed by itself, as the recording packs
+ * it, and the two kinds of block are weighed apart: shared blobs (chunk data, mostly) and segment parts (the stream of
+ * small packets, 40 ticks a part).
  * <p>
  * The recordings are -Pdailies.bench.recordings=a.dailies,b.dailies (comma-separated), by default the two long fixtures
- * of the modded test game; the test skips when none of them is there. The table goes to build/reports/zstd-benchmark.md.
- * Run with gradlew benchmarks.
+ * of the modded test game, in either format ({@link RecordingCorpus}); the test skips when none of them is there. The
+ * table goes to build/reports/zstd-benchmark.md. Run with gradlew benchmarks.
  */
 @Tag("benchmark")
 class ZstdBenchmarkTest {
 
-    private static final String DEFAULT_RECORDINGS = "E:/Youtube/Dailies/run-modded/dailies/fixtures/realworld.dailies,"
-        + "E:/Youtube/Dailies/run-modded/dailies/fixtures/camera-route.dailies";
     private static final double MB = 1_000_000.0;
     /** How much raw data each method packs and unpacks before it is timed */
     private static final long WARM_UP_BYTES = 16L * 1024 * 1024;
-    /** Dictionaries are trained on about this many times their size of sample data, as zstd advises */
-    private static final int SAMPLE_TIMES_DICTIONARY = 100;
-
     /** One recording's blocks, unpacked, by kind */
-    private record Corpus(String name, List<byte[]> blobs, List<byte[]> parts, List<byte[]> pieces, long storedBlobBytes, long storedPartBytes) {
+    private record Corpus(String name, RecordingCorpus.Corpus blocks) {
         List<byte[]> of(Kind kind) {
             return switch (kind) {
-                case BLOBS -> this.blobs;
-                case PARTS -> this.parts;
-                case PIECES -> this.pieces;
+                case BLOBS -> this.blocks.blobs();
+                case PARTS -> this.blocks.parts();
+                case PIECES -> this.blocks.pieces();
             };
         }
 
-        /** What the recording holds for the kind, packed; -1 for the pieces, which no recording on disk holds yet */
+        /** What a deflated recording holds for the kind, packed; -1 for the pieces, which no deflated recording holds */
         long stored(Kind kind) {
             return switch (kind) {
-                case BLOBS -> this.storedBlobBytes;
-                case PARTS -> this.storedPartBytes;
+                case BLOBS -> this.blocks.storedBlobBytes();
+                case PARTS -> this.blocks.storedPartBytes();
                 case PIECES -> -1;
             };
         }
     }
 
     private enum Kind {
-        BLOBS("Shared blobs, as recordings stored them until section storage (whole chunks)"),
+        BLOBS("Shared blobs as the recording stores them (whole chunks in a recording of format 1, pieces in one made now)"),
         PARTS("Segment parts"),
         /**
          * The same shared blobs cut as section storage cuts them (capture.ChunkPieces), each distinct piece once: what a
          * recording in the new format stores for the same play, measured without the game
          */
-        PIECES("Section pieces: the same chunks stored by section, each distinct piece once (the new format)");
+        PIECES("Section pieces: the same chunks stored by section, each distinct piece once (as recordings store them now)");
 
         final String title;
 
@@ -236,31 +231,29 @@ class ZstdBenchmarkTest {
 
     @Test
     void zstdAgainstDeflate() throws IOException {
-        List<Path> files = new ArrayList<>();
-        for (String name : System.getProperty("dailies.bench.recordings", DEFAULT_RECORDINGS).split(",")) {
-            Path file = Path.of(name.trim());
-            if (!name.isBlank() && Files.isRegularFile(file)) {
-                files.add(file);
-            }
-        }
+        List<Path> files = RecordingCorpus.recordings();
         Assumptions.assumeFalse(files.isEmpty(), "None of the recordings in dailies.bench.recordings is there");
 
         List<Corpus> corpora = new ArrayList<>();
         for (Path file : files) {
-            corpora.add(load(file));
+            RecordingCorpus.Corpus blocks = RecordingCorpus.load(file);
+            corpora.add(new Corpus(blocks.name(), blocks));
         }
 
         StringBuilder report = new StringBuilder();
         report.append("# Zstandard against deflate, on real recordings\n\n");
         report.append("Each block packed by itself, as recordings pack them. Sizes are of the packed data alone (the 4-byte length "
             + "and a shared blob's 32-byte name are the same for every method). MB is 10^6 bytes; speeds are MB of raw data a "
-            + "second on one thread, after a warm-up. \"% of D3\" is the size against deflate level 3, what recordings use now.\n\n");
+            + "second on one thread, after a warm-up. \"% of D3\" is the size against deflate level 3, what recordings were packed "
+            + "with before. \"(now)\" is what recordings are packed with now: zstd level 9 with the dictionary packed into the mod "
+            + "for that kind of block (shared data or segment parts).\n\n");
         report.append(String.format(Locale.ROOT, "Java %s, %s, %d processors.%n%n", System.getProperty("java.version"),
             System.getProperty("os.name"), Runtime.getRuntime().availableProcessors()));
         report.append("Recordings:\n");
         for (Corpus corpus : corpora) {
-            report.append(String.format(Locale.ROOT, "- %s: %d shared blobs (%.1f MB raw), %d segment parts (%.1f MB raw); cut by section: %d distinct pieces (%.1f MB raw)%n", corpus.name,
-                corpus.blobs.size(), total(corpus.blobs) / MB, corpus.parts.size(), total(corpus.parts) / MB, corpus.pieces.size(), total(corpus.pieces) / MB));
+            report.append(String.format(Locale.ROOT, "- %s (%s): %d shared blobs (%.1f MB raw), %d segment parts (%.1f MB raw); cut by section: %d distinct pieces (%.1f MB raw)%n", corpus.name,
+                corpus.blocks.deflated() ? "format 1, deflated" : "Zstandard", corpus.of(Kind.BLOBS).size(), total(corpus.of(Kind.BLOBS)) / MB, corpus.of(Kind.PARTS).size(),
+                total(corpus.of(Kind.PARTS)) / MB, corpus.of(Kind.PIECES).size(), total(corpus.of(Kind.PIECES)) / MB));
         }
         report.append('\n');
 
@@ -279,7 +272,7 @@ class ZstdBenchmarkTest {
         List<Result> results = new ArrayList<>();
         for (int level : new int[]{1, 3, 6, 9}) {
             final int l = level;
-            results.add(run("Deflate " + level + (level == 3 ? " (now)" : ""), kind, corpora, corpus -> () -> new DeflateCodec(l)));
+            results.add(run("Deflate " + level + (level == 3 ? " (before)" : ""), kind, corpora, corpus -> () -> new DeflateCodec(l)));
         }
         for (int level : new int[]{1, 3, 6, 9, 15, 19}) {
             final int l = level;
@@ -287,11 +280,17 @@ class ZstdBenchmarkTest {
         }
         results.add(run("aircompressor zstd (3, pure Java)", kind, corpora, corpus -> AirCodec::new));
 
+        // What recordings are packed with now: the dictionary packed into the mod for this kind of block, at Packing's level
+        Packing.Dictionary packaged = kind == Kind.PARTS ? Packing.Dictionaries.current().parts() : Packing.Dictionaries.current().shared();
+        byte[] packagedBytes = packaged == null ? null : packaged.bytes;
+        results.add(run("zstd " + Packing.LEVEL + " + the mod's " + (packagedBytes == null ? 0 : packagedBytes.length / 1024) + " KB dict (now)", kind, corpora,
+            corpus -> () -> new ZstdCodec(Packing.LEVEL, packagedBytes)));
+
         // Dictionaries trained on each recording, used on that recording (which flatters them) and on the other ones
         for (int size : new int[]{64 * 1024, 112 * 1024}) {
             Map<String, byte[]> dictionaries = new LinkedHashMap<>();
             for (Corpus corpus : corpora) {
-                dictionaries.put(corpus.name, train(corpus.of(kind), size));
+                dictionaries.put(corpus.name, RecordingCorpus.train(corpus.of(kind), size));
             }
             for (int level : new int[]{3, 9}) {
                 final int l = level;
@@ -309,8 +308,8 @@ class ZstdBenchmarkTest {
         }
 
         Result deflate3 = results.get(1);
-        // Deflate 3 here is what the recording holds: the same zlib at the same level gives the same bytes
-        if (kind != Kind.PIECES) {
+        // Deflate 3 here is what a format 1 recording holds: the same zlib at the same level gives the same bytes
+        if (kind != Kind.PIECES && corpora.stream().allMatch(corpus -> corpus.blocks.deflated())) {
             long stored = corpora.stream().mapToLong(corpus -> corpus.stored(kind)).sum();
             assertEquals(stored, deflate3.packed, "Deflate 3 should give exactly what the recordings hold");
         }
@@ -382,67 +381,8 @@ class ZstdBenchmarkTest {
         return result;
     }
 
-    /** A dictionary of about the size given, from blocks spread evenly through the recording */
-    private static byte[] train(List<byte[]> blocks, int size) {
-        long want = (long) size * SAMPLE_TIMES_DICTIONARY;
-        long all = total(blocks);
-        int step = (int) Math.max(1, all / want);
-        List<byte[]> samples = new ArrayList<>();
-        for (int i = 0; i < blocks.size(); i += step) {
-            samples.add(blocks.get(i));
-        }
-        byte[] dictionary = new byte[size];
-        long made = Zstd.trainFromBuffer(samples.toArray(new byte[0][]), dictionary);
-        if (Zstd.isError(made)) {
-            throw new IllegalStateException("Training a dictionary failed: " + Zstd.getErrorName(made));
-        }
-        return Arrays.copyOf(dictionary, (int) made);
-    }
-
-    private static Corpus load(Path file) throws IOException {
-        List<byte[]> blobs = new ArrayList<>();
-        List<byte[]> parts = new ArrayList<>();
-        long storedBlobs = 0;
-        long storedParts = 0;
-        try (RecordingFile recording = RecordingFile.open(file)) {
-            Container container = recording.container();
-            for (Container.Entry entry : container.shared.values()) {
-                blobs.add(Packing.unpack(container.read(entry), Container.HASH_BYTES));
-                storedBlobs += entry.length() - Container.HASH_BYTES - 4;
-            }
-            for (Container.Entry entry : container.parts) {
-                parts.add(Packing.unpack(container.read(entry), 0));
-                storedParts += entry.length() - 4;
-            }
-        }
-        String name = file.getFileName().toString().replaceFirst("\\.dailies$", "");
-        return new Corpus(name, blobs, parts, pieces(blobs), storedBlobs, storedParts);
-    }
-
-    /**
-     * The shared blobs cut as the recorder now cuts chunks and light (a chunk is tried first, then a light packet; what
-     * is neither stays whole), with every distinct piece, part or list, kept once by its name, as the store keeps them
-     */
-    private static List<byte[]> pieces(List<byte[]> blobs) {
-        Map<String, byte[]> distinct = new LinkedHashMap<>();
-        for (byte[] blob : blobs) {
-            comedymonkey.dailies.file.PacketPieces.Split split = comedymonkey.dailies.capture.ChunkPieces.split(blob, comedymonkey.dailies.capture.ChunkPieces.Shape.CHUNK);
-            if (split.blobs().size() <= 1) {
-                split = comedymonkey.dailies.capture.ChunkPieces.split(blob, comedymonkey.dailies.capture.ChunkPieces.Shape.LIGHT);
-            }
-            for (comedymonkey.dailies.file.PacketPieces.Blob piece : split.blobs()) {
-                distinct.putIfAbsent(piece.hex(), piece.copy());
-            }
-        }
-        return new ArrayList<>(distinct.values());
-    }
-
     private static long total(List<byte[]> blocks) {
-        long sum = 0;
-        for (byte[] block : blocks) {
-            sum += block.length;
-        }
-        return sum;
+        return RecordingCorpus.total(blocks);
     }
 
 }

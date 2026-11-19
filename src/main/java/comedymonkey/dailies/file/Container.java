@@ -26,11 +26,14 @@ import java.util.zip.CRC32;
  * <li>a reader finds everything from the trailer, the last block of the file, or, when a crash left none, by walking
  * the blocks from the start and keeping those whose checksum holds.</li>
  * </ul>
+ * Every recording carries the dictionaries its blocks were packed with, written right after the preamble, and is read
+ * with those and no others: a later Dailies with dictionaries trained afresh still opens it.
  */
 final class Container implements Closeable {
 
     static final byte[] MAGIC = "DAILIES\n".getBytes(StandardCharsets.US_ASCII);
-    static final int VERSION = 1;
+    /** 2: blocks packed with Zstandard and the recording's own dictionaries. Version 1 (deflate) is no longer read */
+    static final int VERSION = 2;
     static final int PREAMBLE_BYTES = 16;
     static final int HEADER_BYTES = 21;
     static final int HASH_BYTES = 32;
@@ -46,6 +49,13 @@ final class Container implements Closeable {
     static final byte INDEX = 6;
     /** Four positions: the index, the manifest, the editor state and the preview (-1 when there is none) */
     static final byte TRAILER = 7;
+    /**
+     * A dictionary the recording's blocks are packed with, as it is (not packed itself). a: which, {@link #SHARED_DICTIONARY}
+     * or {@link #PARTS_DICTIONARY}. Empty for none. Each is written once, before the manifest
+     */
+    static final byte DICTIONARY = 8;
+    static final int SHARED_DICTIONARY = 0;
+    static final int PARTS_DICTIONARY = 1;
 
     private static final int TRAILER_PAYLOAD_BYTES = 32;
 
@@ -62,6 +72,13 @@ final class Container implements Closeable {
     /** Shared blobs by the hex of their hash */
     final Map<String, Entry> shared = new LinkedHashMap<>();
     Entry manifest = null;
+    /** The dictionary blocks, by {@link #SHARED_DICTIONARY} and {@link #PARTS_DICTIONARY} */
+    final Entry[] dictionaryBlocks = new Entry[2];
+    /**
+     * What the blocks are packed with, read from the dictionary blocks when first needed: listing recordings reads only
+     * their manifests, and should not read their dictionaries too
+     */
+    private volatile Packing.Dictionaries dictionaries = null;
     Entry edit = null;
     Entry preview = null;
     private Entry index = null;
@@ -75,20 +92,62 @@ final class Container implements Closeable {
         this.channel = channel;
     }
 
-    static Container create(Path path) throws IOException {
+    /** @param dictionaries what every block of the new recording is packed with, written into it first */
+    static Container create(Path path, Packing.Dictionaries dictionaries) throws IOException {
         FileChannel channel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.READ, StandardOpenOption.WRITE);
         Container container = new Container(path, channel);
         try {
             ByteBuffer preamble = ByteBuffer.allocate(PREAMBLE_BYTES);
             preamble.put(MAGIC).putInt(VERSION).putInt(0).flip();
             writeFully(channel, preamble, 0);
+            container.end = PREAMBLE_BYTES;
+            container.append(DICTIONARY, SHARED_DICTIONARY, 0, 0, dictionaries.shared() == null ? new byte[0] : dictionaries.shared().bytes);
+            container.append(DICTIONARY, PARTS_DICTIONARY, 0, 0, dictionaries.parts() == null ? new byte[0] : dictionaries.parts().bytes);
+            container.dictionaries = dictionaries;
         } catch (IOException | RuntimeException e) {
             // A channel left open keeps the file locked on Windows until the game closes. The file is new and ours, and empty
             container.closeAndDelete();
             throw e;
         }
-        container.end = PREAMBLE_BYTES;
         return container;
+    }
+
+    /**
+     * What this recording's blocks are packed with: its own dictionaries, never the mod's
+     *
+     * @throws RecordingFormatException when a dictionary block is damaged
+     */
+    Packing.Dictionaries dictionaries() throws IOException {
+        Packing.Dictionaries known = this.dictionaries;
+        if (known == null) {
+            synchronized (this) {
+                if (this.dictionaries == null) {
+                    this.dictionaries = this.readDictionaries();
+                }
+                known = this.dictionaries;
+            }
+        }
+        return known;
+    }
+
+    /** A segment part's data, packed as this recording packs it */
+    byte[] packPart(byte[] data, int from, int length) throws IOException {
+        return Packing.pack(this.dictionaries().parts(), new byte[0], data, from, length);
+    }
+
+    /** A segment part's payload, unpacked */
+    byte[] unpackPart(byte[] payload) throws IOException {
+        return Packing.unpack(this.dictionaries().parts(), payload, 0);
+    }
+
+    /** A shared blob's payload: its name, then its data packed as this recording packs it */
+    byte[] packShared(byte[] hash, byte[] data, int from, int length) throws IOException {
+        return Packing.pack(this.dictionaries().shared(), hash, data, from, length);
+    }
+
+    /** A shared blob's data, from its payload */
+    byte[] unpackShared(byte[] payload) throws IOException {
+        return Packing.unpack(this.dictionaries().shared(), payload, HASH_BYTES);
     }
 
     /**
@@ -123,9 +182,31 @@ final class Container implements Closeable {
             throw new RecordingFormatException(RecordingFormatException.Reason.NEWER_FORMAT, this.path.getFileName() + " was made by a newer version of Dailies (format " + version
                 + ", this version reads up to " + VERSION + "). Update Dailies to open it");
         }
+        if (version < VERSION) {
+            // Before release the format changed without a way back: recordings packed with deflate are not read
+            throw new RecordingFormatException(RecordingFormatException.Reason.NOT_A_RECORDING, this.path.getFileName() + " was made by a test version of Dailies (format " + version
+                + ") whose recordings this version cannot open");
+        }
         if (!this.loadFromTrailer(size)) {
             this.loadByWalking(size);
         }
+        for (Entry entry : this.dictionaryBlocks) {
+            if (entry == null) {
+                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, this.path.getFileName() + " is too badly damaged to open: a dictionary it was packed with is missing");
+            }
+            if (entry.length > Packing.MAX_DICTIONARY) {
+                throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, this.path.getFileName() + " is damaged: a dictionary it was packed with is " + entry.length + " bytes long");
+            }
+        }
+    }
+
+    /** The dictionaries the blocks were packed with, from the recording's own dictionary blocks */
+    private Packing.Dictionaries readDictionaries() throws IOException {
+        Packing.Dictionary[] found = new Packing.Dictionary[2];
+        for (int which = 0; which < 2; which++) {
+            found[which] = Packing.Dictionary.of(this.read(this.dictionaryBlocks[which]));
+        }
+        return new Packing.Dictionaries(found[SHARED_DICTIONARY], found[PARTS_DICTIONARY]);
     }
 
     private boolean loadFromTrailer(long size) {
@@ -153,6 +234,7 @@ final class Container implements Closeable {
             int count = listed.getInt();
             List<Entry> listedParts = new ArrayList<>();
             Map<String, Entry> listedShared = new LinkedHashMap<>();
+            Entry[] listedDictionaries = new Entry[2];
             for (int i = 0; i < count; i++) {
                 byte kind = listed.get();
                 Entry entry = new Entry(kind, listed.getInt(), listed.getInt(), listed.getInt(), listed.getLong(), listed.getInt());
@@ -165,12 +247,15 @@ final class Container implements Closeable {
                     listedShared.put(HexFormat.of().formatHex(hash), entry);
                 } else if (kind == SEGMENT_PART) {
                     listedParts.add(entry);
+                } else if (kind == DICTIONARY && (entry.a == SHARED_DICTIONARY || entry.a == PARTS_DICTIONARY) && listedDictionaries[entry.a] == null) {
+                    listedDictionaries[entry.a] = entry;
                 } else {
                     return false;
                 }
             }
             this.parts.addAll(listedParts);
             this.shared.putAll(listedShared);
+            System.arraycopy(listedDictionaries, 0, this.dictionaryBlocks, 0, 2);
             this.index = indexEntry;
             this.manifest = manifestEntry;
             this.edit = editOffset < 0 ? null : this.expect(editOffset, EDIT, size);
@@ -182,6 +267,7 @@ final class Container implements Closeable {
             // A trailer that cannot be followed is treated like a missing one
             this.parts.clear();
             this.shared.clear();
+            Arrays.fill(this.dictionaryBlocks, null);
             return false;
         }
     }
@@ -210,6 +296,12 @@ final class Container implements Closeable {
                 }
                 case PREVIEW -> this.preview = entry;
                 case EDIT -> this.edit = entry;
+                case DICTIONARY -> {
+                    // Written once each; should a damaged file hold another, the first is the one its blocks were packed with
+                    if ((entry.a == SHARED_DICTIONARY || entry.a == PARTS_DICTIONARY) && this.dictionaryBlocks[entry.a] == null) {
+                        this.dictionaryBlocks[entry.a] = entry;
+                    }
+                }
                 default -> {
                 }
             }
@@ -237,7 +329,7 @@ final class Container implements Closeable {
         header.flip();
         byte kind = header.get();
         Entry entry = new Entry(kind, header.getInt(), header.getInt(), header.getInt(), offset, header.getInt());
-        if (kind < MANIFEST || kind > TRAILER || entry.length < 0 || entry.end() > size) {
+        if (kind < MANIFEST || kind > DICTIONARY || entry.length < 0 || entry.end() > size) {
             return null;
         }
         return entry;
@@ -282,6 +374,11 @@ final class Container implements Closeable {
             case PREVIEW -> this.preview = entry;
             case EDIT -> this.edit = entry;
             case INDEX -> this.index = entry;
+            case DICTIONARY -> {
+                if (a == SHARED_DICTIONARY || a == PARTS_DICTIONARY) {
+                    this.dictionaryBlocks[a] = entry;
+                }
+            }
             default -> {
             }
         }
@@ -292,10 +389,26 @@ final class Container implements Closeable {
         this.shared.put(hashHex, this.append(SHARED, 0, 0, 0, payload));
     }
 
-    /** Lists the segment parts and shared blobs written so far, for the next trailer to point at */
+    /** The dictionary blocks there are, in order */
+    synchronized List<Entry> dictionaryEntries() {
+        List<Entry> found = new ArrayList<>(2);
+        for (Entry entry : this.dictionaryBlocks) {
+            if (entry != null) {
+                found.add(entry);
+            }
+        }
+        return found;
+    }
+
+    /** Lists the dictionaries, segment parts and shared blobs written so far, for the next trailer to point at */
     synchronized void appendIndex() throws IOException {
-        ByteBuffer listed = ByteBuffer.allocate(4 + (this.parts.size() + this.shared.size()) * 25 + this.shared.size() * HASH_BYTES);
-        listed.putInt(this.parts.size() + this.shared.size());
+        List<Entry> dictionaryEntries = this.dictionaryEntries();
+        int count = dictionaryEntries.size() + this.parts.size() + this.shared.size();
+        ByteBuffer listed = ByteBuffer.allocate(4 + count * 25 + this.shared.size() * HASH_BYTES);
+        listed.putInt(count);
+        for (Entry entry : dictionaryEntries) {
+            listed.put(entry.kind).putInt(entry.a).putInt(entry.b).putInt(entry.c).putLong(entry.offset).putInt(entry.length);
+        }
         for (Entry entry : this.parts) {
             listed.put(entry.kind).putInt(entry.a).putInt(entry.b).putInt(entry.c).putLong(entry.offset).putInt(entry.length);
         }

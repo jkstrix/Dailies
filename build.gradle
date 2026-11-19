@@ -182,6 +182,12 @@ dependencies {
         encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
     }
 
+    // Zstandard (zstd-jni, BSD 2-Clause, with the native zstd for every platform Dailies ships for), which every block of a
+    // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
+    // The dev runs need it on the classpath that is not loaded as boot modules, as MDG asks of libraries for 1.21.1
+    jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
+    additionalRuntimeClasspath 'com.github.luben:zstd-jni:1.5.7-25'
+
     // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
     compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
     selftestCompileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
@@ -192,17 +198,34 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // The game brings its own copy when it runs; unit tests run without the game
     testImplementation 'com.google.code.gson:gson:2.10.1'
-    // Only for the compression benchmark (ZstdBenchmarkTest), which weighs Zstandard against the deflate recordings use:
-    // zstd-jni (BSD) with the native zstd, and aircompressor (Apache 2.0), a pure-Java zstd. Never packed into the mod
-    testImplementation 'com.github.luben:zstd-jni:1.5.7-25'
+    // Only for the compression benchmark (ZstdBenchmarkTest), which also weighs aircompressor (Apache 2.0), a pure-Java
+    // zstd, against the zstd-jni recordings are packed with. Never packed into the mod
     testImplementation 'io.airlift:aircompressor:2.0.3'
 }
 
 test {
     useJUnitPlatform {
-        // Timings that say as much about the machine as the code; run by themselves with the task below
-        excludeTags 'benchmark'
+        // Timings that say as much about the machine as the code, and the training of the dictionaries, which writes
+        // into the sources; each run by itself with a task below
+        excludeTags 'benchmark', 'dictionaries'
     }
+}
+
+tasks.register('trainDictionaries', Test) {
+    description = 'Trains the Zstandard dictionaries recordings are packed with on real recordings, into src/main/resources/assets/dailies/zstd'
+    group = 'build'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'dictionaries'
+    }
+    maxHeapSize = '6g'
+    // The recordings to train on, as for the benchmark: -Pdailies.bench.recordings=a.dailies,b.dailies
+    providers.gradlePropertiesPrefixedBy('dailies.bench.').get().each { key, value -> systemProperty key, value }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
 }
 
 tasks.register('benchmarks', Test) {
