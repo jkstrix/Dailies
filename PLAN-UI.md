@@ -110,7 +110,7 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 | Create Jetpack, Gyroscope Stabilizers, Hypertube, Propulsion, Deep Seas, Coasters | flight controls, joystick, ride and placement overlays |
 | Supplementaries, Explorer's and Nature's Compass, Locator Bar, Vista | cannon, slimed and selected-item overlays; search results; the locator bar; viewfinder |
 
-**Left out on purpose:** Xaero's Minimap and World Map, AppleSkin and the Locator Bar (the owner does not want them in videos), FPS
+**Left out on purpose:** Xaero's Minimap and World Map, AppleSkin and the Locator Bar (the owner does not want them in videos), Vista and Emotecraft (the owner is taking them out of the pack), FPS
 Overlay, Dynamic FPS, JEI and Inventory Profiles Next buttons and panels, shulker box tooltips, Iris, Simple Voice
 Chat's group and setup screens (its icons are already a scene look), Better Advancements,
 the compasses' biome lists (menus, not play screens), statistics, the recipe book panel, and every config screen.
@@ -209,7 +209,7 @@ In order of how often they appear in a Create let's play:
 1. Create: every machine setting first (the value settings board and value box, and the machine screens, so a viewer sees what speed, direction or amount was set), then the goggles overlay, then train schedules and the clipboard.
 2. ComedyMonkey's Create Addons (its screens and overlays) and McpCraft (the job board, the prompts and job storage): the owner's own mods. These need no compat jar: the owner can add hooks to the mods themselves, so each implements the compat API directly as a soft dependency (found through `DailiesApi`, as McpCraft already does for playback), records exactly what its screens need, and sends any server-side facts from its own server code.
 3. Jade.
-4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses, Emotecraft's emote wheel.
+4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a small display test.
@@ -237,8 +237,8 @@ Connected 1.3.3 (sequenced pulse generator and others), Create Encased 1.10.1 (a
 ride and placement overlays). Their Catnip outlines, value boxes and goggle lines already go through the Create compat.
 
 **4.4d, `compats/extras` (`dailies_extras`), group `extras`:** Explorer's Compass and Nature's Compass 3.4.0 (the search
-result while held; their search lists are menus, not play), Vista 3.1.2 (the viewfinder and picture
-tape), Emotecraft 2.4.12 (the emote wheel, a play screen like Create's toolbox wheel). Stage 1 is checked, with a
+result while held; their search lists are menus, not play). Vista and Emotecraft are left out: the owner is taking
+them out of the pack (19 November). Stage 1 is checked, with a
 display entry each, for the windows of Sophisticated Backpacks 3.26.21, Curios 9.5.1, Corpse 1.1.22, Pipez 1.2.31 and
 VanillaBackport 1.2.2, with extras where a window loses client-side state.
 
