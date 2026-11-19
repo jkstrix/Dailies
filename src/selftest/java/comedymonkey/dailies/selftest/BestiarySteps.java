@@ -60,8 +60,10 @@ final class BestiarySteps {
     /**
      * Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself.
      * 2: a stage closes after two quiet ticks, before the field is cleared, so that clearing it is not part of the item.
+     * 5: the ghast fireball's explosion is heard as the game's sound or as the one Amendments plays in its place, a verdict
+     * kept in the fixture's notes when it is recorded.
      */
-    static final int VERSION = 4;
+    static final int VERSION = 5;
 
     static SelfTest test;
     static Minecraft minecraft;
