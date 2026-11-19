@@ -155,6 +155,12 @@ the compasses' biome lists (menus, not play screens), statistics, the recipe boo
    - Display entries in the `windows` group: a written book read (two pages turned), a lectern, a book and quill being
      written and then the signing screen, a sign and a hanging sign being edited.
    - Spec: REC-25 no longer leaves out books and signs (the creative inventory stays out), rows for each, TEST-8.
+   - **Paused for a book (the owner's choice, 19 November).** In singleplayer the game pauses while a book is read or
+     written, and stays paused: the owner wants vanilla's pause. But the recording keeps time while a recorded play
+     screen that pauses the game is open: ticks go on being recorded at the usual rate with the world standing still,
+     and the screen's state with them (pages turned, words typed), so in playback the world stands still and the book
+     stays open for as long as it was shown. The pause menu and every other screen that is not a recorded play screen
+     still stop the recording's clock, as today. On a server nothing pauses, so nothing changes there.
 
 ## Stage 2: the compat API and a template (Spec + core + companion, M) — Done
 
