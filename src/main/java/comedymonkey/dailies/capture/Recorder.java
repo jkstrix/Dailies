@@ -534,7 +534,7 @@ public final class Recorder {
         this.segmentStartTick = this.tick;
         this.partBeginsSegment = true;
         // The segment's times are taken before the world is stored: storing chunks afresh hands what has been gathered to
-        // the writer partway through (Out.sharedPackets), and the part that begins the segment carries these times into
+        // the writer partway through (Out.chunks), and the part that begins the segment carries these times into
         // the time index. Taken after, that part had the last segment's times, or the last recording's
         this.segmentReal = System.currentTimeMillis();
         this.segmentGame = minecraft.level.getGameTime();
@@ -655,19 +655,31 @@ public final class Recorder {
         }
 
         /**
-         * Packets stored once and named, as {@link #sharedPacket} does each, written here in this order; each name is set
-         * once it is known. The recording being made does the encoding, cutting up, naming and storing on its writer's
-         * thread, off the game's; this way of writing does them at once
+         * One chunk a snapshot names: where it is (packed as the game packs it), its stored chunk, and the stored light that
+         * goes on top of that, or null for none. Each name is known already, or is set once the packet it names is stored
          */
-        default void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
-            for (int i = 0; i < packets.size(); i++) {
-                if (packets.get(i) == null) {
-                    // Already stored: named again, in its place among the others
-                    this.sharedRef(Records.SHARED_PACKET, names.get(i).get());
-                } else {
-                    names.get(i).set(this.sharedPacket(codec.encode(packets.get(i)), shapeOf(packets.get(i))));
+        record NamedChunk(long key, java.util.concurrent.atomic.AtomicReference<byte[]> chunk, @Nullable java.util.concurrent.atomic.AtomicReference<byte[]> light) {
+        }
+
+        /**
+         * Names the snapshot's chunks here among its records ({@link Records#CHUNKS}), in a listing kept apart from them
+         * (file.ChunkListing). The packets given are stored first, as {@link #sharedPacket} stores each, and each name is set
+         * once it is known: the recording being made encodes, cuts up, names and stores them on its writer's thread, off
+         * the game's. A chunk whose stored chunk has no name in the end, because it could not be turned into bytes, is left
+         * out, and the next snapshot describes it afresh
+         */
+        void chunks(List<NamedChunk> chunks, List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec);
+
+        /** The listing the named chunks come to, once every name that will be set is */
+        static comedymonkey.dailies.file.ChunkListing listing(List<NamedChunk> chunks) {
+            comedymonkey.dailies.file.ChunkListing.Gatherer listing = new comedymonkey.dailies.file.ChunkListing.Gatherer();
+            for (NamedChunk chunk : chunks) {
+                byte[] stored = chunk.chunk().get();
+                if (stored != null) {
+                    listing.put(chunk.key(), stored, chunk.light() == null ? null : chunk.light().get());
                 }
             }
+            return listing.finish();
         }
 
         /** How a packet is cut up to be stored: a chunk and light by section, anything else whole */
@@ -766,28 +778,19 @@ public final class Recorder {
         /**
          * The chunks a snapshot describes afresh are the most of what storing the world cost the game: turning them into
          * bytes, naming them by their SHA-256 and storing them took about a third of it in new terrain. What has been
-         * written so far goes to the writer first, then these, encoded, cut up, named and stored there, so the recording
-         * keeps its order; what is written after goes in the next part
+         * written so far goes to the writer first, which begins the segment; then these, encoded, cut up, named and stored
+         * there, and the listing of every chunk the snapshot names, before the part that says where the chunks go
          */
         @Override
-        public void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
+        public void chunks(List<NamedChunk> chunks, List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
             Recorder.this.flushPart();
-            int endTick = Recorder.this.tick;
             List<Packet<? super ClientGamePacketListener>> made = new ArrayList<>(packets);
             List<java.util.concurrent.atomic.AtomicReference<byte[]>> naming = new ArrayList<>(names);
+            List<NamedChunk> listed = new ArrayList<>(chunks);
             Recorder.this.spool.add(new Spool.Job() {
                 @Override
                 public void run(RecordingWriter writer) throws Exception {
-                    Records.Writer records = new Records.Writer();
                     for (int i = 0; i < made.size(); i++) {
-                        if (made.get(i) == null) {
-                            // Already stored (a chunk whose light alone is written afresh): named again, in its place
-                            byte[] known = naming.get(i).get();
-                            if (known != null) {
-                                records.record(Records.SHARED_PACKET, known);
-                            }
-                            continue;
-                        }
                         byte[] encoded;
                         try {
                             encoded = codec.encode(made.get(i));
@@ -804,19 +807,18 @@ public final class Recorder {
                         // snapshot, has the same name and is not stored again
                         PacketPieces.Split split = ChunkPieces.split(encoded, Out.shapeOf(made.get(i)));
                         store(writer, split);
-                        records.record(Records.SHARED_PACKET, split.name());
                         naming.get(i).set(split.name());
                     }
-                    byte[] bytes = records.take();
-                    writer.appendToSegment(bytes, 0, bytes.length, endTick);
+                    writer.putListing(Out.listing(listed));
                 }
 
                 @Override
                 public long bytes() {
-                    // About what a chunk comes to, for the writer's queue to judge how much is waiting
-                    return made.size() * 40_000L;
+                    // About what a chunk comes to, and a chunk's place in the listing, for the writer's queue to judge how much is waiting
+                    return made.size() * 40_000L + listed.size() * 40L;
                 }
             });
+            Recorder.this.part.record(Records.CHUNKS);
         }
 
         /** Data stored once and referred to by a record of the given kind */

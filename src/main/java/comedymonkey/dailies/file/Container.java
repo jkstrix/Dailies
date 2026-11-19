@@ -21,7 +21,8 @@ import java.util.zip.CRC32;
  * a kind, three numbers whose meaning depends on the kind, a length and a checksum. Blocks are only ever added at the
  * end, so nothing already written is touched again:
  * <ul>
- * <li>a recording grows by adding segment parts and shared blobs, and a crash loses only the block being written;</li>
+ * <li>a recording grows by adding segment parts, shared blobs and the listings of the chunks its snapshots name, and a
+ * crash loses only the block being written;</li>
  * <li>saving the editor state or a new name adds one small block and a new trailer;</li>
  * <li>a reader finds everything from the trailer, the last block of the file, or, when a crash left none, by walking
  * the blocks from the start and keeping those whose checksum holds.</li>
@@ -32,8 +33,11 @@ import java.util.zip.CRC32;
 final class Container implements Closeable {
 
     static final byte[] MAGIC = "DAILIES\n".getBytes(StandardCharsets.US_ASCII);
-    /** 2: blocks packed with Zstandard and the recording's own dictionaries. Version 1 (deflate) is no longer read */
-    static final int VERSION = 2;
+    /**
+     * 3: the chunks a snapshot names are in listing blocks of their own, whole or as changes ({@link #LISTING}). Version 2
+     * named them in the snapshot's records, and version 1 packed blocks with deflate; neither is read
+     */
+    static final int VERSION = 3;
     static final int PREAMBLE_BYTES = 16;
     static final int HEADER_BYTES = 21;
     static final int HASH_BYTES = 32;
@@ -56,6 +60,13 @@ final class Container implements Closeable {
     static final byte DICTIONARY = 8;
     static final int SHARED_DICTIONARY = 0;
     static final int PARTS_DICTIONARY = 1;
+    /**
+     * The chunks one segment's snapshot names ({@link ChunkListing}), packed without a dictionary: names are random and no
+     * dictionary helps them. a: segment number, b: the segment whose listing this one holds the changes from, which is
+     * always an earlier one, or -1 for a whole listing, c: how many chunks the listing comes to. Written before the segment
+     * part whose records say where in the snapshot the chunks go ({@link Records#CHUNKS}), so whatever names a listing has it
+     */
+    static final byte LISTING = 9;
 
     private static final int TRAILER_PAYLOAD_BYTES = 32;
 
@@ -71,6 +82,8 @@ final class Container implements Closeable {
     final List<Entry> parts = new ArrayList<>();
     /** Shared blobs by the hex of their hash */
     final Map<String, Entry> shared = new LinkedHashMap<>();
+    /** Chunk listings by segment number, in file order */
+    final Map<Integer, Entry> listings = new LinkedHashMap<>();
     Entry manifest = null;
     /** The dictionary blocks, by {@link #SHARED_DICTIONARY} and {@link #PARTS_DICTIONARY} */
     final Entry[] dictionaryBlocks = new Entry[2];
@@ -150,6 +163,15 @@ final class Container implements Closeable {
         return Packing.unpack(this.dictionaries().shared(), payload, HASH_BYTES);
     }
 
+    /** A chunk listing's payload */
+    static byte[] packListing(byte[] data) {
+        return Packing.pack(null, new byte[0], data, 0, data.length);
+    }
+
+    static byte[] unpackListing(byte[] payload) throws IOException {
+        return Packing.unpack(null, payload, 0);
+    }
+
     /**
      * @param writable whether blocks may be added (the editor state, a new name, or the repair of a crashed recording)
      */
@@ -183,7 +205,8 @@ final class Container implements Closeable {
                 + ", this version reads up to " + VERSION + "). Update Dailies to open it");
         }
         if (version < VERSION) {
-            // Before release the format changed without a way back: recordings packed with deflate are not read
+            // Before release the format changed without a way back: recordings packed with deflate, or whose snapshots name
+            // their chunks in their own records, are not read
             throw new RecordingFormatException(RecordingFormatException.Reason.NOT_A_RECORDING, this.path.getFileName() + " was made by a test version of Dailies (format " + version
                 + ") whose recordings this version cannot open");
         }
@@ -234,6 +257,7 @@ final class Container implements Closeable {
             int count = listed.getInt();
             List<Entry> listedParts = new ArrayList<>();
             Map<String, Entry> listedShared = new LinkedHashMap<>();
+            Map<Integer, Entry> listedListings = new LinkedHashMap<>();
             Entry[] listedDictionaries = new Entry[2];
             for (int i = 0; i < count; i++) {
                 byte kind = listed.get();
@@ -247,6 +271,8 @@ final class Container implements Closeable {
                     listedShared.put(HexFormat.of().formatHex(hash), entry);
                 } else if (kind == SEGMENT_PART) {
                     listedParts.add(entry);
+                } else if (kind == LISTING) {
+                    listedListings.put(entry.a, entry);
                 } else if (kind == DICTIONARY && (entry.a == SHARED_DICTIONARY || entry.a == PARTS_DICTIONARY) && listedDictionaries[entry.a] == null) {
                     listedDictionaries[entry.a] = entry;
                 } else {
@@ -255,6 +281,7 @@ final class Container implements Closeable {
             }
             this.parts.addAll(listedParts);
             this.shared.putAll(listedShared);
+            this.listings.putAll(listedListings);
             System.arraycopy(listedDictionaries, 0, this.dictionaryBlocks, 0, 2);
             this.index = indexEntry;
             this.manifest = manifestEntry;
@@ -267,6 +294,7 @@ final class Container implements Closeable {
             // A trailer that cannot be followed is treated like a missing one
             this.parts.clear();
             this.shared.clear();
+            this.listings.clear();
             Arrays.fill(this.dictionaryBlocks, null);
             return false;
         }
@@ -289,6 +317,7 @@ final class Container implements Closeable {
             switch (entry.kind) {
                 case MANIFEST -> this.manifest = entry;
                 case SEGMENT_PART -> this.parts.add(entry);
+                case LISTING -> this.listings.put(entry.a, entry);
                 case SHARED -> {
                     if (payload.length >= HASH_BYTES) {
                         this.shared.put(HexFormat.of().formatHex(payload, 0, HASH_BYTES), entry);
@@ -329,7 +358,7 @@ final class Container implements Closeable {
         header.flip();
         byte kind = header.get();
         Entry entry = new Entry(kind, header.getInt(), header.getInt(), header.getInt(), offset, header.getInt());
-        if (kind < MANIFEST || kind > DICTIONARY || entry.length < 0 || entry.end() > size) {
+        if (kind < MANIFEST || kind > LISTING || entry.length < 0 || entry.end() > size) {
             return null;
         }
         return entry;
@@ -371,6 +400,7 @@ final class Container implements Closeable {
         switch (kind) {
             case MANIFEST -> this.manifest = entry;
             case SEGMENT_PART -> this.parts.add(entry);
+            case LISTING -> this.listings.put(a, entry);
             case PREVIEW -> this.preview = entry;
             case EDIT -> this.edit = entry;
             case INDEX -> this.index = entry;
@@ -389,6 +419,29 @@ final class Container implements Closeable {
         this.shared.put(hashHex, this.append(SHARED, 0, 0, 0, payload));
     }
 
+    /**
+     * Writes the chunk listings of one recording in order, each whole or as the changes from the one written before it.
+     * Whole the first time, whenever asked (the first snapshot after a cut or a join), and every
+     * {@link ChunkListing#FULL_EVERY}th time, so a jump never reads more than that many listing blocks
+     */
+    static final class ListingChain {
+        private ChunkListing last = null;
+        private int lastSegment = -1;
+        private int sinceWhole = 0;
+
+        /** @param whole whether to store this one whole whatever came before */
+        void append(Container out, int segment, ChunkListing listing, boolean whole) throws IOException {
+            if (this.last == null || segment <= this.lastSegment || this.sinceWhole + 1 >= ChunkListing.FULL_EVERY) {
+                whole = true;
+            }
+            byte[] data = whole ? listing.encodeFull() : listing.encodeChanges(this.last);
+            out.append(LISTING, segment, whole ? -1 : this.lastSegment, listing.size(), packListing(data));
+            this.sinceWhole = whole ? 0 : this.sinceWhole + 1;
+            this.last = listing;
+            this.lastSegment = segment;
+        }
+    }
+
     /** The dictionary blocks there are, in order */
     synchronized List<Entry> dictionaryEntries() {
         List<Entry> found = new ArrayList<>(2);
@@ -400,16 +453,19 @@ final class Container implements Closeable {
         return found;
     }
 
-    /** Lists the dictionaries, segment parts and shared blobs written so far, for the next trailer to point at */
+    /** Lists the dictionaries, segment parts, chunk listings and shared blobs written so far, for the next trailer to point at */
     synchronized void appendIndex() throws IOException {
         List<Entry> dictionaryEntries = this.dictionaryEntries();
-        int count = dictionaryEntries.size() + this.parts.size() + this.shared.size();
+        int count = dictionaryEntries.size() + this.parts.size() + this.listings.size() + this.shared.size();
         ByteBuffer listed = ByteBuffer.allocate(4 + count * 25 + this.shared.size() * HASH_BYTES);
         listed.putInt(count);
         for (Entry entry : dictionaryEntries) {
             listed.put(entry.kind).putInt(entry.a).putInt(entry.b).putInt(entry.c).putLong(entry.offset).putInt(entry.length);
         }
         for (Entry entry : this.parts) {
+            listed.put(entry.kind).putInt(entry.a).putInt(entry.b).putInt(entry.c).putLong(entry.offset).putInt(entry.length);
+        }
+        for (Entry entry : this.listings.values()) {
             listed.put(entry.kind).putInt(entry.a).putInt(entry.b).putInt(entry.c).putLong(entry.offset).putInt(entry.length);
         }
         for (Map.Entry<String, Entry> blob : this.shared.entrySet()) {
