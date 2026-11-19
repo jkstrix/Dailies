@@ -32,10 +32,10 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 1.4 The "Open windows" look | Done | `showWindows`, on by default, under Show HUD |
 | 1.5 Companion plugin API | Done | `CompanionPlugins` on `dailies_companion:compat`, client side `compat/companion/CompanionCompat`; SRV-6 to 8. First use: the server's list of plugins |
 | 1.6 Spec and tests | Done | Display test `WindowSteps`, group `windows`: chest, furnace, villager trades and inventory drawn in first person, absent in third person and flying free. Passed in game |
-| 2.1 Client compat API | Not started | |
-| 2.2 Server API | Not started | Builds on 1.5 |
-| 2.3 Template compat project | Not started | |
-| 3 Post Rider | Not started | Hooks go into the Post Rider mod itself |
+| 2.1 Client compat API | Done | `api/compat`: a mod registers a `DailiesCompat` and claims screens, menus, window extras, overlays and a server half; Dailies records each claim's state on change and in every snapshot. Claims win over the generic path. The manifest lists the compats used; a missing one is said once. REC-26, REC-27, PLAY-21, PLAY-22, EXP-17, CPT-1 to 3. `gradlew apiJar` builds the API jar (CPT-4) |
+| 2.2 Server API | Done | `Claims.serverHalf` on the companion plugin API; the companion's `disabledPlugins` setting; the privacy rule in SRV-9 |
+| 2.3 Template compat project | Done | `compats/template` (mod id `dailies_template`): an example screen, an overlay, a server half and a display test; builds with Dailies, not in the game test (CPT-5) |
+| 3 Post Rider | Done | Post Rider 1.2.2 carries its own hooks (`client/dailies`), compiled against a copy of the API jar, loaded only with Dailies present. Mailbox drawn by the generic path plus window extras (tab, address, scroll); reading a letter (hand, page, checked against the held letter); writing a letter (text, page, cursor, read-only screen). Display test group `postrider`, passed in game |
 | 4.1 Create | Not started | Every machine setting first |
 | 4.2 The owner's mods (Create Addons, McpCraft) | Not started | Hooks in the mods themselves |
 | 4.3 Jade | Not started | |
@@ -47,7 +47,10 @@ Known limits of stage 1, for a compat or a later fix:
 - the recipe book panel is never shown;
 - a mod window already open when recording starts is left out;
 - the creative inventory is not recorded;
-- the companion has no unit tests of its own (its routing is tested in the core, `CompatRoutesTest`).
+- the companion has no unit tests of its own (its routing is tested in the core, `CompatRoutesTest`);
+- a letter read in playback is drawn only if the recorder's held letter matches the one recorded;
+- the template compat is not in the game test;
+- the modded test now expects Post Rider loaded, from the pack or `dailies.modJars`.
 
 ---
 
@@ -126,7 +129,7 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
      recording, then check in first-person playback with the HUD on that each window is drawn, and in third person
      that it is not. Jumps, trim and snapshots are covered by unit tests.
 
-## Stage 2: the compat API and a template (Spec + core + companion, M) — Not started
+## Stage 2: the compat API and a template (Spec + core + companion, M) — Done
 
 1. **Client API (`comedymonkey.dailies.api.compat`).** A compat registers:
    - an id and a version;
@@ -144,7 +147,7 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
 3. **A template compat project:** Gradle, the client and server halves, one example screen and one overlay, and a test
    step. It is copied to start each compat.
 
-## Stage 3: Post Rider as the first compat (Owner's mod, M) — Not started
+## Stage 3: Post Rider as the first compat (Owner's mod, M) — Done
 
 Post Rider has one window and two screens, which makes it a good first test. It is the owner's own mod, so its hooks go into the mod itself, implementing the compat API directly, rather than into a separate compat jar.
 
