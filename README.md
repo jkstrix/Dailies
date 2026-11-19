@@ -74,7 +74,7 @@ does not work is a failure, not a skip. `runTestModded` also fails at once if a 
 (`-Pdailies.testExpectMods` changes the list).
 
 The groups are `settings`, `world`, `watching`, `moments`, `recording`, `packs`, `playback`, `balloon`, `export`,
-`editor`, `renderer`, `library`, `library-screens`, `points-of-view`, `addon`, `trains`, `edges`, `windows`, `postrider`,
+`editor`, `renderer`, `library`, `library-screens`, `points-of-view`, `addon`, `trains`, `edges`, `registries`, `windows`, `postrider`,
 `create`, `jade`, `aeronautics`, `supplementaries`, `createextras`, `extras`, `createaddons`, `mcpcraft`, `bestiary`, `tour`, `camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`,
 `packs`, `moments` and `playback`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
 

@@ -20,7 +20,9 @@ public final class PayloadRules {
         // The companion's server plugins (SRV-6): what they sent is kept as dailies:compat records and played to each
         // plugin's client half from those, so the message itself is never handed back
         "dailies_companion:compat",
-        // Connection housekeeping
+        // Connection housekeeping. NeoForge's handover of the server's numbering (neoforge:frozen_registry and the two
+        // around it) comes while the connection is being configured, before anything is recorded; the numbering it
+        // carries is kept with the recording's registries instead and put in force in playback (REC-37, PLAY-25)
         "neoforge:register", "neoforge:unregister", "c:register", "c:unregister", "c:version", "minecraft:register", "minecraft:unregister",
         "minecraft:brand", "neoforge:config_file", "neoforge:frozen_registry", "neoforge:frozen_registry_sync_completed",
         "neoforge:frozen_registry_sync_start", "neoforge:known_registry_data_maps", "neoforge:modded_network", "neoforge:modded_network_query",

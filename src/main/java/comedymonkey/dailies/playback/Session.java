@@ -60,6 +60,9 @@ final class Session {
     private static RegistryAccess.Frozen cachedRegistries = null;
 
     static Session create(Minecraft minecraft, String worldName, WorldData data) {
+        // Numbered as the recording's game numbered them before anything is read: the tags below name their members by
+        // number, and every packet after names its sounds, particles and blocks so (PLAY-25)
+        RegistryNumbering.use(worldName, data);
         RegistryAccess.Frozen registries;
         if (worldName.equals(cachedWorld)) {
             registries = cachedRegistries;

@@ -969,6 +969,9 @@ public final class Playback {
         WHEN_LOADED.clear();
         PackPlayback.closed(Minecraft.getInstance());
         Session.forgetRegistries();
+        // The game's own numbering back, however playback ended (PLAY-25). Leaving the playback world has had NeoForge do
+        // it already, as on leaving a server; a playback that failed before its world was built has not
+        RegistryNumbering.restore();
         if (serverConfigsLoaded) {
             serverConfigsLoaded = false;
             try {
