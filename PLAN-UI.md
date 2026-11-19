@@ -47,7 +47,7 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 | Post Rider | reading a letter, writing a letter |
 | Create | train schedules and stations, clipboard, display link, factory panel, package filter |
 | ComedyMonkey's Create Addons | dynamo, electric motor, turbine, splitter, Trade Bot stations |
-| McpCraft | job board, job and factory prompts, job storage |
+| McpCraft | the job board (only that: its prompts and storage screens are left out) |
 | Supplementaries, Amendments | blackboard, sign post, doormat, speaker; lectern book editing |
 | Create add-ons (Connected, Encased, Tracks, Deep Seas) | sequenced pulse generator, auto clutch, track tuning, sonar |
 | Vista | picture tape |
@@ -134,7 +134,7 @@ Post Rider has one window and two screens, which makes it a good first test.
 In order of how often they appear in a Create let's play:
 
 1. Create: goggles overlay, then train schedules and the clipboard.
-2. ComedyMonkey's Create Addons and McpCraft: the owner's own screens and overlays.
+2. ComedyMonkey's Create Addons (its screens and overlays) and McpCraft's job board: the owner's own mods.
 3. Jade.
 4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
 
