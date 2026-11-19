@@ -65,7 +65,7 @@ Java 21. The Gradle wrapper fetches everything else.
 | Build the companion (`companion/build/libs/`) | `gradlew build` in `companion/` |
 | Build the compat API jar for other mods to compile against (`build/libs/dailies-api-*.jar`) | `gradlew apiJar` |
 | Build the template compat (`compats/template/build/libs/`), the start of a compat for another mod | `gradlew :compats:template:build` |
-| Build the Create compat (`compats/create/build/libs/`), which the modded test loads beside Create: Create's machine settings, goggles, clipboard, schedules, stations, display links, factory gauges, outlines in the world (glue, selections, links), schematics in hand and its HUD lines in recordings (CPT-6) | `gradlew :compats:create:build` |
+| Build the Create compat (`compats/create/build/libs/`), which the modded test loads beside Create: Create's machine settings, goggles, clipboard, schedules, stations, display links, factory gauges, outlines in the world (glue, selections, links), schematics in hand, its HUD lines and the toolbox's and wrench's selection wheels in recordings (CPT-6) | `gradlew :compats:create:build` |
 
 The scripted test drives the real game through its own MCP tools and prints `DAILIES TEST PASSED`, or
 `DAILIES TEST FAILED:` and the reason, with the number of checks skipped. Steps that could not run (a mod not

@@ -1,8 +1,10 @@
 package comedymonkey.dailiescompat.create.client;
 
 import com.simibubi.create.content.contraptions.elevator.ElevatorContactScreen;
+import com.simibubi.create.content.contraptions.wrench.RadialWrenchMenu;
 import com.simibubi.create.content.equipment.clipboard.ClipboardScreen;
 import com.simibubi.create.content.equipment.symmetryWand.SymmetryWandScreen;
+import com.simibubi.create.content.equipment.toolbox.RadialToolboxMenu;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftScreen;
 import com.simibubi.create.content.logistics.factoryBoard.FactoryPanelScreen;
 import com.simibubi.create.content.redstone.displayLink.DisplayLinkScreen;
@@ -52,7 +54,8 @@ import java.util.function.Supplier;
  * selection and the rest ({@link Outlines}); a schematic held, its tool bar and its box in the world, and the screen
  * naming a new one ({@link SchematicParts});</li>
  * <li>the line Create puts above the hotbar itself, the bar shown while a train is driven, and the lines shown while a
- * linked controller is bound ({@link CreateHud}); the wand of symmetry's screen ({@link SymmetryPart}).</li>
+ * linked controller is bound ({@link CreateHud}); the wand of symmetry's screen ({@link SymmetryPart});</li>
+ * <li>the toolbox's and the wrench's selection wheels, shown while their keys are held ({@link Wheels}).</li>
  * </ul>
  * Create's other windows the server opens (the linked controller, the toolbox, the schematic table and cannon, the
  * crafting blueprint, the stock keeper and the rest) are recorded and drawn by Dailies itself and need nothing here.
@@ -135,6 +138,9 @@ public final class CreateDailies implements DailiesCompat {
         claims.overlay(CreateHud.TRAIN, overlay(CreateHud::captureTrain, CreateHud::drawTrain, 1));
         claims.overlay(CreateHud.BIND, overlay(CreateHud::captureBind, CreateHud::drawBind, SETTING_TICKS));
         claims.screen(SymmetryPart.NAME, SymmetryWandScreen.class, screen(SymmetryPart::capture, SymmetryPart::build, 1));
+        // 6. The selection wheels, which are play: the toolbox's and the wrench's
+        claims.screen(Wheels.TOOLBOX, RadialToolboxMenu.class, screen(Wheels::captureToolbox, Wheels::buildToolbox, 1));
+        claims.screen(Wheels.WRENCH, RadialWrenchMenu.class, screen(Wheels::captureWrench, Wheels::buildWrench, 1));
     }
 
     @Override

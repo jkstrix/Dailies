@@ -771,6 +771,154 @@ public final class States {
         return read(data, in -> new Symmetry(in.in.readByte(), in.in.readByte()));
     }
 
+    // --- The toolbox's selection wheel ---
+
+    /** One toolbox as the wheel shows it: its colour (the dye's name), its name as shown, and for the one picked from, its slots */
+    public record Toolbox(String colour, String name) {
+    }
+
+    /**
+     * The toolbox's selection wheel, while its key is held: what it is picking (Create's name for the wheel's state:
+     * a toolbox, a slot, a slot with the held item to put back, or only putting it back when out of range), the toolboxes
+     * offered, the one picked from with the item each of its eight slots holds as drawn (by id, empty for none) and
+     * which of them still have any in stock (a bit for each slot), the segment the pointer is on as the wheel last drew
+     * it (a slot 0 to 7, -5 for the middle, -7 for putting all back, -1 for none), whether it is picking by scrolling and
+     * the slot scrolled to, how long it has been open (up to 20 ticks, as far as it fades in), and the item held, which
+     * the middle's tip names.
+     */
+    public record ToolboxWheel(String state, List<Toolbox> toolboxes, boolean picked, Toolbox from, List<String> items, int stocked, int hovered,
+                               boolean scrolling, int scrolled, int ticksOpen, String held) {
+
+        /** Whether slot {@code i} of the toolbox picked from still has any in stock */
+        public boolean stocked(int i) {
+            return (this.stocked & (1 << i)) != 0;
+        }
+
+        /** The item slot {@code i} holds, by id, or empty */
+        public String item(int i) {
+            return i >= 0 && i < this.items.size() ? this.items.get(i) : "";
+        }
+
+        /** Create's codes for the wheel's middle (putting the held item back) and for putting everything back */
+        public static final int UNEQUIP = -5;
+        public static final int DEPOSIT = -7;
+
+        /**
+         * Where to put the pointer, from the middle of the screen, for the wheel to pick the recorded segment as Create
+         * works it out: a slot by its angle, the middle, putting all back to the right, or nothing
+         */
+        public int[] pointer() {
+            if (this.scrolling) {
+                // Picking by scrolling lasts only while the pointer stays near the middle
+                return new int[]{0, 0};
+            }
+            if (this.hovered >= 0 && this.hovered < 8) {
+                // Create's slot under an angle a (degrees) is floor(a + 517.5) % 360 / 45: the middle of slot s is at 45s + 225
+                double angle = Math.toRadians(45 * this.hovered + 225);
+                return new int[]{(int) Math.round(40 * Math.cos(angle)), (int) Math.round(40 * Math.sin(angle))};
+            }
+            if (this.hovered == DEPOSIT) {
+                return new int[]{80, 0};
+            }
+            if (this.hovered == UNEQUIP) {
+                return this.state.equals("DETACH") ? new int[]{0, -50} : new int[]{0, 0};
+            }
+            // Nothing: the very middle, unless the middle is a segment of its own, then beyond the wheel's reach
+            return this.state.equals("SELECT_ITEM_UNEQUIP") ? new int[]{0, 120} : new int[]{0, 0};
+        }
+
+        /**
+         * The segment Create's wheel picks for a pointer this far from the middle, as its drawing works it out (for the
+         * test that the pointer chosen lands where it should)
+         */
+        public static int picked(String state, int x, int y) {
+            int hovered = -1;
+            float distance = x * x + y * y;
+            if (distance > 25 && distance < 10000) {
+                hovered = (int) (Math.floor(Math.toDegrees(Math.atan2(y, x)) + 360 + 180 - 22.5f) % 360) / 45;
+            }
+            if (state.equals("SELECT_ITEM_UNEQUIP") && distance <= 150) {
+                hovered = UNEQUIP;
+            }
+            if (state.equals("DETACH")) {
+                if (x > -20 && x < 20 && y > -80 && y < -20) {
+                    hovered = UNEQUIP;
+                }
+            } else if (x > 60 && x < 100 && y > -20 && y < 20) {
+                hovered = DEPOSIT;
+            }
+            return hovered;
+        }
+    }
+
+    public static byte[] toolboxWheel(ToolboxWheel wheel) {
+        return write(out -> {
+            out.text(wheel.state());
+            out.count(wheel.toolboxes().size());
+            for (Toolbox box : wheel.toolboxes()) {
+                out.text(box.colour());
+                out.text(box.name());
+            }
+            out.out.writeBoolean(wheel.picked());
+            out.text(wheel.from().colour());
+            out.text(wheel.from().name());
+            out.texts(wheel.items());
+            out.out.writeInt(wheel.stocked());
+            out.out.writeInt(wheel.hovered());
+            out.out.writeBoolean(wheel.scrolling());
+            out.out.writeInt(wheel.scrolled());
+            out.out.writeByte(wheel.ticksOpen());
+            out.text(wheel.held());
+        });
+    }
+
+    public static ToolboxWheel readToolboxWheel(byte[] data) {
+        return read(data, in -> {
+            String state = in.text();
+            int count = in.count();
+            List<Toolbox> boxes = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                boxes.add(new Toolbox(in.text(), in.text()));
+            }
+            return new ToolboxWheel(state, boxes, in.in.readBoolean(), new Toolbox(in.text(), in.text()), in.texts(), in.in.readInt(), in.in.readInt(),
+                in.in.readBoolean(), in.in.readInt(), in.in.readByte(), in.text());
+        });
+    }
+
+    // --- The wrench's selection wheel ---
+
+    /**
+     * The wrench's selection wheel, while its key is held on a block: the block (where, and its state as the game writes
+     * a block state), which of its properties is being changed (by its place among those the wheel offers), the states
+     * offered as drawn round the wheel, the one highlighted, where the pointer was from the wheel's middle when it was
+     * far enough out to pick (or none), how long the wheel has been open (up to 20 ticks), and how the player was turned,
+     * which the blocks on the wheel are turned by
+     */
+    public record WrenchWheel(long pos, String block, int property, List<String> states, int selected, boolean pointed, int pointerX, int pointerY,
+                              int ticksOpen, float pitch, float yaw) {
+    }
+
+    public static byte[] wrenchWheel(WrenchWheel wheel) {
+        return write(out -> {
+            out.out.writeLong(wheel.pos());
+            out.text(wheel.block());
+            out.out.writeInt(wheel.property());
+            out.texts(wheel.states());
+            out.out.writeInt(wheel.selected());
+            out.out.writeBoolean(wheel.pointed());
+            out.out.writeInt(wheel.pointerX());
+            out.out.writeInt(wheel.pointerY());
+            out.out.writeByte(wheel.ticksOpen());
+            out.out.writeFloat(wheel.pitch());
+            out.out.writeFloat(wheel.yaw());
+        });
+    }
+
+    public static WrenchWheel readWrenchWheel(byte[] data) {
+        return read(data, in -> new WrenchWheel(in.in.readLong(), in.text(), in.in.readInt(), in.texts(), in.in.readInt(), in.in.readBoolean(), in.in.readInt(),
+            in.in.readInt(), in.in.readByte(), in.in.readFloat(), in.in.readFloat()));
+    }
+
     // --- Writing and reading ---
 
     private interface Writer {

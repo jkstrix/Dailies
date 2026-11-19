@@ -1,7 +1,12 @@
 package comedymonkey.dailiescompat.create.client;
 
+import com.simibubi.create.content.contraptions.wrench.RadialWrenchMenu;
 import com.simibubi.create.content.equipment.clipboard.ClipboardScreen;
 import com.simibubi.create.content.equipment.symmetryWand.SymmetryWandScreen;
+import com.simibubi.create.content.equipment.toolbox.RadialToolboxMenu;
+import com.simibubi.create.content.equipment.toolbox.ToolboxBlockEntity;
+import com.simibubi.create.content.equipment.toolbox.ToolboxHandler;
+import com.simibubi.create.content.equipment.toolbox.ToolboxInventory;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftBlockEntity;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftScreen;
 import com.simibubi.create.content.redstone.displayLink.DisplayLinkBlockEntity;
@@ -17,23 +22,28 @@ import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollVa
 import com.simibubi.create.foundation.utility.CreateLang;
 import comedymonkey.dailies.api.compat.DisplayTest;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * The Create compat's display test, run by Dailies' scripted run (its create group): a creative motor with a shaft on
  * it, a sequenced gearshift, a fluid tank, a display link, a train station, a schematic table, a schematicannon and a
- * glued area beside the player. While recording, the motor's value settings board is opened and its speed scrolled,
+ * glued area beside the player, with a toolbox holding four kinds of item and an encased fan. While recording, the motor's value settings board is opened and its speed scrolled,
  * the motor's value box is aimed at, the goggles are put on and a fluid tank looked at, the gearshift's screen is
  * opened, a clipboard is written in, the display link's and the station's assembly screens and the wand of symmetry's
  * are opened, super glue is held by the glued area, a status line is put up, a linked controller starts binding, a
- * schematic is held, the schematic table and the schematicannon are used, and a schematic is named. Dailies then checks
+ * schematic is held, the schematic table and the schematicannon are used, a schematic is named, and the toolbox's and
+ * the wrench's selection wheels are opened. Dailies then checks
  * each is drawn riding along in first person, and nothing in third person or flying free.
  */
 final class CreateDisplayTest implements DisplayTest {
@@ -44,6 +54,8 @@ final class CreateDisplayTest implements DisplayTest {
     private static final BlockPos STATION = new BlockPos(-4, -60, 3);
     private static final BlockPos TABLE = new BlockPos(6, -60, -3);
     private static final BlockPos CANNON = new BlockPos(-6, -60, -3);
+    private static final BlockPos TOOLBOX = new BlockPos(-3, -60, -6);
+    private static final BlockPos FAN = new BlockPos(3, -60, -6);
     private static final String TYPED = "Speed: 64";
     private static final String NAME = "Dailies";
 
@@ -60,6 +72,21 @@ final class CreateDisplayTest implements DisplayTest {
         stage.command("setblock -6 -60 -3 create:schematicannon");
         // A glued area two blocks long on the ground, south of where the player stands
         stage.command("summon create:super_glue 0 -60 6 {From:[0.0d,0.0d,0.0d],To:[2.0d,1.0d,1.0d]}");
+        // A toolbox for its wheel, and an encased fan, which the wrench's wheel turns to face any of six ways
+        stage.command("setblock -3 -60 -6 create:brown_toolbox");
+        stage.command("setblock 3 -60 -6 create:encased_fan[facing=north]");
+        stage.waitTicks(5);
+        // Four of the toolbox's slots kept for an item each, the last of them empty again (its slot is still kept for it)
+        stage.onServer(player -> {
+            if (player.level().getBlockEntity(TOOLBOX) instanceof ToolboxBlockEntity toolbox) {
+                ToolboxInventory inventory = Reflect.get(toolbox, "inventory");
+                inventory.insertItem(0, new ItemStack(Items.IRON_PICKAXE), false);
+                inventory.insertItem(ToolboxInventory.STACKS_PER_COMPARTMENT, Texts.stack("create:wrench"), false);
+                inventory.insertItem(2 * ToolboxInventory.STACKS_PER_COMPARTMENT, new ItemStack(Items.TORCH, 32), false);
+                inventory.insertItem(3 * ToolboxInventory.STACKS_PER_COMPARTMENT, Texts.stack("create:andesite_alloy").copyWithCount(8), false);
+                inventory.extractItem(3 * ToolboxInventory.STACKS_PER_COMPARTMENT, 8, false);
+            }
+        });
         stage.waitTicks(5);
     }
 
@@ -213,7 +240,52 @@ final class CreateDisplayTest implements DisplayTest {
                     });
                     stage.waitTicks(1);
                 }
+            }),
+            new Display("the toolbox's selection wheel", CreateDailies.ID + "/" + Wheels.TOOLBOX, stage -> {
+                // Within the toolbox's reach, with nothing taken from it yet, so the wheel offers its slots
+                stage.command("item replace entity @s weapon.mainhand with minecraft:air");
+                stage.command("tp @s -2.5 -60 -3.5 180 30");
+                stage.waitTicks(5);
+                stage.onClient(() -> {
+                    List<ToolboxBlockEntity> toolboxes = ToolboxHandler.getNearest(minecraft.level, minecraft.player, 8);
+                    toolboxes.sort(Comparator.comparing(ToolboxBlockEntity::getUniqueId));
+                    if (!toolboxes.isEmpty()) {
+                        minecraft.setScreen(new ToolboxWheelOnTop(toolboxes));
+                    }
+                });
+                stage.waitTicks(3);
+            }),
+            new Display("the wrench's selection wheel", CreateDailies.ID + "/" + Wheels.WRENCH, stage -> {
+                // As Create's key handler opens it with a wrench in hand on a block it can turn; it sends only when a key
+                // or button is let go, and closing it does nothing more
+                stage.command("item replace entity @s weapon.mainhand with create:wrench");
+                stage.command("tp @s 3.5 -60 -3.5 180 30");
+                stage.waitTicks(5);
+                stage.onClient(() -> RadialWrenchMenu.tryCreateFor(minecraft.level.getBlockState(FAN), FAN, minecraft.level).ifPresent(minecraft::setScreen));
+                stage.waitTicks(3);
             }));
+    }
+
+    /**
+     * The toolbox's wheel as Create's key handler opens it with one toolbox in reach, with the pointer held on its top
+     * slot (the wrench) and nothing chosen when it closes: the test closes it with its own close, where Create's wheel
+     * would take the item out of the toolbox
+     */
+    static final class ToolboxWheelOnTop extends RadialToolboxMenu {
+        ToolboxWheelOnTop(List<ToolboxBlockEntity> toolboxes) {
+            super(toolboxes, State.SELECT_ITEM, toolboxes.get(0));
+        }
+
+        @Override
+        public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+            // Slot 1, straight up from the middle, where Create draws its first slot turned not at all
+            super.render(graphics, this.getMinecraft().getWindow().getGuiScaledWidth() / 2, this.getMinecraft().getWindow().getGuiScaledHeight() / 2 - 40,
+                partialTicks);
+        }
+
+        @Override
+        public void removed() {
+        }
     }
 
     /** Uses a block with an empty hand, as the player does, which has the server open its window */
