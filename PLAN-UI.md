@@ -9,9 +9,14 @@ it again in playback and exports.
 riding along with the recorder, in the editor's playback and in exports. Never in third person, a free camera, or with
 the HUD off.
 
-**What it ignores:** settings and configuration screens, the pause menu, title and login screens, onboarding and debug
-screens. Only interface that appears during play is recorded. The rule is an allow list, not a block list: a screen is
-recorded only when Dailies (stage 1) or a compat (stages 2 to 4) says it is a play screen.
+**What counts as play (the owner's rule):** a screen opened by using something in the world (a block, an item or an
+entity) or by the inventory key, during normal play, and the overlays drawn over play. **Everything else is left
+out:** settings and configuration, statistics, advancements, the recipe book panel, the pause menu and every other
+menu, selection wheels, and title, login, setup and debug screens.
+
+Recording works from an allow list, not a block list: a screen is recorded only when Dailies (stage 1) or a compat
+(stages 2 to 4) says it is a play screen. The deny list in the decisions below applies only within that allow list,
+for server-driven windows that are play screens but draw wrongly in playback.
 
 Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessions.
 
@@ -45,7 +50,7 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 | McpCraft | job board, job and factory prompts, job storage |
 | Supplementaries, Amendments | blackboard, sign post, doormat, speaker; lectern book editing |
 | Create add-ons (Connected, Encased, Tracks, Deep Seas) | sequenced pulse generator, auto clutch, track tuning, sonar |
-| Emotecraft, Explorer's and Nature's Compass, Vista | emote wheel, compass search, picture tape |
+| Vista | picture tape |
 
 **Overlays drawn over play.** Each needs a compat that records what it showed:
 
@@ -59,7 +64,8 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 
 **Left out on purpose:** Xaero's Minimap and World Map and AppleSkin (the owner does not want them in videos), FPS
 Overlay, Dynamic FPS, JEI and Inventory Profiles Next buttons and panels, shulker box tooltips, Iris, Simple Voice
-Chat's group and setup screens (its icons are already a scene look), Better Advancements, and every config screen.
+Chat's group and setup screens (its icons are already a scene look), Better Advancements, Emotecraft's emote wheel
+and the compasses' biome lists (menus, not play screens), statistics, the recipe book panel, and every config screen.
 
 ---
 
