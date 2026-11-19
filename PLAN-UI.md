@@ -134,7 +134,7 @@ Post Rider has one window and two screens, which makes it a good first test.
 In order of how often they appear in a Create let's play:
 
 1. Create: every machine setting first (the value settings board and value box, and the machine screens, so a viewer sees what speed, direction or amount was set), then the goggles overlay, then train schedules and the clipboard.
-2. ComedyMonkey's Create Addons (its screens and overlays) and McpCraft (the job board, the prompts and job storage): the owner's own mods.
+2. ComedyMonkey's Create Addons (its screens and overlays) and McpCraft (the job board, the prompts and job storage): the owner's own mods. These need no compat jar: the owner can add hooks to the mods themselves, so each implements the compat API directly as a soft dependency (found through `DailiesApi`, as McpCraft already does for playback), records exactly what its screens need, and sends any server-side facts from its own server code.
 3. Jade.
 4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
 
@@ -151,3 +151,4 @@ a test step.
 | Stage 1 for modded windows | Every server-driven window is tried generically; one that misdraws goes on a deny list, or gets a compat |
 | The pointer | The recorded mouse pointer and the carried item are drawn over the window |
 | Left out | Xaero's Minimap and World Map, AppleSkin |
+| The owner's mods (ComedyMonkey's Create Addons, McpCraft) | Hooks written into the mods themselves where that is easier: they implement the compat API directly instead of a separate compat jar |
