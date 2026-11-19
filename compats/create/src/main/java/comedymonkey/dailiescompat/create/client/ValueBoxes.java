@@ -209,7 +209,7 @@ final class ValueBoxes {
         }
     }
 
-    private static boolean overlaysShown() {
+    static boolean overlaysShown() {
         if (oldDailies) {
             return true;
         }

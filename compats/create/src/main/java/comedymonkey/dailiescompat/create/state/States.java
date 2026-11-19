@@ -415,6 +415,362 @@ public final class States {
         });
     }
 
+    // --- Outlines Create draws into the world ---
+
+    /** A box, by its corners (six numbers: the low corner, then the high one) */
+    public static final int BOX = 0;
+    /** A cluster of whole blocks, outlined round its outside (the blocks packed as the game packs a block position) */
+    public static final int CLUSTER = 1;
+    /** A line, by its two ends (six numbers) */
+    public static final int LINE = 2;
+    /** A line drawn part of the way from one end (six numbers, then how far, then 1 when it is held at its start) */
+    public static final int CHASED_LINE = 3;
+    /** An item floating at a place (three numbers) */
+    public static final int FLOATING_ITEM = 4;
+
+    /**
+     * One outline Create's outliner held at the end of a tick (a selection box, glued areas, a block being linked), as
+     * Catnip draws it: its shape, its colour with its alpha, how wide its lines are and whether they thin as it fades,
+     * whether it draws both sides and leaves its lines unlit, its light, its face textures and the face highlighted (by
+     * Create's names; empty or -1 for none), and how faded it is (1 for not at all).
+     */
+    public record Outline(int kind, double[] coords, long[] blocks, String item, int colour, float lineWidth, boolean fadeLineWidth, boolean disableCull,
+                          boolean disableNormals, int lightmap, String faceTexture, String highlightTexture, int highlightedFace, float alpha) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Outline o && o.kind == this.kind && java.util.Arrays.equals(o.coords, this.coords)
+                && java.util.Arrays.equals(o.blocks, this.blocks) && o.item.equals(this.item) && o.colour == this.colour && o.lineWidth == this.lineWidth
+                && o.fadeLineWidth == this.fadeLineWidth && o.disableCull == this.disableCull && o.disableNormals == this.disableNormals
+                && o.lightmap == this.lightmap && o.faceTexture.equals(this.faceTexture) && o.highlightTexture.equals(this.highlightTexture)
+                && o.highlightedFace == this.highlightedFace && o.alpha == this.alpha;
+        }
+
+        @Override
+        public int hashCode() {
+            return this.kind * 31 + java.util.Arrays.hashCode(this.coords);
+        }
+
+        /** Number {@code i} of its shape, or 0 when there is none */
+        public double coord(int i) {
+            return i >= 0 && i < this.coords.length ? this.coords[i] : 0.0;
+        }
+    }
+
+    public static byte[] outlines(List<Outline> outlines) {
+        return write(out -> {
+            out.count(outlines.size());
+            for (Outline outline : outlines) {
+                out.out.writeByte(outline.kind());
+                out.count(outline.coords().length);
+                for (double coord : outline.coords()) {
+                    out.out.writeDouble(coord);
+                }
+                out.count(outline.blocks().length);
+                for (long block : outline.blocks()) {
+                    out.out.writeLong(block);
+                }
+                out.text(outline.item());
+                out.out.writeInt(outline.colour());
+                out.out.writeFloat(outline.lineWidth());
+                out.out.writeBoolean(outline.fadeLineWidth());
+                out.out.writeBoolean(outline.disableCull());
+                out.out.writeBoolean(outline.disableNormals());
+                out.out.writeInt(outline.lightmap());
+                out.text(outline.faceTexture());
+                out.text(outline.highlightTexture());
+                out.out.writeByte(outline.highlightedFace());
+                out.out.writeFloat(outline.alpha());
+            }
+        });
+    }
+
+    public static List<Outline> readOutlines(byte[] data) {
+        return read(data, in -> {
+            int count = in.count();
+            List<Outline> outlines = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                int kind = in.in.readByte();
+                double[] coords = new double[in.count()];
+                for (int j = 0; j < coords.length; j++) {
+                    coords[j] = in.in.readDouble();
+                }
+                long[] blocks = new long[in.count()];
+                for (int j = 0; j < blocks.length; j++) {
+                    blocks[j] = in.in.readLong();
+                }
+                outlines.add(new Outline(kind, coords, blocks, in.text(), in.in.readInt(), in.in.readFloat(), in.in.readBoolean(), in.in.readBoolean(),
+                    in.in.readBoolean(), in.in.readInt(), in.text(), in.text(), in.in.readByte(), in.in.readFloat()));
+            }
+            return outlines;
+        });
+    }
+
+    // --- Create's status line ---
+
+    /**
+     * A line Create put above the hotbar on the player's own game (what a click will do, "too far", a key bound): the
+     * text, the ticks it has left as the game counts them down, and whether its colour cycles
+     */
+    public record Status(String text, int ticksLeft, boolean animated) {
+
+        /** How opaque the line is drawn, 0 to 255, as the game works it out from the ticks left */
+        public int alpha(float partialTick) {
+            return Math.min(255, (int) ((this.ticksLeft - partialTick) * 255.0F / 20.0F));
+        }
+    }
+
+    public static byte[] status(Status status) {
+        return write(out -> {
+            out.text(status.text());
+            out.out.writeInt(status.ticksLeft());
+            out.out.writeBoolean(status.animated());
+        });
+    }
+
+    public static Status readStatus(byte[] data) {
+        return read(data, in -> new Status(in.text(), in.in.readInt(), in.in.readBoolean()));
+    }
+
+    // --- A train being driven ---
+
+    /**
+     * The bar Create shows while a train is driven: the speed and the throttle as shown (each 0 to 1), how wide the prompt
+     * above it is opened and its text (empty for none) and whether that has a shadow, and the angle of the arrow
+     */
+    public record TrainHud(float speed, float throttle, float promptSize, String prompt, boolean promptShadow, float angle) {
+    }
+
+    public static byte[] trainHud(TrainHud hud) {
+        return write(out -> {
+            out.out.writeFloat(hud.speed());
+            out.out.writeFloat(hud.throttle());
+            out.out.writeFloat(hud.promptSize());
+            out.text(hud.prompt());
+            out.out.writeBoolean(hud.promptShadow());
+            out.out.writeFloat(hud.angle());
+        });
+    }
+
+    public static TrainHud readTrainHud(byte[] data) {
+        return read(data, in -> new TrainHud(in.in.readFloat(), in.in.readFloat(), in.in.readFloat(), in.text(), in.in.readBoolean(), in.in.readFloat()));
+    }
+
+    // --- A linked controller being bound ---
+
+    /** The lines Create shows while a linked controller waits for a key to bind (with the recorder's own key names) */
+    public record BindMode(List<String> lines) {
+    }
+
+    public static byte[] bindMode(BindMode bind) {
+        return write(out -> out.texts(bind.lines()));
+    }
+
+    public static BindMode readBindMode(byte[] data) {
+        return read(data, in -> new BindMode(in.texts()));
+    }
+
+    // --- A schematic in hand ---
+
+    /**
+     * A schematic held, as Create shows it: the hotbar slot it is marked in (-1 for none), the tools offered (by Create's
+     * names), the one picked, whether the tool bar is held open and how far it has risen; and in the world, the
+     * schematic's size, whether it is placed, where (the transform from the world to the schematic, sixteen numbers, or
+     * none), where the deploy tool's preview is (the same, or none), the face picked (-1 for none) and whether it is
+     * highlighted as for moving
+     */
+    public record Schematic(int hotbarSlot, List<String> tools, int selection, boolean focused, float rise, double[] size, boolean deployed, float[] placed,
+                            float[] preview, int face, boolean faceHighlighted) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Schematic s && s.hotbarSlot == this.hotbarSlot && s.tools.equals(this.tools) && s.selection == this.selection
+                && s.focused == this.focused && s.rise == this.rise && java.util.Arrays.equals(s.size, this.size) && s.deployed == this.deployed
+                && java.util.Arrays.equals(s.placed, this.placed) && java.util.Arrays.equals(s.preview, this.preview) && s.face == this.face
+                && s.faceHighlighted == this.faceHighlighted;
+        }
+
+        @Override
+        public int hashCode() {
+            return this.tools.hashCode() * 31 + this.selection;
+        }
+
+        /** The name of the tool picked, or empty */
+        public String tool() {
+            return this.selection >= 0 && this.selection < this.tools.size() ? this.tools.get(this.selection) : "";
+        }
+    }
+
+    public static byte[] schematic(Schematic schematic) {
+        return write(out -> {
+            out.out.writeInt(schematic.hotbarSlot());
+            out.texts(schematic.tools());
+            out.out.writeInt(schematic.selection());
+            out.out.writeBoolean(schematic.focused());
+            out.out.writeFloat(schematic.rise());
+            for (int i = 0; i < 3; i++) {
+                out.out.writeDouble(i < schematic.size().length ? schematic.size()[i] : 0.0);
+            }
+            out.out.writeBoolean(schematic.deployed());
+            out.floats(schematic.placed());
+            out.floats(schematic.preview());
+            out.out.writeByte(schematic.face());
+            out.out.writeBoolean(schematic.faceHighlighted());
+        });
+    }
+
+    public static Schematic readSchematic(byte[] data) {
+        return read(data, in -> new Schematic(in.in.readInt(), in.texts(), in.in.readInt(), in.in.readBoolean(), in.in.readFloat(),
+            new double[]{in.in.readDouble(), in.in.readDouble(), in.in.readDouble()}, in.in.readBoolean(), in.floats(), in.floats(), in.in.readByte(),
+            in.in.readBoolean()));
+    }
+
+    // --- A train station's screens ---
+
+    /**
+     * A train station's screen, or its assembly screen: the station (what it shows besides is read from the playback
+     * world, as the recording holds it), the station's name and the train's as typed, what the doors do (by Create's
+     * name), the train shown (its id, empty for none) and whether it stands at the station
+     */
+    public record Station(long pos, boolean assembling, String name, String trainName, String doorControl, String train, boolean trainPresent) {
+    }
+
+    public static byte[] station(Station station) {
+        return write(out -> {
+            out.out.writeLong(station.pos());
+            out.out.writeBoolean(station.assembling());
+            out.text(station.name());
+            out.text(station.trainName());
+            out.text(station.doorControl());
+            out.text(station.train());
+            out.out.writeBoolean(station.trainPresent());
+        });
+    }
+
+    public static Station readStation(byte[] data) {
+        return read(data, in -> new Station(in.in.readLong(), in.in.readBoolean(), in.text(), in.text(), in.text(), in.text(), in.in.readBoolean()));
+    }
+
+    // --- A display link's screen ---
+
+    /**
+     * A display link's screen: the link (its source and target are read from the playback world), the information picked
+     * (by Create's id, empty for none), the line it writes to, and the source's settings as set (Create's own saved form,
+     * as bytes of the game's tag format, which only the game's side reads)
+     */
+    public record DisplayLink(long pos, String source, int targetLine, byte[] config) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof DisplayLink link && link.pos == this.pos && link.source.equals(this.source) && link.targetLine == this.targetLine
+                && java.util.Arrays.equals(link.config, this.config);
+        }
+
+        @Override
+        public int hashCode() {
+            return Long.hashCode(this.pos) * 31 + this.source.hashCode();
+        }
+    }
+
+    public static byte[] displayLink(DisplayLink link) {
+        return write(out -> {
+            out.out.writeLong(link.pos());
+            out.text(link.source());
+            out.out.writeInt(link.targetLine());
+            out.bytes(link.config());
+        });
+    }
+
+    public static DisplayLink readDisplayLink(byte[] data) {
+        return read(data, in -> new DisplayLink(in.in.readLong(), in.text(), in.in.readInt(), in.bytes()));
+    }
+
+    // --- A factory gauge's screen ---
+
+    /**
+     * A factory gauge's screen: the gauge (its block and its place on it, by Create's name; what it is connected to is read
+     * from the playback world), and what is being set: the address, when promises expire, how many it makes, how many of
+     * each input it asks for, and whether it crafts
+     */
+    public record FactoryPanel(long pos, String slot, String address, int promiseExpiry, int outputCount, int[] inputCounts, boolean crafting) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof FactoryPanel panel && panel.pos == this.pos && panel.slot.equals(this.slot) && panel.address.equals(this.address)
+                && panel.promiseExpiry == this.promiseExpiry && panel.outputCount == this.outputCount
+                && java.util.Arrays.equals(panel.inputCounts, this.inputCounts) && panel.crafting == this.crafting;
+        }
+
+        @Override
+        public int hashCode() {
+            return Long.hashCode(this.pos) * 31 + this.slot.hashCode();
+        }
+    }
+
+    public static byte[] factoryPanel(FactoryPanel panel) {
+        return write(out -> {
+            out.out.writeLong(panel.pos());
+            out.text(panel.slot());
+            out.text(panel.address());
+            out.out.writeInt(panel.promiseExpiry());
+            out.out.writeInt(panel.outputCount());
+            out.count(panel.inputCounts().length);
+            for (int count : panel.inputCounts()) {
+                out.out.writeInt(count);
+            }
+            out.out.writeBoolean(panel.crafting());
+        });
+    }
+
+    public static FactoryPanel readFactoryPanel(byte[] data) {
+        return read(data, in -> {
+            long pos = in.in.readLong();
+            String slot = in.text();
+            String address = in.text();
+            int expiry = in.in.readInt();
+            int output = in.in.readInt();
+            int[] inputs = new int[in.count()];
+            for (int i = 0; i < inputs.length; i++) {
+                inputs[i] = in.in.readInt();
+            }
+            return new FactoryPanel(pos, slot, address, expiry, output, inputs, in.in.readBoolean());
+        });
+    }
+
+    // --- Naming a schematic ---
+
+    /** The screen that names a schematic saved with the schematic and quill: the name as typed and the cursor in it */
+    public record SchematicName(String name, int cursor) {
+    }
+
+    public static byte[] schematicName(SchematicName name) {
+        return write(out -> {
+            out.text(name.name());
+            out.out.writeInt(name.cursor());
+        });
+    }
+
+    public static SchematicName readSchematicName(byte[] data) {
+        return read(data, in -> new SchematicName(in.text(), in.in.readInt()));
+    }
+
+    // --- The wand of symmetry ---
+
+    /** The wand of symmetry's screen: the mirror picked (0 a plane, 1 two crossed planes, 2 three) and how it is turned */
+    public record Symmetry(int mirror, int orientation) {
+    }
+
+    public static byte[] symmetry(Symmetry symmetry) {
+        return write(out -> {
+            out.out.writeByte(symmetry.mirror());
+            out.out.writeByte(symmetry.orientation());
+        });
+    }
+
+    public static Symmetry readSymmetry(byte[] data) {
+        return read(data, in -> new Symmetry(in.in.readByte(), in.in.readByte()));
+    }
+
     // --- Writing and reading ---
 
     private interface Writer {
@@ -447,6 +803,18 @@ public final class States {
             for (String text : texts) {
                 this.text(text);
             }
+        }
+
+        void floats(float[] floats) throws IOException {
+            this.count(floats.length);
+            for (float each : floats) {
+                this.out.writeFloat(each);
+            }
+        }
+
+        void bytes(byte[] bytes) throws IOException {
+            this.count(bytes.length);
+            this.out.write(bytes);
         }
     }
 
@@ -482,6 +850,24 @@ public final class States {
                 texts.add(this.text());
             }
             return texts;
+        }
+
+        float[] floats() throws IOException {
+            float[] floats = new float[this.count()];
+            for (int i = 0; i < floats.length; i++) {
+                floats[i] = this.in.readFloat();
+            }
+            return floats;
+        }
+
+        byte[] bytes() throws IOException {
+            int length = this.in.readInt();
+            if (length < 0 || length > MOST * 16) {
+                throw new IOException("a block of " + length + " bytes");
+            }
+            byte[] bytes = new byte[length];
+            this.in.readFully(bytes);
+            return bytes;
         }
     }
 

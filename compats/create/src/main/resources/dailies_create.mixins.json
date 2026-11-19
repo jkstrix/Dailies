@@ -3,6 +3,8 @@
   "package": "comedymonkey.dailiescompat.create.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ClusterOutlineMixin",
+    "StatusLineMixin",
     "ValueBoardCursorMixin"
   ],
   "injectors": {

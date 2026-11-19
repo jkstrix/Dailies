@@ -41,6 +41,16 @@ final class Reflect {
         }
     }
 
+    /** A static field of this class (Create keeps some of its client state in them) */
+    @SuppressWarnings("unchecked")
+    static <T> T getStatic(Class<?> owner, String name) {
+        try {
+            return (T) field(owner, name).get(null);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     static int getInt(Object owner, String name) {
         try {
             return field(owner.getClass(), name).getInt(owner);

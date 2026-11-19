@@ -2,8 +2,14 @@ package comedymonkey.dailiescompat.create.client;
 
 import com.simibubi.create.content.contraptions.elevator.ElevatorContactScreen;
 import com.simibubi.create.content.equipment.clipboard.ClipboardScreen;
+import com.simibubi.create.content.equipment.symmetryWand.SymmetryWandScreen;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftScreen;
+import com.simibubi.create.content.logistics.factoryBoard.FactoryPanelScreen;
+import com.simibubi.create.content.redstone.displayLink.DisplayLinkScreen;
 import com.simibubi.create.content.redstone.thresholdSwitch.ThresholdSwitchScreen;
+import com.simibubi.create.content.schematics.client.SchematicPromptScreen;
+import com.simibubi.create.content.trains.station.AssemblyScreen;
+import com.simibubi.create.content.trains.station.StationScreen;
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueSettingsScreen;
 import comedymonkey.dailies.api.compat.Claims;
 import comedymonkey.dailies.api.compat.DailiesCompat;
@@ -39,7 +45,14 @@ import java.util.function.Supplier;
  * draws itself ({@link FilterExtras});</li>
  * <li>the engineer's goggles' readout ({@link Goggles});</li>
  * <li>the clipboard ({@link ClipboardPart}), the backtank's remaining air ({@link RemainingAir}), and a train schedule's
- * entries as they are edited ({@link ScheduleExtras}).</li>
+ * entries as they are edited ({@link ScheduleExtras});</li>
+ * <li>a train station's screen and its assembly screen ({@link StationScreens}), the display link's and the factory
+ * gauge's screens ({@link PanelScreens});</li>
+ * <li>the outlines Create draws into the world, a super glue selection and the glued areas, the schematic and quill's
+ * selection and the rest ({@link Outlines}); a schematic held, its tool bar and its box in the world, and the screen
+ * naming a new one ({@link SchematicParts});</li>
+ * <li>the line Create puts above the hotbar itself, the bar shown while a train is driven, and the lines shown while a
+ * linked controller is bound ({@link CreateHud}); the wand of symmetry's screen ({@link SymmetryPart}).</li>
  * </ul>
  * Create's other windows the server opens (the linked controller, the toolbox, the schematic table and cannon, the
  * crafting blueprint, the stock keeper and the rest) are recorded and drawn by Dailies itself and need nothing here.
@@ -65,6 +78,8 @@ public final class CreateDailies implements DailiesCompat {
         // After Create's own work each tick, so the value boxes it worked out in playback can be taken out again
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, ClientTickEvent.Post.class, ValueBoxes::afterTick);
         NeoForge.EVENT_BUS.addListener(EventPriority.NORMAL, false, RenderLevelStageEvent.class, ValueBoxes::drawWorld);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, ClientTickEvent.Post.class, Outlines::afterTick);
+        NeoForge.EVENT_BUS.addListener(EventPriority.NORMAL, false, RenderLevelStageEvent.class, InWorld::draw);
         // The goggles' layer is followed only when nothing has cancelled it, and the lines taken before anyone changes them
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Pre.class, Goggles::layerStarts);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Post.class, Goggles::layerEnds);
@@ -106,6 +121,20 @@ public final class CreateDailies implements DailiesCompat {
         claims.screen(ClipboardPart.NAME, ClipboardScreen.class, screen(ClipboardPart::capture, ClipboardPart::build, TYPING_TICKS));
         claims.overlay(RemainingAir.NAME, overlay(RemainingAir::capture, RemainingAir::draw, 1));
         claims.windowExtras(ScheduleExtras.NAME, "create:schedule", extras(ScheduleExtras::capture, ScheduleExtras::apply, TYPING_TICKS));
+        // 4. Train stations, the display link and the factory gauge
+        claims.screen(StationScreens.STATION, StationScreen.class, screen(StationScreens::capture, StationScreens::build, TYPING_TICKS));
+        claims.screen(StationScreens.ASSEMBLY, AssemblyScreen.class, screen(StationScreens::capture, StationScreens::build, TYPING_TICKS));
+        claims.screen(PanelScreens.DISPLAY_LINK, DisplayLinkScreen.class, screen(PanelScreens::captureDisplayLink, PanelScreens::buildDisplayLink, TYPING_TICKS));
+        claims.screen(PanelScreens.FACTORY_PANEL, FactoryPanelScreen.class,
+            screen(PanelScreens::captureFactoryPanel, PanelScreens::buildFactoryPanel, TYPING_TICKS));
+        // 5. Outlines in the world, schematics, and Create's lines over play
+        claims.overlay(Outlines.NAME, overlay(Outlines::capture, (graphics, state) -> Outlines.draw(state), 1));
+        claims.overlay(SchematicParts.HELD, timedOverlay(SchematicParts::captureHeld, SchematicParts::drawHeld, 1));
+        claims.screen(SchematicParts.NAMING, SchematicPromptScreen.class, screen(SchematicParts::captureNaming, SchematicParts::buildNaming, TYPING_TICKS));
+        claims.overlay(CreateHud.STATUS, timedOverlay(CreateHud::captureStatus, CreateHud::drawStatus, 1));
+        claims.overlay(CreateHud.TRAIN, overlay(CreateHud::captureTrain, CreateHud::drawTrain, 1));
+        claims.overlay(CreateHud.BIND, overlay(CreateHud::captureBind, CreateHud::drawBind, SETTING_TICKS));
+        claims.screen(SymmetryPart.NAME, SymmetryWandScreen.class, screen(SymmetryPart::capture, SymmetryPart::build, 1));
     }
 
     @Override
@@ -154,6 +183,30 @@ public final class CreateDailies implements DailiesCompat {
             @Override
             public void draw(GuiGraphics graphics, byte[] state, int version, float partialTick) {
                 draw.accept(graphics, state);
+            }
+
+            @Override
+            public int ticksBetweenWrites() {
+                return ticks;
+            }
+        };
+    }
+
+    /** An overlay drawn with the moment between ticks, for one that fades or moves smoothly */
+    private interface TimedDraw {
+        void draw(GuiGraphics graphics, byte[] state, float partialTick);
+    }
+
+    private static OverlayPart timedOverlay(Supplier<byte @Nullable []> capture, TimedDraw draw, int ticks) {
+        return new OverlayPart() {
+            @Override
+            public byte @Nullable [] capture() {
+                return capture.get();
+            }
+
+            @Override
+            public void draw(GuiGraphics graphics, byte[] state, int version, float partialTick) {
+                draw.draw(graphics, state, partialTick);
             }
 
             @Override
