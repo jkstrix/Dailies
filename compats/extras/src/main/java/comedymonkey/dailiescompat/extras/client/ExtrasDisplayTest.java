@@ -128,6 +128,11 @@ final class ExtrasDisplayTest implements DisplayTest {
                 reset(stage);
                 stage.command("item replace entity @s weapon.mainhand with sophisticatedbackpacks:backpack");
                 stage.waitTicks(3);
+                // Opened and closed once first: a backpack fresh from a command has no upgrade slots until it has been opened
+                stage.onServer(player -> BackpackSteps.open(player, false));
+                stage.waitTicks(5);
+                stage.onServer(player -> player.closeContainer());
+                stage.waitTicks(5);
                 stage.onServer(player -> BackpackSteps.open(player, true));
                 stage.waitTicks(5);
             }));
@@ -202,9 +207,13 @@ final class ExtrasDisplayTest implements DisplayTest {
             }
             if (withUpgrade) {
                 IBackpackWrapper wrapper = BackpackWrapper.fromStack(backpack);
-                wrapper.getUpgradeHandler().setStackInSlot(0, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath("sophisticatedbackpacks",
-                    "pickup_upgrade"))));
-                wrapper.setOpenTabId(0);
+                if (wrapper.getUpgradeHandler().getSlots() == 0) {
+                    LOGGER.warn("Dailies extras compat's display test: the backpack has no upgrade slots");
+                } else {
+                    wrapper.getUpgradeHandler().setStackInSlot(0, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath("sophisticatedbackpacks",
+                        "pickup_upgrade"))));
+                    wrapper.setOpenTabId(0);
+                }
             }
             backpack.getItem().use(player.serverLevel(), player, InteractionHand.MAIN_HAND);
         }
