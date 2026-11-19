@@ -41,7 +41,9 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 4.2 The owner's mods (Create Addons, McpCraft) | Done | Hooks in the mods themselves (see "Stage 4.2 in detail"). **Create Addons:** its windows by stage 1, with extras putting back its Sort and quick-move buttons; the Electric Motor, Clockwork Dynamo, Geothermal Turbine, Splitter, Trade Bot and Trade Master screens claimed, with the server's power settings recorded; the jetpack gauge, villager goggles, encased lines seen through goggles and the container-picking line claimed. Display test group `createaddons`: 19 displays. **McpCraft:** the job board (each tab, the post draft), Job Storage, the job and factory prompts, the confirm over the board or a storage, the track markers and job beacon, and the markers' toggle line, all claimed; the board's JSON stored once in the recording. Display test group `mcpcraft`: 9 displays. Both passed in game. **Left out:** McpCraft's job board faces (world appearance from a message playback holds back, so boards look bare), its sync screen (a pause-menu screen), Create Addons' Juggernaut camera shake (not interface) |
 | 4.3 Jade | Done | `compats/jade` (mod id `dailies_jade`), a jar of its own beside Jade 15.10.6: Jade's box recorded as Jade drew it (every element with its size, place, scale, fade, theme stored once, the breaking line) and drawn again by Jade's own code; a plugin's custom element keeps its place empty, logged once. Left out: the mod name Jade adds to item tooltips, its chat hints, the narrator, its config screens. Display test group `jade`: 4 displays, passed in game; the other compat groups pass with Jade loaded |
 | 4.4a Create Aeronautics and its add-ons | Done | `compats/aeronautics` (mod id `dailies_aeronautics`). Simulated: the altitude sensor, modulating linked receiver, nameplate and contraption diagram screens claimed; the linked typewriter through stage 1 with extras (keys being set, the key list and scroll, a key's entry); the typewriter binding box, the readout while an assembler lever, steering wheel or throttle lever is held, and the physics staff's padlocks claimed. Simulated Coasters: the track placement row, the hint row and the Bezier handles claimed. Client-side action-bar lines of all six mods. Offroad: only the tyre line; Aeronautics and Create Propulsion: nothing of their own (Propulsion's outlines and value boxes go through the Create compat). **Left out:** Gyroscope Stabilizers' joystick screen and HUD, which the pack's jar never registers, so they never show; Coasters' curve highlight and its never-opened private-build notice. Display test group `aeronautics`: 13 displays, passed in game; the other compat groups pass with the add-ons loaded. Not in the test: the diagram, the staff's padlocks and the handles (they need a Sable craft or built track) |
-| 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
+| 4.4b Supplementaries and Amendments | Underway | See "Stage 4.4 in detail" |
+| 4.4c Create's other add-ons | Underway | See "Stage 4.4 in detail" |
+| 4.4d The rest of the pack | Underway | See "Stage 4.4 in detail" |
 
 Known limits of stage 1, for a compat or a later fix:
 - other mods' listeners on window draw events still fire in playback;
@@ -211,6 +213,34 @@ In order of how often they appear in a Create let's play:
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a small display test.
+
+### Stage 4.4 in detail: the rest of the pack (Compat, three jars, built side by side)
+
+Three compat jars, each a Gradle subproject built with Dailies like the Create compat, each part active only when its
+mod is installed, each with a sweep of its mods' jars (screens, GUI layers, world drawing, action-bar lines) and a small
+display test of its own group. Versions as in the owner's pack.
+
+**4.4b, `compats/supplementaries` (`dailies_supplementaries`), group `supplementaries`:** Supplementaries 4.0.2 and
+Amendments 2.2.7 (on Moonlight 3.8.3).
+- Windows (stage 1, extras where needed): presents, notice board, pulley, cannon, red merchant, and any other.
+- Client-only screens: blackboard, sign post, doormat, speaker, Amendments' lectern book editing and anything else.
+- Overlays: the cannon's aiming, the slimed overlay, the selected-item overlays, and anything else the sweep finds.
+
+**4.4c, `compats/createextras` (`dailies_createextras`), group `createextras`:** Create's add-ons in the pack that the
+Create compat does not cover: Create Deep Seas (`create_submarine` 3.3.0: boat engine, electrolyzer, sonar), Create
+Connected 1.3.3 (sequenced pulse generator and others), Create Encased 1.10.1 (auto clutch and others), Tracks 1.0.1
+(track tuning), Steam 'n' Rails 0.3.0-beta.2, Create Jetpack 5.2.1 (its flight HUD) and Create Hypertube 0.6.0 (its
+ride and placement overlays). Their Catnip outlines, value boxes and goggle lines already go through the Create compat.
+
+**4.4d, `compats/extras` (`dailies_extras`), group `extras`:** Explorer's Compass and Nature's Compass 3.4.0 (the search
+result while held; their search lists are menus, not play), Locator Bar 1.2.4, Vista 3.1.2 (the viewfinder and picture
+tape), Emotecraft 2.4.12 (the emote wheel, a play screen like Create's toolbox wheel). Stage 1 is checked, with a
+display entry each, for the windows of Sophisticated Backpacks 3.26.21, Curios 9.5.1, Corpse 1.1.22, Pipez 1.2.31 and
+VanillaBackport 1.2.2, with extras where a window loses client-side state.
+
+**For all three:** recorded as drawn, never worked out again from the playback world; drawn under the owner's rule;
+the lessons from Create's tests apply; each mod joins the modded test's mods if it is not there. Left out as not play:
+config screens, JEI and Inventory Profiles Next panels, the minimap and AppleSkin (the owner's word).
 
 ### Stage 4.4a in detail: Create Aeronautics and its add-ons (Compat, M)
 
