@@ -22,7 +22,7 @@ class StepGroupsTest {
 
     @Test
     void theLibraryBringsTheScriptedRecordingThePackRecordingAndTheMoments() {
-        assertEquals(Set.of("library", "recording", "packs", "moments", "world"), StepGroups.withNeeds(List.of("library")));
+        assertEquals(Set.of("library", "recording", "packs", "moments", "playback", "world"), StepGroups.withNeeds(List.of("library")));
     }
 
     @Test

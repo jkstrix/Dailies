@@ -73,7 +73,7 @@ does not work is a failure, not a skip. `runTestModded` also fails at once if a 
 The groups are `settings`, `world`, `watching`, `moments`, `recording`, `packs`, `playback`, `balloon`, `export`,
 `editor`, `renderer`, `library`, `library-screens`, `points-of-view`, `addon`, `trains`, `edges`, `bestiary`, `tour`,
 `camera-films` and `budgets`. A group that works on another's recording brings it in: `library` also runs `recording`,
-`packs` and `moments`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
+`packs`, `moments` and `playback`. Asked for by name, the long groups (`bestiary`, `tour`, `camera-films`) run without their flags.
 
 The steps that stage things in a world of their own and compare playback with the live game (the addon, trains, edges,
 the bestiary and the tour) keep their recordings as fixtures in `dailies/fixtures` and play them back on later runs.

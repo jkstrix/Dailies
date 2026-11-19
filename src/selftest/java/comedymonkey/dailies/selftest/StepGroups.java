@@ -21,7 +21,8 @@ final class StepGroups {
     static final Map<String, List<String>> NEEDS = Map.ofEntries(
         Map.entry("recording", List.of("world")),
         Map.entry("watching", List.of("world", "recording")),
-        Map.entry("moments", List.of("world", "recording")),
+        // Its owner-feature steps cue moments from the title screen, where the playback steps leave the game
+        Map.entry("moments", List.of("world", "recording", "playback")),
         Map.entry("packs", List.of("world")),
         Map.entry("playback", List.of("recording")),
         Map.entry("balloon", List.of("playback")),
