@@ -28,7 +28,8 @@ final class StepGroups {
         Map.entry("export", List.of("playback")),
         Map.entry("editor", List.of("export")),
         Map.entry("renderer", List.of("playback")),
-        Map.entry("library", List.of("recording", "packs")));
+        // The library cues the kill through its clip, which the moments steps make (OwnerFeatureSteps)
+        Map.entry("library", List.of("recording", "packs", "moments")));
 
     private StepGroups() {
     }
