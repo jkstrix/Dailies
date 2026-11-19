@@ -105,6 +105,8 @@ public final class Recorder {
     private int pendingTicks = 0;
     private int ticksSinceFlush = 0;
     private int segmentStartTick = 0;
+    /** Snapshots taken in this game, by any recording: never reset, so a change says one was taken */
+    private volatile int snapshotsTaken = 0;
     private boolean partBeginsSegment = false;
     private GameCodec codec;
     private final OwnPlayer own = new OwnPlayer();
@@ -162,6 +164,14 @@ public final class Recorder {
 
     public @Nullable String recordingId() {
         return this.state == State.IDLE ? null : this.id;
+    }
+
+    /**
+     * How many snapshots the recorder has taken in this game, never reset: when it differs from the count at the last
+     * recorded tick, the tick hooks run after a snapshot, whose records come before theirs. Client thread
+     */
+    public int snapshotsTaken() {
+        return this.snapshotsTaken;
     }
 
     public int recordingTick() {
@@ -546,6 +556,7 @@ public final class Recorder {
         this.codec = new GameCodec(listener.registryAccess(), listener.getConnectionType());
         this.own.reset();
         this.part.number(Records.SNAPSHOT_BEGIN, this.tick);
+        this.snapshotsTaken++;
         if (this.waitingForSnapshot) {
             this.part.record(Records.DISCONTINUITY);
             this.own.forgetShown();

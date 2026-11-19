@@ -11,9 +11,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,18 +23,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * Dailies is recording, and each overlay. A state is written, under the compat's id, when it first shows and then
  * whenever it differs from the one written last, at most as often as the claim asks; a claim that stops showing is
  * written gone. Over a claimed screen the pointer is written as for the recorder's windows: a few times a second when it
- * has moved, in the window's own units. Every snapshot holds every state showing then, whole.
+ * has moved, in the window's own units. Every snapshot holds every state showing then, whole, and counts for nothing
+ * as written: play running into a segment steps over its snapshot, so the ticks' own records carry every change
+ * ({@link CompatWrites}).
  */
 final class CompatCapture {
 
-    /** How far, in GUI units, the pointer must move to be written again, as for the recorder's windows */
-    private static final float POINTER_STEP = 0.5F;
-
-    /** What the recording holds of each compat, by compat id */
-    private static final Map<String, Written> WRITTEN = new HashMap<>();
+    /** What the recording holds of each compat, and what the snapshot taken this tick described */
+    private static final CompatWrites WRITES = new CompatWrites();
     private static final Set<String> SAID = ConcurrentHashMap.newKeySet();
     private static String recordingId = null;
-    private static int ticks = 0;
+    /** How many snapshots the recorder had taken at the last recorded tick */
+    private static int snapshotsSeen = -1;
 
     private CompatCapture() {
     }
@@ -46,31 +43,16 @@ final class CompatCapture {
         Recorder.everyRecordedTick(CompatCapture::tick);
     }
 
-    /** What the recording holds of one compat: each claim's last state written, and the pointer */
-    private static final class Written {
-        final Map<String, byte[]> states = new LinkedHashMap<>();
-        final Map<String, Integer> writtenAt = new HashMap<>();
-        String pointerOf = null;
-        boolean share;
-        float x;
-        float y;
-        int pointerAt;
-    }
-
-    /** A claim showing now, with its state and, for a screen, where the pointer is */
-    private record Showing(CompatClaims.Claim claim, byte[] state, float[] pointer, boolean share) {
-    }
-
     /** Every claim showing on the recorder's screen now, by compat id */
-    private static Map<String, List<Showing>> showing(Minecraft minecraft) {
-        Map<String, List<Showing>> now = new LinkedHashMap<>();
+    private static Map<String, List<CompatWrites.Showing>> showing(Minecraft minecraft) {
+        Map<String, List<CompatWrites.Showing>> now = new LinkedHashMap<>();
         Screen screen = minecraft.screen;
         CompatClaims.Claim screenClaim = screen == null ? null : Compats.screenClaim(screen);
         if (screenClaim != null) {
             byte[] state = capture(screenClaim, () -> ((ScreenPart) screenClaim.part()).capture(screen));
             if (state != null) {
                 int[] corner = corner(screenClaim, screen);
-                now.computeIfAbsent(screenClaim.compatId(), id -> new ArrayList<>()).add(new Showing(screenClaim, state, pointer(minecraft, corner), corner == null));
+                now.computeIfAbsent(screenClaim.compatId(), id -> new ArrayList<>()).add(new CompatWrites.Showing(screenClaim.name(), state, pointer(minecraft, corner), corner == null, ticksBetween(screenClaim)));
             }
         } else if (screen instanceof AbstractContainerScreen<?> container && container.getMenu() == minecraft.player.containerMenu && container.getMenu().containerId > 0) {
             // Extras only for a window the server opened for the player, the kind Dailies records itself (REC-25)
@@ -78,14 +60,14 @@ final class CompatCapture {
             if (extras != null) {
                 byte[] state = capture(extras, () -> ((WindowExtras) extras.part()).capture(container));
                 if (state != null) {
-                    now.computeIfAbsent(extras.compatId(), id -> new ArrayList<>()).add(new Showing(extras, state, null, false));
+                    now.computeIfAbsent(extras.compatId(), id -> new ArrayList<>()).add(new CompatWrites.Showing(extras.name(), state, null, false, ticksBetween(extras)));
                 }
             }
         }
         for (CompatClaims.Claim overlay : Compats.CLAIMS.overlays()) {
             byte[] state = capture(overlay, () -> ((OverlayPart) overlay.part()).capture());
             if (state != null) {
-                now.computeIfAbsent(overlay.compatId(), id -> new ArrayList<>()).add(new Showing(overlay, state, null, false));
+                now.computeIfAbsent(overlay.compatId(), id -> new ArrayList<>()).add(new CompatWrites.Showing(overlay.name(), state, null, false, ticksBetween(overlay)));
             }
         }
         return now;
@@ -139,29 +121,36 @@ final class CompatCapture {
         }
     }
 
+    /** A recording other than the one written for so far holds nothing yet: its first snapshot says what shows */
+    private static void sameRecording() {
+        String id = Recorder.get().recordingId();
+        if (id != null && !id.equals(recordingId)) {
+            recordingId = id;
+            WRITES.clear();
+        }
+    }
+
     private static void tick() {
         try {
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.player == null) {
                 return;
             }
-            String id = Recorder.get().recordingId();
-            if (id != null && !id.equals(recordingId)) {
-                // A new recording holds nothing yet: its first snapshot says what shows
-                recordingId = id;
-                WRITTEN.clear();
-            }
-            ticks++;
-            Map<String, List<Showing>> now = showing(minecraft);
-            Set<String> compats = new java.util.TreeSet<>(WRITTEN.keySet());
+            sameRecording();
+            // A snapshot taken since the last tick, known from the recorder rather than from this compat's part of it, so
+            // that a part that was never written counts as describing nothing
+            int snapshots = Recorder.get().snapshotsTaken();
+            WRITES.tickBegins(snapshots != snapshotsSeen);
+            snapshotsSeen = snapshots;
+            Map<String, List<CompatWrites.Showing>> now = showing(minecraft);
+            Set<String> compats = new java.util.TreeSet<>(WRITES.compats());
             compats.addAll(now.keySet());
             for (String compatId : compats) {
                 CompatClaims.Compat compat = Compats.CLAIMS.compat(compatId);
                 if (compat == null) {
                     continue;
                 }
-                Written written = WRITTEN.computeIfAbsent(compatId, key -> new Written());
-                List<CompatRecord.Op> ops = changes(written, now.getOrDefault(compatId, List.of()));
+                List<CompatRecord.Op> ops = WRITES.tick(compatId, now.getOrDefault(compatId, List.of()));
                 if (!ops.isEmpty()) {
                     Recorder.get().writeExtension(compatId, CompatRecord.write(compat.version(), ops));
                     Recorder.get().noteCompat(compatId, compat.version());
@@ -171,76 +160,28 @@ final class CompatCapture {
             if (SAID.add("failed")) {
                 Host.LOGGER.warn("Dailies: a compat's screens could not be recorded. The rest of the recording is unharmed. Said once", t);
             }
+        } finally {
+            WRITES.tickEnds();
         }
     }
 
-    /** What to write for one compat this tick: claims gone, states new or changed (when due), and the pointer */
-    private static List<CompatRecord.Op> changes(Written written, List<Showing> now) {
-        List<CompatRecord.Op> ops = new ArrayList<>();
-        Set<String> names = new java.util.HashSet<>();
-        for (Showing showing : now) {
-            names.add(showing.claim().name());
-        }
-        for (Iterator<String> it = written.states.keySet().iterator(); it.hasNext(); ) {
-            String name = it.next();
-            if (!names.contains(name)) {
-                ops.add(CompatRecord.Op.gone(name));
-                it.remove();
-                written.writtenAt.remove(name);
-                if (name.equals(written.pointerOf)) {
-                    written.pointerOf = null;
-                }
-            }
-        }
-        for (Showing showing : now) {
-            String name = showing.claim().name();
-            byte[] before = written.states.get(name);
-            boolean fresh = before == null;
-            if (fresh || !Arrays.equals(before, showing.state()) && ticks - written.writtenAt.getOrDefault(name, 0) >= ticksBetween(showing.claim())) {
-                ops.add(CompatRecord.Op.state(name, showing.state()));
-                written.states.put(name, showing.state());
-                written.writtenAt.put(name, ticks);
-            }
-            if (showing.pointer() != null) {
-                float x = showing.pointer()[0];
-                float y = showing.pointer()[1];
-                boolean moved = !name.equals(written.pointerOf) || showing.share() != written.share
-                    || Math.abs(x - written.x) * (showing.share() ? 400 : 1) >= POINTER_STEP || Math.abs(y - written.y) * (showing.share() ? 300 : 1) >= POINTER_STEP;
-                if (fresh || !name.equals(written.pointerOf) || moved && ticks - written.pointerAt >= WindowCapture.POINTER_TICKS) {
-                    ops.add(CompatRecord.Op.pointer(name, showing.share(), x, y));
-                    written.pointerOf = name;
-                    written.share = showing.share();
-                    written.x = x;
-                    written.y = y;
-                    written.pointerAt = ticks;
-                }
-            }
-        }
-        return ops;
-    }
-
-    /** One compat's part of a snapshot: every claim of its showing now, whole, with the pointer. Client thread */
+    /**
+     * One compat's part of a snapshot: every claim of its showing now, whole, with the pointer. Client thread. Nothing
+     * counts as written by it: play that runs into its segment steps over it, so the tick that follows writes whatever
+     * the records of the ticks do not hold yet ({@link CompatWrites})
+     */
     static void snapshot(String compatId, Recorder.Out out) {
         Minecraft minecraft = Minecraft.getInstance();
         CompatClaims.Compat compat = Compats.CLAIMS.compat(compatId);
         if (minecraft.player == null || compat == null) {
             return;
         }
-        String id = Recorder.get().recordingId();
-        if (id != null && !id.equals(recordingId)) {
-            recordingId = id;
-            WRITTEN.clear();
+        sameRecording();
+        List<CompatRecord.Op> ops = WRITES.snapshot(compatId, showing(minecraft).getOrDefault(compatId, List.of()));
+        if (!ops.isEmpty()) {
+            out.extension(compatId, CompatRecord.write(compat.version(), ops));
+            Recorder.get().noteCompat(compatId, compat.version());
         }
-        List<Showing> now = showing(minecraft).getOrDefault(compatId, List.of());
-        // Playback forgets everything before a snapshot, so what was written before counts for nothing after it
-        Written written = new Written();
-        WRITTEN.put(compatId, written);
-        if (now.isEmpty()) {
-            return;
-        }
-        List<CompatRecord.Op> ops = changes(written, now);
-        out.extension(compatId, CompatRecord.write(compat.version(), ops));
-        Recorder.get().noteCompat(compatId, compat.version());
     }
 
 }
