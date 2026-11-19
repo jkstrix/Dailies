@@ -181,7 +181,7 @@ class EditStateTest {
         // Keyframes are saved in exactly the shape the tools show and accept
         assertTrue(text.contains("{\"kind\":\"field_of_view\",\"name\":\"\",\"enabled\":true,\"keyframes\":["
                 + Keyframe.exampleJsonText(KeyframeKind.FIELD_OF_VIEW) + ","), text);
-        assertTrue(text.contains("\"looks\":{\"show_hud\":false,\"show_chat\":true,"), text);
+        assertTrue(text.contains("\"looks\":{\"show_hud\":false,\"show_windows\":true,\"show_chat\":true,"), text);
         assertTrue(text.contains("\"entity_overrides\":{\"" + ENTITY + "\":{\"hide\":true,\"name_override\":\"The Stranger\","), text);
         // A scene without an export range says nothing about one
         assertTrue(text.contains("{\"name\":\"Ending\",\"tracks\":[],"), text);

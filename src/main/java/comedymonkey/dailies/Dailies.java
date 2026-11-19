@@ -41,6 +41,7 @@ public final class Dailies {
         Moments.init();
         McpCraftCompat.init();
         ServerMoments.init();
+        comedymonkey.dailies.compat.companion.CompanionCompat.init();
         Recorder.init();
         comedymonkey.dailies.library.Library.init();
         comedymonkey.dailies.compat.sable.SableCompat.init();
@@ -61,12 +62,17 @@ public final class Dailies {
         comedymonkey.dailies.compat.iris.IrisShaders.init();
 
         // Optional, so a server without the Dailies Companion stays joinable
-        modBus.addListener((RegisterPayloadHandlersEvent event) -> ServerMoments.registerPayload(event.registrar("1").optional()));
+        modBus.addListener((RegisterPayloadHandlersEvent event) -> {
+            net.neoforged.neoforge.network.registration.PayloadRegistrar registrar = event.registrar("1").optional();
+            ServerMoments.registerPayload(registrar);
+            comedymonkey.dailies.compat.companion.CompanionCompat.registerPayload(registrar);
+        });
         modBus.addListener((ModConfigEvent.Loading event) -> settingsChanged(event));
         modBus.addListener((ModConfigEvent.Reloading event) -> settingsChanged(event));
 
         modBus.addListener(Notices::register);
         comedymonkey.dailies.extras.Extras.init(modBus);
+        comedymonkey.dailies.windows.Windows.init(modBus);
         modBus.addListener(Keys::register);
         modBus.addListener(PlaybackBar::register);
         Keys.init();

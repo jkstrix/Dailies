@@ -957,6 +957,9 @@ public final class Recorder {
         if (this.state == State.IDLE) {
             return;
         }
+        // What window an open-screen packet opens is noted whether or not anything is being written, so a window opened
+        // while paused is recorded with all it was opened with (REC-25)
+        comedymonkey.dailies.windows.Windows.seen(packet);
         if (!this.capturing()) {
             // Paused, or waiting for the snapshot of a new world: nothing is written, but what changes is still noted, so
             // that the snapshot to come describes afresh only the chunks that are no longer as they were stored

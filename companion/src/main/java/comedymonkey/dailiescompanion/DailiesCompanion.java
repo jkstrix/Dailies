@@ -32,6 +32,7 @@ public final class DailiesCompanion {
 	public DailiesCompanion(IEventBus modBus, net.neoforged.fml.ModContainer container) {
 		container.registerConfig(net.neoforged.fml.config.ModConfig.Type.COMMON, CompanionConfig.SPEC);
 		modBus.addListener(MomentPayload::register);
+		modBus.addListener(CompatPayload::register); // the server plugin API, see CompanionPlugins
 		NeoForge.EVENT_BUS.register(Detectors.class); // the events the server raises by itself
 		CraftEvents.init(); // craft and trains, when Sable or Create is installed
 		NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent e) -> MomentCommand.register(e.getDispatcher()));

@@ -27,7 +27,7 @@ import java.util.UUID;
  */
 final class LooksForms {
 
-    private static final List<String> DRAWN = List.of("show_hud", "show_chat", "show_boss_bars", "show_titles", "show_name_tags", "show_particles",
+    private static final List<String> DRAWN = List.of("show_hud", "show_windows", "show_chat", "show_boss_bars", "show_titles", "show_name_tags", "show_particles",
             "show_held_items", "show_block_outline", "show_own_shadow", "show_scoreboard", "show_action_bar", "show_hotbar", "show_blocks", "show_entities",
             "show_players", "show_beacon_beams", "void_spill", "head_bob", "voice_chat");
     private static final List<String> LISTS = List.of("hidden_entity_types", "hidden_particle_types");
