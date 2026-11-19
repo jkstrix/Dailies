@@ -65,6 +65,21 @@ final class CompatDisplaySteps {
     }
 
     /**
+     * Create Aeronautics' Simulated screens (the altitude sensor, the modulating linked receiver, a nameplate, the linked
+     * typewriter's window with its list of keys and a key's entry), the typewriter's binding, the levers' and the steering
+     * wheel's readouts, Offroad's line above the hotbar and Simulated Coasters' rows of hints and track, through the Create
+     * Aeronautics compat, a mod of its own (compats/aeronautics): -PdailiesOnly=aeronautics
+     */
+    static void aeronautics(SelfTest test) throws Exception {
+        boolean installed = Host.get().isModLoaded("simulated") || Host.get().isModLoaded("simulatedcoasters");
+        if (installed && !Host.get().isModLoaded("dailies_aeronautics")) {
+            test.skip("the Dailies Create Aeronautics compat (dailies_aeronautics) is not installed: Create Aeronautics' screens in recordings were not tried");
+            return;
+        }
+        run(test, installed ? null : "simulated", "Create Aeronautics", "dailies_aeronautics:aeronautics", "Dailies Create Aeronautics");
+    }
+
+    /**
      * ComedyMonkey's Create Addons' windows (with its buttons put back), its machines' settings screens, the stations, the
      * jetpack's gauge, the villager goggles, the encased lines seen through goggles and the line container picking puts up,
      * through the compat in the mod itself: -PdailiesOnly=createaddons

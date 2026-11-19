@@ -247,6 +247,9 @@ public final class SelfTest {
             // Jade's box over play, through the Jade compat (compats/jade, CPT-8): in a world and a recording of its own; skipped
             // with a line without Jade or the compat
             always("jade", "CompatDisplaySteps.jade", () -> CompatDisplaySteps.jade(this)),
+            // Create Aeronautics and its add-ons, through the Create Aeronautics compat (compats/aeronautics, CPT-9): in a world and
+            // a recording of their own; skipped with a line without the mods or the compat
+            always("aeronautics", "CompatDisplaySteps.aeronautics", () -> CompatDisplaySteps.aeronautics(this)),
             // The owner's own mods, each through the compat in the mod itself, in a world and a recording of its own; skipped
             // with a line without the mod, or a version of it without the compat
             always("createaddons", "CompatDisplaySteps.createAddons", () -> CompatDisplaySteps.createAddons(this)),

@@ -113,7 +113,7 @@ neoForge {
             // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
             // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
             systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
-                'create,sable,aeronautics,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,dailies_companion,dailies_create,dailies_jade,dailies_selftest')
+                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -329,9 +329,10 @@ tasks.withType(JavaCompile).configureEach {
 def modsFolderSetting = providers.gradleProperty('dailies.modsFolder').orNull
 def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
 // The mods the scripted run needs or has to prove it works with; their own requirements are added as the game asks for them.
-// Matched as the jars are named, capitals and all: Jade's jar is Jade-1.21.1-NeoForge-<version>.jar
+// Matched as the jars are named, capitals, spaces and all: Jade's jar is Jade-1.21.1-NeoForge-<version>.jar, and Gyroscope
+// Stabilizers' is "Create Aeronautics Gyroscope Stabilizers.jar", with no version in its name
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
-    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*').split(',')
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*').split(',')
 
 // The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
 tasks.register('buildCompanion', GradleBuild) {
@@ -362,8 +363,8 @@ def checkModsFolder = {
 }
 
 tasks.register('installTestMods', Sync) {
-    description = 'Puts the built Dailies jar, the self test jar, the Create and Jade compats and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar', ':compats:jade:jar'
+    description = 'Puts the built Dailies jar, the self test jar, the Create, Jade and Create Aeronautics compats and the other test mods into run-modded/mods'
+    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar'
     doFirst { checkModsFolder() }
     from(tasks.named('jar'))
     from(tasks.named('selftestJar'))
@@ -372,6 +373,8 @@ tasks.register('installTestMods', Sync) {
     from({ project(':compats:create').tasks.named('jar').get().archiveFile })
     // The Jade compat (CPT-8), the same way, which the jade group tries beside Jade
     from({ project(':compats:jade').tasks.named('jar').get().archiveFile })
+    // The Create Aeronautics compat (CPT-9), the same way, which the aeronautics group tries beside Aeronautics and its add-ons
+    from({ project(':compats:aeronautics').tasks.named('jar').get().archiveFile })
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
         exclude overriddenMods
