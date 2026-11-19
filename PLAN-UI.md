@@ -45,7 +45,7 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 | Mod | Screens |
 |---|---|
 | Post Rider | reading a letter, writing a letter |
-| Create | train schedules and stations, clipboard, display link, factory panel, package filter |
+| Create | **every machine setting**: the value settings board and the value box a block shows (a speed controller's or creative motor's speed and direction, left or right, a gearshift's or clutch's state, a smart chute's or funnel's filter and amount, a mechanical arm's targets, and every other value a block is set with); the machine screens (sequenced gearshift, threshold switch, linked controller binding); train schedules and stations, clipboard, display link, factory panel, package filter |
 | ComedyMonkey's Create Addons | dynamo, electric motor, turbine, splitter, Trade Bot stations |
 | McpCraft | the job board, the job and factory prompts, job storage |
 | Supplementaries, Amendments | blackboard, sign post, doormat, speaker; lectern book editing |
@@ -56,7 +56,7 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 
 | Mod | Overlay |
 |---|---|
-| Create | engineer's goggles, blueprint and schematic overlays, linked controller, remaining air |
+| Create | engineer's goggles, the value box over a block being looked at, blueprint and schematic overlays, linked controller, remaining air |
 | Jade | what the player looks at |
 | ComedyMonkey's Create Addons | jetpack, villager goggles |
 | Create Jetpack, Gyroscope Stabilizers, Hypertube, Propulsion, Deep Seas, Coasters | flight controls, joystick, ride and placement overlays |
@@ -133,7 +133,7 @@ Post Rider has one window and two screens, which makes it a good first test.
 
 In order of how often they appear in a Create let's play:
 
-1. Create: goggles overlay, then train schedules and the clipboard.
+1. Create: every machine setting first (the value settings board and value box, and the machine screens, so a viewer sees what speed, direction or amount was set), then the goggles overlay, then train schedules and the clipboard.
 2. ComedyMonkey's Create Addons (its screens and overlays) and McpCraft (the job board, the prompts and job storage): the owner's own mods.
 3. Jade.
 4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
