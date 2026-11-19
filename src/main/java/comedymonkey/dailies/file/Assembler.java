@@ -22,6 +22,11 @@ import java.util.Map;
  * records from that tick on follow it. The first segment of every piece is marked as not following on from what is
  * before it, so playback rebuilds the world there: that is all a boundary costs, and no ticks are added.
  * <p>
+ * The chunks each snapshot names come along in listings of their own ({@link ChunkListing}), never copied as they are:
+ * each is put together from its source and written again, whole for the first snapshot of every piece and as the
+ * changes from the snapshot before it in the new recording otherwise, so no listing ever follows on from one that is
+ * not there.
+ * <p>
  * Server resource packs come along (specification REC-19): the records that say which are in force are copied with
  * the rest, and every pack those records name is stored in the new recording, once, with its pieces. A pack that only
  * a stretch that was cut used is left behind.
@@ -55,9 +60,13 @@ public final class Assembler {
      * The world at the tick a piece starts on, when that is not the start of a segment.
      *
      * @param records what goes between the start and the end of a snapshot, as records
-     * @param shared  shared data those records name that the source does not hold, by name
+     * @param shared  shared data those records and the listing name that the source does not hold, by name
+     * @param chunks  the chunks the snapshot names where its records say {@link Records#CHUNKS}, or null for none
      */
-    public record Snapshot(byte[] records, Map<String, byte[]> shared) {
+    public record Snapshot(byte[] records, Map<String, byte[]> shared, @Nullable ChunkListing chunks) {
+        public Snapshot(byte[] records, Map<String, byte[]> shared) {
+            this(records, shared, null);
+        }
     }
 
     /**
@@ -148,6 +157,7 @@ public final class Assembler {
         final Map<String, RecordingManifest.Pack> packs = new java.util.LinkedHashMap<>();
         private List<RecordingManifest.Pack> sourcePacks = List.of();
         private Map<String, String> packKeys = Map.of();
+        private final Container.ListingChain listings = new Container.ListingChain();
 
         Job(Container out, RecordingManifest manifest, Progress progress, long allTicks) {
             this.out = out;
@@ -203,6 +213,18 @@ public final class Assembler {
                 }
                 this.check();
                 int newStart = here + (lo - piece.from());
+                // The chunks the new segment's snapshot names: the source segment's own, or those of the world described at
+                // a tick inside it. Whole for the first segment of a piece, which follows on from nothing before it here
+                Snapshot inside = lo > segment.startTick ? piece.snapshot() : null;
+                ChunkListing listing = lo > segment.startTick ? (inside == null ? null : inside.chunks()) : source.listing(segment.number);
+                if (listing != null) {
+                    if (!whole || inside != null) {
+                        for (String name : listing.names()) {
+                            this.bring(source, inside, name, true);
+                        }
+                    }
+                    this.listings.append(this.out, this.number, listing, first);
+                }
                 boolean untouched = !rekeyed && lo == segment.startTick && hi == segment.endTick && (!first || startsAfresh(source, segment));
                 if (untouched && whole) {
                     this.copyParts(source, segment, newStart);

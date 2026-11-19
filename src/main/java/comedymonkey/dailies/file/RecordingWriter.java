@@ -18,6 +18,7 @@ public final class RecordingWriter implements Closeable {
     private int segment = -1;
     private int segmentStartTick = 0;
     private boolean closed = false;
+    private final Container.ListingChain listings = new Container.ListingChain();
 
     private RecordingWriter(Container container, RecordingManifest manifest) {
         this.container = container;
@@ -81,6 +82,18 @@ public final class RecordingWriter implements Closeable {
             throw new IllegalStateException("beginSegment has not been called");
         }
         this.container.append(Container.SEGMENT_PART, this.segment, this.segmentStartTick, endTick, this.container.packPart(data, from, length));
+    }
+
+    /**
+     * Stores the chunks the current segment's snapshot names, apart from its records (file.ChunkListing): whole for the
+     * first snapshot and every {@link ChunkListing#FULL_EVERY}th, and as the changes from the snapshot before for the rest.
+     * Call it once a segment, before the part whose records hold {@link Records#CHUNKS}, once every chunk it names is stored
+     */
+    public void putListing(ChunkListing listing) throws IOException {
+        if (this.segment < 0) {
+            throw new IllegalStateException("beginSegment has not been called");
+        }
+        this.listings.append(this.container, this.segment, listing, false);
     }
 
     /**

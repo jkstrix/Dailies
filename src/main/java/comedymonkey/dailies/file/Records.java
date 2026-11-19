@@ -45,6 +45,13 @@ public final class Records {
      * numbers, each the change since the TIME record before it in the same segment; see {@link TimeIndex}
      */
     public static final int TIME = 14;
+    /**
+     * Inside a snapshot: the chunks the snapshot names go here, each its stored chunk ({@link #SHARED_PACKET} as it was) and
+     * then any stored light on top, in the order of {@link ChunkListing}. No payload: the chunks are in the segment's listing
+     * block, read with {@link RecordingFile#listing}, so a jump finds them without unpacking the records and a snapshot
+     * costs only the chunks that changed since the one before
+     */
+    public static final int CHUNKS = 15;
 
     private Records() {
     }

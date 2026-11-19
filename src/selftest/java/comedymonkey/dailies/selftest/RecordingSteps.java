@@ -236,12 +236,20 @@ final class RecordingSteps {
                 "snapshots share something besides chunks and their light: " + audit.sharedPackets + " shared packets, " + audit.packets);
             check(snapshotChunks >= 9L * manifest.segments.size(), "snapshots hold too few chunks: " + snapshotChunks + " in " + manifest.segments.size() + " snapshots");
             check(audit.storedPackets.size() < audit.sharedPackets / 2, "unchanged chunks were stored again: " + audit.storedPackets.size() + " stored for " + audit.sharedPackets + " uses");
+            // Every snapshot names its chunks in a listing of its own (file.ChunkListing): whole for the first and every tenth,
+            // and only the changes from the snapshot before for the rest
+            check(audit.listings == manifest.segments.size(), "not every snapshot has a listing of its chunks: " + audit.listings + " for " + manifest.segments.size() + " snapshots");
+            comedymonkey.dailies.file.RecordingFile.ListingWeight listings = file.listingWeight(number -> true);
+            int listed = listings.whole() + listings.changes();
+            check(listed == manifest.segments.size() && listings.whole() == (listed + comedymonkey.dailies.file.ChunkListing.FULL_EVERY - 1) / comedymonkey.dailies.file.ChunkListing.FULL_EVERY,
+                "the chunk listings are not whole for the first snapshot and every " + comedymonkey.dailies.file.ChunkListing.FULL_EVERY + "th, and changes between: " + listings);
             // Chunks are stored by section (FILE-5): in a flat world nearly every section is air or the same few layers, and
             // nearly all sky light is all lit, so the parts the stored chunks name are a small share of how often they name them
             check(audit.parts.size() > 0 && audit.parts.size() < audit.partUses / 2, "chunks' sections and light are not shared between chunks: " + audit.parts.size()
                 + " parts stored for " + audit.partUses + " uses in " + audit.storedPackets.size() + " stored chunks");
             test.log("snapshots: " + audit.sharedPackets + " chunk uses stored as " + audit.storedPackets.size() + " chunks, made of " + audit.parts.size() + " parts named "
-                + audit.partUses + " times; " + file.sharedCount() + " pieces of shared data in all; last snapshot held the game for "
+                + audit.partUses + " times; " + file.sharedCount() + " pieces of shared data in all; " + audit.listedChunks + " chunks named in " + listings.whole() + " whole listings of "
+                + listings.wholeBytes() + " bytes and " + listings.changes() + " of changes of " + listings.changeBytes() + " bytes (" + audit.listedChunks * 34 + " bytes as names in the records); last snapshot held the game for "
                 + String.format("%.1f", comedymonkey.dailies.capture.Snapshots.lastMillis) + " ms; file is " + java.nio.file.Files.size(recording) / 1024 + " KB");
             // The parts of the recording that are not packets: the recorder's HUD and everyone's skin (REC-13, REC-14)
             check(audit.extensions.containsKey("dailies:hud"), "the recorder's HUD was not captured: " + audit.extensions.keySet());

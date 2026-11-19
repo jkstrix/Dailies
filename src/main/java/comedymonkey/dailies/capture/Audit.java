@@ -23,7 +23,11 @@ public final class Audit {
     public final List<String> problems = new ArrayList<>();
     public int snapshots = 0;
     public int bundles = 0;
+    /** How often a stored packet is named, by a record or in a snapshot's chunk listing */
     public int sharedPackets = 0;
+    /** How many snapshots have a chunk listing, and how many chunks those name in all (each snapshot's chunks counted again) */
+    public int listings = 0;
+    public int listedChunks = 0;
     /** The stored packets the recording names, each once: a chunk named again by snapshot after snapshot is here once */
     public final java.util.Set<String> storedPackets = new java.util.HashSet<>();
     /** How often the stored packets in {@link #storedPackets} name a part (a section, a section's light, heightmaps, block entities) */
@@ -65,14 +69,25 @@ public final class Audit {
                         case Records.SNAPSHOT_END -> inSnapshot = false;
                         case Records.BUNDLE_BEGIN -> audit.bundles++;
                         case Records.PACKET -> audit.packet(codec, reader.payload(), 0, reader.length(), tick, inSnapshot, keep);
-                        case Records.SHARED_PACKET -> {
-                            audit.sharedPackets++;
-                            String name = java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length());
-                            if (audit.storedPackets.add(name)) {
-                                audit.pieces(recording, name);
+                        case Records.SHARED_PACKET -> audit.stored(recording, codec, java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length()), tick, inSnapshot, keep);
+                        case Records.CHUNKS -> {
+                            if (!inSnapshot) {
+                                audit.problems.add("Segment " + segment.number + " names its chunks outside its snapshot");
                             }
-                            byte[] shared = recording.packet(name);
-                            audit.packet(codec, shared, 0, shared.length, tick, inSnapshot, keep);
+                            comedymonkey.dailies.file.ChunkListing listing = recording.listing(segment.number);
+                            if (listing == null) {
+                                audit.problems.add("Segment " + segment.number + " says where its chunks go but has no listing of them");
+                                break;
+                            }
+                            audit.listings++;
+                            audit.listedChunks += listing.size();
+                            for (int i = 0; i < listing.size(); i++) {
+                                audit.stored(recording, codec, listing.chunkHex(i), tick, true, keep);
+                                String light = listing.lightHex(i);
+                                if (light != null) {
+                                    audit.stored(recording, codec, light, tick, true, keep);
+                                }
+                            }
                         }
                         case Records.WORLD -> {
                             audit.worlds++;
@@ -90,6 +105,15 @@ public final class Audit {
             }
         }
         return audit;
+    }
+
+    private void stored(RecordingFile recording, GameCodec codec, String name, int tick, boolean inSnapshot, boolean keep) throws IOException {
+        this.sharedPackets++;
+        if (this.storedPackets.add(name)) {
+            this.pieces(recording, name);
+        }
+        byte[] shared = recording.packet(name);
+        this.packet(codec, shared, 0, shared.length, tick, inSnapshot, keep);
     }
 
     /** Counts the parts a stored packet is made of: everything it names that is not a list of further pieces */
