@@ -53,15 +53,13 @@ mixins into vanilla screens, login, onboarding, shader or debug screens, and are
 |---|---|
 | Create | engineer's goggles, blueprint and schematic overlays, linked controller, remaining air |
 | Jade | what the player looks at |
-| Xaero's Minimap, World Map | the minimap; crosshair messages |
-| AppleSkin | hunger and saturation on the hunger bar |
 | ComedyMonkey's Create Addons | jetpack, villager goggles |
 | Create Jetpack, Gyroscope Stabilizers, Hypertube, Propulsion, Deep Seas, Coasters | flight controls, joystick, ride and placement overlays |
 | Supplementaries, Explorer's and Nature's Compass, Locator Bar, Vista | cannon, slimed and selected-item overlays; search results; the locator bar; viewfinder |
 
-**Left out on purpose:** FPS Overlay, Dynamic FPS, JEI and Inventory Profiles Next buttons and panels, shulker box
-tooltips, Iris, Simple Voice Chat's group and setup screens (its icons are already a scene look), Better Advancements,
-and every config screen.
+**Left out on purpose:** Xaero's Minimap and World Map and AppleSkin (the owner does not want them in videos), FPS
+Overlay, Dynamic FPS, JEI and Inventory Profiles Next buttons and panels, shulker box tooltips, Iris, Simple Voice
+Chat's group and setup screens (its icons are already a scene look), Better Advancements, and every config screen.
 
 ---
 
@@ -132,9 +130,7 @@ In order of how often they appear in a Create let's play:
 1. Create: goggles overlay, then train schedules and the clipboard.
 2. ComedyMonkey's Create Addons and McpCraft: the owner's own screens and overlays.
 3. Jade.
-4. Xaero's Minimap.
-5. AppleSkin: it changes how the hunger bar is drawn, which the recorded HUD redraws.
-6. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
+4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a test step.
