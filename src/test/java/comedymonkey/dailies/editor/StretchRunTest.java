@@ -173,11 +173,6 @@ class StretchRunTest {
         }
 
         @Override
-        public void goBack(int tick) {
-            this.jumpTo(tick);
-        }
-
-        @Override
         public boolean tick() {
             if (this.position >= TOTAL) {
                 return false;
@@ -224,6 +219,22 @@ class StretchRunTest {
         assertEquals(900, fake.position, "the playhead is back where it was");
         assertFalse(fake.paused, "it plays on, as it was playing before");
         assertEquals(1.0, run.share());
+    }
+
+    @Test
+    void aWayBackThatLandsElsewhereIsSaidToHaveLetGo() {
+        Fake fake = new Fake(900, false);
+        StretchRun run = new StretchRun(fake, new StretchRun.Stretch(0, 100, 500));
+        while (run.phase() != StretchRun.Phase.RETURNING) {
+            frame(fake, run);
+        }
+        // Someone jumps elsewhere while the run is on its way back
+        fake.jumpTo(300);
+        frames(fake, run, 100);
+        assertEquals(StretchRun.Phase.DONE, run.phase());
+        assertTrue(run.abandoned(), "a run that did not get back says it let go");
+        assertEquals(300, fake.position, "the recording stays where the other jump put it");
+        assertTrue(fake.paused, "and is not played on from the wrong place");
     }
 
     @Test

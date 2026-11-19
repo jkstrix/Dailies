@@ -450,9 +450,11 @@ final class ExportTools {
         settings.transparent = args.optBool("transparent", false);
         LocalDateTime now = LocalDateTime.now();
         String name = args.string("output_path").replace("{date}", now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))).replace("{time}", now.format(DateTimeFormatter.ofPattern("HH.mm.ss")));
-        Path output = Path.of(name);
-        if (!output.isAbsolute()) {
-            output = Minecraft.getInstance().gameDirectory.toPath().resolve(output);
+        // A full path as given, or a path inside the game folder; never a drive-relative D:clip.mp4 or a .. leading out
+        Path output = comedymonkey.dailies.file.SafePaths.absoluteOrWithin(Minecraft.getInstance().gameDirectory.toPath(), name);
+        if (output == null) {
+            throw new McpToolException("'output_path' must be a full path or a path inside the game folder (no drive without a slash"
+                + " after it, no leading slash, no .. leading out of it): " + name);
         }
         if (Files.exists(output) && !args.optBool("overwrite", false) && !(Files.isDirectory(output) && pictures)) {
             throw new McpToolException(output + " already exists. Pass overwrite true to replace it, or choose another output_path");

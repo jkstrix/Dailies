@@ -61,11 +61,6 @@ public final class StretchPreview {
         }
 
         @Override
-        public void goBack(int tick) {
-            Playback.viewTo(tick, true);
-        }
-
-        @Override
         public boolean tick() {
             // The tick the run stands on is stepped first, should no game tick have come since the jump landed on it
             CameraSteps.catchUp();

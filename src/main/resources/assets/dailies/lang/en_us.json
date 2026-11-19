@@ -1000,6 +1000,7 @@
   "dailies.editor.export.queue.clear": "Clear finished",
   "dailies.editor.export.queue.clear.tip": "Take every job that is done, failed or was stopped off the queue",
   "dailies.editor.export.folder_failed": "The exports folder could not be opened",
+  "dailies.editor.export.folder_bad": "The folder must be a full path, like C:/Videos, or a folder inside the game folder: %s",
   "dailies.editor.progress.title": "Exporting",
   "dailies.editor.progress.frames": "Frame %1$s of %2$s",
   "dailies.editor.progress.speed": "%s frames a second",

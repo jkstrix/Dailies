@@ -631,9 +631,21 @@ final class ExportForms {
         return pictures() ? filled : filled + "." + EditorState.exportContainer;
     }
 
-    private static Path folder() {
-        Path wanted = Path.of(folder);
-        return wanted.isAbsolute() ? wanted : Minecraft.getInstance().gameDirectory.toPath().resolve(wanted);
+    /**
+     * The folder the tab names: a full path, or a folder inside the game folder. Null for anything else (a drive-relative
+     * D:clips, a leading slash, a .. leading out), which is said instead of writing somewhere unexpected
+     */
+    private static @Nullable Path folder() {
+        return comedymonkey.dailies.file.SafePaths.absoluteOrWithin(Minecraft.getInstance().gameDirectory.toPath(), folder);
+    }
+
+    /** The folder, or null after saying why it cannot be used */
+    private static @Nullable Path folderOrSay() {
+        Path target = folder();
+        if (target == null) {
+            EditorState.say(Kit.t("export.folder_bad", folder));
+        }
+        return target;
     }
 
     /** The ticks an export started now would cover, worked out as the export itself does, and how long the video would be */
@@ -690,7 +702,10 @@ final class ExportForms {
 
     private static void openFolder() {
         Path written = Export.lastOutput();
-        Path target = written != null && written.toAbsolutePath().getParent() != null ? written.toAbsolutePath().getParent() : folder();
+        Path target = written != null && written.toAbsolutePath().getParent() != null ? written.toAbsolutePath().getParent() : folderOrSay();
+        if (target == null) {
+            return;
+        }
         Controls.offThread(() -> {
             Files.createDirectories(target);
             Util.getPlatform().openPath(target);
@@ -718,7 +733,10 @@ final class ExportForms {
             return;
         }
 
-        Path target = folder();
+        Path target = folderOrSay();
+        if (target == null) {
+            return;
+        }
         String wanted = fileName(still);
         boolean replace = overwrite;
         String recording = Playback.recordingId();
@@ -810,8 +828,12 @@ final class ExportForms {
         if (settings == null) {
             return;
         }
+        Path target = folderOrSay();
+        if (target == null) {
+            return;
+        }
         ExportPreset from = chosen();
-        ExportQueue.Job job = QueueRunner.jobForOpen(-1, from == null ? null : from.name(), folder().resolve(fileName(false)).toString());
+        ExportQueue.Job job = QueueRunner.jobForOpen(-1, from == null ? null : from.name(), target.resolve(fileName(false)).toString());
         job.settings = QueueRunner.snapshot(settings);
         job.captionFiles = captionFiles;
         job.captionSpeakers = settings.captionSpeakers;
