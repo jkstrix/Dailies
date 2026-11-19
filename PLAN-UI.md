@@ -114,9 +114,9 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
 3. **A template compat project:** Gradle, the client and server halves, one example screen and one overlay, and a test
    step. It is copied to start each compat.
 
-## Stage 3: Post Rider as the first compat (Compat, M)
+## Stage 3: Post Rider as the first compat (Owner's mod, M)
 
-Post Rider has one window and two screens, which makes it a good first test.
+Post Rider has one window and two screens, which makes it a good first test. It is the owner's own mod (source in `E:/Repos/Pony Express`), so its hooks go into the mod itself, implementing the compat API directly, rather than into a separate compat jar.
 
 1. **Mailbox:** a server-driven window, so stage 1 should already show it. The compat checks that and fixes what stage 1
    cannot.
@@ -151,4 +151,4 @@ a test step.
 | Stage 1 for modded windows | Every server-driven window is tried generically; one that misdraws goes on a deny list, or gets a compat |
 | The pointer | The recorded mouse pointer and the carried item are drawn over the window |
 | Left out | Xaero's Minimap and World Map, AppleSkin |
-| The owner's mods (ComedyMonkey's Create Addons, McpCraft) | Hooks written into the mods themselves where that is easier: they implement the compat API directly instead of a separate compat jar |
+| The owner's mods: Post Rider (`E:/Repos/Pony Express`), ComedyMonkey's Create Addons (source location to confirm), McpCraft (`E:/Repos/McpCraft`) | Hooks written into the mods themselves: each implements the compat API directly, as a soft dependency, instead of a separate compat jar. Separate compat jars, as subprojects here, are for other people's mods |
