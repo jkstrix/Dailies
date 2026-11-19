@@ -74,7 +74,7 @@ Every task below follows these. Where a task once fell short of one, it has been
 | 3.8 | Done | BUD-1 to BUD-8 are in the spec. BUD-2 is over budget in generated terrain (225 to 354 MB an hour, target 150). The second half of BUD-5, and BUD-8, are not measured |
 | 3.9 | Done | Chapter XIV has a step for every requirement the scripted run tests, and lists what nothing tests yet |
 | 3.10 | Done | |
-| 3.11 | Underway | Found 19 November 2026: the owner's wings played the wrong sound in a server recording |
+| 3.11 | Done | The server's numbering was in every recording all along (the world data's ids, read while joined); playback now applies it as NeoForge does on joining and reverts it after (REC-37, PLAY-25), fixing recordings already made. The registries group simulates a server with every sound numbered 843 on and passed in game |
 | 4.1 | Partly | `reference/` compiles with every build; the carry-over script is outside this repository |
 | 4.2 | Done | `tools/ci/check_spec.py` checks ids, citations, links and the HTML; it runs first in the scripted-test workflow |
 | 4.3 | Can't tell | Needs the earlier build |
