@@ -5,23 +5,10 @@ import comedymonkey.dailies.api.compat.DisplayTest;
 import comedymonkey.dailiescompat.extras.ExtrasCompat;
 import de.maxhenkel.corpse.corelib.death.Death;
 import de.maxhenkel.corpse.entities.CorpseEntity;
-import de.maxhenkel.pipez.Filter;
-import de.maxhenkel.pipez.blocks.PipeBlock;
-import de.maxhenkel.pipez.blocks.tileentity.PipeLogicTileEntity;
-import de.maxhenkel.pipez.gui.ExtractContainer;
-import de.maxhenkel.pipez.gui.ExtractScreen;
-import de.maxhenkel.pipez.gui.FilterContainer;
-import de.maxhenkel.pipez.gui.FilterScreen;
-import de.maxhenkel.pipez.gui.containerfactory.FilterContainerProvider;
-import de.maxhenkel.pipez.gui.containerfactory.PipeContainerProvider;
 import com.blackgear.vanillabackport.common.level.entities.mob.animal.nautilus.AbstractNautilus;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import com.blackgear.vanillabackport.common.registries.entities.ModEntityTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -37,21 +24,21 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
- * The display test of the compat for the rest of the pack, run by Dailies' scripted run (its extras group). The stage,
- * around the player at the middle of a flat world: a Pipez universal pipe two blocks south and two west, pulling from a
- * chest beyond it. While recording, the player, in survival, holds Explorer's Compass and Nature's Compass each with
- * something found, opens a backpack held in the hand and one with a pickup upgrade's tab open, opens the Curios window, opens a corpse
- * laid two blocks off, opens the pipe's settings on its first and its second tab and a filter with an item typed, and
- * opens a tamed nautilus' inventory. Dailies then checks each is drawn riding along in first person, and nothing in third
+ * The display test of the compat for the rest of the pack, run by Dailies' scripted run (its extras group), around the
+ * player at the middle of a flat world, with nothing staged beforehand. While recording, the player, in survival, holds
+ * Explorer's Compass and Nature's Compass each with something found, opens a backpack held in the hand and one with a
+ * pickup upgrade's tab open, opens the Curios window, opens a corpse laid two blocks off, and opens a tamed nautilus'
+ * inventory. Dailies then checks each is drawn riding along in first person, and nothing in third
  * person or flying free.
  * <p>
  * The mods' own conditions for drawing, met here: a compass shows its lines while held in either hand with no screen
  * open, from its state on the item (found, with a structure or biome and where), set as the item is given; the backpack is opened as using it in the hand opens it, its upgrade and open tab
  * set on the backpack first; the Curios window as Curios' key opens it, by the server; the corpse is opened by the server
- * as using it does, once the player's game has it, within reach, and holding the items the player carried; the pipe's
- * windows as using its pulling side and its filter button open them, by the server; and the nautilus, once tamed and
- * known to the player's game, as using it while sneaking opens its inventory, two blocks off (within its reach of four).
- * Turned by yaw and pitch, never by {@code tp ... facing}; block entities are waited for after {@code setblock}. Not in
+ * as using it does, once the player's game has it, within reach, and holding the items the player carried; and the
+ * nautilus, once tamed and known to the player's game, as using it while sneaking opens its inventory, two blocks off
+ * (within its reach of four). VanillaBackport registers its mobs under the game's own name, so the nautilus is
+ * {@code minecraft:nautilus}, made here from VanillaBackport's own entity type. Turned by yaw and pitch, never by
+ * {@code tp ... facing}. Not in
  * the test: Curios' second page and cosmetic slots (no pack of curio slots big enough in a test world), a corpse's page of
  * further items (they come only from mods' slots), and a line Sophisticated Backpacks or Corpse puts above the hotbar
  * (the tool swap key and the death history key with no deaths), which a key opens rather than a step.
@@ -60,27 +47,10 @@ final class ExtrasDisplayTest implements DisplayTest {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    static final BlockPos PIPE = new BlockPos(-2, -60, 2);
-    static final BlockPos PIPE_CHEST = new BlockPos(-2, -60, 3);
-
     private final Predicate<String> loaded;
 
     ExtrasDisplayTest(Predicate<String> loaded) {
         this.loaded = loaded;
-    }
-
-    @Override
-    public void stage(Stage stage) throws Exception {
-        if (this.loaded.test(ExtrasCompat.PIPEZ)) {
-            stage.command("setblock -2 -60 3 minecraft:chest[facing=north]");
-            stage.command("setblock -2 -60 2 pipez:universal_pipe");
-        }
-        // Their block entities are made with the blocks, and set up on their first ticks
-        stage.waitTicks(10);
-        if (this.loaded.test(ExtrasCompat.PIPEZ)) {
-            stage.onServer(PipezSteps::pullFromChest);
-            stage.waitTicks(5);
-        }
     }
 
     /** Puts the player back as each display starts: nothing held, at the middle. The test closes a screen left open */
@@ -157,30 +127,6 @@ final class ExtrasDisplayTest implements DisplayTest {
                 stage.waitTicks(5);
             }));
         }
-        if (this.loaded.test(ExtrasCompat.PIPEZ)) {
-            displays.add(new Display("a universal pipe's settings", "pipez:extract", stage -> {
-                reset(stage);
-                face(stage, 135.0F, 30.0F);
-                stage.onServer(PipezSteps::openSettings);
-                stage.waitTicks(5);
-            }));
-            displays.add(new Display("a universal pipe's settings on its second tab", "pipez:extract", stage -> {
-                reset(stage);
-                face(stage, 135.0F, 30.0F);
-                stage.onServer(PipezSteps::openSettings);
-                stage.waitTicks(5);
-                stage.onClient(PipezSteps::secondTab);
-                stage.waitTicks(2);
-            }));
-            displays.add(new Display("a pipe's filter, an item typed", "pipez:filter", stage -> {
-                reset(stage);
-                face(stage, 135.0F, 30.0F);
-                stage.onServer(PipezSteps::openFilter);
-                stage.waitTicks(5);
-                stage.onClient(PipezSteps::typeItem);
-                stage.waitTicks(2);
-            }));
-        }
         if (this.loaded.test(ExtrasCompat.VANILLA_BACKPORT)) {
             displays.add(new Display("a tamed nautilus' inventory", prefix + NautilusPart.NAME, stage -> {
                 reset(stage);
@@ -250,65 +196,14 @@ final class ExtrasDisplayTest implements DisplayTest {
         }
     }
 
-    /** Pipez's steps */
-    private static final class PipezSteps {
-        /** The pipe pulls from the chest beyond it, as using its side with a wrench sets it */
-        static void pullFromChest(ServerPlayer player) {
-            ServerLevel level = player.serverLevel();
-            if (level.getBlockState(PIPE).getBlock() instanceof PipeBlock pipe) {
-                pipe.setExtracting(level, PIPE, Direction.SOUTH, true);
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: no pipe at {}", PIPE);
-            }
-        }
-
-        /** As using the pipe's pulling side opens its settings */
-        static void openSettings(ServerPlayer player) {
-            if (player.serverLevel().getBlockEntity(PIPE) instanceof PipeLogicTileEntity pipe) {
-                PipeContainerProvider.openGui(player, pipe, Direction.SOUTH, -1, (id, inventory, opener) -> new ExtractContainer(id, inventory, pipe, Direction.SOUTH, -1));
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: the pipe at {} has no settings", PIPE);
-            }
-        }
-
-        /** As clicking the second tab turns to it */
-        static void secondTab() {
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.screen instanceof ExtractScreen screen && screen.hasTabs()) {
-                Reflect.set(screen, "currentindex", 1);
-                Reflect.call(screen, "init", new Class<?>[0]);
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: the pipe's settings have no tabs");
-            }
-        }
-
-        /** As the settings' add button opens a new filter for the first kind of pipe */
-        static void openFilter(ServerPlayer player) {
-            if (player.serverLevel().getBlockEntity(PIPE) instanceof PipeLogicTileEntity pipe) {
-                Filter<?, ?> filter = pipe.getPipeTypes()[0].createFilter();
-                FilterContainerProvider.openGui(player, pipe, Direction.SOUTH, filter, 0, (id, inventory, opener) -> new FilterContainer(id, inventory, pipe,
-                    Direction.SOUTH, 0, filter));
-            }
-        }
-
-        static void typeItem() {
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.screen instanceof FilterScreen screen) {
-                EditBox item = Reflect.get(screen, "item");
-                item.setValue("minecraft:cobblestone");
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: the pipe's filter did not open");
-            }
-        }
-    }
-
     /** VanillaBackport's steps */
     private static final class NautilusSteps {
         private static UUID tamed = null;
 
         /** A nautilus two blocks off, standing still, tamed by the player */
         static void tame(ServerPlayer player) {
-            Entity made = BuiltInRegistries.ENTITY_TYPE.get(ResourceLocation.fromNamespaceAndPath("vanillabackport", "nautilus")).create(player.serverLevel());
+            // Its id is minecraft:nautilus, not vanillabackport:nautilus: VanillaBackport registers its mobs under the game's name
+            Entity made = ModEntityTypes.NAUTILUS.get().create(player.serverLevel());
             if (!(made instanceof AbstractNautilus nautilus)) {
                 LOGGER.warn("Dailies extras compat's display test: this game has no nautilus");
                 return;

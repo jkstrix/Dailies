@@ -24,7 +24,7 @@ import java.util.function.Predicate;
  * <li>Sophisticated Backpacks: a backpack's window, recorded whole with its upgrade tabs, since Dailies' stand-in player
  * for a window holds no backpack ({@link Backpacks}); its settings window is settings, and left out;</li>
  * <li>extras for windows Dailies draws itself: Curios' page and cosmetic slots ({@link CuriosExtras}), a corpse's page of
- * further items ({@link CorpseExtras}), a Pipez pipe's tab and filter list, and a filter as typed ({@link PipezExtras});</li>
+ * further items ({@link CorpseExtras});</li>
  * <li>VanillaBackport: a nautilus' inventory, which its own packet opens where Dailies' window recording never sees it
  * ({@link NautilusPart});</li>
  * <li>the lines the mods put above the hotbar on the player's own game alone ({@link StatusLine}).</li>
@@ -82,7 +82,6 @@ public final class ExtrasDailies implements DailiesCompat {
         claimFor(ExtrasCompat.BACKPACKS, claims, Backpacks::claim);
         claimFor(ExtrasCompat.CURIOS, claims, CuriosExtras::claim);
         claimFor(ExtrasCompat.CORPSE, claims, CorpseExtras::claim);
-        claimFor(ExtrasCompat.PIPEZ, claims, PipezExtras::claim);
         claimFor(ExtrasCompat.VANILLA_BACKPORT, claims, NautilusPart::claim);
     }
 

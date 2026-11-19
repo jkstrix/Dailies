@@ -9,7 +9,7 @@ displayName = "Dailies Extras Compat"
 authors = "James Knight"
 description = '''
 The rest of the pack's play screens and overlays in Dailies recordings: the lines Explorer's Compass and Nature's Compass
-show while held, Sophisticated Backpacks' backpacks with their upgrade tabs, Curios' pages, a corpse's pages, Pipez' pipe and filter windows, VanillaBackport's nautilus inventory
+show while held, Sophisticated Backpacks' backpacks with their upgrade tabs, Curios' pages, a corpse's pages, VanillaBackport's nautilus inventory
 and the lines these mods put above the hotbar, recorded and drawn again in playback. Does nothing unless Dailies and those
 mods are installed.
 '''
@@ -73,13 +73,6 @@ side = "BOTH"
 modId = "corpse"
 type = "optional"
 versionRange = "[1.21.1-1.1.22,)"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.dailies_extras]]
-modId = "pipez"
-type = "optional"
-versionRange = "[1.21.1-1.2.31,)"
 ordering = "AFTER"
 side = "BOTH"
 

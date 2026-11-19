@@ -76,16 +76,6 @@ class ExtrasStatesTest {
         assertEquals(curios, ExtrasStates.readCurios(ExtrasStates.curios(curios)));
         ExtrasStates.Page page = new ExtrasStates.Page(3);
         assertEquals(page, ExtrasStates.readPage(ExtrasStates.page(page)));
-        ExtrasStates.PipeSettings settings = new ExtrasStates.PipeSettings(1, -1, 4);
-        ExtrasStates.PipeSettings readSettings = ExtrasStates.readPipeSettings(ExtrasStates.pipeSettings(settings));
-        assertEquals(settings, readSettings);
-        assertEquals(-1, readSettings.selected());
-        ExtrasStates.PipeFilter filter = new ExtrasStates.PipeFilter("#minecraft:logs", "{CustomModelData:3}", true, false);
-        ExtrasStates.PipeFilter readFilter = ExtrasStates.readPipeFilter(ExtrasStates.pipeFilter(filter));
-        assertEquals(filter, readFilter);
-        assertEquals("#minecraft:logs", readFilter.item());
-        assertTrue(readFilter.exact());
-        assertArrayEquals(ExtrasStates.pipeFilter(filter), ExtrasStates.pipeFilter(readFilter));
     }
 
     @Test

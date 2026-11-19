@@ -258,7 +258,7 @@ public final class SelfTest {
             // Create's other add-ons, through the compat for them (compats/createextras, CPT-11): in a world and a recording of
             // their own; skipped with a line without the add-ons or the compat
             always("createextras", "CompatDisplaySteps.createExtras", () -> CompatDisplaySteps.createExtras(this)),
-            // The rest of the pack (the compasses, Sophisticated Backpacks, Curios, Corpse, Pipez, VanillaBackport),
+            // The rest of the pack (the compasses, Sophisticated Backpacks, Curios, Corpse, VanillaBackport),
             // through the extras compat (compats/extras, CPT-12): in a world and a recording of their own; skipped with a line
             // without the mods or the compat
             always("extras", "CompatDisplaySteps.extras", () -> CompatDisplaySteps.extras(this)),
@@ -625,6 +625,9 @@ public final class SelfTest {
         });
         try {
             return done.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            logThreads("60 seconds waiting for the client thread to run a step");
+            throw e;
         } catch (java.util.concurrent.ExecutionException e) {
             if (e.getCause() instanceof Exception cause) {
                 throw cause;
@@ -645,9 +648,33 @@ public final class SelfTest {
         long deadline = System.nanoTime() + seconds * 1_000_000_000L;
         while (!condition.getAsBoolean()) {
             if (System.nanoTime() - deadline > 0) {
+                logThreads(seconds + " seconds waiting for " + what);
                 throw new Failure("gave up after " + seconds + " seconds waiting for " + what);
             }
             Thread.sleep(10);
+        }
+    }
+
+    /**
+     * Writes where every thread of the game stands to the log, the render thread first, in one entry: called once as a
+     * wait gives up, before its failure is raised, so a step that hangs (a jump that never finishes, say) shows where the
+     * game was stuck. A stack trace is a snapshot, taken thread by thread, so two threads may be seen a moment apart
+     */
+    static void logThreads(String why) {
+        try {
+            Map<Thread, StackTraceElement[]> traces = Thread.getAllStackTraces();
+            List<Thread> threads = new ArrayList<>(traces.keySet());
+            threads.sort(java.util.Comparator.comparing((Thread thread) -> !"Render thread".equals(thread.getName())).thenComparing(Thread::getName));
+            StringBuilder dump = new StringBuilder("Dailies self test: gave up after ").append(why).append("; every thread, the render thread first:");
+            for (Thread thread : threads) {
+                dump.append("\n\n\"").append(thread.getName()).append("\"").append(thread.isDaemon() ? " daemon" : "").append(" ").append(thread.getState());
+                for (StackTraceElement frame : traces.get(thread)) {
+                    dump.append("\n\tat ").append(frame);
+                }
+            }
+            Host.LOGGER.warn(dump.toString());
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies self test: could not write down the threads after {}", why, t);
         }
     }
 
@@ -684,6 +711,7 @@ public final class SelfTest {
             }
             last = now;
             if (now - deadline > 0) {
+                logThreads(seconds + " seconds waiting for " + ticks + " game ticks to pass");
                 throw new Failure("gave up after " + seconds + " seconds waiting for " + ticks + " game ticks to pass (" + (int) passed + " did)");
             }
         }

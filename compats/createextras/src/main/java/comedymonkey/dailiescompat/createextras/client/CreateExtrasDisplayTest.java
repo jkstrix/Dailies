@@ -43,16 +43,17 @@ import java.util.List;
  * Hypertubes tube. While recording, the player, in survival, opens the electrolyzer's window and the boat engine's (as
  * using them opens them, the engine's while sneaking), the sonar's screen on the console, and has the PDA's message slide
  * in and Create Deep Seas' warning put above the hotbar; opens the pulse generator's and the clutch's screens; holds a
- * recaser with casings in the inventory and opens its wheel; holds railway casing and opens the bogey menu, and holds
- * slashed locometal and opens the tag wheel, each by Steam 'n' Rails' own key handler; wears a jetpack; and holds a tube
+ * recaser with andesite and brass sheets in the inventory and opens its wheel; holds railway casing and opens the bogey
+ * menu, and holds slashed locometal and opens the tag wheel, each by Steam 'n' Rails' own key handler; wears a jetpack; and holds a tube
  * being joined on from the placed one. Dailies then checks each is drawn riding along in first person, and nothing in
  * third person or flying free.
  * <p>
  * The mods' own conditions for drawing, met here: the windows are opened by the server, with nothing in the hand; the
  * sonar closes itself beyond eight blocks of its console, so the player stands beside it; the recaser's wheel opens only
- * with casings to offer, and the bogey menu and the tag wheel only while their items are held; the jetpack's controls show
- * while a jetpack is worn on the chest; the tube's outline shows while a tube that glints, joining on from a placed tube,
- * is held. Turned by yaw and pitch, never by {@code tp ... facing}; block entities are waited for after {@code setblock}.
+ * with two kinds of casing to offer, which it finds by the sheets each casing set is made with (the item tags
+ * c:plates/andesite_alloy, c:plates/brass and the like), never by casings, and the bogey menu and the tag wheel only
+ * while their items are held; the jetpack's controls show while a jetpack is worn on the chest; the tube's outline shows
+ * while a tube that glints, joining on from a placed tube, is held. Turned by yaw and pitch, never by {@code tp ... facing}; block entities are waited for after {@code setblock}.
  * Not in the test, as no simple stage shows them: the implosion (a sub imploding), a boat engine's throttle (held from its
  * helm seat), a console's widget under the pointer (aimed at its screen), the switch on the train's bar (a train driven
  * towards a switch), and Hypertubes' arrow and escape bar (riding a tube). Create: Tracks has nothing of its own to show
@@ -236,9 +237,11 @@ final class CreateExtrasDisplayTest implements DisplayTest {
             }));
             displays.add(new Display("the recaser's wheel", prefix + EncasedScreens.RECASER, stage -> {
                 reset(stage);
-                // The wheel offers the casings in the inventory, and opens only when there are some
-                stage.command("item replace entity @s hotbar.1 with create:andesite_casing 16");
-                stage.command("item replace entity @s hotbar.2 with create:brass_casing 16");
+                // The wheel offers a casing for each kind of sheet in the inventory, and opens only with two or more. Create
+                // Encased knows its casing sets by their sheets' item tags (c:plates/andesite_alloy holds its own andesite
+                // sheet, c:plates/brass Create's brass sheet); casings themselves count for nothing
+                stage.command("item replace entity @s hotbar.1 with createcasing:andesite_sheet 16");
+                stage.command("item replace entity @s hotbar.2 with create:brass_sheet 16");
                 stage.command("item replace entity @s weapon.mainhand with createcasing:recaser");
                 stage.waitTicks(3);
                 // As its key opens it for the recaser held

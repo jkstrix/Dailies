@@ -181,44 +181,6 @@ public final class ExtrasStates {
         return read(data, in -> new Page(in.in.readInt()));
     }
 
-    /** A Pipez pipe's window: the tab of the kind of pipe shown, the filter picked in its list ({@code -1} for none) and how far the list is scrolled */
-    public record PipeSettings(int tab, int selected, int offset) {
-    }
-
-    public static byte[] pipeSettings(PipeSettings state) {
-        return write(out -> {
-            out.out.writeInt(state.tab());
-            out.out.writeInt(state.selected());
-            out.out.writeInt(state.offset());
-        });
-    }
-
-    public static PipeSettings readPipeSettings(byte[] data) {
-        return read(data, in -> new PipeSettings(in.in.readInt(), in.in.readInt(), in.in.readInt()));
-    }
-
-    /** A Pipez filter being edited: the item and the data typed into its two boxes, and its two switches, as not yet saved */
-    public record PipeFilter(String item, String data, boolean exact, boolean invert) {
-
-        public PipeFilter {
-            Objects.requireNonNull(item);
-            Objects.requireNonNull(data);
-        }
-    }
-
-    public static byte[] pipeFilter(PipeFilter state) {
-        return write(out -> {
-            out.text(state.item());
-            out.text(state.data());
-            out.out.writeBoolean(state.exact());
-            out.out.writeBoolean(state.invert());
-        });
-    }
-
-    public static PipeFilter readPipeFilter(byte[] data) {
-        return read(data, in -> new PipeFilter(in.text(), in.text(), in.in.readBoolean(), in.in.readBoolean()));
-    }
-
     // --- The line above the hotbar ---
 
     /**
