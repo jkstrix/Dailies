@@ -40,6 +40,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 4.1 Create | Done | `compats/create` (mod id `dailies_create`), a jar of its own beside Create. Every play-time screen, overlay and in-world mark Create 6.0.10 draws: the value settings board, value boxes and their tip, the goggles readout; the sequenced gearshift, threshold switch, elevator contact, station and train assembly, display link, factory gauge, symmetry wand, worldshaper, schematic naming and schematic edit screens; the toolbox and wrench selection wheels; the clipboard; remaining air, the train HUD, the linked controller's bind HUD, toolbox hotbar marks, the blueprint and table cloth row, the track placement hint, Create's status-line messages; the held schematic (tool bar, placed box, deploy preview) and a placed schematic's blocks, stored once in the recording (REC-28, PLAY-23, CPT-7); every outline Create draws in the world (super glue selection and glued areas, the schematic and quill selection, arm, ejector and port targets, chain conveyor, track and zapper previews), placement helper arrows and ghost blocks, and the symmetry mirror. Stage 1 alone: schematic table, schematicannon, linked controller binding, toolbox, crafting blueprint, package port. Stage 1 plus extras: list and attribute filters, package filter, package port address, redstone requester, the schedule with its entry editor, the stock keeper's search, address, order and scroll. Display test group `create`: 29 displays, passed in game. **Not drawn:** Create's client-side particles (the wand's end-rod particles and others), which are not recorded state |
 | 4.2 The owner's mods (Create Addons, McpCraft) | Done | Hooks in the mods themselves (see "Stage 4.2 in detail"). **Create Addons:** its windows by stage 1, with extras putting back its Sort and quick-move buttons; the Electric Motor, Clockwork Dynamo, Geothermal Turbine, Splitter, Trade Bot and Trade Master screens claimed, with the server's power settings recorded; the jetpack gauge, villager goggles, encased lines seen through goggles and the container-picking line claimed. Display test group `createaddons`: 19 displays. **McpCraft:** the job board (each tab, the post draft), Job Storage, the job and factory prompts, the confirm over the board or a storage, the track markers and job beacon, and the markers' toggle line, all claimed; the board's JSON stored once in the recording. Display test group `mcpcraft`: 9 displays. Both passed in game. **Left out:** McpCraft's job board faces (world appearance from a message playback holds back, so boards look bare), its sync screen (a pause-menu screen), Create Addons' Juggernaut camera shake (not interface) |
 | 4.3 Jade | Done | `compats/jade` (mod id `dailies_jade`), a jar of its own beside Jade 15.10.6: Jade's box recorded as Jade drew it (every element with its size, place, scale, fade, theme stored once, the breaking line) and drawn again by Jade's own code; a plugin's custom element keeps its place empty, logged once. Left out: the mod name Jade adds to item tooltips, its chat hints, the narrator, its config screens. Display test group `jade`: 4 displays, passed in game; the other compat groups pass with Jade loaded |
+| 4.4a Create Aeronautics and its add-ons | Underway | See "Stage 4.4a in detail" |
 | 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
 
 Known limits of stage 1, for a compat or a later fix:
@@ -209,6 +210,33 @@ In order of how often they appear in a Create let's play:
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
 a small display test.
+
+### Stage 4.4a in detail: Create Aeronautics and its add-ons (Compat, M)
+
+Taken before the rest of 4.4 at the owner's word (19 November). Aeronautics comes bundled as three mods, Aeronautics,
+Simulated and Offroad (the bundle 1.3.2 in the pack, on Sable 2.0.6), and the pack adds Gyroscope Stabilizers, Create
+Propulsion and Simulated Coasters. Their compat is a jar of its own, `compats/aeronautics` (mod id
+`dailies_aeronautics`), built with Dailies like the Create compat, each part active only when its mod is installed.
+
+From a scan of the jars (the compat's sweep confirms and completes it):
+- **Simulated's screens:** the altitude sensor, the diagram, the entry modifier, the key editor, the linked typewriter,
+  the modulating linked receiver and the nameplate. Each is checked: a server window goes through stage 1 (with extras
+  for client-side state), a client-only screen is claimed and drawn read-only.
+- **Simulated's overlays and messages:** the linked typewriter's binding HUD, and the messages its zipline, plunger
+  launcher and tyres put above the hotbar. Its additions to Create's goggles and display link screen are already
+  recorded by the Create compat, which records what was drawn.
+- **Gyroscope Stabilizers:** the joystick HUD and the joystick screen.
+- **Simulated Coasters:** the cart edit HUD, the rivet placement HUD, the smooth-track hint, and the Bezier handles and
+  track placement preview drawn into the world (drawn again into the world as the Create compat draws its outlines).
+- **Create Propulsion:** nothing drawn during play was found; the sweep confirms.
+- **Aeronautics and Offroad:** no screens or overlays were found; the sweep confirms, including anything drawn into the
+  world while building or flying.
+- Left out as not play: config screens, Ponder, creative-tab changes, and Simulated Coasters' "private build blocked"
+  screen if it is a notice rather than play (the sweep decides and says why).
+- **A small display test** in an `aeronautics` group, one display per screen, overlay and tab that can be set up
+  simply. Gyroscope Stabilizers, Propulsion and Simulated Coasters join the modded test's mods.
+- The lessons from Create's tests apply (each mod's own conditions for drawing, survival player, yaw and pitch, block
+  entities after `setblock`, block state names, a command that does not run is logged).
 
 ### Stage 4.3 in detail: Jade (Compat, M)
 
