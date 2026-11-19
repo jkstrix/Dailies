@@ -51,6 +51,13 @@
  * stood, a trimmed recording starts with it, and a combined one carries each part's records. Because every state is
  * whole, a compat writes no snapshot code of its own.
  * <p>
+ * <b>Stored once.</b> What is large and seldom changes (a schematic's blocks, say) would cost its whole size in every
+ * snapshot. A compat stores such bytes once with {@link comedymonkey.dailies.api.compat.DailiesCompats#storeOnce}, which
+ * hands back a handle (the bytes' SHA-256) for its state to carry instead, and reads them in playback with
+ * {@link comedymonkey.dailies.api.compat.DailiesCompats#stored}. The recording keeps the bytes itself, packed, once
+ * however often they are stored, carries them through trims and combines, and finds them wherever playback jumps to;
+ * so store the content, never a path to it.
+ * <p>
  * <b>Missing compats.</b> A recording played in a game without a compat that wrote into it plays on without that
  * layer and says so once. A record written by a newer version of a compat is handed to the older one with its version,
  * for it to draw what it can or nothing.

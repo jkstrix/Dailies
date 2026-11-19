@@ -218,6 +218,16 @@ public final class Compats {
         return Playback.loaded() && minecraft.level != null && minecraft.player != null && WindowLayer.shown(minecraft, false);
     }
 
+    /** See {@link comedymonkey.dailies.api.compat.DailiesCompats#storeOnce} */
+    public static String storeOnce(byte[] data) {
+        return CompatBlobs.store(data);
+    }
+
+    /** See {@link comedymonkey.dailies.api.compat.DailiesCompats#stored} */
+    public static byte @Nullable [] stored(String handle) {
+        return CompatBlobs.read(handle);
+    }
+
     public static boolean askServer(String pluginId, int version) {
         return CompanionCompat.ask(pluginId, version);
     }

@@ -577,17 +577,25 @@ public final class States {
      * names), the one picked, whether the tool bar is held open and how far it has risen; and in the world, the
      * schematic's size, whether it is placed, where (the transform from the world to the schematic, sixteen numbers, or
      * none), where the deploy tool's preview is (the same, or none), the face picked (-1 for none) and whether it is
-     * highlighted as for moving
+     * highlighted as for moving; and once it is placed, its blocks: the handle of the schematic's file as the recording
+     * stores it once (empty for none, such as a schematic whose file the recorder's game does not hold), and which of
+     * its mirrored copies Create draws (0 as it is, 1 mirrored front to back, 2 left to right)
      */
     public record Schematic(int hotbarSlot, List<String> tools, int selection, boolean focused, float rise, double[] size, boolean deployed, float[] placed,
-                            float[] preview, int face, boolean faceHighlighted) {
+                            float[] preview, int face, boolean faceHighlighted, String blob, int mirror) {
+
+        /** A schematic held whose blocks are not drawn */
+        public Schematic(int hotbarSlot, List<String> tools, int selection, boolean focused, float rise, double[] size, boolean deployed, float[] placed,
+                         float[] preview, int face, boolean faceHighlighted) {
+            this(hotbarSlot, tools, selection, focused, rise, size, deployed, placed, preview, face, faceHighlighted, "", 0);
+        }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof Schematic s && s.hotbarSlot == this.hotbarSlot && s.tools.equals(this.tools) && s.selection == this.selection
                 && s.focused == this.focused && s.rise == this.rise && java.util.Arrays.equals(s.size, this.size) && s.deployed == this.deployed
                 && java.util.Arrays.equals(s.placed, this.placed) && java.util.Arrays.equals(s.preview, this.preview) && s.face == this.face
-                && s.faceHighlighted == this.faceHighlighted;
+                && s.faceHighlighted == this.faceHighlighted && s.blob.equals(this.blob) && s.mirror == this.mirror;
         }
 
         @Override
@@ -616,13 +624,20 @@ public final class States {
             out.floats(schematic.preview());
             out.out.writeByte(schematic.face());
             out.out.writeBoolean(schematic.faceHighlighted());
+            out.text(schematic.blob());
+            out.out.writeByte(schematic.mirror());
         });
     }
 
     public static Schematic readSchematic(byte[] data) {
-        return read(data, in -> new Schematic(in.in.readInt(), in.texts(), in.in.readInt(), in.in.readBoolean(), in.in.readFloat(),
-            new double[]{in.in.readDouble(), in.in.readDouble(), in.in.readDouble()}, in.in.readBoolean(), in.floats(), in.floats(), in.in.readByte(),
-            in.in.readBoolean()));
+        return read(data, in -> {
+            Schematic read = new Schematic(in.in.readInt(), in.texts(), in.in.readInt(), in.in.readBoolean(), in.in.readFloat(),
+                new double[]{in.in.readDouble(), in.in.readDouble(), in.in.readDouble()}, in.in.readBoolean(), in.floats(), in.floats(), in.in.readByte(),
+                in.in.readBoolean());
+            // Its blocks were added later: a record written before has none
+            return in.more() ? new Schematic(read.hotbarSlot(), read.tools(), read.selection(), read.focused(), read.rise(), read.size(), read.deployed(),
+                read.placed(), read.preview(), read.face(), read.faceHighlighted(), in.text(), in.in.readByte()) : read;
+        });
     }
 
     // --- A train station's screens ---
@@ -971,6 +986,11 @@ public final class States {
 
         In(DataInputStream in) {
             this.in = in;
+        }
+
+        /** Whether there is more after what has been read: fields a later version added at a record's end */
+        boolean more() throws IOException {
+            return this.in.available() > 0;
         }
 
         int count() throws IOException {

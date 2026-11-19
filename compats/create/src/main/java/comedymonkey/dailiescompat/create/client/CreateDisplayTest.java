@@ -20,18 +20,27 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueSettingsScreen;
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import com.simibubi.create.foundation.utility.CreateLang;
+import com.simibubi.create.foundation.utility.CreatePaths;
 import comedymonkey.dailies.api.compat.DisplayTest;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 
@@ -42,7 +51,7 @@ import java.util.List;
  * the motor's value box is aimed at, the goggles are put on and a fluid tank looked at, the gearshift's screen is
  * opened, a clipboard is written in, the display link's and the station's assembly screens and the wand of symmetry's
  * are opened, super glue is held by the glued area, a status line is put up, a linked controller starts binding, a
- * schematic is held, the schematic table and the schematicannon are used, a schematic is named, and the toolbox's and
+ * schematic is held and one placed, the schematic table and the schematicannon are used, a schematic is named, and the toolbox's and
  * the wrench's selection wheels are opened. Dailies then checks
  * each is drawn riding along in first person, and nothing in third person or flying free.
  */
@@ -56,6 +65,8 @@ final class CreateDisplayTest implements DisplayTest {
     private static final BlockPos CANNON = new BlockPos(-6, -60, -3);
     private static final BlockPos TOOLBOX = new BlockPos(-3, -60, -6);
     private static final BlockPos FAN = new BlockPos(3, -60, -6);
+    /** A schematic of three by two by three blocks the stage saves in the player's schematics folder, for one placed */
+    private static final String PLACED_FILE = "dailies_placed.nbt";
     private static final String TYPED = "Speed: 64";
     private static final String NAME = "Dailies";
 
@@ -76,6 +87,22 @@ final class CreateDisplayTest implements DisplayTest {
         stage.command("setblock -3 -60 -6 create:brown_toolbox");
         stage.command("setblock 3 -60 -6 create:encased_fan[facing=north]");
         stage.waitTicks(5);
+        // A small build saved as a schematic file, as the schematic and quill saves one, for a placed schematic's blocks
+        stage.command("fill 8 -60 8 10 -60 10 create:andesite_casing");
+        stage.command("setblock 9 -59 9 create:cogwheel");
+        stage.command("setblock 8 -59 8 minecraft:glass");
+        stage.waitTicks(3);
+        stage.onServer(player -> {
+            StructureTemplate template = new StructureTemplate();
+            template.fillFromWorld(player.serverLevel(), new BlockPos(8, -60, 8), new Vec3i(3, 2, 3), false, null);
+            try {
+                Path file = CreatePaths.SCHEMATICS_DIR.resolve(PLACED_FILE);
+                Files.createDirectories(file.getParent());
+                NbtIo.writeCompressed(template.save(new CompoundTag()), file);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
         // Four of the toolbox's slots kept for an item each, the last of them empty again (its slot is still kept for it)
         stage.onServer(player -> {
             if (player.level().getBlockEntity(TOOLBOX) instanceof ToolboxBlockEntity toolbox) {
@@ -215,6 +242,14 @@ final class CreateDisplayTest implements DisplayTest {
                 stage.command("item replace entity @s weapon.mainhand with create:schematic[create:schematic_file=\"dailies_test.nbt\","
                     + "create:schematic_owner=\"Dev\",create:schematic_bounds=[3,2,3]]");
                 stage.command("tp @s 0.5 -60 3.5 0 45");
+                stage.waitTicks(5);
+            }),
+            new Display("a placed schematic's blocks", CreateDailies.ID + "/" + SchematicParts.HELD, stage -> {
+                // Placed where it stands, south of the station: Create draws its blocks inside its box from the file saved
+                // in the stage, which the recording stores once
+                stage.command("item replace entity @s weapon.mainhand with create:schematic[create:schematic_file=\"" + PLACED_FILE + "\","
+                    + "create:schematic_owner=\"Dev\",create:schematic_bounds=[3,2,3],create:schematic_deployed=true,create:schematic_anchor=[-9,-60,6]]");
+                stage.command("tp @s -7.5 -60 2.5 0 30");
                 stage.waitTicks(5);
             }),
             new Display("the schematic table", "create:schematic_table", stage -> {

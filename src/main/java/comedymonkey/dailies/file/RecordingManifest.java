@@ -188,6 +188,12 @@ public final class RecordingManifest {
     /** The server resource packs whose bytes the recording holds (REC-19), each stored once */
     public List<Pack> packs = new ArrayList<>();
 
+    /**
+     * What compats stored once in the recording (specification REC-28), each by its name as shared data: the SHA-256 of
+     * its bytes, in hex. A compat's states name them, and playback finds them by that name wherever it jumps (PLAY-23)
+     */
+    public List<String> compatBlobs = new ArrayList<>();
+
     /** A resource pack kept inside the recording as shared pieces, so that it is never held whole in memory */
     public static final class Pack {
         /** What the recorded pushes call this pack's content */
@@ -280,6 +286,11 @@ public final class RecordingManifest {
             if (manifest.packs == null) {
                 manifest.packs = new ArrayList<>();
             }
+            if (manifest.compatBlobs == null) {
+                manifest.compatBlobs = new ArrayList<>();
+            }
+            // Names only ever asked for as shared data, but a recording from elsewhere could name anything: what is not a hash is dropped
+            manifest.compatBlobs.removeIf(name -> !SafePaths.matches(name, SafePaths.SHA256));
             for (Pack pack : manifest.packs) {
                 // Playback names the file it writes a pack out to by this hash, so a recording from elsewhere (a share
                 // pack) must not be able to make it a path: anything but the hash written as the recorder writes it is refused

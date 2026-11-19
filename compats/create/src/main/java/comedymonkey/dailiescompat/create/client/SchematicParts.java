@@ -14,7 +14,9 @@ import com.simibubi.create.content.schematics.client.tools.DeployTool;
 import com.simibubi.create.content.schematics.client.tools.ISchematicTool;
 import com.simibubi.create.content.schematics.client.tools.SchematicToolBase;
 import com.simibubi.create.content.schematics.client.tools.ToolType;
+import comedymonkey.dailies.api.DailiesApi;
 import comedymonkey.dailiescompat.create.state.States;
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.outliner.AABBOutline;
 import net.createmod.catnip.render.SuperRenderTypeBuffer;
 import net.minecraft.client.Minecraft;
@@ -41,9 +43,8 @@ import java.util.List;
  * picked, and the deploy tool's preview box where it would go;</li>
  * <li>the screen naming a schematic saved with the schematic and quill ({@link #NAMING}).</li>
  * </ul>
- * The schematic's blocks, which Create draws inside its box from the schematic's file, are not drawn in playback: the
- * file is on the recorder's disk, and a part's state rides in every snapshot, so the file cannot be carried once. The
- * box shows where it stands.
+ * Once placed, the schematic's blocks are drawn inside its box too: the schematic's file is stored once in the recording
+ * and its state names it ({@link SchematicBlocks}).
  */
 final class SchematicParts {
 
@@ -104,8 +105,19 @@ final class SchematicParts {
                 preview = deployPreview(Reflect.get(deploy, "chasingSelectedPos"), bounds, transformation);
             }
         }
+        String blob = "";
+        int mirror = 0;
+        if (held != null && handler.isDeployed()) {
+            // Its blocks, from its file; and the copy Create draws, as SchematicHandler.render picks it
+            blob = SchematicBlocks.handle(Reflect.get(handler, "displayedSchematic"));
+            SchematicTransformation transformation = handler.getTransformation();
+            float pt = AnimationTickHolder.getPartialTicks();
+            boolean leftRight = transformation.getScaleLR().getValue(pt) < 0;
+            boolean frontBack = transformation.getScaleFB().getValue(pt) < 0;
+            mirror = leftRight && !frontBack ? 2 : frontBack && !leftRight ? 1 : 0;
+        }
         return States.schematic(new States.Schematic(held == null ? -1 : Reflect.getInt(handler, "activeHotbarSlot"), tools,
-            Reflect.getInt(bar, "selection"), bar.focused, rise, size, handler.isDeployed(), placed, preview, face, faceHighlighted));
+            Reflect.getInt(bar, "selection"), bar.focused, rise, size, handler.isDeployed(), placed, preview, face, faceHighlighted, blob, mirror));
     }
 
     /** Where the deploy tool shows the schematic would go, as DeployTool.renderTool places it (its camera taken out) */
@@ -167,6 +179,9 @@ final class SchematicParts {
     static void drawWorld(PoseStack ms, SuperRenderTypeBuffer buffer, Vec3 camera, float partialTicks) {
         States.Schematic schematic = shown;
         if (schematic == null || !InWorld.noted(drawnAt)) {
+            if (!DailiesApi.isPlayback()) {
+                SchematicBlocks.forget();
+            }
             return;
         }
         AABB bounds = new AABB(0, 0, 0, schematic.size()[0], schematic.size()[1], schematic.size()[2]);
@@ -180,20 +195,25 @@ final class SchematicParts {
                     schematic.faceHighlighted() ? AllSpecialTextures.HIGHLIGHT_CHECKERED : AllSpecialTextures.CHECKERED);
             }
             outline.getParams().withFaceTexture(AllSpecialTextures.CHECKERED);
-            drawBox(ms, buffer, camera, partialTicks, outline, schematic.placed());
+            drawBox(ms, buffer, camera, partialTicks, outline, schematic.placed(), schematic);
         }
         if (schematic.preview().length == 16) {
             AABBOutline outline = new AABBOutline(bounds);
             outline.getParams().colored(BOX_COLOUR).lineWidth(1 / 16.0F);
-            drawBox(ms, buffer, camera, partialTicks, outline, schematic.preview());
+            drawBox(ms, buffer, camera, partialTicks, outline, schematic.preview(), null);
         }
     }
 
-    private static void drawBox(PoseStack ms, SuperRenderTypeBuffer buffer, Vec3 camera, float partialTicks, AABBOutline outline, float[] placed) {
+    /** A box placed by its transform, with the schematic's blocks inside it first when they are to be drawn, as SchematicHandler.render does */
+    private static void drawBox(PoseStack ms, SuperRenderTypeBuffer buffer, Vec3 camera, float partialTicks, AABBOutline outline, float[] placed,
+                                States.@Nullable Schematic blocks) {
         ms.pushPose();
         try {
             ms.translate(-camera.x, -camera.y, -camera.z);
             ms.mulPose(new Matrix4f().set(placed));
+            if (blocks != null && blocks.deployed()) {
+                SchematicBlocks.draw(ms, buffer, blocks.blob(), blocks.mirror());
+            }
             outline.render(ms, buffer, Vec3.ZERO, partialTicks);
         } finally {
             ms.popPose();

@@ -916,6 +916,24 @@ public final class Recorder {
         }
     }
 
+    /**
+     * Has the writer thread store bytes a compat keeps once for the recording (specification REC-28), named by their
+     * hash. Does nothing while no recording is being made. Client thread
+     */
+    public void keepCompatBlob(byte[] data, byte[] hash) {
+        this.spool(new Spool.Job() {
+            @Override
+            public void run(RecordingWriter writer) throws Exception {
+                writer.putCompatBlob(data, hash);
+            }
+
+            @Override
+            public long bytes() {
+                return data.length;
+            }
+        });
+    }
+
     /** Hands the writer thread a piece of work of its own, done in turn with everything else that is written. Client thread */
     void spool(Spool.Job job) {
         Spool spool = this.spool;
