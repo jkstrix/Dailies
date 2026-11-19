@@ -36,7 +36,7 @@ Sizes as in `PLAN.md`: **S** under an hour, **M** a session, **L** several sessi
 | 2.2 Server API | Done | `Claims.serverHalf` on the companion plugin API; the companion's `disabledPlugins` setting; the privacy rule in SRV-9 |
 | 2.3 Template compat project | Done | `compats/template` (mod id `dailies_template`): an example screen, an overlay, a server half and a display test; builds with Dailies, not in the game test (CPT-5) |
 | 3 Post Rider | Done | Post Rider 1.2.2 carries its own hooks (`client/dailies`), compiled against a copy of the API jar, loaded only with Dailies present. Mailbox drawn by the generic path plus window extras (tab, address, scroll); reading a letter (hand, page, checked against the held letter); writing a letter (text, page, cursor, read-only screen). Display test group `postrider`, passed in game |
-| 4.1 Create | Not started | Every machine setting first |
+| 4.1 Create | Partly | `compats/create` (mod id `dailies_create`), a jar of its own beside Create. Claimed: the value settings board, value boxes (drawn into the world as Create draws them) and their tip, the sequenced gearshift, threshold switch and elevator contact screens, the goggles readout, the clipboard, remaining air. Stage 1 plus extras: list and attribute filters, package filter, package port, redstone requester, the schedule. Display test group `create`, passed in game. **Not yet:** train station and assembly screens, display link, factory panel, the symmetry wand and zappers, the linked controller and blueprint overlays |
 | 4.2 The owner's mods (Create Addons, McpCraft) | Not started | Hooks in the mods themselves |
 | 4.3 Jade | Not started | |
 | 4.4 Supplementaries, Deep Seas, flight and ride overlays, compasses | Not started | |
@@ -51,6 +51,8 @@ Known limits of stage 1, for a compat or a later fix:
 - a letter read in playback is drawn only if the recorder's held letter matches the one recorded;
 - the template compat is not in the game test;
 - the modded test now expects Post Rider loaded, from the pack or `dailies.modJars`.
+- the Create compat reads some of Create's private fields by their 6.0.10 names: a rename in a Create update loses that part, logged once;
+- Create hides the goggles' readout while a value box shows, so a recording does too.
 
 ---
 
@@ -162,7 +164,7 @@ Post Rider has one window and two screens, which makes it a good first test. It 
 5. **Test:** Post Rider joins the modded test's mods. A small display test opens a mailbox, reads a letter and writes
    one while recording, and checks each screen is drawn in first-person playback.
 
-## Stage 4: the rest of the pack, by value (Compat, L) — Not started
+## Stage 4: the rest of the pack, by value (Compat, L) — Underway
 
 In order of how often they appear in a Create let's play:
 

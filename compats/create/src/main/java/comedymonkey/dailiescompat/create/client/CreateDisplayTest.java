@@ -19,8 +19,8 @@ import java.util.List;
 
 /**
  * The Create compat's display test, run by Dailies' scripted run (its create group): a creative motor with a shaft on
- * it and a sequenced gearshift beside the player. While recording, the motor's value settings board is opened and its
- * speed scrolled, the motor's value box is aimed at, the goggles are put on and the shaft looked at, the gearshift's
+ * it, a sequenced gearshift and a fluid tank beside the player. While recording, the motor's value settings board is opened and its
+ * speed scrolled, the motor's value box is aimed at, the goggles are put on and a fluid tank looked at, the gearshift's
  * screen is opened, and a clipboard is written in. Dailies then checks each is drawn riding along in first person, and
  * nothing in third person or flying free.
  */
@@ -36,6 +36,7 @@ final class CreateDisplayTest implements DisplayTest {
         stage.command("setblock 2 -60 0 create:creative_motor[facing=north]");
         stage.command("setblock 2 -60 -1 create:shaft[axis=z]");
         stage.command("setblock -2 -60 0 create:sequenced_gearshift");
+        stage.command("setblock 0 -60 -3 create:fluid_tank");
         stage.waitTicks(5);
     }
 
@@ -77,9 +78,13 @@ final class CreateDisplayTest implements DisplayTest {
                 }
             }),
             new Display("the motor's value box", CreateDailies.ID + "/" + ValueBoxes.NAME, CreateDisplayTest::aimAtMotor),
-            new Display("the goggles on the shaft", CreateDailies.ID + "/" + Goggles.NAME, stage -> {
+            new Display("the goggles on a fluid tank", CreateDailies.ID + "/" + Goggles.NAME, stage -> {
+                // A fluid tank: the goggles always show its capacity, and it has no value box. Create hides the goggles'
+                // readout while a value box shows (the motor has one on every side looked at), and shows nothing for a
+                // bare shaft, which has no stress figures
                 stage.command("item replace entity @s armor.head with create:goggles");
-                stage.command("tp @s 2.5 -60 -3.5 facing 2.5 -59.5 -0.5");
+                // Due north and 30 degrees down, at the middle of the tank (the facing form of tp did not turn the player)
+                stage.command("tp @s 0.5 -60 -0.5 180 30");
                 stage.waitTicks(5);
             }),
             new Display("a sequenced gearshift's screen", CreateDailies.ID + "/" + MachineScreens.GEARSHIFT, stage -> {
