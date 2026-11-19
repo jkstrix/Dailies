@@ -113,7 +113,7 @@ neoForge {
             // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
             // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
             systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
-                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_selftest')
+                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,supplementaries,amendments,moonlight,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_supplementaries,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -332,7 +332,7 @@ def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
 // Matched as the jars are named, capitals, spaces and all: Jade's jar is Jade-1.21.1-NeoForge-<version>.jar, and Gyroscope
 // Stabilizers' is "Create Aeronautics Gyroscope Stabilizers.jar", with no version in its name
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
-    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*').split(',')
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*,supplementaries-1.21.1-*,amendments-1.21-*,moonlight-1.21.1-*').split(',')
 
 // The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
 tasks.register('buildCompanion', GradleBuild) {
@@ -375,6 +375,9 @@ tasks.register('installTestMods', Sync) {
     from({ project(':compats:jade').tasks.named('jar').get().archiveFile })
     // The Create Aeronautics compat (CPT-9), the same way, which the aeronautics group tries beside Aeronautics and its add-ons
     from({ project(':compats:aeronautics').tasks.named('jar').get().archiveFile })
+    // The Supplementaries compat (CPT-10), the same way, which the supplementaries group tries beside Supplementaries and Amendments
+    dependsOn ':compats:supplementaries:jar'
+    from({ project(':compats:supplementaries').tasks.named('jar').get().archiveFile })
     from(modsSource) {
         include moddedTestMods.collect { it.trim() + '.jar' }
         exclude overriddenMods

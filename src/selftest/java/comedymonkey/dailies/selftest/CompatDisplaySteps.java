@@ -80,6 +80,21 @@ final class CompatDisplaySteps {
     }
 
     /**
+     * Supplementaries' doormat, sign post, blackboard and speaker block screens, its present, trapped present, notice board,
+     * pulley, sack, cannon and red merchant windows, the slime over the screen, a quiver's row, the cannon aimed and its keys
+     * above the hotbar, a Stasis slingshot's far outline, and Amendments' book and quill on a lectern, through the
+     * Supplementaries compat, a mod of its own (compats/supplementaries): -PdailiesOnly=supplementaries
+     */
+    static void supplementaries(SelfTest test) throws Exception {
+        boolean installed = Host.get().isModLoaded("supplementaries") || Host.get().isModLoaded("amendments");
+        if (installed && !Host.get().isModLoaded("dailies_supplementaries")) {
+            test.skip("the Dailies Supplementaries compat (dailies_supplementaries) is not installed: Supplementaries' screens in recordings were not tried");
+            return;
+        }
+        run(test, installed ? null : "supplementaries", "Supplementaries", "dailies_supplementaries:supplementaries", "Dailies Supplementaries");
+    }
+
+    /**
      * ComedyMonkey's Create Addons' windows (with its buttons put back), its machines' settings screens, the stations, the
      * jetpack's gauge, the villager goggles, the encased lines seen through goggles and the line container picking puts up,
      * through the compat in the mod itself: -PdailiesOnly=createaddons

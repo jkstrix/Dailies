@@ -1,0 +1,58 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies_supplementaries"
+version = "${version}"
+displayName = "Dailies Supplementaries Compat"
+authors = "James Knight"
+description = '''
+Supplementaries' and Amendments' play screens and overlays in Dailies recordings: the doormat, sign post, blackboard and
+speaker block screens, a book and quill written in on a lectern, what the present, trapped present, cannon and red
+merchant windows hold besides their slots, the slimed overlay, the quiver's and lunch basket's row, the cannon's
+controls and its trajectory, the slingshot's far outline and the lines put above the hotbar, recorded and drawn again in
+playback. Does nothing unless Dailies and those mods are installed.
+'''
+# Only the player's game has anything to do: a server never needs it, and a game with it joins a server without it
+displayTest = "IGNORE_ALL_VERSION"
+
+[[mixins]]
+config = "dailies_supplementaries.mixins.json"
+
+[[dependencies.dailies_supplementaries]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.dailies_supplementaries]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+# All soft: the compat stands down without Dailies, and leaves out the part of each mod that is missing. Supplementaries
+# and Amendments put the game's version before their own in their versions
+[[dependencies.dailies_supplementaries]]
+modId = "dailies"
+type = "optional"
+versionRange = "[1.1.0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.dailies_supplementaries]]
+modId = "supplementaries"
+type = "optional"
+versionRange = "[1.21.1-4.0.2,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_supplementaries]]
+modId = "amendments"
+type = "optional"
+versionRange = "[1.21-2.2.7,)"
+ordering = "AFTER"
+side = "BOTH"

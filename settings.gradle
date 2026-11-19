@@ -18,3 +18,5 @@ include 'compats:template'
 include 'compats:create'
 include 'compats:jade'
 include 'compats:aeronautics'
+// Supplementaries' and Amendments' (CPT-10)
+include 'compats:supplementaries'

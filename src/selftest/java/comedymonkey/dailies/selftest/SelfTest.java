@@ -250,6 +250,11 @@ public final class SelfTest {
             // Create Aeronautics and its add-ons, through the Create Aeronautics compat (compats/aeronautics, CPT-9): in a world and
             // a recording of their own; skipped with a line without the mods or the compat
             always("aeronautics", "CompatDisplaySteps.aeronautics", () -> CompatDisplaySteps.aeronautics(this)),
+            // Supplementaries and Amendments, through the Supplementaries compat (compats/supplementaries, CPT-10): in a world and a
+            // recording of their own; then their placed items (skull piles, skull candles, book piles and the rest) played back
+            // in place, in another; each skipped with a line without the mods or the compat
+            always("supplementaries", "CompatDisplaySteps.supplementaries", () -> CompatDisplaySteps.supplementaries(this)),
+            always("supplementaries", "SupplementariesPlacingSteps.run", () -> SupplementariesPlacingSteps.run(this)),
             // The owner's own mods, each through the compat in the mod itself, in a world and a recording of its own; skipped
             // with a line without the mod, or a version of it without the compat
             always("createaddons", "CompatDisplaySteps.createAddons", () -> CompatDisplaySteps.createAddons(this)),
