@@ -26,7 +26,6 @@ import com.simibubi.create.content.contraptions.actors.trainControls.ControlsHan
 import com.simibubi.create.content.equipment.blueprint.BlueprintEntity;
 import com.simibubi.create.content.equipment.zapper.terrainzapper.WorldshaperScreen;
 import com.simibubi.create.content.logistics.stockTicker.StockKeeperRequestScreen;
-import com.simibubi.create.content.logistics.stockTicker.StockTickerInteractionHandler;
 import com.simibubi.create.content.schematics.client.SchematicEditScreen;
 import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.schedule.IScheduleInput;
@@ -91,7 +90,8 @@ final class CreateDisplayTest implements DisplayTest {
     private static final BlockPos TOOLBOX = new BlockPos(-3, -60, -6);
     private static final BlockPos FAN = new BlockPos(3, -60, -6);
     private static final BlockPos BLUEPRINT = new BlockPos(0, -60, -9);
-    private static final BlockPos STOCK_TICKER = new BlockPos(-8, -60, -9);
+    /** The blaze burner beside the stock ticker, which keeps its stock */
+    private static final BlockPos KEEPER = new BlockPos(-7, -60, -9);
     /** The first point of a curve of track, and the train's station on a line of its own */
     private static final BlockPos TRACK_START = new BlockPos(0, -60, 22);
     private static final BlockPos TRAIN_STATION = new BlockPos(0, -60, 15);
@@ -136,7 +136,8 @@ final class CreateDisplayTest implements DisplayTest {
         // A stock ticker with a blaze burner beside it, which keeps its stock as a seated keeper would, and a crafting
         // blueprint laid on the ground holding a recipe in each of its sections
         stage.command("setblock -8 -60 -9 create:stock_ticker");
-        stage.command("setblock -7 -60 -9 create:blaze_burner");
+        // With a blaze in it (the property is "blaze"): a burner without one never opens the keeper
+        stage.command("setblock -7 -60 -9 create:blaze_burner[blaze=smouldering]");
         stage.command("setblock 0 -60 22 create:track[shape=xo]");
         stage.onServer(player -> {
             BlueprintEntity blueprint = new BlueprintEntity(player.level(), BLUEPRINT, Direction.UP, Direction.NORTH);
@@ -406,24 +407,28 @@ final class CreateDisplayTest implements DisplayTest {
                 stage.waitTicks(10);
             }),
             new Display("the track placement hint", CreateDailies.ID + "/" + PlayHud.TRACK_HINT, stage -> {
-                // The first point picked on a piece of track, then a point further along and to one side looked at: an
-                // S-bend with straight track at both ends, which Create offers to make smoother. Held long enough for the
-                // item's name to go and the hint to warm up
-                stage.command("item replace entity @s weapon.mainhand with create:track");
+                // The first point picked on a piece of track heading east, then the ground about 22 blocks east and 3
+                // south looked at, still facing east: a long S-bend. Create shows the hint only while the curve has a
+                // straight run at both ends (TrackPlacement resets its warm-up otherwise), which a plain turn or a short
+                // S-bend never has. Held long enough for the item's name to go and the hint to warm up
+                // A stack: the player is in survival, and a curve that needs more track than is held is not offered
+                stage.command("item replace entity @s weapon.mainhand with create:track 64");
                 stage.command("tp @s -1.5 -60 22.5 -90 50");
                 stage.waitTicks(3);
                 stage.onClient(() -> minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
                     new BlockHitResult(Vec3.atCenterOf(TRACK_START).add(0, -0.375, 0), Direction.UP, TRACK_START, false)));
                 stage.waitTicks(3);
-                stage.command("tp @s 7.5 -60 25.5 -90 28");
+                stage.command("tp @s 19.5 -60 25.5 -90 28");
                 stage.waitTicks(50);
             }),
             new Display("the stock keeper's search", "create:stock_keeper_request", stage -> {
-                // As using the stock ticker's keeper opens it; a search typed, which the extras keep
+                // The blaze burner beside the stock ticker used with an empty hand, as a player opens the keeper; a search
+                // typed, which the extras keep
                 stage.command("item replace entity @s weapon.mainhand with minecraft:air");
-                stage.command("tp @s -7.5 -60 -6.5 180 20");
+                stage.command("tp @s -6.5 -60 -6.5 180 20");
                 stage.waitTicks(3);
-                stage.onServer(player -> StockTickerInteractionHandler.interactWithLogisticsManagerAt(player, player.level(), STOCK_TICKER));
+                stage.onClient(() -> minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
+                    new BlockHitResult(Vec3.atCenterOf(KEEPER).add(0, 0, 0.5), Direction.SOUTH, KEEPER, false)));
                 stage.waitTicks(5);
                 stage.onClient(() -> {
                     if (minecraft.screen instanceof StockKeeperRequestScreen keeper) {

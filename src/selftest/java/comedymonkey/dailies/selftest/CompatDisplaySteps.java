@@ -149,7 +149,11 @@ final class CompatDisplaySteps {
         return new DisplayTest.Stage() {
             @Override
             public void command(String command) throws Exception {
-                test.command(command);
+                // A command the game refuses is said in the log: a display set up by one (a block state misnamed) would
+                // otherwise fail later for no reason the log shows
+                if (!test.commandRan(command)) {
+                    test.log("a display test's command did not run: " + command);
+                }
             }
 
             @Override

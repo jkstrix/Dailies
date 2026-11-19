@@ -674,6 +674,26 @@ public final class SelfTest {
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
     }
 
+    /**
+     * Runs a command as {@link #command} does, and says whether it ran: one the game refuses (a typo, a block state it
+     * does not have) gives false, where {@link #command} lets it pass unseen, its output being hidden
+     */
+    boolean commandRan(String command) throws Exception {
+        net.minecraft.client.server.IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        check(server != null, "there is no built-in server to run '" + command + "' on");
+        java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean(false);
+        server.submit(() -> {
+            net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput()
+                .withCallback((success, result) -> {
+                    if (success) {
+                        ran.set(true);
+                    }
+                }), command);
+        }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+        return ran.get();
+    }
+
     void log(String message) {
         Host.LOGGER.info("Dailies self test: {}", message);
     }
