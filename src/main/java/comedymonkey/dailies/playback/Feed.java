@@ -775,19 +775,13 @@ final class Feed {
                 Playback.settleLight(Minecraft.getInstance());
             }
             // The world is already as the next snapshot describes it, unless the recording says otherwise
-            boolean inSnapshot = false;
-            while (this.reader.next()) {
-                int kind = this.reader.kind();
-                if (kind == Records.SNAPSHOT_BEGIN) {
-                    inSnapshot = true;
-                } else if (kind == Records.DISCONTINUITY && inSnapshot) {
-                    this.reloadWanted = this.segmentIndex;
-                    return false;
-                } else if (kind == Records.SNAPSHOT_END) {
-                    break;
-                } else if (!inSnapshot) {
-                    return true;
-                }
+            SegmentCrossing.Next next = SegmentCrossing.enter(this.reader);
+            if (next == SegmentCrossing.Next.REBUILD) {
+                this.reloadWanted = this.segmentIndex;
+                return false;
+            }
+            if (next == SegmentCrossing.Next.PLAY_THIS) {
+                return true;
             }
         }
     }
