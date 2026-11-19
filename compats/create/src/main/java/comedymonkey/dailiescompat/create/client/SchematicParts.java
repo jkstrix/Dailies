@@ -14,7 +14,6 @@ import com.simibubi.create.content.schematics.client.tools.DeployTool;
 import com.simibubi.create.content.schematics.client.tools.ISchematicTool;
 import com.simibubi.create.content.schematics.client.tools.SchematicToolBase;
 import com.simibubi.create.content.schematics.client.tools.ToolType;
-import comedymonkey.dailies.api.DailiesApi;
 import comedymonkey.dailiescompat.create.state.States;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.outliner.AABBOutline;
@@ -179,9 +178,6 @@ final class SchematicParts {
     static void drawWorld(PoseStack ms, SuperRenderTypeBuffer buffer, Vec3 camera, float partialTicks) {
         States.Schematic schematic = shown;
         if (schematic == null || !InWorld.noted(drawnAt)) {
-            if (!DailiesApi.isPlayback()) {
-                SchematicBlocks.forget();
-            }
             return;
         }
         AABB bounds = new AABB(0, 0, 0, schematic.size()[0], schematic.size()[1], schematic.size()[2]);

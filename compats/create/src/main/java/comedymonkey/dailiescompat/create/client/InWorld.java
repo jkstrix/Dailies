@@ -11,10 +11,10 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
 /**
  * The compat's drawing into the world in playback, after the particles as Catnip draws its outlines, for the overlays
- * whose part shows in the world rather than over it: the outlines ({@link Outlines}) and a held schematic's box
- * ({@link SchematicParts}). Each overlay's drawing over the world notes the frame it was drawn in; its part in the world
- * is drawn only while that note is fresh and Dailies still shows overlays, so it follows the owner's rule like every
- * other overlay. The value boxes keep a drawing of their own ({@link ValueBoxes#drawWorld}).
+ * whose part shows in the world rather than over it: the outlines ({@link Outlines}), a held schematic's box and blocks
+ * ({@link SchematicParts}), a placement helper's ghost blocks and the wand of symmetry's mirror ({@link WorldMarks}).
+ * Each overlay's drawing over the world notes the frame it was drawn in; its part in the world is drawn only while that
+ * note is fresh and Dailies still shows overlays, so it follows the owner's rule like every other overlay. The value boxes keep a drawing of their own ({@link ValueBoxes#drawWorld}).
  */
 final class InWorld {
 
@@ -39,6 +39,8 @@ final class InWorld {
         }
         frames++;
         if (!DailiesApi.isPlayback()) {
+            // A schematic built for playback holds the playback world it was built in: let go of it once playback is over
+            SchematicBlocks.forget();
             return;
         }
         PoseStack ms = event.getPoseStack();
@@ -49,7 +51,9 @@ final class InWorld {
             float partialTicks = AnimationTickHolder.getPartialTicks();
             Outlines.drawWorld(ms, buffer, camera, partialTicks);
             SchematicParts.drawWorld(ms, buffer, camera, partialTicks);
+            WorldMarks.drawGhosts(ms, buffer, camera);
             buffer.draw();
+            WorldMarks.drawMirrors(ms, camera);
         } finally {
             ms.popPose();
         }

@@ -380,13 +380,27 @@ public final class States {
 
     /**
      * A train schedule as its window holds it while it is edited (Create's own saved form of it, as bytes of the game's
-     * tag format, which only the game's side reads), and how far its list is scrolled
+     * tag format, which only the game's side reads), and how far its list is scrolled; and the entry's editor open over
+     * the list, if any: what is edited ({@link #NOT_EDITING}, {@link #INSTRUCTION} or {@link #CONDITION}), the entry as the
+     * editor holds it (Create's saved form of it, with the values its fields hold as typed), whether the editor offers to
+     * delete it, and the items in its slots, by id
      */
-    public record Schedule(byte[] saved, float scroll) {
+    public record Schedule(byte[] saved, float scroll, int editing, byte[] entry, boolean deletable, List<String> slots) {
+
+        public static final int NOT_EDITING = 0;
+        public static final int INSTRUCTION = 1;
+        public static final int CONDITION = 2;
+
+        /** A schedule with no entry's editor open */
+        public Schedule(byte[] saved, float scroll) {
+            this(saved, scroll, NOT_EDITING, new byte[0], false, List.of());
+        }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Schedule schedule && java.util.Arrays.equals(schedule.saved, this.saved) && schedule.scroll == this.scroll;
+            return other instanceof Schedule schedule && java.util.Arrays.equals(schedule.saved, this.saved) && schedule.scroll == this.scroll
+                && schedule.editing == this.editing && java.util.Arrays.equals(schedule.entry, this.entry) && schedule.deletable == this.deletable
+                && schedule.slots.equals(this.slots);
         }
 
         @Override
@@ -400,6 +414,10 @@ public final class States {
             out.count(schedule.saved().length);
             out.out.write(schedule.saved());
             out.out.writeFloat(schedule.scroll());
+            out.out.writeByte(schedule.editing());
+            out.bytes(schedule.entry());
+            out.out.writeBoolean(schedule.deletable());
+            out.texts(schedule.slots());
         });
     }
 
@@ -411,7 +429,9 @@ public final class States {
             }
             byte[] saved = new byte[length];
             in.in.readFully(saved);
-            return new Schedule(saved, in.in.readFloat());
+            float scroll = in.in.readFloat();
+            // The entry's editor was added later: a record written before has none open
+            return in.more() ? new Schedule(saved, scroll, in.in.readByte(), in.bytes(), in.in.readBoolean(), in.texts()) : new Schedule(saved, scroll);
         });
     }
 
@@ -932,6 +952,316 @@ public final class States {
     public static WrenchWheel readWrenchWheel(byte[] data) {
         return read(data, in -> new WrenchWheel(in.in.readLong(), in.text(), in.in.readInt(), in.texts(), in.in.readInt(), in.in.readBoolean(), in.in.readInt(),
             in.in.readInt(), in.in.readByte(), in.in.readFloat(), in.in.readFloat()));
+    }
+
+    // --- The worldshaper's screen ---
+
+    /**
+     * The worldshaper's screen, opened by using it while sneaking: its title (the item's name), the block it places (as
+     * the game writes a block state), and what is being set, each by Create's name: the pattern, the brush and its three
+     * numbers, whether it follows diagonals and crosses materials, the tool and how it places
+     */
+    public record Worldshaper(String title, String block, String pattern, String brush, int[] params, boolean followDiagonals, boolean acrossMaterials,
+                              String tool, String placement) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Worldshaper w && w.title.equals(this.title) && w.block.equals(this.block) && w.pattern.equals(this.pattern)
+                && w.brush.equals(this.brush) && java.util.Arrays.equals(w.params, this.params) && w.followDiagonals == this.followDiagonals
+                && w.acrossMaterials == this.acrossMaterials && w.tool.equals(this.tool) && w.placement.equals(this.placement);
+        }
+
+        @Override
+        public int hashCode() {
+            return this.brush.hashCode() * 31 + java.util.Arrays.hashCode(this.params);
+        }
+
+        /** Brush number {@code i}, or 1 */
+        public int param(int i) {
+            return i >= 0 && i < this.params.length ? this.params[i] : 1;
+        }
+    }
+
+    public static byte[] worldshaper(Worldshaper shaper) {
+        return write(out -> {
+            out.text(shaper.title());
+            out.text(shaper.block());
+            out.text(shaper.pattern());
+            out.text(shaper.brush());
+            out.count(shaper.params().length);
+            for (int param : shaper.params()) {
+                out.out.writeInt(param);
+            }
+            out.out.writeBoolean(shaper.followDiagonals());
+            out.out.writeBoolean(shaper.acrossMaterials());
+            out.text(shaper.tool());
+            out.text(shaper.placement());
+        });
+    }
+
+    public static Worldshaper readWorldshaper(byte[] data) {
+        return read(data, in -> {
+            String title = in.text();
+            String block = in.text();
+            String pattern = in.text();
+            String brush = in.text();
+            int[] params = new int[in.count()];
+            for (int i = 0; i < params.length; i++) {
+                params[i] = in.in.readInt();
+            }
+            return new Worldshaper(title, block, pattern, brush, params, in.in.readBoolean(), in.in.readBoolean(), in.text(), in.text());
+        });
+    }
+
+    // --- The schematic's edit screen ---
+
+    /**
+     * The screen where a schematic held is placed by number: its name, the three coordinates as typed, which of them is
+     * being typed in (-1 for none) and where in it, and the rotation and mirror picked (by their place in Create's lists)
+     */
+    public record SchematicEdit(String name, List<String> coords, int focused, int cursor, int rotation, int mirror) {
+
+        /** Coordinate {@code i} as typed, or empty */
+        public String coord(int i) {
+            return i >= 0 && i < this.coords.size() ? this.coords.get(i) : "";
+        }
+    }
+
+    public static byte[] schematicEdit(SchematicEdit edit) {
+        return write(out -> {
+            out.text(edit.name());
+            out.texts(edit.coords());
+            out.out.writeByte(edit.focused());
+            out.out.writeInt(edit.cursor());
+            out.out.writeByte(edit.rotation());
+            out.out.writeByte(edit.mirror());
+        });
+    }
+
+    public static SchematicEdit readSchematicEdit(byte[] data) {
+        return read(data, in -> new SchematicEdit(in.text(), in.texts(), in.in.readByte(), in.in.readInt(), in.in.readByte(), in.in.readByte()));
+    }
+
+    // --- The toolbox's marks on the hotbar ---
+
+    /**
+     * The marks Create draws on the hotbar's slots that hold an item taken from a toolbox: for each such slot (0 to 8),
+     * whether its toolbox is still in reach, and which slot is selected
+     */
+    public record ToolboxMarks(int selected, List<Integer> slots, List<Boolean> inReach) {
+    }
+
+    public static byte[] toolboxMarks(ToolboxMarks marks) {
+        return write(out -> {
+            out.out.writeByte(marks.selected());
+            out.count(marks.slots().size());
+            for (int i = 0; i < marks.slots().size(); i++) {
+                out.out.writeByte(marks.slots().get(i));
+                out.out.writeBoolean(i < marks.inReach().size() && marks.inReach().get(i));
+            }
+        });
+    }
+
+    public static ToolboxMarks readToolboxMarks(byte[] data) {
+        return read(data, in -> {
+            int selected = in.in.readByte();
+            int count = in.count();
+            List<Integer> slots = new ArrayList<>(count);
+            List<Boolean> inReach = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                slots.add((int) in.in.readByte());
+                inReach.add(in.in.readBoolean());
+            }
+            return new ToolboxMarks(selected, slots, inReach);
+        });
+    }
+
+    // --- The blueprint overlay, and the table cloth's shop over it ---
+
+    /** An item as an overlay shows it: by id, how many, and whether it is shown as had (an ingredient) */
+    public record Stack(String item, int count, boolean had) {
+    }
+
+    /**
+     * The row Create shows above the hotbar for a crafting blueprint looked at, the track or chain about to be placed, a
+     * table cloth's shop or a shopping list: the ingredients (each had or missing), whether there is an output, the
+     * results and whether they can be crafted; and for a shop, whether it is a checkout, the stock and the purchases made
+     */
+    public record Blueprint(List<Stack> ingredients, boolean noOutput, List<Stack> results, boolean craftable, boolean shop, boolean checkout, int stock,
+                            int purchases) {
+    }
+
+    private static void stacks(Out out, List<Stack> stacks) throws IOException {
+        out.count(stacks.size());
+        for (Stack stack : stacks) {
+            out.text(stack.item());
+            out.out.writeInt(stack.count());
+            out.out.writeBoolean(stack.had());
+        }
+    }
+
+    private static List<Stack> stacks(In in) throws IOException {
+        int count = in.count();
+        List<Stack> stacks = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            stacks.add(new Stack(in.text(), in.in.readInt(), in.in.readBoolean()));
+        }
+        return stacks;
+    }
+
+    public static byte[] blueprint(Blueprint blueprint) {
+        return write(out -> {
+            stacks(out, blueprint.ingredients());
+            out.out.writeBoolean(blueprint.noOutput());
+            stacks(out, blueprint.results());
+            out.out.writeBoolean(blueprint.craftable());
+            out.out.writeBoolean(blueprint.shop());
+            out.out.writeBoolean(blueprint.checkout());
+            out.out.writeInt(blueprint.stock());
+            out.out.writeInt(blueprint.purchases());
+        });
+    }
+
+    public static Blueprint readBlueprint(byte[] data) {
+        return read(data, in -> new Blueprint(stacks(in), in.in.readBoolean(), stacks(in), in.in.readBoolean(), in.in.readBoolean(), in.in.readBoolean(),
+            in.in.readInt(), in.in.readInt()));
+    }
+
+    // --- The track placement hint ---
+
+    /**
+     * The hint Create shows above the hotbar while a curve of track is being placed (hold the sprint key for a smooth
+     * curve): its text, the key named as the recorder had it bound, and how far it has warmed up (4 to 20 ticks), which
+     * it fades in by
+     */
+    public record TrackHint(String text, int warmup) {
+
+        /** How opaque the hint is drawn, as Create works it out */
+        public float alpha() {
+            return Math.max(0.1F, Math.min(1.0F, (this.warmup - 4) / 3.0F));
+        }
+    }
+
+    public static byte[] trackHint(TrackHint hint) {
+        return write(out -> {
+            out.text(hint.text());
+            out.out.writeByte(hint.warmup());
+        });
+    }
+
+    public static TrackHint readTrackHint(byte[] data) {
+        return read(data, in -> new TrackHint(in.text(), in.in.readByte()));
+    }
+
+    // --- Placement helpers ---
+
+    /**
+     * A ghost block a placement helper shows: where, its state, how opaque, whether it breathes (then its opacity is
+     * Catnip's own over time), and whether it is the see-through kind
+     */
+    public record Ghost(long pos, String state, float alpha, boolean breathing, boolean transparent) {
+    }
+
+    /**
+     * What a placement helper shows (a shaft held at a shaft, say): the arrow round the crosshair pointing at where the
+     * block would go (how far it has faded in, by Catnip's count of 0 to 10, the angle it is drawn at and the angle
+     * snapped to its steps, the recorder's setting of how it is drawn and its size), and the ghost blocks in the world
+     */
+    public record Placement(int fade, float angle, float snapped, String mode, float scale, List<Ghost> ghosts) {
+
+        /** The arrow's opacity, as Catnip works it out from its count */
+        public float alpha() {
+            float progress = Math.min(this.fade / 10.0F, 1.0F);
+            return progress * progress;
+        }
+    }
+
+    public static byte[] placement(Placement placement) {
+        return write(out -> {
+            out.out.writeByte(placement.fade());
+            out.out.writeFloat(placement.angle());
+            out.out.writeFloat(placement.snapped());
+            out.text(placement.mode());
+            out.out.writeFloat(placement.scale());
+            out.count(placement.ghosts().size());
+            for (Ghost ghost : placement.ghosts()) {
+                out.out.writeLong(ghost.pos());
+                out.text(ghost.state());
+                out.out.writeFloat(ghost.alpha());
+                out.out.writeBoolean(ghost.breathing());
+                out.out.writeBoolean(ghost.transparent());
+            }
+        });
+    }
+
+    public static Placement readPlacement(byte[] data) {
+        return read(data, in -> {
+            int fade = in.in.readByte();
+            float angle = in.in.readFloat();
+            float snapped = in.in.readFloat();
+            String mode = in.text();
+            float scale = in.in.readFloat();
+            int count = in.count();
+            List<Ghost> ghosts = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                ghosts.add(new Ghost(in.in.readLong(), in.text(), in.in.readFloat(), in.in.readBoolean(), in.in.readBoolean()));
+            }
+            return new Placement(fade, angle, snapped, mode, scale, ghosts);
+        });
+    }
+
+    // --- The wand of symmetry's mirror in the world ---
+
+    /** A mirror a wand of symmetry in the hotbar has placed: which (0 a plane, 1 two crossed planes, 2 three), where, and how it is turned */
+    public record Mirror(int kind, double x, double y, double z, int orientation) {
+    }
+
+    public static byte[] mirrors(List<Mirror> mirrors) {
+        return write(out -> {
+            out.count(mirrors.size());
+            for (Mirror mirror : mirrors) {
+                out.out.writeByte(mirror.kind());
+                out.out.writeDouble(mirror.x());
+                out.out.writeDouble(mirror.y());
+                out.out.writeDouble(mirror.z());
+                out.out.writeByte(mirror.orientation());
+            }
+        });
+    }
+
+    public static List<Mirror> readMirrors(byte[] data) {
+        return read(data, in -> {
+            int count = in.count();
+            List<Mirror> mirrors = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                mirrors.add(new Mirror(in.in.readByte(), in.in.readDouble(), in.in.readDouble(), in.in.readDouble(), in.in.readByte()));
+            }
+            return mirrors;
+        });
+    }
+
+    // --- Extras for the stock keeper's request window ---
+
+    /**
+     * What the stock keeper's request window holds that the server never sent: the search as typed (whether it is being
+     * typed in, and where), the address, the order being built (each item and how many), and how far the list is scrolled
+     */
+    public record StockKeeper(String search, boolean searching, int cursor, String address, List<Stack> order, float scroll) {
+    }
+
+    public static byte[] stockKeeper(StockKeeper keeper) {
+        return write(out -> {
+            out.text(keeper.search());
+            out.out.writeBoolean(keeper.searching());
+            out.out.writeInt(keeper.cursor());
+            out.text(keeper.address());
+            stacks(out, keeper.order());
+            out.out.writeFloat(keeper.scroll());
+        });
+    }
+
+    public static StockKeeper readStockKeeper(byte[] data) {
+        return read(data, in -> new StockKeeper(in.text(), in.in.readBoolean(), in.in.readInt(), in.text(), stacks(in), in.in.readFloat()));
     }
 
     // --- Writing and reading ---

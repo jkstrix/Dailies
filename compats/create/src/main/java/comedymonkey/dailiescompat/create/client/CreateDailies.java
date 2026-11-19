@@ -5,10 +5,12 @@ import com.simibubi.create.content.contraptions.wrench.RadialWrenchMenu;
 import com.simibubi.create.content.equipment.clipboard.ClipboardScreen;
 import com.simibubi.create.content.equipment.symmetryWand.SymmetryWandScreen;
 import com.simibubi.create.content.equipment.toolbox.RadialToolboxMenu;
+import com.simibubi.create.content.equipment.zapper.terrainzapper.WorldshaperScreen;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftScreen;
 import com.simibubi.create.content.logistics.factoryBoard.FactoryPanelScreen;
 import com.simibubi.create.content.redstone.displayLink.DisplayLinkScreen;
 import com.simibubi.create.content.redstone.thresholdSwitch.ThresholdSwitchScreen;
+import com.simibubi.create.content.schematics.client.SchematicEditScreen;
 import com.simibubi.create.content.schematics.client.SchematicPromptScreen;
 import com.simibubi.create.content.trains.station.AssemblyScreen;
 import com.simibubi.create.content.trains.station.StationScreen;
@@ -55,10 +57,14 @@ import java.util.function.Supplier;
  * naming a new one ({@link SchematicParts});</li>
  * <li>the line Create puts above the hotbar itself, the bar shown while a train is driven, and the lines shown while a
  * linked controller is bound ({@link CreateHud}); the wand of symmetry's screen ({@link SymmetryPart});</li>
- * <li>the toolbox's and the wrench's selection wheels, shown while their keys are held ({@link Wheels}).</li>
+ * <li>the toolbox's and the wrench's selection wheels, shown while their keys are held ({@link Wheels});</li>
+ * <li>the worldshaper's and the schematic's edit screens ({@link EditScreens}), the toolbox's marks on the hotbar, the
+ * row shown for a blueprint, track, chain or shop, the track placement hint and a placement helper's arrow and ghost
+ * blocks ({@link PlayHud}), the wand of symmetry's mirror in the world ({@link WorldMarks}), and the stock keeper's
+ * search, address, order and scroll as extras for its window ({@link StockKeeperExtras}).</li>
  * </ul>
  * Create's other windows the server opens (the linked controller, the toolbox, the schematic table and cannon, the
- * crafting blueprint, the stock keeper and the rest) are recorded and drawn by Dailies itself and need nothing here.
+ * crafting blueprint and the rest) are recorded and drawn by Dailies itself and need nothing here.
  * Each state is the least that draws its part again, and the whole of it; Dailies writes it when it changes and keeps
  * it for snapshots, jumps and trims.
  */
@@ -141,6 +147,17 @@ public final class CreateDailies implements DailiesCompat {
         // 6. The selection wheels, which are play: the toolbox's and the wrench's
         claims.screen(Wheels.TOOLBOX, RadialToolboxMenu.class, screen(Wheels::captureToolbox, Wheels::buildToolbox, 1));
         claims.screen(Wheels.WRENCH, RadialWrenchMenu.class, screen(Wheels::captureWrench, Wheels::buildWrench, 1));
+        // 7. The rest of play: the worldshaper's and the schematic's edit screens, the toolbox's marks, the blueprint row,
+        // the track hint, placement helpers, the wand of symmetry's mirror, and the stock keeper's search and order
+        claims.screen(EditScreens.WORLDSHAPER, WorldshaperScreen.class, screen(EditScreens::captureWorldshaper, EditScreens::buildWorldshaper, 1));
+        claims.screen(EditScreens.SCHEMATIC_EDIT, SchematicEditScreen.class,
+            screen(EditScreens::captureSchematicEdit, EditScreens::buildSchematicEdit, TYPING_TICKS));
+        claims.overlay(PlayHud.TOOLBOX_MARKS, overlay(PlayHud::captureToolboxMarks, PlayHud::drawToolboxMarks, 1));
+        claims.overlay(PlayHud.BLUEPRINT, overlay(PlayHud::captureBlueprint, PlayHud::drawBlueprint, SETTING_TICKS));
+        claims.overlay(PlayHud.TRACK_HINT, overlay(PlayHud::captureTrackHint, PlayHud::drawTrackHint, 1));
+        claims.overlay(PlayHud.PLACEMENT, overlay(PlayHud::capturePlacement, PlayHud::drawPlacement, 1));
+        claims.overlay(WorldMarks.MIRROR, overlay(WorldMarks::captureMirrors, WorldMarks::noteMirrors, 1));
+        claims.windowExtras(StockKeeperExtras.NAME, StockKeeperExtras.MENU, extras(StockKeeperExtras::capture, StockKeeperExtras::apply, TYPING_TICKS));
     }
 
     @Override
