@@ -13,6 +13,7 @@ pluginManagement {
 rootProject.name = 'dailies'
 
 // Compats for other people's mods, each a mod of its own built with Dailies (specification CPT-5): the template that
-// each is started from, and Create's
+// each is started from, Create's and Jade's
 include 'compats:template'
 include 'compats:create'
+include 'compats:jade'

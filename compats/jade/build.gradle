@@ -1,0 +1,73 @@
+// The Jade compat (specification CPT-8): a small mod of its own, dailies_jade, that records the box Jade draws over play
+// (what the player looks at) through Dailies' compat API and draws it again in playback with Jade's own elements. Like
+// the Create compat it has only a client half: the box is recorded as the recorder's game drew it, server data and all,
+// so it needs nothing from a server. It loads and runs without Dailies or Jade, doing nothing: both are soft
+// dependencies, only compiled against.
+//
+// Built with Dailies (gradlew build in the repository builds it too); the modded test loads its jar (installTestMods).
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+version = '1.0.0'
+group = 'comedymonkey.dailiescompat'
+
+base {
+    archivesName = 'dailies-compat-jade-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    // Jade as Modrinth publishes it: the same jar as the one in the owner's pack
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies_jade {
+            sourceSet sourceSets.main
+        }
+    }
+    // No runs: the compat is tried in game beside Dailies and Jade, in the modded test (its jade group)
+}
+
+// Jade 15.10.6 for NeoForge 1.21.1, the version in the owner's pack and the modded test
+def jadeVersion = '15.10.6+neoforge'
+
+dependencies {
+    // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
+    compileOnly project(path: ':', configuration: 'dailiesApi')
+    // Jade: the same, so the mod runs without Jade
+    compileOnly("maven.modrinth:jade:${jadeVersion}") { transitive = false }
+
+    // The state's unit tests need neither the game nor Jade: the state is plain bytes
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

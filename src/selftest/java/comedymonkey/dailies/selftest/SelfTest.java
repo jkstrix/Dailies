@@ -244,6 +244,9 @@ public final class SelfTest {
             // Create compat (compats/create, CPT-6): in a world and a recording of its own; skipped with a line without Create
             // or the compat
             always("create", "CompatDisplaySteps.create", () -> CompatDisplaySteps.create(this)),
+            // Jade's box over play, through the Jade compat (compats/jade, CPT-8): in a world and a recording of its own; skipped
+            // with a line without Jade or the compat
+            always("jade", "CompatDisplaySteps.jade", () -> CompatDisplaySteps.jade(this)),
             // The owner's own mods, each through the compat in the mod itself, in a world and a recording of its own; skipped
             // with a line without the mod, or a version of it without the compat
             always("createaddons", "CompatDisplaySteps.createAddons", () -> CompatDisplaySteps.createAddons(this)),

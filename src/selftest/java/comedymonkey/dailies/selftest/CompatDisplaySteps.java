@@ -53,6 +53,18 @@ final class CompatDisplaySteps {
     }
 
     /**
+     * Jade's box on a chest with items in it, a furnace smelting, a pig with its hearts and (with Create) a creative motor,
+     * through the Jade compat, a mod of its own (compats/jade): -PdailiesOnly=jade
+     */
+    static void jade(SelfTest test) throws Exception {
+        if (Host.get().isModLoaded("jade") && !Host.get().isModLoaded("dailies_jade")) {
+            test.skip("the Dailies Jade compat (dailies_jade) is not installed: Jade's box in recordings was not tried");
+            return;
+        }
+        run(test, "jade", "Jade", "dailies_jade:jade", "Dailies Jade");
+    }
+
+    /**
      * ComedyMonkey's Create Addons' windows (with its buttons put back), its machines' settings screens, the stations, the
      * jetpack's gauge, the villager goggles, the encased lines seen through goggles and the line container picking puts up,
      * through the compat in the mod itself: -PdailiesOnly=createaddons
