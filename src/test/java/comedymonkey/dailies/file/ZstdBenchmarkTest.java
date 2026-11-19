@@ -48,18 +48,33 @@ class ZstdBenchmarkTest {
     private static final int SAMPLE_TIMES_DICTIONARY = 100;
 
     /** One recording's blocks, unpacked, by kind */
-    private record Corpus(String name, List<byte[]> blobs, List<byte[]> parts, long storedBlobBytes, long storedPartBytes) {
+    private record Corpus(String name, List<byte[]> blobs, List<byte[]> parts, List<byte[]> pieces, long storedBlobBytes, long storedPartBytes) {
         List<byte[]> of(Kind kind) {
-            return kind == Kind.BLOBS ? this.blobs : this.parts;
+            return switch (kind) {
+                case BLOBS -> this.blobs;
+                case PARTS -> this.parts;
+                case PIECES -> this.pieces;
+            };
         }
 
+        /** What the recording holds for the kind, packed; -1 for the pieces, which no recording on disk holds yet */
         long stored(Kind kind) {
-            return kind == Kind.BLOBS ? this.storedBlobBytes : this.storedPartBytes;
+            return switch (kind) {
+                case BLOBS -> this.storedBlobBytes;
+                case PARTS -> this.storedPartBytes;
+                case PIECES -> -1;
+            };
         }
     }
 
     private enum Kind {
-        BLOBS("Shared blobs"), PARTS("Segment parts");
+        BLOBS("Shared blobs, as recordings stored them until section storage (whole chunks)"),
+        PARTS("Segment parts"),
+        /**
+         * The same shared blobs cut as section storage cuts them (capture.ChunkPieces), each distinct piece once: what a
+         * recording in the new format stores for the same play, measured without the game
+         */
+        PIECES("Section pieces: the same chunks stored by section, each distinct piece once (the new format)");
 
         final String title;
 
@@ -244,8 +259,8 @@ class ZstdBenchmarkTest {
             System.getProperty("os.name"), Runtime.getRuntime().availableProcessors()));
         report.append("Recordings:\n");
         for (Corpus corpus : corpora) {
-            report.append(String.format(Locale.ROOT, "- %s: %d shared blobs (%.1f MB raw), %d segment parts (%.1f MB raw)%n", corpus.name,
-                corpus.blobs.size(), total(corpus.blobs) / MB, corpus.parts.size(), total(corpus.parts) / MB));
+            report.append(String.format(Locale.ROOT, "- %s: %d shared blobs (%.1f MB raw), %d segment parts (%.1f MB raw); cut by section: %d distinct pieces (%.1f MB raw)%n", corpus.name,
+                corpus.blobs.size(), total(corpus.blobs) / MB, corpus.parts.size(), total(corpus.parts) / MB, corpus.pieces.size(), total(corpus.pieces) / MB));
         }
         report.append('\n');
 
@@ -295,8 +310,10 @@ class ZstdBenchmarkTest {
 
         Result deflate3 = results.get(1);
         // Deflate 3 here is what the recording holds: the same zlib at the same level gives the same bytes
-        long stored = corpora.stream().mapToLong(corpus -> corpus.stored(kind)).sum();
-        assertEquals(stored, deflate3.packed, "Deflate 3 should give exactly what the recordings hold");
+        if (kind != Kind.PIECES) {
+            long stored = corpora.stream().mapToLong(corpus -> corpus.stored(kind)).sum();
+            assertEquals(stored, deflate3.packed, "Deflate 3 should give exactly what the recordings hold");
+        }
 
         StringBuilder table = new StringBuilder();
         long raw = deflate3.raw;
@@ -399,7 +416,25 @@ class ZstdBenchmarkTest {
             }
         }
         String name = file.getFileName().toString().replaceFirst("\\.dailies$", "");
-        return new Corpus(name, blobs, parts, storedBlobs, storedParts);
+        return new Corpus(name, blobs, parts, pieces(blobs), storedBlobs, storedParts);
+    }
+
+    /**
+     * The shared blobs cut as the recorder now cuts chunks and light (a chunk is tried first, then a light packet; what
+     * is neither stays whole), with every distinct piece, part or list, kept once by its name, as the store keeps them
+     */
+    private static List<byte[]> pieces(List<byte[]> blobs) {
+        Map<String, byte[]> distinct = new LinkedHashMap<>();
+        for (byte[] blob : blobs) {
+            comedymonkey.dailies.file.PacketPieces.Split split = comedymonkey.dailies.capture.ChunkPieces.split(blob, comedymonkey.dailies.capture.ChunkPieces.Shape.CHUNK);
+            if (split.blobs().size() <= 1) {
+                split = comedymonkey.dailies.capture.ChunkPieces.split(blob, comedymonkey.dailies.capture.ChunkPieces.Shape.LIGHT);
+            }
+            for (comedymonkey.dailies.file.PacketPieces.Blob piece : split.blobs()) {
+                distinct.putIfAbsent(piece.hex(), piece.copy());
+            }
+        }
+        return new ArrayList<>(distinct.values());
     }
 
     private static long total(List<byte[]> blocks) {
