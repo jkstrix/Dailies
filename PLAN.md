@@ -74,6 +74,7 @@ Every task below follows these. Where a task once fell short of one, it has been
 | 3.8 | Done | BUD-1 to BUD-8 are in the spec. BUD-2 is over budget in generated terrain (225 to 354 MB an hour, target 150). The second half of BUD-5, and BUD-8, are not measured |
 | 3.9 | Done | Chapter XIV has a step for every requirement the scripted run tests, and lists what nothing tests yet |
 | 3.10 | Done | |
+| 3.11 | Underway | Found 19 November 2026: the owner's wings played the wrong sound in a server recording |
 | 4.1 | Partly | `reference/` compiles with every build; the carry-over script is outside this repository |
 | 4.2 | Done | `tools/ci/check_spec.py` checks ids, citations, links and the HTML; it runs first in the scripted-test workflow |
 | 4.3 | Can't tell | Needs the earlier build |
@@ -380,7 +381,7 @@ The game's standard settings screen shows every choice as a "< value >" button t
 - **Decided: LGPL.** x264 and x265 would need a GPL build and make Dailies GPL; hardware encoders on every GPU vendor cover H.264, H.265 and AV1 instead.
 - **Decided: no OpenH264.** Cisco's patent licence only covers binaries fetched from Cisco, so software H.264 is left out rather than bundled or downloaded.
 
-### 3.2 to 3.10
+### 3.2 to 3.11
 
 | # | Problem | Fix | Side | Size |
 |---|---|---|---|---|
@@ -393,6 +394,7 @@ The game's standard settings screen shows every choice as a "< value >" button t
 | 3.8 | The spec has few measurable targets. | Add budgets the scripted run measures (below). | Spec | M |
 | 3.9 | The scripted run does not cover anything added by this plan. | Add a test step per new requirement, and list what still needs two players or a person. | Spec | M |
 | 3.10 | Nothing runs the scripted test automatically. | Add a CI job on a self-hosted runner with a GPU (the owner's PC is enough) that builds every part and runs the scripted test on each change, keeping the log, screenshots and measurements. | Folder | M |
+| 3.11 | A recording made on a server plays some things wrong when the player's own game numbers a registry differently from the server: the owner heard his jetpack's wings play the wrong sound. Sounds, particles, menu types and other registry entries travel as numbers, and NeoForge's handover of the server's numbering at join is in the recording but skipped in playback, so the numbers are read against the player's own. | While a recording plays, use the server's numbering it holds (the frozen registry handover NeoForge sent at join), as NeoForge does on joining a server, and put the player's own back when playback ends or fails. It needs no mod's help and fixes recordings already made. A test records on a server whose mods differ from the client's (one sound-adding mod fewer, or ids shifted) and checks the right sound, particle and menu in playback. | Spec | M |
 
 ### Budgets for 3.8
 
