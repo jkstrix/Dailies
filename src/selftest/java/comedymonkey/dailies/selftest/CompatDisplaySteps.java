@@ -134,6 +134,13 @@ final class CompatDisplaySteps {
                 WindowSteps.ride(test, minecraft, ticks.get(i));
                 if (!shown.drawnAs().equals(WindowLayer.held()) && !Compats.held().contains(shown.drawnAs())) {
                     problems.add(shown.label() + ": the recording holds " + WindowLayer.held() + " and " + Compats.held() + " at tick " + ticks.get(i) + ", not " + shown.drawnAs());
+                    // Which ticks around it do hold it, to tell a state never recorded from one a jump loses
+                    StringBuilder seen = new StringBuilder();
+                    for (int t = ticks.get(i) - 24; t <= ticks.get(i) + 44; t += 2) {
+                        WindowSteps.ride(test, minecraft, t);
+                        seen.append(t).append(shown.drawnAs().equals(WindowLayer.held()) || Compats.held().contains(shown.drawnAs()) ? "+ " : "- ");
+                    }
+                    test.log(shown.label() + ": held (+) or not (-) by tick around it: " + seen);
                     continue;
                 }
                 if (!drawn(test, shown.drawnAs())) {
