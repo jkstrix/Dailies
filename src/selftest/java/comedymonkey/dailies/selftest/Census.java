@@ -92,8 +92,17 @@ final class Census {
     List<String> changes;
     /** Block light and sky light at every watched block, sixteen times the one plus the other, where the blocks are kept */
     byte[] light;
-    /** The same three ticks on in the live game, which takes light in a little at a time: either is right for playback */
+    /** The same three ticks on in the live game, which takes light in a little at a time: this, light or lightDrawn is right for playback */
     byte[] lightLater;
+    /**
+     * The same on the first frame the live game drew after this tick; null when another tick came first. The game works
+     * out what the blocks a tick changed do to the light only as it draws, so the light read at the end of a tick is
+     * still that of the tick before, and a jump, which settles the light where it lands, shows this one. A block there
+     * for a single tick had its light only here: oak planks set over the addon's bearing at tick 2061 and taken into
+     * its contraption at 2062 (sky 14 beneath them, 15 at the end of 2061 and again by 2064), and the grass a ghast
+     * fireball blew away at 679 in the bestiary, open to the sky until its fire came at 680
+     */
+    byte[] lightDrawn;
     int recorderId = Integer.MIN_VALUE;
 
     private Census(int tick) {
@@ -158,6 +167,7 @@ final class Census {
             respawnTicks.clear();
         }
         previous = null;
+        awaitingDraw = null;
         lastPlayed = -1;
         TRACKER.forget();
         mode = wanted;
@@ -179,8 +189,18 @@ final class Census {
         GRABS.add(new Object[]{file, new int[]{framesOn}});
     }
 
+    /** Live: the tick just written down whose light is read again once a frame has been drawn after it */
+    private static Census awaitingDraw = null;
+
     private static void drawn() {
         frames++;
+        Census waiting = awaitingDraw;
+        awaitingDraw = null;
+        Minecraft minecraft = Minecraft.getInstance();
+        if (waiting != null && mode == Mode.LIVE && minecraft.level != null && waiting.dimension.equals(minecraft.level.dimension().location().toString())) {
+            byte[] drawn = scanLight(minecraft.level, boxesAt(waiting.dimension, waiting.tick));
+            waiting.lightDrawn = drawn.length == waiting.light.length ? drawn : null;
+        }
         for (Object[] grab : GRABS) {
             int[] left = (int[]) grab[1];
             if (left[0]-- <= 0) {
@@ -218,6 +238,8 @@ final class Census {
                 Census census = take(minecraft, tick, true, previous, TRACKER, keyTicks.contains(tick) || tick % BestiarySteps.EVERY == 0);
                 live.put(tick, census);
                 previous = census;
+                // A tick that came before any frame was drawn leaves the one before it with no light of its own drawn
+                awaitingDraw = census.light != null ? census : null;
                 Census earlier = live.get(tick - 3);
                 if (earlier != null && earlier.light != null && earlier.dimension.equals(census.dimension)) {
                     byte[] later = scanLight(minecraft.level, boxesAt(earlier.dimension, earlier.tick));
@@ -641,7 +663,7 @@ final class Census {
             int wide = box[3] - box[0] + 1, high = box[4] - box[1] + 1, deep = box[5] - box[2] + 1;
             for (int i = 0; i < wide * high * deep; i++) {
                 byte was = then.light[offset + i], is = now[offset + i];
-                if (was != is && (then.lightLater == null || then.lightLater[offset + i] != is)) {
+                if (was != is && (then.lightLater == null || then.lightLater[offset + i] != is) && (then.lightDrawn == null || then.lightDrawn[offset + i] != is)) {
                     differ.add((box[0] + i % wide) + " " + (box[1] + i / (wide * deep)) + " " + (box[2] + (i / wide) % deep) + ": " + ((was >> 4) & 15) + "/" + (was & 15) + " -> " + ((is >> 4) & 15) + "/" + (is & 15));
                 }
             }
@@ -1211,6 +1233,7 @@ final class Census {
             out.strings(census.changes);
             out.bytes(census.light);
             out.bytes(census.lightLater);
+            out.bytes(census.lightDrawn);
             out.json.endArray();
         }
         out.json.endArray();
@@ -1260,6 +1283,8 @@ final class Census {
             census.changes = in.strings();
             census.light = in.bytes();
             census.lightLater = in.bytes();
+            // Notes written before the drawn light was kept end here; they play as they did, without it
+            census.lightDrawn = in.more() ? in.bytes() : null;
             in.json.endArray();
             live.put(census.tick, census);
         }
