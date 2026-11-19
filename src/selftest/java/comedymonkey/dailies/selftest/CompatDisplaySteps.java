@@ -51,6 +51,23 @@ final class CompatDisplaySteps {
         run(test, "create", "Create", "dailies_create:create", "Dailies Create");
     }
 
+    /**
+     * ComedyMonkey's Create Addons' windows (with its buttons put back), its machines' settings screens, the stations, the
+     * jetpack's gauge, the villager goggles, the encased lines seen through goggles and the line container picking puts up,
+     * through the compat in the mod itself: -PdailiesOnly=createaddons
+     */
+    static void createAddons(SelfTest test) throws Exception {
+        run(test, "comedymonkeysaddons", "ComedyMonkey's Create Addons", "comedymonkeysaddons:screens", "Dailies Create Addons");
+    }
+
+    /**
+     * McpCraft's job board on each tab, a confirm over it, a Job Storage, its two prompts and the track markers' toggle line,
+     * through the compat in the mod itself: -PdailiesOnly=mcpcraft
+     */
+    static void mcpCraft(SelfTest test) throws Exception {
+        run(test, "mcpcraft", "McpCraft", "mcpcraft:screens", "Dailies McpCraft");
+    }
+
     static void run(SelfTest test, String modId, String modName, String compatId, String world) throws Exception {
         if (!Host.get().isModLoaded(modId)) {
             test.skip(modName + " is not installed: its screens in recordings were not tried");
@@ -90,11 +107,15 @@ final class CompatDisplaySteps {
             test.waitTicks(20);
             ticks.add(test.onClient(() -> Recorder.get().recordingTick()));
             test.waitTicks(20);
-            test.onClientRun(() -> {
-                if (minecraft.screen != null) {
-                    minecraft.screen.onClose();
-                }
-            });
+            // Closed as the player closes it: a question asked over another screen goes back to it, which is closed in turn
+            for (int closes = 0; closes < 3 && test.onClient(() -> minecraft.screen != null); closes++) {
+                test.onClientRun(() -> {
+                    if (minecraft.screen != null) {
+                        minecraft.screen.onClose();
+                    }
+                });
+                test.waitTicks(2);
+            }
             test.waitFor(() -> minecraft.screen == null, 10, shown.label() + " to close in the live game");
             test.waitTicks(20);
         }
