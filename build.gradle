@@ -184,9 +184,14 @@ dependencies {
 
     // Zstandard (zstd-jni, BSD 2-Clause, with the native zstd for every platform Dailies ships for), which every block of a
     // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
-    // The dev runs need it on the classpath that is not loaded as boot modules, as MDG asks of libraries for 1.21.1
+    // The runs that load Dailies from its classes need it on the classpath that is not loaded as boot modules, as MDG asks
+    // of libraries for 1.21.1. Only those: the runs that load the built jar (testModded, playModded, manualShots) get it
+    // from inside the jar, and a second copy on their classpath stopped the game ("reads more than one module named
+    // com.github.luben.zstd_jni")
     jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
-    additionalRuntimeClasspath 'com.github.luben:zstd-jni:1.5.7-25'
+    for (run in ['client', 'testClient', 'handsOn', 'kitShots']) {
+        add("${run}AdditionalRuntimeClasspath", 'com.github.luben:zstd-jni:1.5.7-25')
+    }
 
     // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
     compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
