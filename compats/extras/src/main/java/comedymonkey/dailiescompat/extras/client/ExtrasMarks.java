@@ -18,8 +18,7 @@ public final class ExtrasMarks {
     public static final int NATURES = 1;
 
     /** The mods' classes whose lines above the hotbar are the player's own game's alone, never sent by a server as well */
-    private static final String[] LINES_OF = {"net.mehvahdjukaar.vista.client.", "net.p3pp3rf1y.sophisticatedbackpacks.client.",
-        "de.maxhenkel.corpse.net.MessageOpenHistory"};
+    private static final String[] LINES_OF = {"net.p3pp3rf1y.sophisticatedbackpacks.client.", "de.maxhenkel.corpse.net.MessageOpenHistory"};
     /** As far down the stack as the other compats look for their own lines */
     private static final int DEPTH = 12;
     private static final StackWalker WALKER = StackWalker.getInstance();
@@ -65,8 +64,8 @@ public final class ExtrasMarks {
     // --- The line above the hotbar ---
 
     /**
-     * The game puts a line above the hotbar: kept when one of the mods' own client code put it there (Vista's viewfinder
-     * hint, Sophisticated Backpacks' tool swap refused, Corpse's empty death history), found by a walk of the nearest
+     * The game puts a line above the hotbar: kept when one of the mods' own client code put it there (Sophisticated
+     * Backpacks' tool swap refused, Corpse's empty death history), found by a walk of the nearest
      * frames of the stack. Lines a server sends, and those the mods set on both sides (whose copy from the server arrives
      * in a packet the recording holds), are left alone.
      */

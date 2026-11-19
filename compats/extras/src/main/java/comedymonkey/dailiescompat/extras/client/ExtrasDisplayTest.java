@@ -15,11 +15,6 @@ import de.maxhenkel.pipez.gui.FilterScreen;
 import de.maxhenkel.pipez.gui.containerfactory.FilterContainerProvider;
 import de.maxhenkel.pipez.gui.containerfactory.PipeContainerProvider;
 import com.blackgear.vanillabackport.common.level.entities.mob.animal.nautilus.AbstractNautilus;
-import io.github.kosmx.emotes.arch.screen.ingame.FastMenuScreen;
-import net.mehvahdjukaar.vista.client.ViewFinderController;
-import net.mehvahdjukaar.vista.client.ui.SignalProjectorScreen;
-import net.mehvahdjukaar.vista.common.projector.SignalProjectorBlockEntity;
-import net.mehvahdjukaar.vista.common.view_finder.ViewFinderBlockEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.BlockPos;
@@ -43,21 +38,15 @@ import java.util.function.Predicate;
 
 /**
  * The display test of the compat for the rest of the pack, run by Dailies' scripted run (its extras group). The stage,
- * around the player at the middle of a flat world: Vista's signal projector two blocks west and a viewfinder two blocks
- * east, and a Pipez universal pipe two blocks south and two west, pulling from a chest beyond it. While recording, the
- * player, in survival, holds Explorer's Compass and Nature's Compass each with something found, opens Emotecraft's emote
- * wheel, types an address into the projector, takes the viewfinder over (and, again, for Vista's line above the hotbar),
- * opens a backpack held in the hand and one with a pickup upgrade's tab open, opens the Curios window, opens a corpse
+ * around the player at the middle of a flat world: a Pipez universal pipe two blocks south and two west, pulling from a
+ * chest beyond it. While recording, the player, in survival, holds Explorer's Compass and Nature's Compass each with
+ * something found, opens a backpack held in the hand and one with a pickup upgrade's tab open, opens the Curios window, opens a corpse
  * laid two blocks off, opens the pipe's settings on its first and its second tab and a filter with an item typed, and
  * opens a tamed nautilus' inventory. Dailies then checks each is drawn riding along in first person, and nothing in third
  * person or flying free.
  * <p>
  * The mods' own conditions for drawing, met here: a compass shows its lines while held in either hand with no screen
- * open, from its state on the item (found, with a structure or biome and where), set as the item is given; the wheel is
- * the screen Emotecraft's key opens, and a game without emotes on its wheel shows it empty, which is still the wheel;
- * the projector's screen is opened as using the block opens it, on the player's side; the viewfinder is taken over as
- * using it does, by the server, which then tells the player's game, and Vista draws its scope while it is held and its
- * hint above the hotbar as it is taken; the backpack is opened as using it in the hand opens it, its upgrade and open tab
+ * open, from its state on the item (found, with a structure or biome and where), set as the item is given; the backpack is opened as using it in the hand opens it, its upgrade and open tab
  * set on the backpack first; the Curios window as Curios' key opens it, by the server; the corpse is opened by the server
  * as using it does, once the player's game has it, within reach, and holding the items the player carried; the pipe's
  * windows as using its pulling side and its filter button open them, by the server; and the nautilus, once tamed and
@@ -71,12 +60,8 @@ final class ExtrasDisplayTest implements DisplayTest {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    static final BlockPos PROJECTOR = new BlockPos(-2, -60, 0);
-    static final BlockPos VIEWFINDER = new BlockPos(2, -60, 0);
     static final BlockPos PIPE = new BlockPos(-2, -60, 2);
     static final BlockPos PIPE_CHEST = new BlockPos(-2, -60, 3);
-    /** The address typed into the projector */
-    static final String ADDRESS = "https://example.com/feed";
 
     private final Predicate<String> loaded;
 
@@ -86,10 +71,6 @@ final class ExtrasDisplayTest implements DisplayTest {
 
     @Override
     public void stage(Stage stage) throws Exception {
-        if (this.loaded.test(ExtrasCompat.VISTA)) {
-            stage.command("setblock -2 -60 0 vista:wave_collector");
-            stage.command("setblock 2 -60 0 vista:viewfinder[facing=up]");
-        }
         if (this.loaded.test(ExtrasCompat.PIPEZ)) {
             stage.command("setblock -2 -60 3 minecraft:chest[facing=north]");
             stage.command("setblock -2 -60 2 pipez:universal_pipe");
@@ -102,14 +83,8 @@ final class ExtrasDisplayTest implements DisplayTest {
         }
     }
 
-    /**
-     * Puts the player back as each display starts: nothing held, no viewfinder taken over. The test closes a screen left
-     * open, but a viewfinder is not a screen
-     */
+    /** Puts the player back as each display starts: nothing held, at the middle. The test closes a screen left open */
     private void reset(Stage stage) throws Exception {
-        if (this.loaded.test(ExtrasCompat.VISTA)) {
-            stage.onClient(VistaSteps::letGo);
-        }
         stage.command("item replace entity @s weapon.mainhand with minecraft:air");
         stage.command("tp @s 0.5 -60 0.5 0 0");
         stage.waitTicks(3);
@@ -139,37 +114,6 @@ final class ExtrasDisplayTest implements DisplayTest {
                 stage.command("item replace entity @s weapon.mainhand with naturescompass:naturescompass[naturescompass:compass_state=2,"
                     + "naturescompass:biome_id=\"minecraft:cherry_grove\",naturescompass:found_x=-480,naturescompass:found_z=256]");
                 stage.waitTicks(3);
-            }));
-        }
-        if (this.loaded.test(ExtrasCompat.EMOTECRAFT)) {
-            displays.add(new Display("Emotecraft's emote wheel", prefix + EmoteWheel.NAME, stage -> {
-                reset(stage);
-                stage.onClient(EmotecraftSteps::openWheel);
-            }));
-        }
-        if (this.loaded.test(ExtrasCompat.VISTA)) {
-            displays.add(new Display("Vista's signal projector, an address typed", prefix + VistaParts.PROJECTOR, stage -> {
-                reset(stage);
-                face(stage, 90.0F, 30.0F);
-                stage.onClient(VistaSteps::openProjector);
-                stage.waitTicks(3);
-                for (char typed : ADDRESS.toCharArray()) {
-                    stage.onClient(() -> VistaSteps.type(typed));
-                }
-                stage.waitTicks(2);
-            }));
-            displays.add(new Display("Vista's viewfinder looked through", prefix + VistaParts.VIEWFINDER, stage -> {
-                reset(stage);
-                face(stage, -90.0F, 30.0F);
-                stage.onServer(VistaSteps::takeOver);
-                stage.waitTicks(5);
-                stage.onClient(VistaSteps::checkTaken);
-            }));
-            displays.add(new Display("Vista's line above the hotbar as a viewfinder is taken over", prefix + StatusLine.NAME, stage -> {
-                reset(stage);
-                face(stage, -90.0F, 30.0F);
-                stage.onServer(VistaSteps::takeOver);
-                stage.waitTicks(5);
             }));
         }
         if (this.loaded.test(ExtrasCompat.BACKPACKS)) {
@@ -246,55 +190,6 @@ final class ExtrasDisplayTest implements DisplayTest {
     }
 
     // Each mod's steps in a class of its own, so a game without the mod never loads them
-
-    /** Vista's steps */
-    private static final class VistaSteps {
-        static void openProjector() {
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.level != null && minecraft.level.getBlockEntity(PROJECTOR) instanceof SignalProjectorBlockEntity projector) {
-                SignalProjectorScreen.open(projector);
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: no signal projector at {}", PROJECTOR);
-            }
-        }
-
-        static void type(char typed) {
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.screen instanceof SignalProjectorScreen screen) {
-                screen.charTyped(typed, 0);
-            }
-        }
-
-        /** As using the viewfinder takes it over: the server makes the player its user and tells the player's game */
-        static void takeOver(ServerPlayer player) {
-            if (player.serverLevel().getBlockEntity(VIEWFINDER) instanceof ViewFinderBlockEntity viewfinder) {
-                viewfinder.tryInteracting(player, InteractionHand.MAIN_HAND, ItemStack.EMPTY, VIEWFINDER);
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: no viewfinder at {}", VIEWFINDER);
-            }
-        }
-
-        static void checkTaken() {
-            if (!ViewFinderController.isActive()) {
-                LOGGER.warn("Dailies extras compat's display test: the viewfinder was not taken over");
-            }
-        }
-
-        /** As the sneak key lets go of a viewfinder: the camera goes back to the player */
-        static void letGo() {
-            if (ViewFinderController.isActive()) {
-                ViewFinderController.stopControlling();
-            }
-        }
-    }
-
-    /** Emotecraft's steps */
-    private static final class EmotecraftSteps {
-        /** As Emotecraft's key opens it */
-        static void openWheel() {
-            Minecraft.getInstance().setScreen(new FastMenuScreen(null));
-        }
-    }
 
     /** Sophisticated Backpacks' steps */
     private static final class BackpackSteps {

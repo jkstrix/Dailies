@@ -22,14 +22,12 @@ public final class ExtrasCompat {
     /** The mods with something drawn during play for the compat to record, by mod id */
     public static final String EXPLORERS_COMPASS = "explorerscompass";
     public static final String NATURES_COMPASS = "naturescompass";
-    public static final String VISTA = "vista";
-    public static final String EMOTECRAFT = "emotecraft";
     public static final String BACKPACKS = "sophisticatedbackpacks";
     public static final String CURIOS = "curios";
     public static final String CORPSE = "corpse";
     public static final String PIPEZ = "pipez";
     public static final String VANILLA_BACKPORT = "vanillabackport";
-    public static final List<String> MODS = List.of(EXPLORERS_COMPASS, NATURES_COMPASS, VISTA, EMOTECRAFT, BACKPACKS, CURIOS, CORPSE, PIPEZ, VANILLA_BACKPORT);
+    public static final List<String> MODS = List.of(EXPLORERS_COMPASS, NATURES_COMPASS, BACKPACKS, CURIOS, CORPSE, PIPEZ, VANILLA_BACKPORT);
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public ExtrasCompat() {

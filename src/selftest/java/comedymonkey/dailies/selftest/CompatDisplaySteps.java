@@ -115,18 +115,17 @@ final class CompatDisplaySteps {
 
     /**
      * The rest of the pack, through the extras compat, a mod of its own (compats/extras): Explorer's Compass and Nature's
-     * Compass held, Emotecraft's emote wheel, Vista's signal projector, viewfinder and its line above the hotbar, a backpack
-     * (and one with an upgrade's tab open), the Curios window, a corpse, a Pipez pipe's settings on two tabs and a filter,
+     * Compass held, a backpack (and one with an upgrade's tab open), the Curios window, a corpse, a Pipez pipe's settings on two tabs and a filter,
      * and a nautilus' inventory: -PdailiesOnly=extras
      */
     static void extras(SelfTest test) throws Exception {
-        boolean installed = java.util.stream.Stream.of("explorerscompass", "naturescompass", "vista", "emotecraft", "sophisticatedbackpacks", "curios", "corpse",
-            "pipez", "vanillabackport").anyMatch(Host.get()::isModLoaded);
+        boolean installed = java.util.stream.Stream.of("explorerscompass", "naturescompass", "sophisticatedbackpacks", "curios", "corpse", "pipez",
+            "vanillabackport").anyMatch(Host.get()::isModLoaded);
         if (installed && !Host.get().isModLoaded("dailies_extras")) {
             test.skip("the Dailies extras compat (dailies_extras) is not installed: the rest of the pack's screens in recordings were not tried");
             return;
         }
-        run(test, installed ? null : "vista", "The rest of the pack", "dailies_extras:extras", "Dailies Extras");
+        run(test, installed ? null : "sophisticatedbackpacks", "The rest of the pack", "dailies_extras:extras", "Dailies Extras");
     }
 
     /**

@@ -72,95 +72,6 @@ public final class ExtrasStates {
         });
     }
 
-    // --- Vista's viewfinder ---
-
-    /** Vista's viewfinder looked through: the zoom as its bar shows it, whether it is locked, and how far the scope had opened */
-    public record Viewfinder(int zoom, boolean locked, float scope) {
-    }
-
-    public static byte[] viewfinder(Viewfinder state) {
-        return write(out -> {
-            out.out.writeInt(state.zoom());
-            out.out.writeBoolean(state.locked());
-            out.out.writeFloat(state.scope());
-        });
-    }
-
-    public static Viewfinder readViewfinder(byte[] data) {
-        return read(data, in -> new Viewfinder(in.in.readInt(), in.in.readBoolean(), in.in.readFloat()));
-    }
-
-    // --- Vista's signal projector ---
-
-    /** The signal projector's screen: the projector's place and block, the address as typed, the cursor and the end of the selection */
-    public record Projector(long pos, String block, String url, int cursor, int selection) {
-
-        public Projector {
-            Objects.requireNonNull(block);
-            Objects.requireNonNull(url);
-        }
-    }
-
-    public static byte[] projector(Projector state) {
-        return write(out -> {
-            out.out.writeLong(state.pos());
-            out.text(state.block());
-            out.text(state.url());
-            out.out.writeInt(state.cursor());
-            out.out.writeInt(state.selection());
-        });
-    }
-
-    public static Projector readProjector(byte[] data) {
-        return read(data, in -> new Projector(in.in.readLong(), in.text(), in.text(), in.in.readInt(), in.in.readInt()));
-    }
-
-    // --- Emotecraft's emote wheel ---
-
-    /** The wheel's eight places, as drawn: what the recorder's wheel shows has no emote when its id is empty */
-    public static final int PLACES = 8;
-    /** No warning over the wheel; the server has Emotecraft only through a proxy; the server has no Emotecraft */
-    public static final int NO_WARNING = 0;
-    public static final int PROXY_ONLY = 1;
-    public static final int NO_SERVER = 2;
-
-    /**
-     * Emotecraft's emote wheel: the page shown, the emote in each of its eight places (by id, with its name as the game's
-     * JSON, both empty for none), the warning over it, which of Emotecraft's two wheels and whether dark and with icons
-     * (the recorder's settings), and where the pointer was as a share of the wheel's size from its middle, so the place
-     * under it is lit as it was on a wheel of any size.
-     */
-    public record EmoteWheel(int page, List<String> emotes, List<String> names, int warning, boolean legacy, boolean dark, boolean icons, float pointerX,
-                             float pointerY) {
-
-        public EmoteWheel {
-            emotes = List.copyOf(emotes);
-            names = List.copyOf(names);
-            if (emotes.size() != names.size()) {
-                throw new IllegalArgumentException("a name for each emote");
-            }
-        }
-    }
-
-    public static byte[] emoteWheel(EmoteWheel state) {
-        return write(out -> {
-            out.out.writeInt(state.page());
-            out.texts(state.emotes());
-            out.texts(state.names());
-            out.out.writeInt(state.warning());
-            out.out.writeBoolean(state.legacy());
-            out.out.writeBoolean(state.dark());
-            out.out.writeBoolean(state.icons());
-            out.out.writeFloat(state.pointerX());
-            out.out.writeFloat(state.pointerY());
-        });
-    }
-
-    public static EmoteWheel readEmoteWheel(byte[] data) {
-        return read(data, in -> new EmoteWheel(in.in.readInt(), in.texts(), in.texts(), in.in.readInt(), in.in.readBoolean(), in.in.readBoolean(),
-            in.in.readBoolean(), in.in.readFloat(), in.in.readFloat()));
-    }
-
     // --- Items, as the game saves them ---
 
     /**
@@ -367,13 +278,6 @@ public final class ExtrasStates {
             this.bytes((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
         }
 
-        void texts(List<String> texts) throws IOException {
-            this.count(texts.size());
-            for (String text : texts) {
-                this.text(text);
-            }
-        }
-
         void bytes(byte[] bytes) throws IOException {
             this.count(bytes.length);
             this.out.write(bytes);
@@ -397,15 +301,6 @@ public final class ExtrasStates {
 
         String text() throws IOException {
             return new String(this.bytes(), StandardCharsets.UTF_8);
-        }
-
-        List<String> texts() throws IOException {
-            int count = this.count();
-            List<String> texts = new ArrayList<>(count);
-            for (int i = 0; i < count; i++) {
-                texts.add(this.text());
-            }
-            return texts;
         }
 
         byte[] bytes() throws IOException {

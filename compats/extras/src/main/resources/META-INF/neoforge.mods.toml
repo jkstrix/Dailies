@@ -9,8 +9,7 @@ displayName = "Dailies Extras Compat"
 authors = "James Knight"
 description = '''
 The rest of the pack's play screens and overlays in Dailies recordings: the lines Explorer's Compass and Nature's Compass
-show while held, Vista's viewfinder and signal projector, Emotecraft's emote wheel, Sophisticated Backpacks' backpacks with
-their upgrade tabs, Curios' pages, a corpse's pages, Pipez' pipe and filter windows, VanillaBackport's nautilus inventory
+show while held, Sophisticated Backpacks' backpacks with their upgrade tabs, Curios' pages, a corpse's pages, Pipez' pipe and filter windows, VanillaBackport's nautilus inventory
 and the lines these mods put above the hotbar, recorded and drawn again in playback. Does nothing unless Dailies and those
 mods are installed.
 '''
@@ -53,20 +52,6 @@ side = "BOTH"
 modId = "naturescompass"
 type = "optional"
 versionRange = "[1.21.1-3.4.0-neoforge,)"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.dailies_extras]]
-modId = "vista"
-type = "optional"
-versionRange = "[1.21-3.1.1,)"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.dailies_extras]]
-modId = "emotecraft"
-type = "optional"
-versionRange = "[2.4.12,)"
 ordering = "AFTER"
 side = "BOTH"
 

@@ -9,9 +9,8 @@ import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * The line the mods put above the hotbar on the player's own game, which no packet carries: Vista's hint as the
- * viewfinder is taken over (how to let go of it and lock it), Sophisticated Backpacks' refusal to swap a tool for a held
- * backpack, and Corpse's word that there is no death history, noted by the compat's mixin ({@link ExtrasMarks}).
+ * The line the mods put above the hotbar on the player's own game, which no packet carries: Sophisticated Backpacks'
+ * refusal to swap a tool for a held backpack, and Corpse's word that there is no death history, noted by the compat's mixin ({@link ExtrasMarks}).
  * Recorded while the game still shows that very line, with the ticks it has left, and drawn as the game draws its line
  * above the hotbar. Lines the servers send arrive in packets the recording keeps.
  */

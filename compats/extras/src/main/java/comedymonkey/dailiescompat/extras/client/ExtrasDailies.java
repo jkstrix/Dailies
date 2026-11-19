@@ -1,13 +1,11 @@
 package comedymonkey.dailiescompat.extras.client;
 
 import com.mojang.logging.LogUtils;
-import comedymonkey.dailies.api.DailiesApi;
 import comedymonkey.dailies.api.compat.Claims;
 import comedymonkey.dailies.api.compat.DailiesCompat;
 import comedymonkey.dailies.api.compat.DailiesCompats;
 import comedymonkey.dailies.api.compat.DisplayTest;
 import comedymonkey.dailiescompat.extras.ExtrasCompat;
-import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -23,9 +21,6 @@ import java.util.function.Predicate;
  * <ul>
  * <li>Explorer's Compass and Nature's Compass: the lines each shows while it is held, searching, found or not found
  * ({@link CompassLines}). Their search lists are menus and stay out;</li>
- * <li>Vista: the viewfinder looked through (its scope and zoom bar) and the signal projector's screen ({@link VistaParts});
- * its picture tape's window comes only with Exposure, which the pack has not, so it never shows;</li>
- * <li>Emotecraft: the emote wheel ({@link EmoteWheel}); its emote list, settings and export screens are menus;</li>
  * <li>Sophisticated Backpacks: a backpack's window, recorded whole with its upgrade tabs, since Dailies' stand-in player
  * for a window holds no backpack ({@link Backpacks}); its settings window is settings, and left out;</li>
  * <li>extras for windows Dailies draws itself: Curios' page and cosmetic slots ({@link CuriosExtras}), a corpse's page of
@@ -34,11 +29,10 @@ import java.util.function.Predicate;
  * ({@link NautilusPart});</li>
  * <li>the lines the mods put above the hotbar on the player's own game alone ({@link StatusLine}).</li>
  * </ul>
- * Left out, as not play or not interface: configuration screens; the compasses' search lists; Emotecraft's emote list;
- * Corpse's death history (a list opened by a key, like the statistics); Sophisticated Backpacks' settings window; the
+ * Left out, as not play or not interface: configuration screens; the compasses' search lists; Corpse's death history (a list opened by a key, like the statistics); Sophisticated Backpacks' settings window; the
  * Locator Bar mod and VanillaBackport's own locator bar, at the owner's word; VanillaBackport's music toast; and how the
- * world looks (Vista's televisions and their feeds, a backpack's mob catcher effect, Sophisticated's highlighted blocks,
- * an emote played), which playback draws from its own world.
+ * world looks (a backpack's mob catcher effect, Sophisticated's highlighted blocks), which playback draws from its own
+ * world.
  * <p>
  * Each state is the least that draws its part again, and the whole of it; Dailies writes it when it changes and keeps it
  * for snapshots, jumps and trims.
@@ -49,8 +43,6 @@ public final class ExtrasDailies implements DailiesCompat {
     /** Raise when a state in ExtrasStates changes shape; the parts must still read every version before it */
     static final int VERSION = 1;
     private static final Logger LOGGER = LogUtils.getLogger();
-    /** Vista's viewfinder layer, by its name */
-    private static final ResourceLocation VISTA_LAYER = ResourceLocation.fromNamespaceAndPath("vista", "viewfinder");
 
     private final Predicate<String> loaded;
 
@@ -61,17 +53,8 @@ public final class ExtrasDailies implements DailiesCompat {
     /** Registers the compat and its listeners, with the parts of the mods that are loaded. Only call it when Dailies is loaded */
     public static void register(Predicate<String> loaded) {
         DailiesCompats.register(new ExtrasDailies(loaded));
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Pre.class, ExtrasDailies::layerStarts);
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Pre.class, CompassLines::layerStarts);
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, false, RenderGuiLayerEvent.Post.class, CompassLines::layerEnds);
-    }
-
-    /** A mod's layer starts: the compasses' are noted while recording and held back in playback, and Vista's held back in playback */
-    private static void layerStarts(RenderGuiLayerEvent.Pre event) {
-        CompassLines.layerStarts(event);
-        if (event.getName().equals(VISTA_LAYER) && DailiesApi.isPlayback()) {
-            // Vista works its own out from the watcher's game; the recorder's is drawn from the recording
-            event.setCanceled(true);
-        }
     }
 
     @Override
@@ -86,7 +69,7 @@ public final class ExtrasDailies implements DailiesCompat {
 
     @Override
     public void claim(Claims claims) {
-        // The line above the hotbar, which three of the mods put up on the player's own game
+        // The line above the hotbar, which two of the mods (Sophisticated Backpacks and Corpse) put up on the player's own game
         claims.overlay(StatusLine.NAME, Parts.overlay(StatusLine::capture, StatusLine::draw, 1));
         boolean explorers = this.loaded.test(ExtrasCompat.EXPLORERS_COMPASS);
         boolean natures = this.loaded.test(ExtrasCompat.NATURES_COMPASS);
@@ -96,8 +79,6 @@ public final class ExtrasDailies implements DailiesCompat {
         if (natures) {
             claims.overlay(CompassLines.NATURES, Parts.overlay(CompassLines::captureNatures, CompassLines::draw, 1));
         }
-        claimFor(ExtrasCompat.VISTA, claims, VistaParts::claim);
-        claimFor(ExtrasCompat.EMOTECRAFT, claims, EmoteWheel::claim);
         claimFor(ExtrasCompat.BACKPACKS, claims, Backpacks::claim);
         claimFor(ExtrasCompat.CURIOS, claims, CuriosExtras::claim);
         claimFor(ExtrasCompat.CORPSE, claims, CorpseExtras::claim);

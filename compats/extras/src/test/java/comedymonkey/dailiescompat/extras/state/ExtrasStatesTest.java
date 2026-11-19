@@ -7,7 +7,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,50 +29,6 @@ class ExtrasStatesTest {
         assertTrue(read.lines().get(3).right());
         assertEquals(120, read.lines().get(3).fromSide());
         assertArrayEquals(ExtrasStates.lines(lines), ExtrasStates.lines(read));
-    }
-
-    @Test
-    void theViewfinderKeepsItsZoomItsLockAndItsScope() {
-        ExtrasStates.Viewfinder viewfinder = new ExtrasStates.Viewfinder(17, true, 1.0625F);
-        ExtrasStates.Viewfinder read = ExtrasStates.readViewfinder(ExtrasStates.viewfinder(viewfinder));
-        assertEquals(viewfinder, read);
-        assertEquals(17, read.zoom());
-        assertTrue(read.locked());
-        assertEquals(1.0625F, read.scope());
-        assertArrayEquals(ExtrasStates.viewfinder(viewfinder), ExtrasStates.viewfinder(read));
-    }
-
-    @Test
-    void theProjectorKeepsItsAddressAsTypedAndTheCursor() {
-        ExtrasStates.Projector projector = new ExtrasStates.Projector(-123456789L, "vista:wave_collector", "https://example.com/feed ✓", 12, 4);
-        ExtrasStates.Projector read = ExtrasStates.readProjector(ExtrasStates.projector(projector));
-        assertEquals(projector, read);
-        assertEquals("https://example.com/feed ✓", read.url());
-        assertEquals(12, read.cursor());
-        assertEquals(4, read.selection());
-        assertArrayEquals(ExtrasStates.projector(projector), ExtrasStates.projector(read));
-    }
-
-    @Test
-    void theEmoteWheelKeepsItsPageItsEmotesItsSettingsAndThePointer() {
-        String wave = "6f1d8f3e-1d2c-4a51-9a07-2f0a8b1f7c11";
-        List<String> emotes = List.of(wave, "", "", "1c5e0a4d-0e3b-4d6f-8f0e-6b8d1c7a2e33", "", "", "", "");
-        List<String> names = List.of("{\"text\":\"Wave\"}", "", "", "{\"color\":\"red\",\"text\":\"INVALID\"}", "", "", "", "");
-        ExtrasStates.EmoteWheel wheel = new ExtrasStates.EmoteWheel(3, emotes, names, ExtrasStates.NO_SERVER, false, true, true, 0.31F, -0.12F);
-        ExtrasStates.EmoteWheel read = ExtrasStates.readEmoteWheel(ExtrasStates.emoteWheel(wheel));
-        assertEquals(wheel, read);
-        assertEquals(3, read.page());
-        assertEquals(ExtrasStates.PLACES, read.emotes().size());
-        assertEquals(wave, read.emotes().get(0));
-        assertEquals("", read.emotes().get(1));
-        assertEquals(ExtrasStates.NO_SERVER, read.warning());
-        assertTrue(read.dark());
-        assertFalse(read.legacy());
-        assertEquals(0.31F, read.pointerX());
-        assertArrayEquals(ExtrasStates.emoteWheel(wheel), ExtrasStates.emoteWheel(read));
-        // A name for each emote, or the wheel could not say what a place shows
-        assertThrows(IllegalArgumentException.class, () -> new ExtrasStates.EmoteWheel(0, List.of(wave), List.of(), ExtrasStates.NO_WARNING, false, false,
-            true, 0.0F, 0.0F));
     }
 
     @Test
