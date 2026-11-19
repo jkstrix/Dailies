@@ -26,6 +26,10 @@ import java.util.Map;
  * the rest, and every pack those records name is stored in the new recording, once, with its pieces. A pack that only
  * a stretch that was cut used is left behind.
  * <p>
+ * The new recording is packed with the mod's own dictionaries, like any recording made now. What it copies from a
+ * source packed with the same ones goes across byte for byte; what comes from a source packed with others (made by a
+ * Dailies whose dictionaries were trained afresh) is unpacked with the source's and packed again with the new ones.
+ * <p>
  * Nothing here knows the game. What to put in the new recording's description is the caller's business; this fills
  * in the segments, their times, the length and the resource packs.
  */
@@ -99,7 +103,7 @@ public final class Assembler {
             allTicks += piece.to() - piece.from();
         }
         Files.createDirectories(target.toAbsolutePath().getParent());
-        Container out = Container.create(target);
+        Container out = Container.create(target, Packing.Dictionaries.current());
         try {
             manifest.finished = false;
             manifest.times = new ArrayList<>();
@@ -177,7 +181,7 @@ public final class Assembler {
                 for (Map.Entry<String, Container.Entry> blob : blobs) {
                     this.check();
                     if (!this.has(blob.getKey())) {
-                        this.out.appendShared(blob.getKey(), from.read(blob.getValue()));
+                        this.out.appendShared(blob.getKey(), this.sharedPayload(from, blob.getValue(), blob.getKey()));
                     }
                 }
                 for (RecordingManifest.Pack pack : this.sourcePacks) {
@@ -287,29 +291,61 @@ public final class Assembler {
             boolean first = true;
             for (Container.Entry part : parts) {
                 this.check();
-                byte[] packed = from.read(part);
-                if (first && newStart != segment.startTick) {
-                    packed = renumbered(packed, newStart);
-                }
+                byte[] packed = this.partPayload(from, from.read(part), first && newStart != segment.startTick, newStart);
                 first = false;
                 this.out.append(Container.SEGMENT_PART, this.number, newStart, newStart + (part.c() - segment.startTick), packed);
             }
         }
 
         /**
-         * A segment's first part with the tick its snapshot says it is of put right. Only this one part is unpacked
-         * and packed again; if it does not start the way a segment should, it is left exactly as it is.
+         * A segment part of the source as the new recording stores it: the very bytes when both pack parts with the same
+         * dictionary and the tick stays, unpacked and packed again otherwise
+         *
+         * @param renumber whether this is a segment's first part, whose snapshot is to say it is of tick newStart
          */
-        private static byte[] renumbered(byte[] packed, int newStart) throws IOException {
-            byte[] bytes = Packing.unpack(packed, 0);
+        private byte[] partPayload(Container from, byte[] packed, boolean renumber, int newStart) throws IOException {
+            boolean same = Packing.Dictionary.same(from.dictionaries().parts(), this.out.dictionaries().parts());
+            if (same && !renumber) {
+                return packed;
+            }
+            byte[] bytes = from.unpackPart(packed);
+            if (renumber) {
+                byte[] changed = renumbered(bytes, newStart);
+                if (changed != null) {
+                    bytes = changed;
+                } else if (same) {
+                    return packed;
+                }
+            }
+            return this.out.packPart(bytes, 0, bytes.length);
+        }
+
+        /**
+         * A shared blob of the source as the new recording stores it: the very bytes when both pack shared data with the
+         * same dictionary, unpacked and packed again otherwise
+         */
+        private byte[] sharedPayload(Container from, Container.Entry entry, String name) throws IOException {
+            byte[] payload = from.read(entry);
+            if (Packing.Dictionary.same(from.dictionaries().shared(), this.out.dictionaries().shared())) {
+                return payload;
+            }
+            byte[] data = from.unpackShared(payload);
+            return this.out.packShared(HexFormat.of().parseHex(name), data, 0, data.length);
+        }
+
+        /**
+         * A segment's first part with the tick its snapshot says it is of put right, or null when it does not start the
+         * way a segment should, and is then left exactly as it is
+         */
+        private static @Nullable byte[] renumbered(byte[] bytes, int newStart) {
             // The first record: its kind, its length, then the tick, each a varint
             int at = 0;
             if (bytes.length < 3 || bytes[at++] != Records.SNAPSHOT_BEGIN) {
-                return packed;
+                return null;
             }
             int length = bytes[at++];
             if (length < 1 || length > 5 || at + length > bytes.length) {
-                return packed;
+                return null;
             }
             Records.Writer start = new Records.Writer();
             start.number(Records.SNAPSHOT_BEGIN, newStart);
@@ -317,7 +353,7 @@ public final class Assembler {
             byte[] all = new byte[head.length + bytes.length - at - length];
             System.arraycopy(head, 0, all, 0, head.length);
             System.arraycopy(bytes, at + length, all, head.length, bytes.length - at - length);
-            return Packing.pack(new byte[0], all, 0, all.length);
+            return all;
         }
 
         /** Reads through a segment that is to be copied as it is: the shared data it names is brought across, and its first times noted */
@@ -374,7 +410,7 @@ public final class Assembler {
                 }
             }
             if (fresh != null) {
-                this.out.appendShared(name, Packing.pack(HexFormat.of().parseHex(name), fresh, 0, fresh.length));
+                this.out.appendShared(name, this.out.packShared(HexFormat.of().parseHex(name), fresh, 0, fresh.length));
                 return;
             }
             Container from = source.container();
@@ -383,7 +419,7 @@ public final class Assembler {
                 entry = from.shared.get(name);
             }
             if (entry != null) {
-                this.out.appendShared(name, from.read(entry));
+                this.out.appendShared(name, this.sharedPayload(from, entry, name));
             }
             // Shared data the source itself has lost stays lost: playback steps over it there, and will here
         }
@@ -507,7 +543,7 @@ public final class Assembler {
 
         private void part(Records.Writer writer, int startTick, int endTick) throws IOException {
             byte[] bytes = writer.take();
-            this.out.append(Container.SEGMENT_PART, this.number, startTick, endTick, Packing.pack(new byte[0], bytes, 0, bytes.length));
+            this.out.append(Container.SEGMENT_PART, this.number, startTick, endTick, this.out.packPart(bytes, 0, bytes.length));
         }
     }
 

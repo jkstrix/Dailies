@@ -24,13 +24,21 @@ public final class RecordingWriter implements Closeable {
         this.manifest = manifest;
     }
 
-    /** Starts a new file. The manifest must have its id; it is written at once so that a crash leaves a file that says what it is */
+    /**
+     * Starts a new file, packed with the mod's own dictionaries, which go into it first. The manifest must have its id; it
+     * is written at once so that a crash leaves a file that says what it is
+     */
     public static RecordingWriter create(Path file, RecordingManifest manifest) throws IOException {
+        return create(file, manifest, Packing.Dictionaries.current());
+    }
+
+    /** The same, packed with other dictionaries: for the tests, which write recordings as another version of Dailies would */
+    static RecordingWriter create(Path file, RecordingManifest manifest, Packing.Dictionaries dictionaries) throws IOException {
         if (manifest.id == null || manifest.id.isEmpty()) {
             throw new IllegalArgumentException("A recording needs an id");
         }
         Files.createDirectories(file.toAbsolutePath().getParent());
-        Container container = Container.create(file);
+        Container container = Container.create(file, dictionaries);
         try {
             manifest.finished = false;
             container.append(Container.MANIFEST, 0, 0, 0, manifest.toBytes());
@@ -72,7 +80,7 @@ public final class RecordingWriter implements Closeable {
         if (this.segment < 0) {
             throw new IllegalStateException("beginSegment has not been called");
         }
-        this.container.append(Container.SEGMENT_PART, this.segment, this.segmentStartTick, endTick, Packing.pack(new byte[0], data, from, length));
+        this.container.append(Container.SEGMENT_PART, this.segment, this.segmentStartTick, endTick, this.container.packPart(data, from, length));
     }
 
     /**
@@ -101,7 +109,7 @@ public final class RecordingWriter implements Closeable {
         }
         String name = HexFormat.of().formatHex(hash);
         if (!this.container.shared.containsKey(name)) {
-            this.container.appendShared(name, Packing.pack(hash, data, from, length));
+            this.container.appendShared(name, this.container.packShared(hash, data, from, length));
         }
         return name;
     }

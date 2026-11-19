@@ -122,8 +122,9 @@ class RecordingFileTest {
         Path file = this.writeThreeSegments();
         long middleOfSecondSegment;
         try (RecordingFile recording = RecordingFile.open(file)) {
-            // Segment 1 lies between the ends of segments 0 and 2; aim for the middle of the file's recorded data
-            middleOfSecondSegment = Files.size(file) / 2;
+            // The middle of segment 1's first part
+            Container.Entry part = recording.container().parts.stream().filter(entry -> entry.a() == 1).findFirst().orElseThrow();
+            middleOfSecondSegment = part.offset() + Container.HEADER_BYTES + part.length() / 2;
             assertArrayEquals(segmentData(1), readSegment(recording, 1));
         }
         try (RandomAccessFile raw = new RandomAccessFile(file.toFile(), "rw")) {

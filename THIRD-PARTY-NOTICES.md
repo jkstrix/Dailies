@@ -1,7 +1,8 @@
 # Third-party notices
 
 Dailies itself is under the MIT licence (see `LICENSE`). Its jar also carries the video encoder below, run as
-a separate program, and the weights of a small sound classifier (see "YAMNet" at the end). This file and the licence texts it names are inside the jar too: this file at the top, the texts
+a separate program, the Zstandard library recordings are packed with (see "Zstandard"), and the weights of a small
+sound classifier (see "YAMNet" at the end). This file and the licence texts it names are inside the jar too: this file at the top, the texts
 in the `licenses` folder.
 
 ## Platforms
@@ -72,6 +73,22 @@ with every source pinned by its sha256 in `tools/ffmpeg/sources.lock`, and the w
 which builds, checks and packs every platform on GitHub's machines. `./tools/ffmpeg/build.sh build <platform>` then
 `pack` does the same on a machine of your own. Dailies can also be built with the JavaCPP Presets' Windows-only build
 (`-Pdailies.encoderSource=bytedeco`), whose licence texts then go into the jar's `licenses` folder instead.
+
+## Zstandard
+
+- **What:** zstd-jni, Java bindings for Zstandard, with the native Zstandard library built for each platform. Every
+  block of a recording is packed with it.
+- **Version:** zstd-jni 1.5.7-25 (Zstandard 1.5.7), unchanged, from Maven Central (`com.github.luben:zstd-jni`).
+- **Where it is:** `META-INF/jarjar/zstd-jni-1.5.7-25.jar` inside the Dailies jar, which NeoForge loads as a library.
+  It carries the native library for many platforms, among them all five Dailies ships for; the one for the running
+  platform is unpacked to `<game>/dailies/natives/` and loaded from there.
+- **Licence:** zstd-jni is under the BSD 2-Clause licence, Copyright (c) 2015-present, Luben Karavelov
+  (`licenses/zstd-jni-LICENSE`). Zstandard is under the BSD licence, Copyright (c) Meta Platforms, Inc. and affiliates
+  (`licenses/zstd-LICENSE`); it is also offered under the GPL version 2, which Dailies does not use.
+- **Source:** https://github.com/luben/zstd-jni and https://github.com/facebook/zstd
+
+The two dictionaries Dailies packs recordings with, `assets/dailies/zstd/shared.dict` and `parts.dict`, are Dailies'
+own, trained by Zstandard's trainer on recordings made in testing (`gradlew trainDictionaries`).
 
 ## YAMNet
 

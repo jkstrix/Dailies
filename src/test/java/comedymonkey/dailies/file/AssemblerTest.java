@@ -35,6 +35,9 @@ class AssemblerTest {
     @TempDir
     Path folder;
 
+    /** What the made-up recordings are packed with; null for the mod's own dictionaries, as a recording made now is */
+    private Packing.Dictionaries packWith = null;
+
     private static final Assembler.Progress QUIET = new Assembler.Progress() {
         @Override
         public void report(double fraction) {
@@ -70,7 +73,7 @@ class AssemblerTest {
         manifest.created = REAL_START + source;
         manifest.gameVersion = "1.21.1";
         manifest.worldName = "World " + source;
-        RecordingWriter writer = RecordingWriter.create(file, manifest);
+        RecordingWriter writer = this.packWith == null ? RecordingWriter.create(file, manifest) : RecordingWriter.create(file, manifest, this.packWith);
         Records.Writer part = new Records.Writer();
         TimeIndex.Encoder times = new TimeIndex.Encoder();
         int pauseEvery = afreshEvery * SEGMENT_TICKS;
@@ -351,6 +354,54 @@ class AssemblerTest {
         try (RecordingFile first = RecordingFile.open(a)) {
             assertEquals(200, first.totalTicks());
             assertEquals("s1t77", play(first).atTick().get(77));
+        }
+    }
+
+    /**
+     * A source packed with other dictionaries, as one made by a Dailies whose dictionaries were trained afresh: combined
+     * whole, trimmed on segment boundaries and cut inside a segment, every new recording is packed with the mod's own
+     * dictionaries and plays the same
+     */
+    @Test
+    void sourcesPackedWithOtherDictionariesArePackedAgainWithTheModsOwn() throws IOException {
+        this.packWith = TestDictionaries.other();
+        // Every segment starts afresh, so a cut on a boundary copies the segment after it, renumbered
+        Path older = this.record("older", 1, 4, 1, true);
+        this.packWith = null;
+        Path now = this.record("now", 2, 2, 0, true);
+        Path joined = this.folder.resolve("joined both" + RecordingFile.EXTENSION);
+        Path trimmed = this.folder.resolve("trimmed older" + RecordingFile.EXTENSION);
+        try (RecordingFile first = RecordingFile.open(older); RecordingFile second = RecordingFile.open(now)) {
+            assertTrue(first.container().dictionaries().same(TestDictionaries.other()));
+            Assembler.write(joined, newManifest("joined both"), List.of(new Assembler.Piece(first, 0, 400, null), new Assembler.Piece(second, 0, 200, null)), null, null, QUIET);
+            // A cut on a boundary (the segment after it renumbered) and a cut inside a segment's records
+            Assembler.write(trimmed, newManifest("trimmed older"), List.of(new Assembler.Piece(first, 0, 150, null), new Assembler.Piece(first, 300, 400, null)), null, null, QUIET);
+        }
+        for (Path file : List.of(joined, trimmed)) {
+            try (RecordingFile result = RecordingFile.open(file)) {
+                assertTrue(result.container().dictionaries().same(Packing.Dictionaries.current()), file.getFileName().toString());
+            }
+        }
+        try (RecordingFile result = RecordingFile.open(joined)) {
+            assertEquals(600, result.totalTicks());
+            Played played = play(result);
+            assertEquals("s1t1", played.atTick().get(1));
+            assertEquals("s1t399", played.atTick().get(399));
+            assertEquals("snapshot s2t0", played.atTick().get(400));
+            assertEquals("s2t200", played.atTick().get(600));
+            assertEquals(List.of("world 1", "world 1", "world 1", "world 1", "world 2", "world 2"), played.worlds());
+            assertTrue(played.chunksAtStart().contains("300:chunk 1 3"));
+            assertEquals(List.of(0, 100, 200, 300, 400), played.afreshAt());
+            assertEquals(realAt(1, 250, 100), result.timeAt(250).realTime());
+        }
+        try (RecordingFile result = RecordingFile.open(trimmed)) {
+            assertEquals(250, result.totalTicks());
+            Played played = play(result);
+            assertEquals("s1t149", played.atTick().get(149));
+            assertEquals("snapshot s1t300", played.atTick().get(150));
+            assertEquals("s1t400", played.atTick().get(250));
+            assertEquals(List.of(0, 100, 150), played.afreshAt());
+            assertTrue(played.chunksAtStart().contains("150:chunk 1 3"));
         }
     }
 

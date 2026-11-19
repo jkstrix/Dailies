@@ -37,6 +37,7 @@ public final class Dailies {
 
         // The provided features reach the core only through Host, so it goes in before any of them start
         Host.install(new CoreHost(container));
+        loadCompression();
         Moments.init();
         McpCraftCompat.init();
         ServerMoments.init();
@@ -74,6 +75,24 @@ public final class Dailies {
 
         // The scripted runs are the mod dailies_selftest, which starts itself; this only fails a run that lacks it
         ScriptedRun.checkSelfTestLoaded();
+    }
+
+    /**
+     * Recordings are packed with Zstandard, whose native library is unpacked into the dailies folder rather than a
+     * temporary one (see ZstdNative). Loaded now, so a computer it cannot be loaded on is in the log from the start
+     * rather than found out when the first recording begins
+     */
+    private static void loadCompression() {
+        comedymonkey.dailies.file.ZstdNative.useFolder(Host.get().dataDirectory().resolve("natives"));
+        try {
+            comedymonkey.dailies.file.ZstdNative.load();
+            Throwable folderFailure = comedymonkey.dailies.file.ZstdNative.folderFailure();
+            if (folderFailure != null) {
+                Host.LOGGER.warn("Dailies: the Zstandard library could not be unpacked into the dailies folder and was loaded from a temporary file instead", folderFailure);
+            }
+        } catch (RuntimeException | LinkageError e) {
+            Host.LOGGER.error("Dailies: recordings cannot be written or opened on this computer", e);
+        }
     }
 
     private static void settingsChanged(ModConfigEvent event) {

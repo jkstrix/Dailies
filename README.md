@@ -53,6 +53,8 @@ Java 21. The Gradle wrapper fetches everything else.
 |---|---|
 | Build the mod jar (`build/libs/`) | `gradlew build` |
 | Unit tests | `gradlew test` |
+| The timings, among them the compression benchmark on the long fixtures (`build/reports/zstd-benchmark.md`) | `gradlew benchmarks` |
+| Train the Zstandard dictionaries recordings are packed with again, on the long fixtures, into `src/main/resources/assets/dailies/zstd` | `gradlew trainDictionaries` |
 | Start the game with the mod, for development | `gradlew runClient` |
 | The scripted test in a plain game (about 2 minutes) | `gradlew runTestClient` |
 | The scripted test with the built jar beside Create, Sable, Aeronautics, Sodium, Iris, Simple Voice Chat and the companion (about 3 minutes) | `gradlew runTestModded` |
