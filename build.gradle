@@ -192,6 +192,10 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // The game brings its own copy when it runs; unit tests run without the game
     testImplementation 'com.google.code.gson:gson:2.10.1'
+    // Only for the compression benchmark (ZstdBenchmarkTest), which weighs Zstandard against the deflate recordings use:
+    // zstd-jni (BSD) with the native zstd, and aircompressor (Apache 2.0), a pure-Java zstd. Never packed into the mod
+    testImplementation 'com.github.luben:zstd-jni:1.5.7-25'
+    testImplementation 'io.airlift:aircompressor:2.0.3'
 }
 
 test {
@@ -209,6 +213,14 @@ tasks.register('benchmarks', Test) {
     useJUnitPlatform {
         includeTags 'benchmark'
     }
+    // The compression benchmark holds two long recordings' data unpacked
+    maxHeapSize = '6g'
+    // Settings for the benchmarks passed on from the command line, such as -Pdailies.bench.recordings=a.dailies,b.dailies
+    providers.gradlePropertiesPrefixedBy('dailies.bench.').get().each { key, value -> systemProperty key, value }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
 }
 
 processResources {
