@@ -248,9 +248,9 @@ public final class Snapshots {
     }
 
     /**
-     * A whole chunk has arrived and been stored in the recording exactly as the server sent it. Until a packet changes
-     * it, the snapshots that follow name those bytes instead of describing the chunk again: travelling brings hundreds
-     * of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
+     * A whole chunk has arrived and been stored in the recording exactly as the server sent it, in its pieces. Until a
+     * packet changes it, the snapshots that follow name it instead of describing the chunk again: travelling brings
+     * hundreds of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
      */
     static void arrived(int x, int z, byte[] name) {
         CHUNKS.put(ChunkPos.asLong(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
@@ -589,7 +589,9 @@ public final class Snapshots {
         Set<Long> present = new HashSet<>();
         List<Packet<? super ClientGamePacketListener>> lids = new ArrayList<>();
         // The chunks to describe afresh: their packets are made here, from the world as it is on this tick, and turned into
-        // bytes, named and stored by the recorder's writer, off the game's thread (Recorder.Out.sharedPackets)
+        // bytes, cut up by section, named and stored by the recorder's writer, off the game's thread (Recorder.Out.sharedPackets).
+        // A chunk described afresh costs the recording only the sections, light and block entities that are not as stored
+        // before: the rest keeps its name
         List<Packet<? super ClientGamePacketListener>> fresh = new ArrayList<>();
         List<java.util.concurrent.atomic.AtomicReference<byte[]>> freshNames = new ArrayList<>();
         int count = 0;
@@ -770,7 +772,7 @@ public final class Snapshots {
                 continue;
             }
             try {
-                out.sharedPacket(codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null)));
+                out.sharedPacket(codec.encode(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null)), ChunkPieces.Shape.CHUNK);
             } catch (Throwable t) {
                 warnOnce("chunk", t);
             }

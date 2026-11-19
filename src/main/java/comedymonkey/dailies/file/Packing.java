@@ -33,6 +33,9 @@ final class Packing {
         }
     });
     private static final ThreadLocal<byte[]> BUFFER = ThreadLocal.withInitial(() -> new byte[64 * 1024]);
+    // Playback unpacks a chunk's sections, light and the rest one small blob at a time, dozens to a chunk, so the
+    // decompressor is kept per thread too rather than made and ended for every one
+    private static final ThreadLocal<Inflater> INFLATER = ThreadLocal.withInitial(Inflater::new);
 
     private Packing() {
     }
@@ -68,7 +71,7 @@ final class Packing {
         BoundedReader in = new BoundedReader(payload, from, payload.length - from);
         int length = BoundedReader.checkLength(in.readInt(), in.remaining() * MOST_SHRUNK + 64);
         byte[] data = new byte[length];
-        Inflater inflater = new Inflater();
+        Inflater inflater = INFLATER.get();
         try {
             inflater.setInput(payload, from + 4, payload.length - from - 4);
             int done = 0;
@@ -83,7 +86,8 @@ final class Packing {
         } catch (DataFormatException e) {
             throw damaged();
         } finally {
-            inflater.end();
+            // Ready for the next block, and holding none of this one
+            inflater.reset();
         }
     }
 
@@ -91,6 +95,13 @@ final class Packing {
     static byte[] hash(byte[] data) {
         // digest() leaves it ready for the next
         return DIGEST.get().digest(data);
+    }
+
+    /** The SHA-256 of a stretch of an array, the same as of a copy of just that stretch */
+    static byte[] hash(byte[] data, int from, int length) {
+        MessageDigest digest = DIGEST.get();
+        digest.update(data, from, length);
+        return digest.digest();
     }
 
     private static RecordingFormatException damaged() {

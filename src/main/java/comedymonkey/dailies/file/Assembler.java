@@ -243,7 +243,7 @@ public final class Assembler {
                     kept.size = known.size;
                     kept.pieces = new ArrayList<>(known.pieces);
                     for (String piece : known.pieces) {
-                        this.bring(source, null, piece);
+                        this.bring(source, null, piece, false);
                     }
                     this.packs.put(newKey, kept);
                     return;
@@ -332,7 +332,7 @@ public final class Assembler {
                     }
                     int kind = reader.kind();
                     if (kind == Records.SHARED_PACKET || kind == Records.WORLD) {
-                        this.bring(source, null, HexFormat.of().formatHex(reader.payload(), 0, reader.length()));
+                        this.bring(source, null, HexFormat.of().formatHex(reader.payload(), 0, reader.length()), kind == Records.SHARED_PACKET);
                     } else if (kind == Records.EXTENSION) {
                         this.packRecord(source, reader);
                     } else if (kind == Records.TIME && !timed) {
@@ -344,11 +344,35 @@ public final class Assembler {
             }
         }
 
-        private void bring(RecordingFile source, @Nullable Snapshot snapshot, String name) throws IOException {
+        /**
+         * Brings shared data across, once
+         *
+         * @param pieces whether it is a piece list (file.PacketPieces), whose parts and inner lists come across with it,
+         *               before it, so that a new recording that holds a piece list always holds all it is made of
+         */
+        private void bring(RecordingFile source, @Nullable Snapshot snapshot, String name, boolean pieces) throws IOException {
+            this.bring(source, snapshot, name, pieces, false);
+        }
+
+        private void bring(RecordingFile source, @Nullable Snapshot snapshot, String name, boolean pieces, boolean inner) throws IOException {
             if (this.has(name)) {
                 return;
             }
             byte[] fresh = snapshot == null ? null : snapshot.shared().get(name);
+            if (pieces) {
+                byte[] list = fresh != null ? fresh : source.hasShared(name) ? source.shared(name) : null;
+                List<PacketPieces.Reference> references;
+                try {
+                    references = list == null ? List.of() : PacketPieces.references(list);
+                } catch (RecordingFormatException damaged) {
+                    // Not a piece list: brought as it is, and playback steps over it there as it does here
+                    references = List.of();
+                }
+                for (PacketPieces.Reference reference : references) {
+                    // A list inside a list holds only parts, so this goes no deeper than that, whatever a damaged one says
+                    this.bring(source, snapshot, reference.name(), !inner && reference.kind() == PacketPieces.LIST, true);
+                }
+            }
             if (fresh != null) {
                 this.out.appendShared(name, Packing.pack(HexFormat.of().parseHex(name), fresh, 0, fresh.length));
                 return;
@@ -387,7 +411,7 @@ public final class Assembler {
                             continue;
                         }
                         if (kind == Records.SHARED_PACKET || kind == Records.WORLD) {
-                            this.bring(source, snapshot, HexFormat.of().formatHex(described.payload(), 0, described.length()));
+                            this.bring(source, snapshot, HexFormat.of().formatHex(described.payload(), 0, described.length()), kind == Records.SHARED_PACKET);
                         }
                         byte[] rekeyed = kind == Records.EXTENSION ? this.packRecord(source, described) : null;
                         if (rekeyed != null) {
@@ -457,7 +481,7 @@ public final class Assembler {
                         justBegun = true;
                     } else {
                         if (kind == Records.SHARED_PACKET || kind == Records.WORLD) {
-                            this.bring(source, null, HexFormat.of().formatHex(reader.payload(), 0, reader.length()));
+                            this.bring(source, null, HexFormat.of().formatHex(reader.payload(), 0, reader.length()), kind == Records.SHARED_PACKET);
                         }
                         byte[] rekeyed = kind == Records.EXTENSION ? this.packRecord(source, reader) : null;
                         if (rekeyed != null) {

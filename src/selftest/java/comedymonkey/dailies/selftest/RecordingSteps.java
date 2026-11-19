@@ -235,8 +235,13 @@ final class RecordingSteps {
             check(audit.count(net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket.class) + audit.count(net.minecraft.network.protocol.game.ClientboundLightUpdatePacket.class) >= audit.sharedPackets,
                 "snapshots share something besides chunks and their light: " + audit.sharedPackets + " shared packets, " + audit.packets);
             check(snapshotChunks >= 9L * manifest.segments.size(), "snapshots hold too few chunks: " + snapshotChunks + " in " + manifest.segments.size() + " snapshots");
-            check(file.sharedCount() < audit.sharedPackets / 2, "unchanged chunks were stored again: " + file.sharedCount() + " stored for " + audit.sharedPackets + " uses");
-            test.log("snapshots: " + audit.sharedPackets + " chunk uses stored as " + file.sharedCount() + " pieces; last snapshot held the game for "
+            check(audit.storedPackets.size() < audit.sharedPackets / 2, "unchanged chunks were stored again: " + audit.storedPackets.size() + " stored for " + audit.sharedPackets + " uses");
+            // Chunks are stored by section (FILE-5): in a flat world nearly every section is air or the same few layers, and
+            // nearly all sky light is all lit, so the parts the stored chunks name are a small share of how often they name them
+            check(audit.parts.size() > 0 && audit.parts.size() < audit.partUses / 2, "chunks' sections and light are not shared between chunks: " + audit.parts.size()
+                + " parts stored for " + audit.partUses + " uses in " + audit.storedPackets.size() + " stored chunks");
+            test.log("snapshots: " + audit.sharedPackets + " chunk uses stored as " + audit.storedPackets.size() + " chunks, made of " + audit.parts.size() + " parts named "
+                + audit.partUses + " times; " + file.sharedCount() + " pieces of shared data in all; last snapshot held the game for "
                 + String.format("%.1f", comedymonkey.dailies.capture.Snapshots.lastMillis) + " ms; file is " + java.nio.file.Files.size(recording) / 1024 + " KB");
             // The parts of the recording that are not packets: the recorder's HUD and everyone's skin (REC-13, REC-14)
             check(audit.extensions.containsKey("dailies:hud"), "the recorder's HUD was not captured: " + audit.extensions.keySet());

@@ -617,7 +617,7 @@ final class Feed {
         }
         net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket packet;
         try {
-            byte[] shared = this.file.shared(stored);
+            byte[] shared = this.file.packet(stored);
             if (!(this.session.codec.decode(shared, 0, shared.length) instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket decoded)) {
                 return null;
             }
@@ -800,7 +800,8 @@ final class Feed {
                 if (this.alreadyThere(stored, minecraft)) {
                     return;
                 }
-                byte[] shared = this.file.shared(stored);
+                // Put back together from its pieces, byte for byte the packet that was stored, so it is applied as any other
+                byte[] shared = this.file.packet(stored);
                 this.storedNow = this.bundle == null ? stored : null;
                 try {
                     this.packet(shared, 0, shared.length, minecraft);
@@ -980,7 +981,7 @@ final class Feed {
         }
         this.chunksKept--;
         try {
-            byte[] chunk = this.file.shared(stored);
+            byte[] chunk = this.file.packet(stored);
             String now = this.storedNow;
             this.storedNow = stored;
             try {

@@ -14,7 +14,10 @@ public final class Records {
     public static final int TICK = 1;
     /** One game packet as the game encodes it for the wire (packet id, then body) */
     public static final int PACKET = 2;
-    /** A game packet kept as shared data, such as a chunk. Payload: the name of the shared data (32 bytes) */
+    /**
+     * A game packet kept as shared data, such as a chunk. Payload: the name (32 bytes) of the shared data that is its piece
+     * list, which puts it back together from bytes and other shared data ({@link PacketPieces})
+     */
     public static final int SHARED_PACKET = 3;
     /** A mod's message. Payload: its id as text (varint length, UTF-8), then the whole packet as for PACKET */
     public static final int PAYLOAD = 4;

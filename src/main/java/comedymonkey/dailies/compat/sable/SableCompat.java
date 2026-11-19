@@ -805,7 +805,7 @@ public final class SableCompat implements Host.Crafts {
                 }
 
                 out.payloadFrame(this.startTrackingType.id().toString(), startFrame);
-                chunks.forEach(out::sharedPacket);
+                chunks.forEach(encoded -> out.sharedPacket(encoded, comedymonkey.dailies.capture.ChunkPieces.Shape.CHUNK));
                 if (doneFrame != null) {
                     out.payloadFrame(this.finalizeType.id().toString(), doneFrame);
                 }

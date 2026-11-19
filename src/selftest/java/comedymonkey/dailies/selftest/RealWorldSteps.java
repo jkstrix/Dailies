@@ -910,9 +910,14 @@ final class RealWorldSteps {
     private static void whatItHolds(SelfTest test, RecordingFile file, GameCodec codec, int ownId) throws Exception {
         Map<String, long[]> byKind = new java.util.HashMap<>();
         Map<String, long[]> ordinary = new java.util.HashMap<>();
-        java.util.Set<String> ordinaryPieces = new java.util.HashSet<>();
+        int ordinaryStored = 0;
+        long ordinaryBytes = 0;
         int ordinaryNames = 0;
         java.util.Set<String> pieces = new java.util.HashSet<>();
+        // Every piece of shared data the stored chunks are made of (their piece lists, sections, light, heightmaps and
+        // block entities), each counted once, the first time a chunk names it
+        java.util.Set<String> blobs = new java.util.HashSet<>();
+        long chunkBytes = 0;
         int namedInSnapshots = 0, namedInTicks = 0;
         int ownSounds = 0, cracks = 0, breaks = 0;
         long other = 0;
@@ -931,8 +936,18 @@ final class RealWorldSteps {
                         inSnapshot = false;
                     } else if (kind == comedymonkey.dailies.file.Records.SHARED_PACKET) {
                         String piece = java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length());
-                        if (pieces.add(piece) && inOrdinary) {
-                            ordinaryPieces.add(piece);
+                        if (pieces.add(piece)) {
+                            long fresh = 0;
+                            for (String blob : file.piecesOf(piece)) {
+                                if (blobs.add(blob)) {
+                                    fresh += file.shared(blob).length;
+                                }
+                            }
+                            chunkBytes += fresh;
+                            if (inOrdinary) {
+                                ordinaryStored++;
+                                ordinaryBytes += fresh;
+                            }
                         }
                         if (inOrdinary) {
                             ordinaryNames++;
@@ -973,27 +988,19 @@ final class RealWorldSteps {
                 }
             }
         }
-        long chunkBytes = 0;
-        for (String piece : pieces) {
-            chunkBytes += file.shared(piece).length;
-        }
         long packetBytes = byKind.values().stream().mapToLong(sum -> sum[0]).sum();
         StringBuilder biggest = new StringBuilder();
         byKind.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0])).limit(9).forEach(entry -> biggest.append(String.format(Locale.ROOT, " %s %.1f MB (%d);",
             entry.getKey(), entry.getValue()[0] / 1048576.0, entry.getValue()[1])));
-        table.add(String.format(Locale.ROOT, "what the recording holds, before packing: %d stored chunks %.1f MB, named %d times by snapshots and %d times as they arrived; packets %.1f MB; the rest %.1f MB. The largest kinds of packet:%s",
-            pieces.size(), chunkBytes / 1048576.0, namedInSnapshots, namedInTicks, packetBytes / 1048576.0, other / 1048576.0, biggest));
+        table.add(String.format(Locale.ROOT, "what the recording holds, before packing: %d stored chunks in %d pieces %.1f MB, named %d times by snapshots and %d times as they arrived; packets %.1f MB; the rest %.1f MB. The largest kinds of packet:%s",
+            pieces.size(), blobs.size(), chunkBytes / 1048576.0, namedInSnapshots, namedInTicks, packetBytes / 1048576.0, other / 1048576.0, biggest));
 
         if (ordinaryTo > ordinaryFrom) {
-            long fresh = 0;
-            for (String piece : ordinaryPieces) {
-                fresh += file.shared(piece).length;
-            }
             StringBuilder most = new StringBuilder();
             ordinary.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0])).limit(7).forEach(entry -> most.append(String.format(Locale.ROOT, " %s %.0f KB (%d);",
                 entry.getKey(), entry.getValue()[0] / 1024.0, entry.getValue()[1])));
-            table.add(String.format(Locale.ROOT, "where ordinary play's bytes go (the walk round the village, ticks %d to %d, before packing): %d chunks stored that were not stored before, %.1f MB; chunks named %d times, %.0f KB; packets %.0f KB, the largest kinds:%s",
-                ordinaryFrom, ordinaryTo, ordinaryPieces.size(), fresh / 1048576.0, ordinaryNames, ordinaryNames * 33 / 1024.0,
+            table.add(String.format(Locale.ROOT, "where ordinary play's bytes go (the walk round the village, ticks %d to %d, before packing): %d chunks stored that were not stored before, whose pieces not stored before come to %.1f MB; chunks named %d times, %.0f KB; packets %.0f KB, the largest kinds:%s",
+                ordinaryFrom, ordinaryTo, ordinaryStored, ordinaryBytes / 1048576.0, ordinaryNames, ordinaryNames * 33 / 1024.0,
                 ordinary.values().stream().mapToLong(sum -> sum[0]).sum() / 1024.0, most));
         }
         test.log("real world: the recording holds " + ownSounds + " sounds of players' own bodies (footsteps and the like)");
