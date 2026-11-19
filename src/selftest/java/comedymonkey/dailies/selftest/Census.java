@@ -976,8 +976,17 @@ final class Census {
     }
 
     /** Whether the live game had an entity within the last ten ticks */
+    /**
+     * The longest a lightning bolt can last, in ticks: three before its first flash ends, and up to three more flashes of
+     * up to eleven ticks each, by dice each game throws for itself. A bolt the live game's dice ended after five ticks
+     * stays in playback as long as playback's own dice say, or until the recording removes it, which is when the server's
+     * did: in the bestiary recorded on 19 November 2026 that was seventeen ticks on (bolt 1894 at tick 2453), and
+     * playback's bolt was still there sixteen ticks on, past the ten this allowed before
+     */
+    private static final int LIGHTNING_TICKS = 40;
+
     private static boolean lately(int id, int tick) {
-        for (int back = 1; back <= 10; back++) {
+        for (int back = 1; back <= LIGHTNING_TICKS; back++) {
             Census earlier = live.get(tick - back);
             if (earlier != null && earlier.things.containsKey(id)) {
                 return true;

@@ -321,6 +321,29 @@ class ChunkListingTest {
     }
 
     @Test
+    void aRunOfJumpsReadsEachListingBlockOnce() throws IOException {
+        List<Map<Long, Seen>> journey = journey(35, 8);
+        Path path = this.record("jumps", journey, true);
+        try (RecordingFile file = RecordingFile.open(path)) {
+            // A jump back from the end: the whole listing at 30 and the changes up to 33
+            file.listing(33);
+            assertEquals(4, file.listingBlocksRead.get());
+            // Stepping back, and forward again past where it was, reads only what it has not read
+            file.listing(31);
+            file.listing(34);
+            assertEquals(5, file.listingBlocksRead.get());
+            // Forwards through every snapshot and back again, as the budgets jump: each block once in all
+            for (int segment = 0; segment < journey.size(); segment++) {
+                file.listing(segment);
+            }
+            for (int segment = journey.size() - 1; segment >= 0; segment--) {
+                assertEquals(listing(journey.get(segment)), file.listing(segment));
+            }
+            assertEquals(journey.size(), file.listingBlocksRead.get(), "every listing block read once");
+        }
+    }
+
+    @Test
     void aRecordingCutShortStillFindsItsListings() throws IOException {
         List<Map<Long, Seen>> journey = journey(15, 4);
         Path path = this.record("crashed", journey, false);

@@ -374,7 +374,8 @@ public final class RecordingFile implements Closeable {
      * byte for byte as it was stored
      */
     public byte[] packet(String name) throws IOException {
-        return PacketPieces.rebuild(this.shared(name), this::piece);
+        // The packet's own piece list is kept with its pieces: a jump names the same chunks as the jump before it
+        return PacketPieces.rebuild(this.piece(name), this::piece);
     }
 
     /**
@@ -404,6 +405,8 @@ public final class RecordingFile implements Closeable {
      */
     private static final long LISTINGS_KEPT_BYTES = 8L * 1024 * 1024;
     private final Map<Integer, ChunkListing> listingsKept = new java.util.LinkedHashMap<>(64, 0.75f, true);
+    /** How many listing blocks have been read and put together, for the tests that a jump reads each only once */
+    final java.util.concurrent.atomic.AtomicInteger listingBlocksRead = new java.util.concurrent.atomic.AtomicInteger();
     private long listingsKeptBytes = 0;
 
     /**
@@ -455,6 +458,7 @@ public final class RecordingFile implements Closeable {
         while (!chain.isEmpty()) {
             Container.Entry next = chain.pop();
             built = ChunkListing.decode(Container.unpackListing(this.container.read(next)), next.b() < 0 ? null : built);
+            this.listingBlocksRead.incrementAndGet();
             if (built.size() != next.c()) {
                 throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "A listing of chunks in the recording does not come to what it says");
             }
@@ -512,12 +516,17 @@ public final class RecordingFile implements Closeable {
         return new ListingWeight(whole, wholeBytes, changes, changeBytes);
     }
 
-    /** How many bytes of pieces are kept unpacked for {@link #packet}: sections of air and all-lit light come up in nearly every chunk */
-    private static final long PIECES_KEPT_BYTES = 16L * 1024 * 1024;
+    /**
+     * How many bytes of pieces are kept unpacked for {@link #packet}. Sections of air and all-lit light come up in nearly
+     * every chunk; and a jump that builds the world again builds every chunk of a snapshot, whose pieces come to some 19 MB
+     * unpacked on the generated-terrain tour (609 chunks, 12,000 pieces). Kept to 16 MB, each such jump read and unpacked
+     * nearly all of them again, 54 ms on average of reading alone over the budgets' run of jumps there; kept to 64 MB, 19 ms
+     */
+    static final long PIECES_KEPT_BYTES = 64L * 1024 * 1024;
     private final Map<String, byte[]> piecesKept = new java.util.LinkedHashMap<>(256, 0.75f, true);
     private long piecesKeptBytes = 0;
 
-    /** A part or inner list of a stored packet. Never handed out to be changed: {@link PacketPieces#rebuild} only copies from it */
+    /** A piece list, part or inner list of a stored packet. Never handed out to be changed: {@link PacketPieces#rebuild} only reads it */
     private byte[] piece(String name) throws IOException {
         synchronized (this.piecesKept) {
             byte[] kept = this.piecesKept.get(name);
