@@ -1,8 +1,10 @@
 package comedymonkey.dailies.playback;
 
+import comedymonkey.dailies.capture.ChunkPieces;
 import comedymonkey.dailies.capture.GameCodec;
 import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.file.Assembler;
+import comedymonkey.dailies.file.PacketPieces;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.Records;
 import net.minecraft.network.protocol.Packet;
@@ -60,10 +62,18 @@ final class SnapshotOut implements Recorder.Out {
     }
 
     @Override
-    public byte[] sharedPacket(byte[] encoded) {
-        byte[] hash = this.keep(encoded);
-        this.records.record(Records.SHARED_PACKET, hash);
-        return hash;
+    public byte[] sharedPacket(byte[] encoded, ChunkPieces.Shape shape) {
+        // In its pieces, as the recording being made stores it: those the recording being played already holds (the
+        // sections of a chunk that has not changed since, say) are named, not kept again
+        PacketPieces.Split split = ChunkPieces.split(encoded, shape);
+        for (PacketPieces.Blob blob : split.blobs()) {
+            String name = blob.hex();
+            if (!this.source.hasShared(name) && !this.shared.containsKey(name)) {
+                this.shared.put(name, blob.copy());
+            }
+        }
+        this.records.record(Records.SHARED_PACKET, split.name());
+        return split.name();
     }
 
     @Override

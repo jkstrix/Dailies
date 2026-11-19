@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A recording on disk, for playback and for the editor. Segments are read one at a time and independently, so a
@@ -366,6 +367,59 @@ public final class RecordingFile implements Closeable {
             throw new RecordingFormatException(RecordingFormatException.Reason.DAMAGED, "The recording is missing shared data " + name);
         }
         return Packing.unpack(this.container.read(entry), Container.HASH_BYTES);
+    }
+
+    /**
+     * The packet a {@link Records#SHARED_PACKET} record names, put back together from its pieces ({@link PacketPieces}),
+     * byte for byte as it was stored
+     */
+    public byte[] packet(String name) throws IOException {
+        return PacketPieces.rebuild(this.shared(name), this::piece);
+    }
+
+    /**
+     * Every piece of shared data a stored packet is made of: its own piece list first, then the lists and parts it names
+     * and those its lists name, in order, each as often as it is named
+     */
+    public List<String> piecesOf(String name) throws IOException {
+        List<String> pieces = new ArrayList<>();
+        pieces.add(name);
+        for (PacketPieces.Reference reference : PacketPieces.references(this.shared(name))) {
+            pieces.add(reference.name());
+            if (reference.kind() == PacketPieces.LIST) {
+                for (PacketPieces.Reference inner : PacketPieces.references(this.piece(reference.name()))) {
+                    pieces.add(inner.name());
+                }
+            }
+        }
+        return pieces;
+    }
+
+    /** How many bytes of pieces are kept unpacked for {@link #packet}: sections of air and all-lit light come up in nearly every chunk */
+    private static final long PIECES_KEPT_BYTES = 16L * 1024 * 1024;
+    private final Map<String, byte[]> piecesKept = new java.util.LinkedHashMap<>(256, 0.75f, true);
+    private long piecesKeptBytes = 0;
+
+    /** A part or inner list of a stored packet. Never handed out to be changed: {@link PacketPieces#rebuild} only copies from it */
+    private byte[] piece(String name) throws IOException {
+        synchronized (this.piecesKept) {
+            byte[] kept = this.piecesKept.get(name);
+            if (kept != null) {
+                return kept;
+            }
+        }
+        byte[] piece = this.shared(name);
+        synchronized (this.piecesKept) {
+            if (this.piecesKept.put(name, piece) == null) {
+                this.piecesKeptBytes += piece.length;
+            }
+            java.util.Iterator<byte[]> oldest = this.piecesKept.values().iterator();
+            while (this.piecesKeptBytes > PIECES_KEPT_BYTES && oldest.hasNext()) {
+                this.piecesKeptBytes -= oldest.next().length;
+                oldest.remove();
+            }
+        }
+        return piece;
     }
 
     /**

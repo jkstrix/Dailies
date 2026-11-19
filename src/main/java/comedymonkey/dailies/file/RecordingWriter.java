@@ -91,12 +91,17 @@ public final class RecordingWriter implements Closeable {
      * @return the name to ask for it by
      */
     public String putShared(byte[] data, byte[] hash) throws IOException {
+        return this.putShared(data, 0, data.length, hash);
+    }
+
+    /** The same, for a stretch of an array: a section of a chunk packet, say, stored without being copied out first */
+    public String putShared(byte[] data, int from, int length, byte[] hash) throws IOException {
         if (hash.length != Container.HASH_BYTES) {
             throw new IllegalArgumentException("A name of shared data is " + Container.HASH_BYTES + " bytes, not " + hash.length);
         }
         String name = HexFormat.of().formatHex(hash);
         if (!this.container.shared.containsKey(name)) {
-            this.container.appendShared(name, Packing.pack(hash, data, 0, data.length));
+            this.container.appendShared(name, Packing.pack(hash, data, from, length));
         }
         return name;
     }

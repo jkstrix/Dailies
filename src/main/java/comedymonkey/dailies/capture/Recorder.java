@@ -2,6 +2,7 @@ package comedymonkey.dailies.capture;
 
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.config.DailiesConfig;
+import comedymonkey.dailies.file.PacketPieces;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.file.RecordingWriter;
@@ -634,16 +635,29 @@ public final class Recorder {
     public interface Out {
         void packet(Packet<? super ClientGamePacketListener> packet);
 
-        /** A packet that is likely to recur unchanged, such as a chunk: it is stored once however often it is written */
+        /**
+         * Names again a packet already stored ({@link Records#SHARED_PACKET}: stored once however often it is named), or
+         * other shared data, by the name it was stored under
+         */
         void sharedRef(int kind, byte[] hash);
 
-        /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
-        byte[] sharedPacket(byte[] encoded);
+        /**
+         * Stores a packet that is likely to recur unchanged, such as a chunk, in the pieces its shape is cut into
+         * ({@link ChunkPieces}), and names it here
+         *
+         * @return what to pass to {@link #sharedRef} to write the same packet again without its bytes
+         */
+        byte[] sharedPacket(byte[] encoded, ChunkPieces.Shape shape);
+
+        /** A packet stored as one piece */
+        default byte[] sharedPacket(byte[] encoded) {
+            return this.sharedPacket(encoded, ChunkPieces.Shape.WHOLE);
+        }
 
         /**
          * Packets stored once and named, as {@link #sharedPacket} does each, written here in this order; each name is set
-         * once it is known. The recording being made does the encoding, naming and storing on its writer's thread, off
-         * the game's; this way of writing does them at once
+         * once it is known. The recording being made does the encoding, cutting up, naming and storing on its writer's
+         * thread, off the game's; this way of writing does them at once
          */
         default void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
             for (int i = 0; i < packets.size(); i++) {
@@ -651,9 +665,15 @@ public final class Recorder {
                     // Already stored: named again, in its place among the others
                     this.sharedRef(Records.SHARED_PACKET, names.get(i).get());
                 } else {
-                    names.get(i).set(this.sharedPacket(codec.encode(packets.get(i))));
+                    names.get(i).set(this.sharedPacket(codec.encode(packets.get(i)), shapeOf(packets.get(i))));
                 }
             }
+        }
+
+        /** How a packet is cut up to be stored: a chunk and light by section, anything else whole */
+        static ChunkPieces.Shape shapeOf(Packet<?> packet) {
+            return packet instanceof ClientboundLevelChunkWithLightPacket ? ChunkPieces.Shape.CHUNK
+                : packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket ? ChunkPieces.Shape.LIGHT : ChunkPieces.Shape.WHOLE;
         }
 
         /** Data stored once and referred to by a record of the given kind */
@@ -687,7 +707,7 @@ public final class Recorder {
         }
 
         /**
-         * Keeps data in the recording without writing it into the ticks, once however often it is asked: a packet for a
+         * Keeps data in the recording without writing it into the ticks, once however often it is asked: registries for a
          * snapshot to name, say. Named here, and stored by the writer under that name without working it out again
          *
          * @return its name
@@ -710,9 +730,34 @@ public final class Recorder {
             return hash;
         }
 
+        /**
+         * Keeps a packet in the recording in its pieces, once however often it is asked: a chunk as it arrived, for the
+         * snapshots that follow to name. Cutting it up and naming the pieces reads its bytes once, as naming it whole did;
+         * the writer stores whichever pieces it does not hold yet, without copying them out of the packet first
+         *
+         * @return the name of its piece list
+         */
+        byte[] storedPacket(byte[] frame, ChunkPieces.Shape shape) {
+            PacketPieces.Split split = ChunkPieces.split(frame, shape);
+            if (Recorder.this.sharedSent.add(HexFormat.of().formatHex(split.name()))) {
+                Recorder.this.spool.add(new Spool.Job() {
+                    @Override
+                    public void run(RecordingWriter writer) throws Exception {
+                        store(writer, split);
+                    }
+
+                    @Override
+                    public long bytes() {
+                        return frame.length;
+                    }
+                });
+            }
+            return split.name();
+        }
+
         /** @return what to pass to {@link #sharedRef} to write the same packet again without its bytes */
-        public byte[] sharedPacket(byte[] encoded) {
-            byte[] hash = this.stored(encoded);
+        public byte[] sharedPacket(byte[] encoded, ChunkPieces.Shape shape) {
+            byte[] hash = this.storedPacket(encoded, shape);
             Recorder.this.flushTicks();
             Recorder.this.part.record(Records.SHARED_PACKET, hash);
             return hash;
@@ -721,8 +766,8 @@ public final class Recorder {
         /**
          * The chunks a snapshot describes afresh are the most of what storing the world cost the game: turning them into
          * bytes, naming them by their SHA-256 and storing them took about a third of it in new terrain. What has been
-         * written so far goes to the writer first, then these, encoded, named and stored there, so the recording keeps its
-         * order; what is written after goes in the next part
+         * written so far goes to the writer first, then these, encoded, cut up, named and stored there, so the recording
+         * keeps its order; what is written after goes in the next part
          */
         @Override
         public void sharedPackets(List<Packet<? super ClientGamePacketListener>> packets, List<java.util.concurrent.atomic.AtomicReference<byte[]>> names, GameCodec codec) {
@@ -755,10 +800,12 @@ public final class Recorder {
                             }
                             continue;
                         }
-                        byte[] hash = RecordingWriter.hashOf(encoded);
-                        writer.putShared(encoded, hash);
-                        records.record(Records.SHARED_PACKET, hash);
-                        naming.get(i).set(hash);
+                        // Cut up by section: whatever has not changed since it was last stored, as it arrived or by a
+                        // snapshot, has the same name and is not stored again
+                        PacketPieces.Split split = ChunkPieces.split(encoded, Out.shapeOf(made.get(i)));
+                        store(writer, split);
+                        records.record(Records.SHARED_PACKET, split.name());
+                        naming.get(i).set(split.name());
                     }
                     byte[] bytes = records.take();
                     writer.appendToSegment(bytes, 0, bytes.length, endTick);
@@ -802,6 +849,16 @@ public final class Recorder {
 
         public void bundleEnd() {
             Recorder.this.part.record(Records.BUNDLE_END);
+        }
+    }
+
+    /**
+     * Stores the pieces of a packet that the file does not hold yet, each list after the parts it names and the packet's
+     * own list last, so a crash part way leaves nothing that names what is not there. Writer thread
+     */
+    private static void store(RecordingWriter writer, PacketPieces.Split split) throws IOException {
+        for (PacketPieces.Blob blob : split.blobs()) {
+            writer.putShared(blob.bytes(), blob.from(), blob.length(), blob.name());
         }
     }
 
@@ -940,7 +997,7 @@ public final class Recorder {
             // After a respawn or a change of dimension a whole new world of chunks arrives before the snapshot of it is taken.
             // Each is kept exactly as it came, so the snapshot names it; describing all of them afresh in that one tick held
             // the game for forty milliseconds. Not while paused: a long pause can pass any number of chunks that are never wanted
-            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.stored(frame));
+            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.storedPacket(frame, ChunkPieces.Shape.CHUNK));
         }
     }
 
@@ -984,8 +1041,9 @@ public final class Recorder {
             return;
         } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
             // A chunk is stored once however often it is sent, and the snapshots that follow name it for as long as nothing
-            // changes it. Before, a chunk met while travelling was stored here and then again, described afresh, by the next snapshot
-            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.sharedPacket(frame));
+            // changes it. Before, a chunk met while travelling was stored here and then again, described afresh, by the next
+            // snapshot. It is stored by section, so a snapshot that does describe it afresh names the sections stored here again
+            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.sharedPacket(frame, ChunkPieces.Shape.CHUNK));
         } else if (packet instanceof ClientboundSetEntityMotionPacket motion && minecraft.player != null && motion.getId() == minecraft.player.getId()) {
             // A push on the recorder's own body. Where they actually went is recorded from the player itself
             return;

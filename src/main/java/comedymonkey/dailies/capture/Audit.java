@@ -24,6 +24,12 @@ public final class Audit {
     public int snapshots = 0;
     public int bundles = 0;
     public int sharedPackets = 0;
+    /** The stored packets the recording names, each once: a chunk named again by snapshot after snapshot is here once */
+    public final java.util.Set<String> storedPackets = new java.util.HashSet<>();
+    /** How often the stored packets in {@link #storedPackets} name a part (a section, a section's light, heightmaps, block entities) */
+    public int partUses = 0;
+    /** The parts those name, each once: a section of air in every chunk is here once */
+    public final java.util.Set<String> parts = new java.util.HashSet<>();
     public int snapshotPackets = 0;
     public int worlds = 0;
     /** Every packet in the order it was recorded, with the tick it belongs to. Only filled when asked for */
@@ -61,7 +67,11 @@ public final class Audit {
                         case Records.PACKET -> audit.packet(codec, reader.payload(), 0, reader.length(), tick, inSnapshot, keep);
                         case Records.SHARED_PACKET -> {
                             audit.sharedPackets++;
-                            byte[] shared = recording.shared(java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length()));
+                            String name = java.util.HexFormat.of().formatHex(reader.payload(), 0, reader.length());
+                            if (audit.storedPackets.add(name)) {
+                                audit.pieces(recording, name);
+                            }
+                            byte[] shared = recording.packet(name);
                             audit.packet(codec, shared, 0, shared.length, tick, inSnapshot, keep);
                         }
                         case Records.WORLD -> {
@@ -80,6 +90,23 @@ public final class Audit {
             }
         }
         return audit;
+    }
+
+    /** Counts the parts a stored packet is made of: everything it names that is not a list of further pieces */
+    private void pieces(RecordingFile recording, String name) throws IOException {
+        java.util.Set<String> lists = new java.util.HashSet<>();
+        lists.add(name);
+        for (comedymonkey.dailies.file.PacketPieces.Reference reference : comedymonkey.dailies.file.PacketPieces.references(recording.shared(name))) {
+            if (reference.kind() == comedymonkey.dailies.file.PacketPieces.LIST) {
+                lists.add(reference.name());
+            }
+        }
+        for (String piece : recording.piecesOf(name)) {
+            if (!lists.contains(piece)) {
+                this.partUses++;
+                this.parts.add(piece);
+            }
+        }
     }
 
     private void packet(GameCodec codec, byte[] bytes, int from, int length, int tick, boolean inSnapshot, boolean keep) {
