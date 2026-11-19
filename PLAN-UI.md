@@ -93,9 +93,9 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
    - a version, and a way for a client compat to ask for it.
 6. **Spec and tests.**
    - Rows in REC, PLAY and EXP; the REC-11 exception; the look in chapter V.
-   - Scripted steps: open a chest, a furnace and a villager's trades while recording. In a first-person export with
-     the HUD on, each window must match the live game's screen (as the bestiary compares light). In third person, or
-     with the HUD off, it must be absent. A jump into an open window, and a trim cutting through one, must show it.
+   - One small display test, not a full one: open a chest, a furnace, a villager's trades and the inventory while
+     recording, then check in first-person playback with the HUD on that each window is drawn, and in third person
+     that it is not. Jumps, trim and snapshots are covered by unit tests.
 
 ## Stage 2: the compat API and a template (Spec + core + companion, M)
 
@@ -105,7 +105,8 @@ and the compasses' biome lists (menus, not play screens), statistics, the recipe
    - how it records them (its own extension records, as little data as will draw them again);
    - how it draws them in playback;
    - what it holds for a snapshot;
-   - a scripted test step.
+   - a small display test: a scripted step that opens its screens while recording and checks they are drawn in
+     first-person playback. Every compat, and the vanilla windows, gets one of these, not a full test.
 
    Its records carry its version. A recording lists the compats that wrote into it; playback without one plays on
    without that layer and says so once.
@@ -126,8 +127,8 @@ Post Rider has one window and two screens, which makes it a good first test. It 
    draws the writing screen with the text as it stood at each tick.
 4. **Server half:** none is expected: the client already has the mailbox contents and the letters. If delivery or
    mail state turns out to be server-only, the companion API carries it.
-5. **Test:** Post Rider joins the modded test's mods. A scripted step opens a mailbox, reads a letter and writes one
-   while recording, and checks a first-person export against the live screens.
+5. **Test:** Post Rider joins the modded test's mods. A small display test opens a mailbox, reads a letter and writes
+   one while recording, and checks each screen is drawn in first-person playback.
 
 ## Stage 4: the rest of the pack, by value (Compat, L)
 
@@ -139,7 +140,7 @@ In order of how often they appear in a Create let's play:
 4. Supplementaries, Create Deep Seas, the flight and ride overlays, the compasses.
 
 Each takes the stage 3 shape: what is the least data that draws it again, does the server need to send anything, and
-a test step.
+a small display test.
 
 ---
 
@@ -150,5 +151,6 @@ a test step.
 | Where compat jars live | Subprojects in this repository: one build, built and tested together with Dailies and the companion |
 | Stage 1 for modded windows | Every server-driven window is tried generically; one that misdraws goes on a deny list, or gets a compat |
 | The pointer | The recorded mouse pointer and the carried item are drawn over the window |
+| Tests | One small display test per compat and for the vanilla windows: the screens are drawn in first-person playback, not in third person. No full comparison tests |
 | Left out | Xaero's Minimap and World Map, AppleSkin |
 | The owner's mods: Post Rider (`E:/Repos/Pony Express`), ComedyMonkey's Create Addons (`E:/Repos/Flight Goggles Compat`), McpCraft (`E:/Repos/McpCraft`) | Hooks written into the mods themselves: each implements the compat API directly, as a soft dependency, instead of a separate compat jar. Separate compat jars, as subprojects here, are for other people's mods |
