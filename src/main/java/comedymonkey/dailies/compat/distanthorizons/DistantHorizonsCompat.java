@@ -248,9 +248,26 @@ public final class DistantHorizonsCompat {
         if (copied != null) {
             return copied;
         }
-        File folder = folderRoot().resolve(safe(recording)).resolve(safe(name)).toFile();
-        folder.mkdirs();
-        return folder;
+        Path wanted = folderRoot().resolve(safe(recording)).resolve(safe(name));
+        try {
+            // A spare starts from what the first choice holds, so far terrain built so far is not lost
+            Path folder = FarTerrainFolders.free(wanted, (chosen, spare) -> {
+                if (spare && !java.nio.file.Files.isRegularFile(chosen.resolve(DATABASE))) {
+                    copyStore(wanted, chosen);
+                }
+            });
+            if (folder != null) {
+                if (!folder.equals(wanted)) {
+                    Host.LOGGER.info("Dailies: Distant Horizons still has {} open, so playback uses {} beside it", wanted, folder.getFileName());
+                }
+                return folder.toFile();
+            }
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies: no folder could be made ready for the playback world's far terrain: {}", t.toString());
+            return null;
+        }
+        Host.LOGGER.warn("Dailies: Distant Horizons still has {} and all its spares open; playback leaves it its own folder", wanted);
+        return null;
     }
 
     private static final String DATABASE = "DistantHorizons.sqlite";
@@ -276,8 +293,15 @@ public final class DistantHorizonsCompat {
             }
             Path copy = folderRoot().resolve("worlds").resolve(safe(Integer.toHexString(source.toString().toLowerCase(java.util.Locale.ROOT).hashCode())
                 + "-" + source.getFileName())).resolve(safe(dimension));
-            refresh(source, copy);
-            return copy.toFile();
+            Path folder = FarTerrainFolders.free(copy, (chosen, spare) -> refresh(source, chosen));
+            if (folder == null) {
+                Host.LOGGER.warn("Dailies: Distant Horizons still has {} and all its spares open; the far terrain is built from the recording's chunks instead", copy);
+                return null;
+            }
+            if (!folder.equals(copy)) {
+                Host.LOGGER.info("Dailies: Distant Horizons still has {} open, so playback uses a copy in {} beside it", copy, folder.getFileName());
+            }
+            return folder.toFile();
         } catch (Throwable t) {
             Host.LOGGER.warn("Dailies: the far terrain of the world recorded could not be copied for playback; it is built from the recording's chunks instead: {}", t.toString());
             return null;
@@ -309,6 +333,18 @@ public final class DistantHorizonsCompat {
         }
         java.nio.file.Files.writeString(stampFile, stamp);
         Host.LOGGER.info("Dailies: copied the far terrain of {} for playback ({} MB in {} ms)", source, bytes / (1024 * 1024), (System.nanoTime() - started) / 1_000_000);
+    }
+
+    /** Copies a far terrain store, with its journal, from one folder to another */
+    private static void copyStore(Path from, Path to) throws java.io.IOException {
+        for (String part : new String[]{DATABASE, DATABASE + "-wal", DATABASE + "-shm"}) {
+            Path source = from.resolve(part);
+            if (java.nio.file.Files.isRegularFile(source)) {
+                Path partial = to.resolve(part + ".copying");
+                java.nio.file.Files.copy(source, partial, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                java.nio.file.Files.move(partial, to.resolve(part), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
     }
 
     /** What the world's own store is now: when any of its files changes, the copy is made afresh */
