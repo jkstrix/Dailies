@@ -308,6 +308,25 @@ def apiJar = tasks.register('apiJar', Jar) {
     from(rootProject.file('LICENSE'))
 }
 
+// Every Dailies jar a modpack takes, in one folder (build/modpack): Dailies, the compats for other people's mods (each
+// does nothing unless its mod is installed, so all of them can go in) and the companion, which a server takes and the
+// game takes for singleplayer. The template compat is only a starting point and is left out; the owner's own mods carry
+// their hooks themselves. gradlew modpackJars -Pdailies.encoderDir=... as for any build of the Dailies jar
+def modpackCompats = ['create', 'jade', 'aeronautics', 'supplementaries', 'createextras', 'extras']
+tasks.register('modpackJars', Sync) {
+    description = 'Puts every Dailies jar a modpack takes into build/modpack: Dailies, the compats and the companion'
+    group = 'build'
+    dependsOn tasks.named('jar'), 'buildCompanion'
+    modpackCompats.each { dependsOn ":compats:${it}:jar" }
+    from(tasks.named('jar'))
+    modpackCompats.each { name -> from({ project(":compats:${name}").tasks.named('jar').get().archiveFile }) }
+    from(file('companion/build/libs')) {
+        include 'dailies-companion-*.jar'
+        exclude '*-sources.jar', '*-javadoc.jar'
+    }
+    into(layout.buildDirectory.dir('modpack'))
+}
+
 // The compats in compats/ compile against the API jar, as a compat in another repository does
 configurations {
     dailiesApi {

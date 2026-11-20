@@ -63,6 +63,7 @@ Java 21. The Gradle wrapper fetches everything else.
 | Sixty seconds at the controls while recording, then the recording open in the editor | `gradlew runHandsOn` |
 | Retake the manual's pictures | `gradlew runManualShots` |
 | Build the companion (`companion/build/libs/`) | `gradlew build` in `companion/` |
+| Every Dailies jar a modpack takes, in one folder (`build/modpack/`): Dailies, the compats and the companion | `gradlew modpackJars` |
 | Build the compat API jar for other mods to compile against (`build/libs/dailies-api-*.jar`) | `gradlew apiJar` |
 | Build the template compat (`compats/template/build/libs/`), the start of a compat for another mod | `gradlew :compats:template:build` |
 | Build the Create compat (`compats/create/build/libs/`), which the modded test loads beside Create: Create's machine settings, goggles, clipboard, schedules, stations, display links, factory gauges, outlines in the world (glue, selections, links), schematics in hand and placed (the schematic's file stored once in the recording), its HUD lines, the toolbox's and wrench's selection wheels, the worldshaper's and schematic edit screens, the toolbox's hotbar marks, the blueprint and shop row, the track hint, placement helpers, the symmetry mirror and the stock keeper's search and order in recordings (CPT-6) | `gradlew :compats:create:build` |
