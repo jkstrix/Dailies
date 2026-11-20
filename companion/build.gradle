@@ -14,6 +14,26 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+repositories {
+    mavenCentral()
+    // Create, as Create's own README names it
+    maven {
+        name = 'Create'
+        url = 'https://maven.createmod.net'
+        content {
+            includeGroup 'com.simibubi.create'
+        }
+    }
+    // Sable as Modrinth publishes it: the same jar, byte for byte, as the one in the owner's pack
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+}
+
 neoForge {
     version = project.neo_version
 
@@ -31,6 +51,44 @@ neoForge {
             programArgument '--nogui'
         }
     }
+}
+
+// The versions in the owner's pack. Sable and Create are only compiled against, never packed in, so the companion runs
+// without either: the classes that call them (SableCraft, CreateTrains) load only when their mod is installed. They are
+// called directly, not by reflection: a reflective lookup makes the JVM load every type in a class's method signatures,
+// and Sable's name client-only ones, which stop a dedicated server
+def sableVersion = '2.0.6+mc1.21.1'
+def sableCompanionJar = 'sable-companion-common-1.21.1-1.6.0.jar'
+def createVersion = '6.0.10-281'
+
+configurations {
+    // Sable itself, also to take out the library its craft's bounding boxes come from (sable-companion, in jarjar)
+    sableJar {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+dependencies {
+    sableJar "maven.modrinth:sable:${sableVersion}"
+}
+
+def unbundled = layout.buildDirectory.dir('sable-bundle')
+def unbundle = tasks.register('unbundleSable', Sync) {
+    description = 'Takes sable-companion out of the Sable jar, to compile against'
+    from({ zipTree(configurations.sableJar.singleFile) }) {
+        include "META-INF/jarjar/${sableCompanionJar}"
+        eachFile { path = name }
+    }
+    includeEmptyDirs = false
+    into unbundled
+}
+
+dependencies {
+    compileOnly("maven.modrinth:sable:${sableVersion}") { transitive = false }
+    compileOnly files(unbundled.map { it.file(sableCompanionJar) }).builtBy(unbundle)
+    compileOnly("com.simibubi.create:create-1.21.1:${createVersion}:slim") { transitive = false }
 }
 
 processResources {

@@ -244,19 +244,28 @@ public final class DistantHorizonsCompat {
         } catch (Throwable t) {
             // The folder is still the recording's own, only not named after the dimension
         }
-        File copied = copyOfWorld(level);
-        if (copied != null) {
-            return copied;
+        Path folder = copyOfWorld(level);
+        if (folder == null) {
+            folder = folderRoot().resolve(safe(recording)).resolve(safe(name));
         }
-        File folder = folderRoot().resolve(safe(recording)).resolve(safe(name)).toFile();
-        folder.mkdirs();
-        return folder;
+        try {
+            return FarTerrainFolders.openable(folder, folderRoot().resolve("links").resolve(folderRoot().relativize(folder))).toFile();
+        } catch (Throwable t) {
+            if (!linkFailureTold) {
+                linkFailureTold = true;
+                Host.LOGGER.warn("Dailies: no junction could be made for the playback world's far terrain, so Distant Horizons is given {} itself and may fail to open it again after a jump. Said once: {}", folder, t.toString());
+            }
+            folder.toFile().mkdirs();
+            return folder.toFile();
+        }
     }
+
+    private static boolean linkFailureTold = false;
 
     private static final String DATABASE = "DistantHorizons.sqlite";
 
     /** Dailies' copy of the far terrain of the world recorded, for this dimension; null when there is none to copy */
-    private static @Nullable File copyOfWorld(Object level) {
+    private static @Nullable Path copyOfWorld(Object level) {
         try {
             comedymonkey.dailies.file.RecordingManifest manifest = Playback.manifest();
             Object wrapped = getWrappedMcObject.invoke(level);
@@ -277,20 +286,28 @@ public final class DistantHorizonsCompat {
             Path copy = folderRoot().resolve("worlds").resolve(safe(Integer.toHexString(source.toString().toLowerCase(java.util.Locale.ROOT).hashCode())
                 + "-" + source.getFileName())).resolve(safe(dimension));
             refresh(source, copy);
-            return copy.toFile();
+            return copy;
         } catch (Throwable t) {
             Host.LOGGER.warn("Dailies: the far terrain of the world recorded could not be copied for playback; it is built from the recording's chunks instead: {}", t.toString());
             return null;
         }
     }
 
-    /** Copies the world's far terrain store, with the journal that may hold its latest writes, when it has changed since */
+    /**
+     * Copies the world's far terrain store, with the journal that may hold its latest writes, when it has changed since.
+     * While Distant Horizons still has the copy open (it keeps it open after closing a level) it cannot be replaced, and
+     * the copy made before is used as it is until the game starts again
+     */
     private static void refresh(Path source, Path copy) throws java.io.IOException {
         java.nio.file.Files.createDirectories(copy);
         String stamp = stamp(source);
         Path stampFile = copy.resolve("dailies-source.txt");
-        if (java.nio.file.Files.isRegularFile(copy.resolve(DATABASE)) && java.nio.file.Files.isRegularFile(stampFile)
-            && java.nio.file.Files.readString(stampFile).equals(stamp)) {
+        boolean have = java.nio.file.Files.isRegularFile(copy.resolve(DATABASE));
+        if (have && java.nio.file.Files.isRegularFile(stampFile) && java.nio.file.Files.readString(stampFile).equals(stamp)) {
+            return;
+        }
+        if (have && !FarTerrainFolders.renamable(copy)) {
+            Host.LOGGER.info("Dailies: the far terrain of {} has changed, but Distant Horizons still has the copy open, so playback shows the copy made before", source);
             return;
         }
         long started = System.nanoTime();
@@ -367,6 +384,8 @@ public final class DistantHorizonsCompat {
     }
 
     private static void forgetLevel() {
+        checkGeneration++;
+        answers.clear();
         wrappedLevel = new WeakReference<>(null);
         levelWrapper = null;
         cache = null;
@@ -478,6 +497,9 @@ public final class DistantHorizonsCompat {
             if (Boolean.FALSE.equals(value)) {
                 return true;
             }
+            if (checkStuck()) {
+                return true;
+            }
             if (!waiting.isEmpty()) {
                 return false;
             }
@@ -489,8 +511,38 @@ public final class DistantHorizonsCompat {
         return unconfirmed.isEmpty() && frames - lastChange >= QUIET_FRAMES;
     }
 
-    /** Asks the store about a few of the chunks handed over: those it holds are done with */
+    /**
+     * Asks of the store, on a thread of its own, about a few of the chunks handed over: those it holds are done with.
+     * Never on the game's thread: Distant Horizons answers by waiting, with no limit, for the chunk's data to load, and
+     * while it is still opening a large store and taking in the chunks just handed over that wait did not end. The
+     * game froze on the first frame of an export that rebuilt the world (the owner, 20 November). One that has not
+     * answered after {@link #CHECK_PATIENCE_NANOS} is given up on, and the far terrain counts as settled
+     */
     private static void confirmSome() throws Exception {
+        Throwable problem = checkProblem;
+        if (problem != null) {
+            checkProblem = null;
+            throw problem instanceof Exception exception ? exception : new RuntimeException(problem);
+        }
+        for (long[] answer; (answer = answers.poll()) != null; ) {
+            if (answer[0] != checkGeneration || !unconfirmed.containsKey(answer[1])) {
+                continue;
+            }
+            long pos = answer[1];
+            int attempts = unconfirmed.get(pos) + 1;
+            unconfirmed.remove(pos);
+            if (answer[2] != 0 || attempts >= CONFIRM_ATTEMPTS) {
+                // A chunk asked about thirty times without an answer is let go: an export never waits on one chunk for ever
+                lastChange = frames;
+            } else {
+                // To the back of the line, so the others get asked meanwhile
+                unconfirmed.put(pos, attempts);
+            }
+        }
+        java.util.concurrent.Future<?> asking = checking;
+        if (asking != null && !asking.isDone()) {
+            return;
+        }
         ClientLevel level = Minecraft.getInstance().level;
         Object wrapper = level == null ? null : wrapperFor(level);
         if (wrapper == null || unconfirmed.isEmpty()) {
@@ -503,20 +555,48 @@ public final class DistantHorizonsCompat {
             }
             asked.add(entry.getLongKey());
         }
-        for (long pos : asked) {
-            Object answer = getAllTerrainDataAtChunkPos.invoke(terrainRepo, wrapper, ChunkPos.getX(pos), ChunkPos.getZ(pos), cache);
-            boolean held = answer != null && resultSuccess.getBoolean(answer) && holdsData(resultPayload.get(answer));
-            int attempts = unconfirmed.get(pos) + 1;
-            if (held || attempts >= CONFIRM_ATTEMPTS) {
-                // A chunk asked about thirty times without an answer is let go: an export never waits on one chunk for ever
-                unconfirmed.remove(pos);
-                lastChange = frames;
-            } else {
-                // To the back of the line, so the others get asked meanwhile
-                unconfirmed.remove(pos);
-                unconfirmed.put(pos, attempts);
+        long generation = checkGeneration;
+        Object askCache = cache;
+        checkStarted = System.nanoTime();
+        checking = CHECKER.submit(() -> {
+            try {
+                for (long pos : asked) {
+                    Object answer = getAllTerrainDataAtChunkPos.invoke(terrainRepo, wrapper, ChunkPos.getX(pos), ChunkPos.getZ(pos), askCache);
+                    boolean held = answer != null && resultSuccess.getBoolean(answer) && holdsData(resultPayload.get(answer));
+                    answers.add(new long[]{generation, pos, held ? 1 : 0});
+                }
+            } catch (Throwable t) {
+                checkProblem = t;
             }
+        });
+    }
+
+    /** How long one ask of the store may take before the far terrain stops being waited for */
+    private static final long CHECK_PATIENCE_NANOS = 5_000_000_000L;
+    private static final java.util.concurrent.ExecutorService CHECKER = java.util.concurrent.Executors.newSingleThreadExecutor(work -> {
+        Thread thread = new Thread(work, "Dailies-Far-Terrain-Check");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final java.util.concurrent.ConcurrentLinkedQueue<long[]> answers = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private static volatile @Nullable Throwable checkProblem = null;
+    private static volatile @Nullable java.util.concurrent.Future<?> checking = null;
+    private static long checkStarted = 0;
+    /** Answers about a world no longer loaded are thrown away */
+    private static long checkGeneration = 0;
+    private static boolean checkStuckTold = false;
+
+    /** Whether the last ask of the store has gone unanswered for too long */
+    private static boolean checkStuck() {
+        java.util.concurrent.Future<?> asking = checking;
+        if (asking == null || asking.isDone() || System.nanoTime() - checkStarted < CHECK_PATIENCE_NANOS) {
+            return false;
         }
+        if (!checkStuckTold) {
+            checkStuckTold = true;
+            Host.LOGGER.warn("Dailies: Distant Horizons has not said for {} s whether it holds a chunk's far terrain, so exports stop waiting for it and show the far terrain as it is. Said once", CHECK_PATIENCE_NANOS / 1_000_000_000L);
+        }
+        return true;
     }
 
     private static boolean holdsData(@Nullable Object payload) {
@@ -543,7 +623,15 @@ public final class DistantHorizonsCompat {
         try {
             Object wrapper = wrapperFor(level);
             Object folder = wrapper == null ? null : getDhSaveFolder.invoke(wrapper);
-            return folder instanceof File file ? file.toPath() : null;
+            if (!(folder instanceof File file)) {
+                return null;
+            }
+            // The folder itself, not the junction Distant Horizons is given on Windows (see FarTerrainFolders.openable)
+            try {
+                return file.toPath().toRealPath();
+            } catch (java.io.IOException e) {
+                return file.toPath();
+            }
         } catch (Throwable t) {
             return null;
         }

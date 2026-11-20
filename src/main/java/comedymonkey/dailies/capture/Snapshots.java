@@ -557,7 +557,23 @@ public final class Snapshots {
         for (PlayerTeam team : scoreboard.getPlayerTeams()) {
             out.packet(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
         }
-        minecraft.gui.getBossOverlay().events.values().forEach(bar -> out.packet(ClientboundBossEventPacket.createAddPacket(bar)));
+        minecraft.gui.getBossOverlay().events.values().forEach(bar -> out.packet(addBar(bar)));
+    }
+
+    /**
+     * A boss bar as the last packet left it. What a bar shows is eased by the clock on the wall towards the progress it
+     * was last told, over a tenth of a second, and the game's own add packet takes what it shows: a bar told it had
+     * emptied just before a snapshot was written down as it was before (the bestiary's dying dragon: 0.64 in the snapshot
+     * at 1444, live 0, and no packet after it to empty it, so a jump back to 1500 or 1516 showed 0.64)
+     */
+    static ClientboundBossEventPacket addBar(net.minecraft.client.gui.components.LerpingBossEvent bar) {
+        net.minecraft.world.BossEvent told = new net.minecraft.world.BossEvent(bar.getId(), bar.getName(), bar.getColor(), bar.getOverlay()) {
+        };
+        told.setProgress(bar.targetPercent);
+        told.setDarkenScreen(bar.shouldDarkenScreen());
+        told.setPlayBossMusic(bar.shouldPlayBossMusic());
+        told.setCreateWorldFog(bar.shouldCreateWorldFog());
+        return ClientboundBossEventPacket.createAddPacket(told);
     }
 
     /**

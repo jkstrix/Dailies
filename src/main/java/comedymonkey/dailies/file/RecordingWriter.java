@@ -127,6 +127,22 @@ public final class RecordingWriter implements Closeable {
         return name;
     }
 
+    /**
+     * Stores bytes a compat keeps once for the whole recording (specification REC-28), such as a schematic a compat's
+     * states name: as shared data, so the same bytes stored again cost nothing, and listed in the manifest, which is
+     * written again at once the first time so that a crash keeps them. The name is trusted, as for {@link #putShared}.
+     *
+     * @return the name to ask for them by
+     */
+    public String putCompatBlob(byte[] data, byte[] hash) throws IOException {
+        String name = this.putShared(data, hash);
+        if (!this.manifest.compatBlobs.contains(name)) {
+            this.manifest.compatBlobs.add(name);
+            this.writeManifest();
+        }
+        return name;
+    }
+
     /** The name shared data is stored by: the SHA-256 of its bytes. Any thread */
     public static byte[] hashOf(byte[] data) {
         return Packing.hash(data);

@@ -231,9 +231,44 @@ public final class SelfTest {
             always("trains", "TrainSteps.run", () -> TrainSteps.run(this)),
             // Powder snow, snowballs and the void, in a recording of their own
             always("edges", "EdgeSteps.run", () -> EdgeSteps.run(this)),
+            // A recording made on a server that numbers its sounds differently from this game, simulated by numbering them so
+            // before a world opens, plays each sound as itself (REC-37, PLAY-25); two short recordings in a world of their own
+            always("registries", "RegistrySteps.run", () -> RegistrySteps.run(this)),
             // The recorder's windows (a chest, a furnace, a villager's trades, the inventory) drawn in playback, in a world and a
             // short recording of their own; each later compat adds a display step of the same shape
             always("windows", "WindowSteps.run", () -> WindowSteps.run(this)),
+            // The game's books, lectern and signs, through Dailies' own compat (REC-29): its display test, in a world and a
+            // recording of its own
+            always("windows", "CompatDisplaySteps.vanilla", () -> CompatDisplaySteps.vanilla(this)),
+            // Post Rider's mailbox, a letter read and a letter written, through the compat in Post Rider itself (REC-26, PLAY-21):
+            // the compat's own display test, in a world and a recording of its own; skipped with a line without Post Rider
+            always("postrider", "CompatDisplaySteps.postRider", () -> CompatDisplaySteps.postRider(this)),
+            // Create's value settings board and value box, the goggles, a sequenced gearshift and a clipboard, through the
+            // Create compat (compats/create, CPT-6): in a world and a recording of its own; skipped with a line without Create
+            // or the compat
+            always("create", "CompatDisplaySteps.create", () -> CompatDisplaySteps.create(this)),
+            // Jade's box over play, through the Jade compat (compats/jade, CPT-8): in a world and a recording of its own; skipped
+            // with a line without Jade or the compat
+            always("jade", "CompatDisplaySteps.jade", () -> CompatDisplaySteps.jade(this)),
+            // Create Aeronautics and its add-ons, through the Create Aeronautics compat (compats/aeronautics, CPT-9): in a world and
+            // a recording of their own; skipped with a line without the mods or the compat
+            always("aeronautics", "CompatDisplaySteps.aeronautics", () -> CompatDisplaySteps.aeronautics(this)),
+            // Supplementaries and Amendments, through the Supplementaries compat (compats/supplementaries, CPT-10): in a world and a
+            // recording of their own; then their placed items (skull piles, skull candles, book piles and the rest) played back
+            // in place, in another; each skipped with a line without the mods or the compat
+            always("supplementaries", "CompatDisplaySteps.supplementaries", () -> CompatDisplaySteps.supplementaries(this)),
+            always("supplementaries", "SupplementariesPlacingSteps.run", () -> SupplementariesPlacingSteps.run(this)),
+            // Create's other add-ons, through the compat for them (compats/createextras, CPT-11): in a world and a recording of
+            // their own; skipped with a line without the add-ons or the compat
+            always("createextras", "CompatDisplaySteps.createExtras", () -> CompatDisplaySteps.createExtras(this)),
+            // The rest of the pack (the compasses, Sophisticated Backpacks, Curios, Corpse, VanillaBackport),
+            // through the extras compat (compats/extras, CPT-12): in a world and a recording of their own; skipped with a line
+            // without the mods or the compat
+            always("extras", "CompatDisplaySteps.extras", () -> CompatDisplaySteps.extras(this)),
+            // The owner's own mods, each through the compat in the mod itself, in a world and a recording of its own; skipped
+            // with a line without the mod, or a version of it without the compat
+            always("createaddons", "CompatDisplaySteps.createAddons", () -> CompatDisplaySteps.createAddons(this)),
+            always("mcpcraft", "CompatDisplaySteps.mcpCraft", () -> CompatDisplaySteps.mcpCraft(this)),
             // About ten minutes when it records, about six when its fixture is reused: -PdailiesFlags=dailies.test.bestiary.
             // The recording is kept in dailies/fixtures; dailies.test.recordTours records it (and the tour below) again
             when(Boolean.getBoolean("dailies.test.bestiary"), "the bestiary was not asked for (dailies.test.bestiary)", "bestiary", "BestiarySteps.run", () -> BestiarySteps.run(this)),
@@ -593,6 +628,9 @@ public final class SelfTest {
         });
         try {
             return done.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            logThreads("60 seconds waiting for the client thread to run a step");
+            throw e;
         } catch (java.util.concurrent.ExecutionException e) {
             if (e.getCause() instanceof Exception cause) {
                 throw cause;
@@ -613,9 +651,33 @@ public final class SelfTest {
         long deadline = System.nanoTime() + seconds * 1_000_000_000L;
         while (!condition.getAsBoolean()) {
             if (System.nanoTime() - deadline > 0) {
+                logThreads(seconds + " seconds waiting for " + what);
                 throw new Failure("gave up after " + seconds + " seconds waiting for " + what);
             }
             Thread.sleep(10);
+        }
+    }
+
+    /**
+     * Writes where every thread of the game stands to the log, the render thread first, in one entry: called once as a
+     * wait gives up, before its failure is raised, so a step that hangs (a jump that never finishes, say) shows where the
+     * game was stuck. A stack trace is a snapshot, taken thread by thread, so two threads may be seen a moment apart
+     */
+    static void logThreads(String why) {
+        try {
+            Map<Thread, StackTraceElement[]> traces = Thread.getAllStackTraces();
+            List<Thread> threads = new ArrayList<>(traces.keySet());
+            threads.sort(java.util.Comparator.comparing((Thread thread) -> !"Render thread".equals(thread.getName())).thenComparing(Thread::getName));
+            StringBuilder dump = new StringBuilder("Dailies self test: gave up after ").append(why).append("; every thread, the render thread first:");
+            for (Thread thread : threads) {
+                dump.append("\n\n\"").append(thread.getName()).append("\"").append(thread.isDaemon() ? " daemon" : "").append(" ").append(thread.getState());
+                for (StackTraceElement frame : traces.get(thread)) {
+                    dump.append("\n\tat ").append(frame);
+                }
+            }
+            Host.LOGGER.warn(dump.toString());
+        } catch (Throwable t) {
+            Host.LOGGER.warn("Dailies self test: could not write down the threads after {}", why, t);
         }
     }
 
@@ -652,6 +714,7 @@ public final class SelfTest {
             }
             last = now;
             if (now - deadline > 0) {
+                logThreads(seconds + " seconds waiting for " + ticks + " game ticks to pass");
                 throw new Failure("gave up after " + seconds + " seconds waiting for " + ticks + " game ticks to pass (" + (int) passed + " did)");
             }
         }
@@ -665,6 +728,26 @@ public final class SelfTest {
             net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
             server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput(), command);
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /**
+     * Runs a command as {@link #command} does, and says whether it ran: one the game refuses (a typo, a block state it
+     * does not have) gives false, where {@link #command} lets it pass unseen, its output being hidden
+     */
+    boolean commandRan(String command) throws Exception {
+        net.minecraft.client.server.IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        check(server != null, "there is no built-in server to run '" + command + "' on");
+        java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean(false);
+        server.submit(() -> {
+            net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput()
+                .withCallback((success, result) -> {
+                    if (success) {
+                        ran.set(true);
+                    }
+                }), command);
+        }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+        return ran.get();
     }
 
     void log(String message) {

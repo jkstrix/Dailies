@@ -1,0 +1,88 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies_createextras"
+version = "${version}"
+displayName = "Dailies Create Add-ons Compat"
+logoFile = "dailies_createextras.png"
+logoBlur = false
+authors = "James Knight"
+description = '''
+The play screens and overlays of Create's add-ons in Dailies recordings: Create Deep Seas' sonar, PDA, implosion, engine
+throttle and console, Create Connected's sequenced pulse generator, Create Encased's automatic clutch and recaser wheel,
+Steam 'n' Rails' bogey menu, tag wheel and switch on the train's bar, Create Jetpack's controls, Create: Hypertubes' ride
+arrow, escape bar and placement outline, and the lines all of them put above the hotbar, recorded and drawn again in
+playback. Does nothing unless Dailies and those mods are installed.
+'''
+# Only the player's game has anything to do: a server never needs it, and a game with it joins a server without it
+displayTest = "IGNORE_ALL_VERSION"
+
+[[mixins]]
+config = "dailies_createextras.mixins.json"
+
+[[dependencies.dailies_createextras]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.dailies_createextras]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+# All soft: the compat stands down without Dailies, and leaves out the part of each mod that is missing. The add-ons take
+# any version: some write theirs with a loader and game version after it, which a range would turn away
+[[dependencies.dailies_createextras]]
+modId = "dailies"
+type = "optional"
+versionRange = "[1.1.0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.dailies_createextras]]
+modId = "create_submarine"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_createextras]]
+modId = "create_connected"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_createextras]]
+modId = "createcasing"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_createextras]]
+modId = "railways"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_createextras]]
+modId = "create_jetpack"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.dailies_createextras]]
+modId = "create_hypertube"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"

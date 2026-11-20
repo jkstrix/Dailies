@@ -98,7 +98,10 @@ final class SelfTestSupport {
         test.onClientRun(() -> Playback.jumpTo(tick, true));
         long deadline = started + 120_000_000_000L;
         while (Playback.jumping() || Playback.position() != tick) {
-            check(System.nanoTime() - deadline < 0, "gave up waiting for the jump to tick " + tick);
+            if (System.nanoTime() - deadline >= 0) {
+                SelfTest.logThreads("120 seconds waiting for the jump to tick " + tick);
+                check(false, "gave up waiting for the jump to tick " + tick);
+            }
             check(Playback.lastError() == null, "playback stopped during the jump to tick " + tick + ": " + Playback.lastError());
             Thread.sleep(2);
         }

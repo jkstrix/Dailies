@@ -92,8 +92,17 @@ final class Census {
     List<String> changes;
     /** Block light and sky light at every watched block, sixteen times the one plus the other, where the blocks are kept */
     byte[] light;
-    /** The same three ticks on in the live game, which takes light in a little at a time: either is right for playback */
+    /** The same three ticks on in the live game, which takes light in a little at a time: this, light or lightDrawn is right for playback */
     byte[] lightLater;
+    /**
+     * The same on the first frame the live game drew after this tick; null when another tick came first. The game works
+     * out what the blocks a tick changed do to the light only as it draws, so the light read at the end of a tick is
+     * still that of the tick before, and a jump, which settles the light where it lands, shows this one. A block there
+     * for a single tick had its light only here: oak planks set over the addon's bearing at tick 2061 and taken into
+     * its contraption at 2062 (sky 14 beneath them, 15 at the end of 2061 and again by 2064), and the grass a ghast
+     * fireball blew away at 679 in the bestiary, open to the sky until its fire came at 680
+     */
+    byte[] lightDrawn;
     int recorderId = Integer.MIN_VALUE;
 
     private Census(int tick) {
@@ -158,6 +167,7 @@ final class Census {
             respawnTicks.clear();
         }
         previous = null;
+        awaitingDraw = null;
         lastPlayed = -1;
         TRACKER.forget();
         mode = wanted;
@@ -179,8 +189,18 @@ final class Census {
         GRABS.add(new Object[]{file, new int[]{framesOn}});
     }
 
+    /** Live: the tick just written down whose light is read again once a frame has been drawn after it */
+    private static Census awaitingDraw = null;
+
     private static void drawn() {
         frames++;
+        Census waiting = awaitingDraw;
+        awaitingDraw = null;
+        Minecraft minecraft = Minecraft.getInstance();
+        if (waiting != null && mode == Mode.LIVE && minecraft.level != null && waiting.dimension.equals(minecraft.level.dimension().location().toString())) {
+            byte[] drawn = scanLight(minecraft.level, boxesAt(waiting.dimension, waiting.tick));
+            waiting.lightDrawn = drawn.length == waiting.light.length ? drawn : null;
+        }
         for (Object[] grab : GRABS) {
             int[] left = (int[]) grab[1];
             if (left[0]-- <= 0) {
@@ -218,6 +238,8 @@ final class Census {
                 Census census = take(minecraft, tick, true, previous, TRACKER, keyTicks.contains(tick) || tick % BestiarySteps.EVERY == 0);
                 live.put(tick, census);
                 previous = census;
+                // A tick that came before any frame was drawn leaves the one before it with no light of its own drawn
+                awaitingDraw = census.light != null ? census : null;
                 Census earlier = live.get(tick - 3);
                 if (earlier != null && earlier.light != null && earlier.dimension.equals(census.dimension)) {
                     byte[] later = scanLight(minecraft.level, boxesAt(earlier.dimension, earlier.tick));
@@ -610,8 +632,25 @@ final class Census {
 
     /** The light of the watched boxes as playback has it this instant */
     static byte[] lightNow(Minecraft minecraft, int tick) {
-        return scanLight(minecraft.level, boxesAt(minecraft.level.dimension().location().toString(), tick));
+        List<int[]> boxes = boxesAt(minecraft.level.dimension().location().toString(), tick);
+        byte[] light = scanLight(minecraft.level, boxes);
+        // Which of the chunks looked at playback did not hold: light there is only what the game kept beside the chunks it holds
+        java.util.Set<String> unheld = new java.util.HashSet<>();
+        for (int[] box : boxes) {
+            for (int cx = box[0] >> 4; cx <= box[3] >> 4; cx++) {
+                for (int cz = box[2] >> 4; cz <= box[5] >> 4; cz++) {
+                    if (!minecraft.level.getChunkSource().hasChunk(cx, cz)) {
+                        unheld.add(cx + "," + cz);
+                    }
+                }
+            }
+        }
+        lookedAt = new Object[] {light, unheld};
+        return light;
     }
+
+    /** The light lightNow last gave, and the chunks among those it looked at that playback did not hold */
+    private static volatile Object[] lookedAt = null;
 
     /** Where light differs from the live game's at a tick, each as "x y z: block/sky live -> block/sky"; null when it cannot be compared */
     static List<String> lightDifferences(Census then, byte[] now) {
@@ -624,7 +663,7 @@ final class Census {
             int wide = box[3] - box[0] + 1, high = box[4] - box[1] + 1, deep = box[5] - box[2] + 1;
             for (int i = 0; i < wide * high * deep; i++) {
                 byte was = then.light[offset + i], is = now[offset + i];
-                if (was != is && (then.lightLater == null || then.lightLater[offset + i] != is)) {
+                if (was != is && (then.lightLater == null || then.lightLater[offset + i] != is) && (then.lightDrawn == null || then.lightDrawn[offset + i] != is)) {
                     differ.add((box[0] + i % wide) + " " + (box[1] + i / (wide * deep)) + " " + (box[2] + (i / wide) % deep) + ": " + ((was >> 4) & 15) + "/" + (was & 15) + " -> " + ((is >> 4) & 15) + "/" + (is & 15));
                 }
             }
@@ -639,9 +678,14 @@ final class Census {
         if (differ != null && !differ.isEmpty()) {
             // By chunk, so it can be seen whether whole chunks or the edges of something are wrong
             TreeMap<String, Integer> chunks = new TreeMap<>();
+            // A chunk playback did not hold is named so: its light is what the game kept beside the chunks it holds
+            Object[] looked = lookedAt;
+            @SuppressWarnings("unchecked")
+            java.util.Set<String> unheld = looked != null && looked[0] == now ? (java.util.Set<String>) looked[1] : java.util.Set.of();
             for (String place : differ) {
                 String[] at = place.substring(0, place.indexOf(':')).split(" ");
-                chunks.merge((Integer.parseInt(at[0]) >> 4) + "," + (Integer.parseInt(at[2]) >> 4), 1, Integer::sum);
+                String chunk = (Integer.parseInt(at[0]) >> 4) + "," + (Integer.parseInt(at[2]) >> 4);
+                chunks.merge(unheld.contains(chunk) ? chunk + " not held" : chunk, 1, Integer::sum);
             }
             tally.add(mode, "light", "differs", then.tick, differ.size() + " places at tick " + then.tick + ", block/sky live -> playback: " + few(differ) + "; by chunk " + chunks, warning);
             tally.lightPlaces.merge(mode, differ.size(), Integer::sum);
@@ -704,6 +748,153 @@ final class Census {
                 }
             }
         }
+    }
+
+    /**
+     * A block entity as described, without the NeoForge attachments in its saved data that hold no more than their
+     * defaults. NeoForge makes an attachment, at its default, the moment anything asks for it, and a mod may ask as it
+     * draws: Supplementaries asks every block entity drawn whether it is written in antique ink, so a sign holds
+     * supplementaries:antique_ink false from the first frame that draws it, which in playback at speed comes ticks later
+     * than in the live game. Such an attachment is no different from none and changes nothing drawn; one set to anything
+     * else is still compared. Done on the text, so the live game's descriptions kept with a fixture compare so too
+     */
+    static String withoutDefaultAttachments(String text) {
+        String key = "\"" + net.neoforged.neoforge.attachment.AttachmentHolder.ATTACHMENTS_NBT_KEY + "\":{";
+        int at = text == null ? -1 : text.indexOf(key);
+        if (at < 0) {
+            return text;
+        }
+        int open = at + key.length() - 1;
+        int close = matching(text, open);
+        if (close < 0) {
+            return text;
+        }
+        List<String> kept = new ArrayList<>();
+        for (String entry : entries(text.substring(open + 1, close))) {
+            int colon = nameEnds(entry);
+            String standard = colon < 0 ? null : defaultAttachment(entry.substring(0, colon).replace("\"", ""));
+            if (standard == null || !standard.equals(entry)) {
+                kept.add(entry);
+            }
+        }
+        if (!kept.isEmpty()) {
+            return text.substring(0, open + 1) + String.join(",", kept) + text.substring(close);
+        }
+        // None left: the key goes too, with the comma that set it apart
+        int from = at, to = close + 1;
+        if (from > 0 && text.charAt(from - 1) == ',') {
+            from--;
+        } else if (to < text.length() && text.charAt(to) == ',') {
+            to++;
+        }
+        return text.substring(0, from) + text.substring(to);
+    }
+
+    /** By attachment name, the attachment at its default as a description writes it, "name":value; "" when it has none here */
+    private static final Map<String, String> DEFAULT_ATTACHMENTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static String defaultAttachment(String name) {
+        String known = DEFAULT_ATTACHMENTS.computeIfAbsent(name, missing -> {
+            try {
+                net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(missing);
+                net.neoforged.neoforge.attachment.AttachmentType<?> type = id == null ? null : net.neoforged.neoforge.registries.NeoForgeRegistries.ATTACHMENT_TYPES.get(id);
+                ClientLevel level = Minecraft.getInstance().level;
+                if (type == null || level == null) {
+                    return "";
+                }
+                // A holder of its own, standing for no block entity: a default that needs one is not made, and compared as it is
+                net.neoforged.neoforge.attachment.AttachmentHolder.AsField fresh = new net.neoforged.neoforge.attachment.AttachmentHolder.AsField(null) {
+                    @Override
+                    public void syncData(net.neoforged.neoforge.attachment.AttachmentType<?> changed) {
+                    }
+                };
+                fresh.getData(type);
+                net.minecraft.nbt.CompoundTag saved = fresh.serializeAttachments(level.registryAccess());
+                if (saved == null || !saved.contains(missing)) {
+                    return "";
+                }
+                net.minecraft.nbt.CompoundTag alone = new net.minecraft.nbt.CompoundTag();
+                alone.put(missing, saved.get(missing));
+                String written = clean(String.valueOf(alone));
+                return written.substring(1, written.length() - 1);
+            } catch (Throwable t) {
+                return "";
+            }
+        });
+        return known.isEmpty() ? null : known;
+    }
+
+    /** Where the brace or bracket at {@code open} is closed, minding quoted text; -1 when it is not */
+    private static int matching(String text, int open) {
+        int depth = 0;
+        char quote = 0;
+        for (int i = open; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (quote != 0) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == quote) {
+                    quote = 0;
+                }
+            } else if (c == '"' || c == '\'') {
+                quote = c;
+            } else if (c == '{' || c == '[') {
+                depth++;
+            } else if ((c == '}' || c == ']') && --depth == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** The entries of a compound's inside, split at the commas between them */
+    private static List<String> entries(String inside) {
+        List<String> entries = new ArrayList<>();
+        int depth = 0, start = 0;
+        char quote = 0;
+        for (int i = 0; i < inside.length(); i++) {
+            char c = inside.charAt(i);
+            if (quote != 0) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == quote) {
+                    quote = 0;
+                }
+            } else if (c == '"' || c == '\'') {
+                quote = c;
+            } else if (c == '{' || c == '[') {
+                depth++;
+            } else if (c == '}' || c == ']') {
+                depth--;
+            } else if (c == ',' && depth == 0) {
+                entries.add(inside.substring(start, i));
+                start = i + 1;
+            }
+        }
+        if (start < inside.length()) {
+            entries.add(inside.substring(start));
+        }
+        return entries;
+    }
+
+    /** Where an entry's name ends, outside its quotes; -1 when it has none */
+    private static int nameEnds(String entry) {
+        char quote = 0;
+        for (int i = 0; i < entry.length(); i++) {
+            char c = entry.charAt(i);
+            if (quote != 0) {
+                if (c == '\\') {
+                    i++;
+                } else if (c == quote) {
+                    quote = 0;
+                }
+            } else if (c == '"' || c == '\'') {
+                quote = c;
+            } else if (c == ':') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static String describe(BlockEntity entity, ClientLevel level) {
@@ -941,7 +1132,7 @@ final class Census {
         places.addAll(now.blockEntities.keySet());
         for (long place : places) {
             String a = then.blockEntities.get(place), b = now.blockEntities.get(place);
-            if (!java.util.Objects.equals(a, b)) {
+            if (!java.util.Objects.equals(a, b) && !java.util.Objects.equals(withoutDefaultAttachments(a), withoutDefaultAttachments(b))) {
                 String kind = (a != null ? a : b).split(" ")[0];
                 tally.add(mode, "block entity " + kind, a == null ? "is in playback only" : b == null ? "is missing in playback" : "differs", tick,
                     BlockPos.of(place).toShortString() + ": live " + a + ", playback " + b, false);
@@ -1042,6 +1233,7 @@ final class Census {
             out.strings(census.changes);
             out.bytes(census.light);
             out.bytes(census.lightLater);
+            out.bytes(census.lightDrawn);
             out.json.endArray();
         }
         out.json.endArray();
@@ -1091,6 +1283,8 @@ final class Census {
             census.changes = in.strings();
             census.light = in.bytes();
             census.lightLater = in.bytes();
+            // Notes written before the drawn light was kept end here; they play as they did, without it
+            census.lightDrawn = in.more() ? in.bytes() : null;
             in.json.endArray();
             live.put(census.tick, census);
         }

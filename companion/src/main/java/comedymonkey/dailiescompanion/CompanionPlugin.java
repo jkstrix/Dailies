@@ -7,7 +7,8 @@ import net.minecraft.server.level.ServerPlayer;
 /**
  * A server-side helper that sends a player's game facts only the server knows, for a client compat to record (for
  * example the server half of a mod's compat). Register it with {@link CompanionPlugins#register} while the mod loads,
- * then push data to players with {@link CompanionPlugins#push}.
+ * then push data to players with {@link CompanionPlugins#push}. Send each player only facts about their own play or
+ * what they could see for themselves: it is kept in their recordings (see {@link CompanionPlugins} on privacy).
  */
 public interface CompanionPlugin {
 

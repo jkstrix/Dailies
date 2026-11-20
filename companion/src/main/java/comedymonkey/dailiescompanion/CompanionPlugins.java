@@ -22,6 +22,13 @@ import org.slf4j.LoggerFactory;
  * One plugin is built in, {@value #PLUGINS}: it tells a game which plugins this server has and their versions, so a
  * client half knows whether its server half is there before it asks. Its data is a varint count, then for each plugin
  * its id (a varint length and UTF-8) and its version (a varint).
+ *
+ * <p>
+ * Privacy (specification SRV-9): what goes to a player's game is kept in their recordings and can end up in a video,
+ * so a plugin sends each player only facts about that player's own play, or what that player could see for
+ * themselves in the world; never another player's inventory, mail, position or messages that were not meant for them.
+ * The server's operator can switch any plugin off for everyone with {@code disabledPlugins}: it is left out of the list,
+ * a game asking for it is told the server has none, and what it pushes is dropped.
  */
 public final class CompanionPlugins {
 	public static final String PLUGINS = "dailies_companion:plugins";
@@ -68,13 +75,21 @@ public final class CompanionPlugins {
 		}
 	}
 
-	/** Every plugin registered, by id, with its version. */
+	/** Every plugin registered and not switched off in the settings, by id, with its version. */
 	public static Map<String, Integer> plugins() {
 		Map<String, Integer> all = new LinkedHashMap<>();
 		synchronized (REGISTERED) {
-			REGISTERED.forEach((id, plugin) -> all.put(id, plugin.version()));
+			REGISTERED.forEach((id, plugin) -> {
+				if (enabled(id))
+					all.put(id, plugin.version());
+			});
 		}
 		return all;
+	}
+
+	/** Whether a plugin may send anything: the built-in list always may, the others unless {@code disabledPlugins} names them. */
+	static boolean enabled(String id) {
+		return PLUGINS.equals(id) || CompanionConfig.pluginEnabled(id);
 	}
 
 	/** Whether this player's game is listening on the shared channel. */
@@ -85,7 +100,8 @@ public final class CompanionPlugins {
 	/**
 	 * Sends a plugin's data to one player, with the plugin's version.
 	 *
-	 * @return false when the plugin is not registered, the player's game is not listening, or the data is too long
+	 * @return false when the plugin is not registered or is switched off, the player's game is not listening, or the
+	 *         data is too long
 	 */
 	public static boolean push(ServerPlayer player, String id, byte[] data) {
 		CompanionPlugin plugin = REGISTERED.get(id);
@@ -93,6 +109,8 @@ public final class CompanionPlugins {
 			LoggerFactory.getLogger("Dailies Companion").warn("Dailies Companion: nothing was sent for '{}', which is not a registered plugin", id);
 			return false;
 		}
+		if (!enabled(id))
+			return false;
 		return send(player, id, plugin.version(), data);
 	}
 
@@ -120,7 +138,7 @@ public final class CompanionPlugins {
 	/** A player's game asked for a plugin's data: the plugin answers, or version 0 says the server has none of that id. Server thread */
 	static void asked(ServerPlayer player, String id, int clientVersion) {
 		CompanionPlugin plugin = REGISTERED.get(id);
-		if (plugin == null) {
+		if (plugin == null || !enabled(id)) {
 			send(player, id, 0, null);
 			return;
 		}

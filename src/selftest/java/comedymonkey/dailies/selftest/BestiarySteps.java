@@ -60,8 +60,11 @@ final class BestiarySteps {
     /**
      * Goes up whenever the staging changes, so that a fixture staged before is recorded again by itself.
      * 2: a stage closes after two quiet ticks, before the field is cleared, so that clearing it is not part of the item.
+     * 5: the ghast fireball's explosion is heard as the game's sound or as the one Amendments plays in its place, a verdict
+     * kept in the fixture's notes when it is recorded.
+     * 6: the notes keep the light the live game drew after each tick written down (Census.lightDrawn).
      */
-    static final int VERSION = 4;
+    static final int VERSION = 6;
 
     static SelfTest test;
     static Minecraft minecraft;
@@ -413,10 +416,21 @@ final class BestiarySteps {
     }
 
     static Function<Item, String> heard(String sound) {
-        return new Need("heard " + sound, item -> {
-            long times = Census.liveSounds.stream().filter(line -> line.endsWith(" " + sound) && Integer.parseInt(line.substring(0, line.indexOf(' '))) >= item.from
+        return heard(sound, new String[0]);
+    }
+
+    /**
+     * Heard as the sound, or as one a mod plays in its place: Amendments, in the owner's pack, gives the ghast fireball's
+     * explosion a sound of its own (amendments:explosion.fireball) instead of the game's
+     */
+    static Function<Item, String> heard(String sound, String... insteadOf) {
+        java.util.List<String> any = new java.util.ArrayList<>(java.util.List.of(insteadOf));
+        any.add(0, sound);
+        return new Need("heard " + String.join(" or ", any), item -> {
+            long times = Census.liveSounds.stream().filter(line -> any.stream().anyMatch(name -> line.endsWith(" " + name))
+                && Integer.parseInt(line.substring(0, line.indexOf(' '))) >= item.from
                 && Integer.parseInt(line.substring(0, line.indexOf(' '))) <= item.to).count();
-            return times == 0 ? null : sound + " heard " + times + " times";
+            return times == 0 ? null : String.join(" or ", any) + " heard " + times + " times";
         });
     }
 

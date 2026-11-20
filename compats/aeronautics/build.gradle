@@ -1,0 +1,127 @@
+// The Create Aeronautics compat (specification CPT-9): a small mod of its own, dailies_aeronautics, that records the play
+// screens and overlays of Create Aeronautics' bundle (Aeronautics, Simulated and Offroad) and of the add-ons the owner's
+// pack plays it with (Simulated Coasters, Gyroscope Stabilizers, Create Propulsion) through Dailies' compat API, and
+// draws them again in playback. Like the Create compat it has only a client half: everything it records is on the
+// player's own screen. It loads and runs without Dailies or any of those mods, doing nothing: each is a soft dependency,
+// only compiled against, and each part is claimed only when its mod is loaded.
+//
+// Built with Dailies (gradlew build in the repository builds it too); the modded test loads its jar (installTestMods).
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+version = '1.0.0'
+group = 'comedymonkey.dailiescompat'
+
+base {
+    archivesName = 'dailies-compat-aeronautics-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+    // Create, Ponder (with Catnip in it) and Flywheel, as Create's own README names them: Simulated's screens are built on
+    // Create's and Catnip's
+    maven {
+        name = 'Create'
+        url = 'https://maven.createmod.net'
+        content {
+            includeGroup 'com.simibubi.create'
+            includeGroup 'net.createmod.ponder'
+            includeGroup 'dev.engine-room.flywheel'
+        }
+    }
+    // Create Aeronautics' bundle, Sable and Simulated Coasters as Modrinth publishes them: the same jars, byte for byte, as
+    // the ones in the owner's pack
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies_aeronautics {
+            sourceSet sourceSets.main
+        }
+    }
+    // No runs: the compat is tried in game beside Dailies and the mods, in the modded test (its aeronautics group)
+}
+
+// The versions in the owner's pack and the modded test. Aeronautics comes as one bundle holding Aeronautics, Simulated
+// and Offroad 1.3.2 as jars inside it; the compat compiles against the Simulated inside the very bundle the pack plays.
+// (The Simulated team's own maven has a simulated-neoforge 1.3.2 too, but a later build of it than the bundle's, with a
+// few members the pack's lacks.)
+def aeronauticsVersion = '1.3.2+mc1.21.1'
+def simulatedJar = 'dev.simulated_team.simulated.simulated-neoforge-1.21.1-1.3.2.jar'
+def sableVersion = '2.0.6+mc1.21.1'
+def coastersVersion = '0.1.5'
+def createVersion = '6.0.10-281'
+def ponderVersion = '1.0.82+mc1.21.1'
+def flywheelVersion = '1.0.6'
+
+configurations {
+    // The bundle itself, only to take Simulated out of it
+    aeronauticsBundle {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+dependencies {
+    aeronauticsBundle "maven.modrinth:create-aeronautics:${aeronauticsVersion}"
+}
+
+// Simulated, as the bundle carries it (META-INF/jarjar), put where the compiler can read it
+def unbundled = layout.buildDirectory.dir('aeronautics-bundle')
+def unbundle = tasks.register('unbundleAeronautics', Sync) {
+    description = 'Takes Simulated out of the Create Aeronautics bundle, to compile against'
+    from({ zipTree(configurations.aeronauticsBundle.singleFile) }) {
+        include "META-INF/jarjar/${simulatedJar}"
+        eachFile { path = name }
+    }
+    includeEmptyDirs = false
+    into unbundled
+}
+
+dependencies {
+    // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
+    compileOnly project(path: ':', configuration: 'dailiesApi')
+    // Create and the libraries its classes are built on, Simulated, Sable and Simulated Coasters: the same, so the mod runs
+    // without any of them. Aeronautics, Offroad, Gyroscope Stabilizers and Create Propulsion are not compiled against:
+    // the compat names their blocks and items by id, and none of their classes is needed (see the compat's sweep)
+    compileOnly("com.simibubi.create:create-1.21.1:${createVersion}:slim") { transitive = false }
+    compileOnly("net.createmod.ponder:ponder-neoforge:${ponderVersion}") { transitive = false }
+    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1:${flywheelVersion}") { transitive = false }
+    compileOnly files(unbundled.map { it.file(simulatedJar) }).builtBy(unbundle)
+    compileOnly("maven.modrinth:sable:${sableVersion}") { transitive = false }
+    compileOnly("maven.modrinth:create-coasters-simulated:${coastersVersion}") { transitive = false }
+
+    // The states' unit tests need neither the game nor the mods: the states are plain bytes
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

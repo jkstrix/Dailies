@@ -56,8 +56,11 @@ import static comedymonkey.dailies.selftest.SelfTest.args;
  */
 final class AddonSteps {
 
-    /** Goes up whenever the staging changes, so that a fixture staged before is staged and recorded again by itself */
-    private static final int VERSION = 1;
+    /**
+     * Goes up whenever the staging changes, so that a fixture staged before is staged and recorded again by itself.
+     * 2: the notes keep the light the live game drew after each tick written down (Census.lightDrawn)
+     */
+    private static final int VERSION = 2;
 
 
     static final String WORLD = "Dailies Addon";

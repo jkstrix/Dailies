@@ -327,6 +327,105 @@ public final class VoiceChatLook {
         }
     }
 
+    // ------------------------------------------------------------------ Voice chat's corner of the screen
+
+    private static boolean hudLooked = false;
+    private static boolean hudFailed = false;
+    private static @Nullable Method isTalking, isWhispering, stateDisconnected, stateDisabled, groupIcons, entryGet;
+    private static @Nullable Field clientConfig, hideIcons, showHudIcons, showGroupHud;
+
+    /**
+     * Whether voice chat's corner of the screen shows the recorder's now: the owner's rule for the recorder's screen
+     * (riding along with them in first person, the HUD look on), the voice chat look shown, and voice chat's own settings
+     * not hiding its icons. Client thread; see the voice chat HUD mixin
+     */
+    public static boolean hudShown() {
+        if (!shown || !Playback.loaded() || !hudReady() || !comedymonkey.dailies.windows.Compats.overlaysShown()) {
+            return false;
+        }
+        try {
+            Object config = clientConfig.get(null);
+            return config != null && !Boolean.TRUE.equals(entryGet.invoke(hideIcons.get(config)))
+                && Boolean.TRUE.equals(entryGet.invoke(showHudIcons.get(config)));
+        } catch (Throwable t) {
+            failOnce("Simple Voice Chat's icon settings could not be read, so its corner of the screen is left empty in playback", t);
+            return false;
+        }
+    }
+
+    /**
+     * The recorder's voice status, as the icon voice chat shows for it ("icons/..."), or null for none: not connected
+     * and voice chat turned off as their recorded state says, else whispering or talking as their recorded voice says.
+     * A muted microphone is never sent to the server, so it is not in the recording and not shown
+     */
+    public static @Nullable String hudIcon() {
+        try {
+            comedymonkey.dailies.file.RecordingManifest manifest = Playback.manifest();
+            if (manifest == null || manifest.recorderId == null || manifest.recorderId.isEmpty()) {
+                return null;
+            }
+            UUID recorder = UUID.fromString(manifest.recorderId);
+            Object state = RECORDED.states().get(recorder);
+            if (state == null) {
+                return null;
+            }
+            if (Boolean.TRUE.equals(stateDisconnected.invoke(state))) {
+                return "icons/disconnected";
+            }
+            if (Boolean.TRUE.equals(stateDisabled.invoke(state))) {
+                return "icons/speaker_off";
+            }
+            Object cache = clockedCache;
+            if (cache != null && Boolean.TRUE.equals(isWhispering.invoke(cache, recorder))) {
+                return "icons/microphone_whisper";
+            }
+            if (cache != null && Boolean.TRUE.equals(isTalking.invoke(cache, recorder))) {
+                return "icons/microphone";
+            }
+            return null;
+        } catch (Throwable t) {
+            failOnce("the recorder's voice chat status could not be worked out, so no status icon is shown in playback", t);
+            return null;
+        }
+    }
+
+    /** Voice chat's group display, drawn by voice chat from the recorded group the look has put in, when the recorder was in one */
+    public static void drawGroup(net.minecraft.client.gui.GuiGraphics graphics) {
+        try {
+            Object config = clientConfig.get(null);
+            if (RECORDED.group() != null && config != null && Boolean.TRUE.equals(entryGet.invoke(showGroupHud.get(config)))) {
+                groupIcons.invoke(null, graphics);
+            }
+        } catch (Throwable t) {
+            failOnce("Simple Voice Chat's group display could not be drawn in playback", t);
+        }
+    }
+
+    private static boolean hudReady() {
+        if (!hudLooked) {
+            hudLooked = true;
+            try {
+                Class<?> cache = Class.forName(CLIENT + "TalkCache");
+                isTalking = cache.getMethod("isTalking", UUID.class);
+                isWhispering = cache.getMethod("isWhispering", UUID.class);
+                Class<?> playerState = Class.forName(COMMON + "PlayerState");
+                stateDisconnected = playerState.getMethod("isDisconnected");
+                stateDisabled = playerState.getMethod("isDisabled");
+                groupIcons = Class.forName(CLIENT + "GroupChatManager").getMethod("renderIcons", net.minecraft.client.gui.GuiGraphics.class);
+                clientConfig = Class.forName("de.maxhenkel.voicechat.VoicechatClient").getField("CLIENT_CONFIG");
+                Class<?> config = Class.forName("de.maxhenkel.voicechat.config.ClientConfig");
+                hideIcons = config.getField("hideIcons");
+                showHudIcons = config.getField("showHudIcons");
+                showGroupHud = config.getField("showGroupHud");
+                entryGet = Class.forName("de.maxhenkel.voicechat.configbuilder.entry.ConfigEntry").getMethod("get");
+            } catch (Throwable t) {
+                hudFailed = true;
+                Host.LOGGER.warn("Dailies: this version of Simple Voice Chat draws its corner of the screen in a way Dailies does not know, so it is left empty in playback. Said once", t);
+            }
+        }
+        return !hudFailed;
+    }
+
     // ------------------------------------------------------------------ Finding voice chat
 
     private static boolean ready() {

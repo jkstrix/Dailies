@@ -309,7 +309,7 @@ final class BestiaryStages {
 
     private static void fireballs() throws Exception {
         item("Ghast: shooting face").owns("ghast").need(state("ghast", "charging=true"));
-        item("Ghast fireball: flight, explosion and fire").owns("minecraft:fireball", "blocks").need(present("minecraft:fireball", 1)).need(blockChange("-> fire")).need(heard("minecraft:entity.generic.explode"));
+        item("Ghast fireball: flight, explosion and fire").owns("minecraft:fireball", "blocks").need(present("minecraft:fireball", 1)).need(blockChange("-> fire")).need(heard("minecraft:entity.generic.explode", "amendments:explosion.fireball"));
         item("Ghast fireball: deflected by a hit").owns("minecraft:fireball").need(present("minecraft:fireball", 2));
         item("Fireball in flight across a stored world (slowed down so a jump lands on it)").owns("minecraft:fireball").need(present("minecraft:fireball", 3));
         item("Blaze: burning state").owns("blaze").need(state("blaze", "d16=1"));

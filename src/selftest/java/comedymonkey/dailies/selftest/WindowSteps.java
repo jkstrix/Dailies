@@ -32,8 +32,8 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
  * drawn. That the windows land the same after a jump or a trim is the unit tests' (WindowStateTest).
  * <p>
  * Each window is one {@link Display}: how to open it, and what the layer reports when it draws it. A compat that draws
- * a window or overlay of its own adds a step of the same shape, a display check of its own. Run by itself with
- * -PdailiesOnly=windows.
+ * a window or overlay of its own adds a step of the same shape, a display check of its own ({@link CompatDisplaySteps},
+ * from the compat's own display test). Run by itself with -PdailiesOnly=windows.
  */
 final class WindowSteps {
 
@@ -152,20 +152,20 @@ final class WindowSteps {
         test.waitTicks(20);
     }
 
-    private static void onServer(SelfTest test, java.util.function.Consumer<ServerPlayer> action) throws Exception {
+    static void onServer(SelfTest test, java.util.function.Consumer<ServerPlayer> action) throws Exception {
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         check(server != null, "there is no built-in server to open the window on");
         server.submit(() -> action.accept(server.getPlayerList().getPlayers().get(0))).get(30, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     /** Jumps to the tick and rides along with the recorder */
-    private static void ride(SelfTest test, Minecraft minecraft, int tick) throws Exception {
+    static void ride(SelfTest test, Minecraft minecraft, int tick) throws Exception {
         SelfTestSupport.jump(test, tick, 60);
         test.onClientRun(() -> Viewer.ride(minecraft.level.getPlayerByUUID(UUID.fromString(Playback.manifest().recorderId))));
         test.waitFor(() -> Viewer.riding() != null, 10, "the view to ride along with the recorder");
     }
 
-    private static void frames(SelfTest test, int count) throws Exception {
+    static void frames(SelfTest test, int count) throws Exception {
         long from = Drawn.frames();
         test.waitFor(() -> Drawn.frames() >= from + count, 30, count + " frames to be drawn");
     }

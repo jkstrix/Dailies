@@ -4,6 +4,7 @@ import comedymonkey.dailies.Host;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.mixin.access.TimerAccess;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
@@ -64,6 +65,10 @@ public final class Playback {
     private static boolean keepEditor = false;
     private static int switchTick = -1;
     private static boolean switchPlayOn = false;
+    /** Where the recording stood when a still record (REC-36) was last read, or -1 for none since the world was built */
+    private static int stillReadAt = -1;
+    /** Whether the world stands still for the tick just played: the live game stood paused under a play screen (REC-36) */
+    private static volatile boolean standing = false;
 
     private Playback() {
     }
@@ -91,6 +96,18 @@ public final class Playback {
             entity.moveTo(x, y, z, yaw, pitch);
             entity.setOldPosAndRot();
             entity.lerpTo(x, y, z, yaw, pitch, 1);
+        });
+        // A tick the live game stood paused for under a play screen: the world is not ticked for it here either (REC-36)
+        PlaybackExtensions.register(comedymonkey.dailies.capture.StillTicks.ID, new PlaybackExtensions.Extension() {
+            @Override
+            public void play(byte[] data, int from, int length, boolean skipping) {
+                stillReadAt = feed == null ? -1 : feed.position();
+            }
+
+            @Override
+            public void reset() {
+                stillReadAt = -1;
+            }
         });
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> Viewer.frame());
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> {
@@ -201,8 +218,17 @@ public final class Playback {
         return loaded;
     }
 
+    /**
+     * Whether the game is to stand paused: while the recording does, and while it plays through ticks the live game stood
+     * paused for (REC-36), so that the world is drawn standing where it stood, as the live game drew it
+     */
     public static boolean gamePaused() {
-        return paused && !fastTick;
+        return (paused || standing) && !fastTick;
+    }
+
+    /** Whether the world stands still at the tick just played, the live game having stood paused under a play screen (REC-36) */
+    public static boolean standing() {
+        return standing;
     }
 
     public static float millisPerTick() {
@@ -215,7 +241,10 @@ public final class Playback {
         if (!loaded || paused) {
             return position;
         }
-        float partial = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true);
+        // While the world stands still (REC-36) the game's clock holds the world where it stood, but the recording's time
+        // goes on, and the pointer over a book and the camera move with it: read the clock that keeps running
+        DeltaTracker timer = Minecraft.getInstance().getTimer();
+        float partial = standing ? ((TimerAccess) timer).dailies$partialTick() : timer.getGameTimeDeltaPartialTick(true);
         return Math.max(0.0, position - 1 + partial);
     }
 
@@ -523,6 +552,7 @@ public final class Playback {
             }
             // The path preview plays a Smart Camera stretch by hand here, as an export does, once any jump has landed
             comedymonkey.dailies.editor.StretchPreview.frameStart();
+            redrawIfBlank(minecraft);
             if (!jumping() && !WHEN_LOADED.isEmpty()) {
                 List<Runnable> actions = new ArrayList<>(WHEN_LOADED);
                 WHEN_LOADED.clear();
@@ -543,7 +573,43 @@ public final class Playback {
         }
     }
 
+    /** Frames in a row a paused recording has held chunks and drawn none of them, since it was opened */
+    private static int blankFrames = 0;
+    private static boolean redrawn = false;
+    private static final int BLANK_FRAMES_BEFORE_REDRAW = 30;
+
+    /**
+     * The first recording opened after the game starts showed only sky, no terrain, until the playhead was moved (the
+     * owner, 20 November, in a pack with Sodium, Iris, Colorful Lighting and Distant Horizons, each of which reloads or
+     * changes how terrain is drawn the first time a world appears). Paused at the first frame nothing moves the camera
+     * or changes a block, so nothing told the renderer to draw again. So when a paused recording has held chunks and
+     * drawn none for {@value #BLANK_FRAMES_BEFORE_REDRAW} frames, its world is rebuilt once at the same tick, as a jump
+     * does, which hands every chunk to the renderer afresh. Once per opened recording, so a world that really shows no
+     * terrain (a void, the sky straight up) is never rebuilt over and over
+     */
+    private static void redrawIfBlank(Minecraft minecraft) {
+        if (redrawn || !paused || jumping() || skipping || comedymonkey.dailies.export.Export.active()
+            || minecraft.level == null || minecraft.levelRenderer == null) {
+            blankFrames = 0;
+            return;
+        }
+        if (minecraft.level.getChunkSource().getLoadedChunksCount() == 0 || minecraft.levelRenderer.countRenderedSections() > 0) {
+            blankFrames = 0;
+            return;
+        }
+        if (++blankFrames < BLANK_FRAMES_BEFORE_REDRAW) {
+            return;
+        }
+        redrawn = true;
+        blankFrames = 0;
+        Host.LOGGER.info("Dailies: the playback world held {} chunks but drew none for {} frames, so it is rebuilt once at tick {}",
+            minecraft.level.getChunkSource().getLoadedChunksCount(), BLANK_FRAMES_BEFORE_REDRAW, position);
+        jumpTo(position, true);
+    }
+
     private static void openNow(Minecraft minecraft, Path path) throws Exception {
+        blankFrames = 0;
+        redrawn = false;
         boolean keep = keepEditor && file != null;
         int startTick = keep ? switchTick : -1;
         boolean playOn = keep && switchPlayOn;
@@ -614,6 +680,8 @@ public final class Playback {
         }
         feed = new Feed(file);
         paused = true;
+        standing = false;
+        stillReadAt = -1;
         pauseAfterJump = true;
         rough = false;
         if (!keep) {
@@ -824,6 +892,7 @@ public final class Playback {
                 return;
             }
             position = feed.position();
+            stand(minecraft, comedymonkey.dailies.capture.StillTicks.stands(stillReadAt, position));
             if (!fastTick && position == pauseAt) {
                 pauseAt = -1;
                 paused = true;
@@ -838,6 +907,33 @@ public final class Playback {
             jumpTarget = -1;
             skipping = false;
         }
+    }
+
+    /**
+     * The tick about to run is one the live game stood paused for under a play screen (REC-36), or is not. For one that
+     * is, the game is told it stands paused before its world would be ticked, so nothing in the world moves, the time of
+     * day included, as nothing did live; the sounds already playing go on and no new ones start, as live. While the
+     * recording runs, the game's clock is also held where the world stands as the first such tick comes, so the world is
+     * drawn still rather than easing over and over through the last tick that moved, and let go where it runs on, from
+     * the time it has kept meanwhile, so the world goes on drawing in step. In a jump the clock is left alone: where it
+     * lands, the game takes it up from {@link #gamePaused} at the end of the frame.
+     */
+    private static void stand(Minecraft minecraft, boolean still) {
+        if (still) {
+            ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$setPause(true);
+        }
+        if (still == standing) {
+            return;
+        }
+        standing = still;
+        if (skipping || paused) {
+            return;
+        }
+        DeltaTracker.Timer timer = (DeltaTracker.Timer) minecraft.getTimer();
+        if (!still) {
+            ((TimerAccess) timer).dailies$setPausedPartialTick(((TimerAccess) timer).dailies$partialTick());
+        }
+        timer.updatePauseState(still);
     }
 
     /** The viewer's player has just been created in a new world */
@@ -901,6 +997,8 @@ public final class Playback {
         reloadIndex = -1;
         skipping = false;
         paused = true;
+        standing = false;
+        stillReadAt = -1;
         pendingOpen = null;
         pendingClose = false;
         keepEditor = false;
@@ -908,6 +1006,9 @@ public final class Playback {
         WHEN_LOADED.clear();
         PackPlayback.closed(Minecraft.getInstance());
         Session.forgetRegistries();
+        // The game's own numbering back, however playback ended (PLAY-25). Leaving the playback world has had NeoForge do
+        // it already, as on leaving a server; a playback that failed before its world was built has not
+        RegistryNumbering.restore();
         if (serverConfigsLoaded) {
             serverConfigsLoaded = false;
             try {

@@ -31,6 +31,10 @@ import java.util.Map;
  * the rest, and every pack those records name is stored in the new recording, once, with its pieces. A pack that only
  * a stretch that was cut used is left behind.
  * <p>
+ * What compats stored once (specification REC-28) comes along whole: a compat's states are its own bytes, so which of
+ * them name a stored blob cannot be told, and every blob a source lists is stored in the new recording, once, and listed
+ * in its manifest.
+ * <p>
  * The new recording is packed with the mod's own dictionaries, like any recording made now. What it copies from a
  * source packed with the same ones goes across byte for byte; what comes from a source packed with others (made by a
  * Dailies whose dictionaries were trained afresh) is unpacked with the source's and packed again with the new ones.
@@ -124,6 +128,7 @@ public final class Assembler {
                 here += piece.to() - piece.from();
             }
             manifest.packs = new ArrayList<>(job.packs.values());
+            manifest.compatBlobs = new ArrayList<>(job.compatBlobs);
             if (preview != null) {
                 out.append(Container.PREVIEW, 0, 0, 0, preview);
             }
@@ -155,6 +160,8 @@ public final class Assembler {
         private int number = 0;
         /** The resource packs the new recording holds so far, by the key its records know them by */
         final Map<String, RecordingManifest.Pack> packs = new java.util.LinkedHashMap<>();
+        /** What compats stored once that the new recording holds so far (REC-28) */
+        final java.util.Set<String> compatBlobs = new java.util.LinkedHashSet<>();
         private List<RecordingManifest.Pack> sourcePacks = List.of();
         private Map<String, String> packKeys = Map.of();
         private final Container.ListingChain listings = new Container.ListingChain();
@@ -181,6 +188,12 @@ public final class Assembler {
             this.packKeys = piece.packKeys() == null ? Map.of() : piece.packKeys();
             // Records that name a pack by another key have to be written again, so nothing is copied as it stands then
             boolean rekeyed = !this.packKeys.isEmpty();
+            for (String blob : source.manifest().compatBlobs) {
+                this.check();
+                if (source.hasShared(blob) && this.compatBlobs.add(blob)) {
+                    this.bring(source, null, blob, false);
+                }
+            }
             if (whole) {
                 // Everything a recording stores is used by it somewhere, so there is nothing to pick out
                 Container from = source.container();

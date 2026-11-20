@@ -8,8 +8,10 @@ import java.util.Set;
  * kept only when it is a play screen, one opened by using something in the world or by the inventory key. For now
  * that is a window the server opened with a menu type (a chest, a furnace, a villager's trades, a mod's machine), a
  * horse's inventory, and the player's own inventory. Everything else is left out without being looked at: settings,
- * statistics, advancements, the pause menu and every other menu, the creative inventory, books, signs, chat, title
- * and loading screens, and anything a mod draws for itself. No game in here, so it is unit tested.
+ * statistics, advancements, the pause menu and every other menu, the creative inventory, chat, title and loading
+ * screens, and anything a mod draws for itself. A screen a compat claims whole (REC-26) is the compat's, and left out
+ * here: so are books, the lectern and signs, which Dailies' own compat records (REC-29). No game in here, so it is unit
+ * tested.
  */
 public final class WindowRules {
 
@@ -33,10 +35,16 @@ public final class WindowRules {
      * @param containerId     its menu's container id; 0 is the player's own inventory
      * @param menuType        its menu's type id, or null when the menu has none (the inventory, a horse, the creative inventory)
      * @param horseOpened     whether the server's packet opening a horse's inventory with this container id was seen
+     * @param claimed         whether a compat claims the screen whole, by its class or its menu type (REC-26)
      */
-    record Facts(boolean menuScreen, boolean inventoryScreen, boolean horseScreen, boolean playersMenu, int containerId, String menuType, boolean horseOpened) {
+    record Facts(boolean menuScreen, boolean inventoryScreen, boolean horseScreen, boolean playersMenu, int containerId, String menuType, boolean horseOpened,
+                 boolean claimed) {
 
-        /** A screen that is not built on a menu at all: the pause menu, settings, statistics, a book, chat */
+        Facts(boolean menuScreen, boolean inventoryScreen, boolean horseScreen, boolean playersMenu, int containerId, String menuType, boolean horseOpened) {
+            this(menuScreen, inventoryScreen, horseScreen, playersMenu, containerId, menuType, horseOpened, false);
+        }
+
+        /** A screen that is not built on a menu at all: the pause menu, settings, statistics, chat */
         static Facts notAWindow() {
             return new Facts(false, false, false, false, -1, null, false);
         }
@@ -47,6 +55,10 @@ public final class WindowRules {
 
     /** @return how the window is to be recorded, or null when the screen is not a play screen and is left out */
     static WindowState.Source decide(Facts facts) {
+        if (facts.claimed()) {
+            // A compat records it, and only the compat: the two would draw it twice
+            return null;
+        }
         if (facts.inventoryScreen()) {
             return WindowState.Source.INVENTORY;
         }

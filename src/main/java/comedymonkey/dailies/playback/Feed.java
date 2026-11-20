@@ -453,6 +453,10 @@ final class Feed {
                         moved = true;
                     }
                     new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(pos).handle(this.session.listener);
+                    if (level != null) {
+                        // Straight after the game's own job that takes the chunk's light away, in the same queue
+                        level.queueLightUpdate(() -> darkenLeftBehind(level, pos));
+                    }
                 } catch (Throwable t) {
                     this.warnOnce("dropping a chunk when going back", t);
                 }
@@ -462,6 +466,30 @@ final class Feed {
         }
         if (moved) {
             level.getChunkSource().updateViewCenter(this.centreX, this.centreZ);
+        }
+    }
+
+    /**
+     * The light a game keeps of a chunk it has let go of, as a world built from nothing has it there: none. A game that
+     * lets go of a chunk takes its light away only where no chunk it still holds stands next to it; beside one it keeps
+     * the sections the light of its neighbour reaches into, with the light they had. A world built from nothing makes
+     * those sections new beside each chunk it is given, and dark. So a jump back into a kept world, which lets go of the
+     * chunks the snapshot does not have, left the ring round the snapshot's chunks lit as it was later in the recording:
+     * full sky where the live game, arrived in the overworld from The End two ticks before, had none (the bestiary, at the
+     * edge of the chunks that had come). Run from the game's light queue, straight after its own job that lets the light
+     * go, before the light engine runs: a section about to go altogether drops what is queued for it there too
+     */
+    private static void darkenLeftBehind(net.minecraft.client.multiplayer.ClientLevel level, net.minecraft.world.level.ChunkPos pos) {
+        net.minecraft.world.level.lighting.LevelLightEngine engine = level.getLightEngine();
+        for (int index = 0; index < engine.getLightSectionCount(); index++) {
+            net.minecraft.core.SectionPos section = net.minecraft.core.SectionPos.of(pos, engine.getMinLightSection() + index);
+            for (net.minecraft.world.level.LightLayer layer : net.minecraft.world.level.LightLayer.values()) {
+                // Only where the game still holds light: queued for a section it holds none for, the darkness would wait
+                // there and be taken as the light of the chunk when it came again, where its packet says nothing
+                if (engine.getLayerListener(layer).getDataLayerData(section) != null) {
+                    engine.queueSectionData(layer, section, new net.minecraft.world.level.chunk.DataLayer());
+                }
+            }
         }
     }
 
