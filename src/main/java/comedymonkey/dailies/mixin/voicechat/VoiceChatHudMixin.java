@@ -1,30 +1,49 @@
 package comedymonkey.dailies.mixin.voicechat;
 
+import comedymonkey.dailies.compat.voicechat.VoiceChatLook;
 import comedymonkey.dailies.playback.Playback;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Simple Voice Chat draws a status icon of the viewer's own in a corner of the screen: not connected, speaker off,
- * microphone off, talking, whispering. In playback the game is connected to no voice chat server, so it showed "not
- * connected" over playback and in exports, with or without the voice chat look (the owner, 20 November: "I should
- * never see that voice chat icon during playback"). So while a recording is open, that icon is never drawn. The look's
- * own parts are drawn elsewhere by voice chat and are untouched: the group display beside it, and the icons over
- * players' heads. Skipped without complaint when voice chat is absent or has changed.
+ * Simple Voice Chat's corner of the screen: the viewer's own voice status (not connected, voice chat off, talking,
+ * whispering) and the group display. In playback the game is connected to no voice chat server, so voice chat itself
+ * would show "not connected" over playback and in exports. While a recording is open the corner shows instead what
+ * the recorder's showed, by the owner's rule for everything on the recorder's screen: riding along with the recorder in
+ * first person, the HUD look and the voice chat look on (the owner, 20 November). The recorder's status comes from
+ * their recorded voice chat state and recorded voice, and the group display from the recorded group the look has put
+ * into voice chat. Voice chat draws both itself, with its own settings for where and how large. At every other time in
+ * playback the corner is empty. Skipped without complaint when voice chat is absent or has changed.
  */
 @Pseudo
 @Mixin(targets = "de.maxhenkel.voicechat.voice.client.RenderEvents", remap = false)
 public abstract class VoiceChatHudMixin {
 
-    @Inject(method = "renderIcon(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/resources/ResourceLocation;)V",
-        at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void dailies$noOwnIconInPlayback(CallbackInfo info) {
-        if (Playback.active()) {
-            info.cancel();
+    @Shadow(remap = false)
+    private void renderIcon(GuiGraphics graphics, ResourceLocation texture) {
+        throw new AssertionError();
+    }
+
+    @Inject(method = "onRenderHUD(Lnet/minecraft/client/gui/GuiGraphics;F)V", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
+    private void dailies$recordersCorner(GuiGraphics graphics, float delta, CallbackInfo info) {
+        if (!Playback.active()) {
+            return;
         }
+        info.cancel();
+        if (!VoiceChatLook.hudShown()) {
+            return;
+        }
+        String icon = VoiceChatLook.hudIcon();
+        if (icon != null) {
+            this.renderIcon(graphics, ResourceLocation.fromNamespaceAndPath("voicechat", icon));
+        }
+        VoiceChatLook.drawGroup(graphics);
     }
 
 }
