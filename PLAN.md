@@ -80,7 +80,7 @@ Every task below follows these. Where a task once fell short of one, it has been
 | 3.14 | Done, not yet confirmed in game | Exports ask Distant Horizons whether the far terrain is in on a thread of their own, and stop waiting after 5 s without an answer |
 | 3.15 | Done, not yet confirmed in game | A paused recording that holds chunks but draws none for 30 frames is rebuilt once at the same tick |
 | 3.16 | Done, not yet confirmed in game | Voice chat's corner (own status and group display) shows the recorder's, by the owner's rule (first person riding along, HUD and voice chat looks on), and is empty at every other time in playback |
-| 3.17 | Done, not yet confirmed in game | The Locator Bar is never drawn while a recording is open, and the vanilla experience bar it hides shows again |
+| 3.17 | Done, passed in game (the owner, 20 November) | The Locator Bar is never drawn while a recording is open, and the vanilla experience bar it hides shows again |
 | 4.1 | Partly | `reference/` compiles with every build; the carry-over script is outside this repository |
 | 4.2 | Done | `tools/ci/check_spec.py` checks ids, citations, links and the HTML; it runs first in the scripted-test workflow |
 | 4.3 | Can't tell | Needs the earlier build |
