@@ -76,6 +76,7 @@ Every task below follows these. Where a task once fell short of one, it has been
 | 3.10 | Done | |
 | 3.11 | Done | The server's numbering was in every recording all along (the world data's ids, read while joined); playback now applies it as NeoForge does on joining and reverts it after (REC-37, PLAY-25), fixing recordings already made. The registries group simulates a server with every sound numbered 843 on and passed in game |
 | 3.12 | Done, not yet confirmed in game | A playback folder Distant Horizons still holds open is passed over for a spare beside it, with the far terrain copied in; unit tested with a held file |
+| 3.13 | Done, not yet confirmed in game | Lootr's "fillUpdateTag on the client side" error is left out of the log while a snapshot is taken; what is recorded is unchanged; unit tested on a real logger |
 | 4.1 | Partly | `reference/` compiles with every build; the carry-over script is outside this repository |
 | 4.2 | Done | `tools/ci/check_spec.py` checks ids, citations, links and the HTML; it runs first in the scripted-test workflow |
 | 4.3 | Can't tell | Needs the earlier build |
@@ -382,7 +383,7 @@ The game's standard settings screen shows every choice as a "< value >" button t
 - **Decided: LGPL.** x264 and x265 would need a GPL build and make Dailies GPL; hardware encoders on every GPU vendor cover H.264, H.265 and AV1 instead.
 - **Decided: no OpenH264.** Cisco's patent licence only covers binaries fetched from Cisco, so software H.264 is left out rather than bundled or downloaded.
 
-### 3.2 to 3.12
+### 3.2 to 3.13
 
 | # | Problem | Fix | Side | Size |
 |---|---|---|---|---|
@@ -397,6 +398,7 @@ The game's standard settings screen shows every choice as a "< value >" button t
 | 3.10 | Nothing runs the scripted test automatically. | Add a CI job on a self-hosted runner with a GPU (the owner's PC is enough) that builds every part and runs the scripted test on each change, keeping the log, screenshots and measurements. | Folder | M |
 | 3.11 | A recording made on a server plays some things wrong when the player's own game numbers a registry differently from the server: the owner heard his jetpack's wings play the wrong sound. Sounds, particles, menu types and other registry entries travel as numbers, and NeoForge's handover of the server's numbering at join is in the recording but skipped in playback, so the numbers are read against the player's own. | While a recording plays, use the server's numbering it holds (the frozen registry handover NeoForge sent at join), as NeoForge does on joining a server, and put the player's own back when playback ends or fails. It needs no mod's help and fixes recordings already made. A test records on a server whose mods differ from the client's (one sound-adding mod fewer, or ids shifted) and checks the right sound, particle and menu in playback. | Spec | M |
 | 3.12 | In the owner's pack on a server (20 November), an export after watching a recording drew no far terrain and ran under 60 frames a second at 4K. Distant Horizons renames the folder Dailies gives it onto itself before opening it, and Windows refuses while a file in it is open. Distant Horizons can leave the playback database open after closing a level, because a worker thread opens a connection as the level closes. So when the export swapped worlds, the reopen failed on every frame, about 4.5 times a frame, each with a stack trace: 37,750 in four minutes, a 253 MB log, and 7 to 17 ms a frame where 0.1 to 0.7 was usual. | Before giving Distant Horizons a folder, Dailies tries the same rename itself. A folder still held is passed over for `<name>-spare<n>` beside it, filled from the world's store or from the held folder. Spares are deleted once the first choice is free again. | Spec | S |
+| 3.13 | In the same session, recording logged 1,182 Lootr errors in about a minute: "Tried to fillUpdateTag on the client side". A snapshot asks every block entity near the player what it would send of itself. On a client, Lootr's chests, barrels, shulker boxes, pots and suspicious blocks give a complete answer (opened, and by whom), but log an error each time: one per Lootr container in sight, every two seconds. | `compat/lootr`: with Lootr installed, a filter on Lootr's logger drops that one message while a snapshot is being taken. Lootr's answer, so the recording, is unchanged; anything else it logs, and the same message at other times, still gets through. | Spec | S |
 
 ### Budgets for 3.8
 

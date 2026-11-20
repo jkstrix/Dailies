@@ -203,6 +203,8 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // The game brings its own copy when it runs; unit tests run without the game
     testImplementation 'com.google.code.gson:gson:2.10.1'
+    // The log filters (SnapshotLogFilterTest), the version the game brings
+    testImplementation 'org.apache.logging.log4j:log4j-core:2.22.1'
     // Only for the compression benchmark (ZstdBenchmarkTest), which also weighs aircompressor (Apache 2.0), a pure-Java
     // zstd, against the zstd-jni recordings are packed with. Never packed into the mod
     testImplementation 'io.airlift:aircompressor:2.0.3'
