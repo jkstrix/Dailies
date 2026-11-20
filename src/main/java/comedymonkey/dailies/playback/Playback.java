@@ -552,6 +552,7 @@ public final class Playback {
             }
             // The path preview plays a Smart Camera stretch by hand here, as an export does, once any jump has landed
             comedymonkey.dailies.editor.StretchPreview.frameStart();
+            redrawIfBlank(minecraft);
             if (!jumping() && !WHEN_LOADED.isEmpty()) {
                 List<Runnable> actions = new ArrayList<>(WHEN_LOADED);
                 WHEN_LOADED.clear();
@@ -572,7 +573,43 @@ public final class Playback {
         }
     }
 
+    /** Frames in a row a paused recording has held chunks and drawn none of them, since it was opened */
+    private static int blankFrames = 0;
+    private static boolean redrawn = false;
+    private static final int BLANK_FRAMES_BEFORE_REDRAW = 30;
+
+    /**
+     * The first recording opened after the game starts showed only sky, no terrain, until the playhead was moved (the
+     * owner, 20 November, in a pack with Sodium, Iris, Colorful Lighting and Distant Horizons, each of which reloads or
+     * changes how terrain is drawn the first time a world appears). Paused at the first frame nothing moves the camera
+     * or changes a block, so nothing told the renderer to draw again. So when a paused recording has held chunks and
+     * drawn none for {@value #BLANK_FRAMES_BEFORE_REDRAW} frames, its world is rebuilt once at the same tick, as a jump
+     * does, which hands every chunk to the renderer afresh. Once per opened recording, so a world that really shows no
+     * terrain (a void, the sky straight up) is never rebuilt over and over
+     */
+    private static void redrawIfBlank(Minecraft minecraft) {
+        if (redrawn || !paused || jumping() || skipping || comedymonkey.dailies.export.Export.active()
+            || minecraft.level == null || minecraft.levelRenderer == null) {
+            blankFrames = 0;
+            return;
+        }
+        if (minecraft.level.getChunkSource().getLoadedChunksCount() == 0 || minecraft.levelRenderer.countRenderedSections() > 0) {
+            blankFrames = 0;
+            return;
+        }
+        if (++blankFrames < BLANK_FRAMES_BEFORE_REDRAW) {
+            return;
+        }
+        redrawn = true;
+        blankFrames = 0;
+        Host.LOGGER.info("Dailies: the playback world held {} chunks but drew none for {} frames, so it is rebuilt once at tick {}",
+            minecraft.level.getChunkSource().getLoadedChunksCount(), BLANK_FRAMES_BEFORE_REDRAW, position);
+        jumpTo(position, true);
+    }
+
     private static void openNow(Minecraft minecraft, Path path) throws Exception {
+        blankFrames = 0;
+        redrawn = false;
         boolean keep = keepEditor && file != null;
         int startTick = keep ? switchTick : -1;
         boolean playOn = keep && switchPlayOn;

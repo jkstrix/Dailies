@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "comedymonkey.dailies.mixin.voicechat",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "VoiceChatHudMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
