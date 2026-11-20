@@ -6,6 +6,8 @@ license = "MIT"
 modId = "dailies_supplementaries"
 version = "${version}"
 displayName = "Dailies Supplementaries Compat"
+logoFile = "dailies_supplementaries.png"
+logoBlur = false
 authors = "James Knight"
 description = '''
 Supplementaries' and Amendments' play screens and overlays in Dailies recordings: the doormat, sign post, blackboard and

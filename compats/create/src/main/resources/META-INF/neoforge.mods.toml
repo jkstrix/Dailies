@@ -6,6 +6,8 @@ license = "MIT"
 modId = "dailies_create"
 version = "${version}"
 displayName = "Dailies Create Compat"
+logoFile = "dailies_create.png"
+logoBlur = false
 authors = "James Knight"
 description = '''
 Create's play screens and overlays in Dailies recordings: the value settings board and the value box a block shows, the

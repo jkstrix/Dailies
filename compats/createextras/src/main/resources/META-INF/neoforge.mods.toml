@@ -6,6 +6,8 @@ license = "MIT"
 modId = "dailies_createextras"
 version = "${version}"
 displayName = "Dailies Create Add-ons Compat"
+logoFile = "dailies_createextras.png"
+logoBlur = false
 authors = "James Knight"
 description = '''
 The play screens and overlays of Create's add-ons in Dailies recordings: Create Deep Seas' sonar, PDA, implosion, engine

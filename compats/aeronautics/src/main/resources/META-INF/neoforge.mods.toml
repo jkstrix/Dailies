@@ -6,6 +6,8 @@ license = "MIT"
 modId = "dailies_aeronautics"
 version = "${version}"
 displayName = "Dailies Create Aeronautics Compat"
+logoFile = "dailies_aeronautics.png"
+logoBlur = false
 authors = "James Knight"
 description = '''
 Create Aeronautics' play screens and overlays in Dailies recordings, with those of Simulated Coasters: the altitude

@@ -6,6 +6,8 @@ license = "MIT"
 modId = "dailies_companion"
 version = "${version}"
 displayName = "Dailies Companion"
+logoFile = "dailies_companion.png"
+logoBlur = false
 authors = "James Knight"
 description = '''Sends custom events from the server to players' games, where a recorder logs them as moments. Optional on both sides: players without a recorder are simply not sent anything.'''
 
