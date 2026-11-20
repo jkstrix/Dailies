@@ -68,9 +68,10 @@ The reply says how many of the players were listening.
 
 ### Craft and trains
 
-The last four need Sable (for craft) or Create (for trains) on the server. The companion reaches both by reflection,
-so it loads and works as before without them; if a different version of either has moved something, it switches that
-part off with one line in the log. The names it relies on are those of Sable 2.0.6 and Create 6.0.10.
+The last four need Sable (for craft) or Create (for trains) on the server. The companion is built against Sable 2.0.6
+and Create 6.0.10 and calls them directly, from classes that load only when the mod is installed, so it loads and works
+as before without them. If something goes wrong in either part, it switches that part off with one line in the log
+naming the cause, and says when the cause is a different version of the mod.
 
 What each carries in its JSON:
 
