@@ -32,6 +32,9 @@ config = "dailies.renderers.mixins.json"
 [[mixins]]
 config = "dailies.voicechat.mixins.json"
 
+[[mixins]]
+config = "dailies.hidden.mixins.json"
+
 [[dependencies.dailies]]
 modId = "neoforge"
 type = "required"
