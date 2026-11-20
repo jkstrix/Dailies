@@ -42,45 +42,45 @@ final class FarTerrainFolders {
         return SafePaths.within(game, recorded);
     }
 
-    /** Folders tried beside a playback folder still held open, before giving up on all of them */
-    static final int SPARES = 8;
-
-    /** Fills a folder chosen for playback; told whether it is the first choice or a spare beside one still held */
-    @FunctionalInterface
-    interface Filler {
-        void fill(Path folder, boolean spare) throws IOException;
-    }
-
     /**
-     * The folder to give Distant Horizons for a playback world: the one asked for when it is free, or else a spare beside
-     * it. Distant Horizons 3.3 renames the folder it is given onto itself before it opens it (see
-     * DistantHorizonsCompat.bindFolders), and Windows refuses that while any file in it is still open. Distant Horizons can
-     * leave its database open after it has closed a level, when a worker thread opens a connection just as the level
-     * closes. It then fails again on every frame, with a stack trace each time: no far terrain, and an export slowed to
-     * well under 60 frames a second at 4K (the owner, 20 November, after a world swap for an export on a server). So a
-     * folder still held is passed over for {@code <name>-spare<n>}, filled by {@code filler}. Spares are deleted once
-     * the first choice is free again, and any still held are left for a later time. Null when every folder is held
+     * The path to give Distant Horizons for a playback folder. Distant Horizons 3.3 renames the folder it is given onto
+     * itself before it opens it (see DistantHorizonsCompat.bindFolders), and Windows refuses that while any file in the
+     * folder is open. Distant Horizons leaves the database open after it closes a level, so every reopen failed: on
+     * every frame, with a stack trace each time, and with no far terrain (the owner, 20 November, on a server). On
+     * Windows it is therefore given a directory junction at {@code link} that leads to the folder. Renaming a junction
+     * onto itself renames only the junction, which has no files of its own open, and the database is still the one
+     * file, so a connection left open and a new one share it as SQLite expects. Elsewhere, or when no junction can be
+     * made, the folder itself
      */
-    static @Nullable Path free(Path wanted, Filler filler) throws IOException {
-        for (int i = 0; i <= SPARES; i++) {
-            Path folder = i == 0 ? wanted : spare(wanted, i);
-            Files.createDirectories(folder);
-            if (!renamable(folder)) {
-                continue;
-            }
-            filler.fill(folder, i > 0);
-            if (i == 0) {
-                for (int j = 1; j <= SPARES; j++) {
-                    deleteQuietly(spare(wanted, j));
-                }
-            }
+    static Path openable(Path folder, Path link) throws IOException {
+        Files.createDirectories(folder);
+        deleteSpares(folder);
+        if (!windows()) {
             return folder;
         }
-        return null;
+        if (Files.isDirectory(link) && Files.isSameFile(link, folder) && renamable(link)) {
+            return link;
+        }
+        if (Files.exists(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            // A junction to somewhere else, or a folder in the way: only the entry goes, never what a junction leads to
+            Files.delete(link);
+        }
+        Files.createDirectories(link.getParent());
+        Process process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), folder.toString()).redirectErrorStream(true).start();
+        String said = new String(process.getInputStream().readAllBytes()).trim();
+        try {
+            if (process.waitFor() != 0 || !Files.isSameFile(link, folder)) {
+                throw new IOException("mklink /J said: " + said);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted while making a junction", e);
+        }
+        return link;
     }
 
-    static Path spare(Path wanted, int number) {
-        return wanted.resolveSibling(wanted.getFileName() + "-spare" + number);
+    static boolean windows() {
+        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows");
     }
 
     /** What Distant Horizons does to the folder before opening it, done first: false while a file in it is held open */
@@ -89,20 +89,27 @@ final class FarTerrainFolders {
         return file.renameTo(file);
     }
 
-    private static void deleteQuietly(Path folder) {
-        if (!Files.isDirectory(folder)) {
-            return;
-        }
-        try (Stream<Path> walk = Files.walk(folder)) {
-            walk.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException e) {
-                    // Still held: tried again the next time the folder is chosen
-                }
-            });
-        } catch (IOException e) {
-            // As above
+    /**
+     * Copies of a far terrain store that the build of 20 November made beside a folder still held open, about a
+     * gigabyte each for a large world; gone once nothing holds them, and kept until then
+     */
+    private static void deleteSpares(Path folder) {
+        for (int i = 1; i <= 8; i++) {
+            Path spare = folder.resolveSibling(folder.getFileName() + "-spare" + i);
+            if (!Files.isDirectory(spare, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                continue;
+            }
+            try (Stream<Path> walk = Files.walk(spare)) {
+                walk.sorted(Comparator.reverseOrder()).forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException e) {
+                        // Still held: tried again the next time
+                    }
+                });
+            } catch (IOException e) {
+                // As above
+            }
         }
     }
 

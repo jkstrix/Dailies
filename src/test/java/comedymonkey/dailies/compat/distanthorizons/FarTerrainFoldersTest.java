@@ -8,8 +8,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,46 +58,51 @@ class FarTerrainFoldersTest {
 
 
     /**
-     * A folder Distant Horizons still has a file open in cannot be renamed onto itself on Windows, which is what Distant
-     * Horizons does before it opens one: a spare beside it is used, and dropped once the first choice is free again
+     * On Windows Distant Horizons is given a junction to the folder: a file still open in the folder stops the folder
+     * itself being renamed onto itself, which Distant Horizons does before opening it, but never the junction
      */
     @Test
-    void aFolderStillHeldOpenIsPassedOverForASpareUntilItIsFree() throws Exception {
-        Assumptions.assumeTrue(System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows"),
-            "only Windows refuses to rename a folder with a file open in it");
-        Path wanted = this.game.resolve("dailies/dh/worlds/abc-world/minecraft_overworld");
-        Files.createDirectories(wanted);
-        Path database = wanted.resolve("DistantHorizons.sqlite");
-        Files.writeString(database, "far terrain");
-        List<String> filled = new ArrayList<>();
-        FarTerrainFolders.Filler filler = (folder, spare) -> {
-            filled.add(folder.getFileName() + (spare ? " spare" : ""));
-            if (spare) {
-                Files.copy(database, folder.resolve("DistantHorizons.sqlite"));
-            }
-        };
-
-        assertEquals(wanted, FarTerrainFolders.free(wanted, filler));
-        try (FileChannel held = FileChannel.open(database, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
-            assertFalse(FarTerrainFolders.renamable(wanted));
-            Path spare = FarTerrainFolders.free(wanted, filler);
-            assertEquals(FarTerrainFolders.spare(wanted, 1), spare);
-            assertTrue(FarTerrainFolders.renamable(spare));
-            assertEquals("far terrain", Files.readString(spare.resolve("DistantHorizons.sqlite")));
+    void aJunctionCanBeRenamedOntoItselfWhileTheFolderHasAFileOpen() throws Exception {
+        Assumptions.assumeTrue(FarTerrainFolders.windows(), "only Windows refuses to rename a folder with a file open in it");
+        Path folder = this.game.resolve("dailies/dh/worlds/abc-world/minecraft_overworld");
+        Path link = this.game.resolve("dailies/dh/links/worlds/abc-world/minecraft_overworld");
+        Path given = FarTerrainFolders.openable(folder, link);
+        assertEquals(link, given);
+        assertTrue(Files.isSameFile(given, folder));
+        Files.writeString(given.resolve("DistantHorizons.sqlite"), "far terrain");
+        try (FileChannel held = FileChannel.open(given.resolve("DistantHorizons.sqlite"), StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+            assertFalse(FarTerrainFolders.renamable(folder));
+            assertTrue(FarTerrainFolders.renamable(given));
+            // Opened again, as after the next jump: the same junction, and the same one file
+            assertEquals(link, FarTerrainFolders.openable(folder, link));
+            assertEquals("far terrain", Files.readString(folder.resolve("DistantHorizons.sqlite")));
         }
-        assertEquals(wanted, FarTerrainFolders.free(wanted, filler));
-        assertFalse(Files.exists(FarTerrainFolders.spare(wanted, 1)), "the spare is dropped once the first choice is free");
-        assertEquals(List.of("minecraft_overworld", "minecraft_overworld-spare1 spare", "minecraft_overworld"), filled);
     }
 
-    /** Off Windows a held file never stops a rename, and the first choice is always taken */
+    /** A junction left leading somewhere else is replaced, and what it led to is untouched */
     @Test
-    void aFreeFolderIsTakenAsItIs() throws Exception {
-        Path wanted = this.game.resolve("dailies/dh/recording/level");
-        List<Boolean> spares = new ArrayList<>();
-        assertEquals(wanted, FarTerrainFolders.free(wanted, (folder, spare) -> spares.add(spare)));
-        assertTrue(Files.isDirectory(wanted));
-        assertEquals(List.of(false), spares);
+    void aJunctionToSomewhereElseIsReplaced() throws Exception {
+        Assumptions.assumeTrue(FarTerrainFolders.windows(), "junctions are made only on Windows");
+        Path other = this.game.resolve("dailies/dh/worlds/other/minecraft_overworld");
+        Path folder = this.game.resolve("dailies/dh/worlds/abc-world/minecraft_overworld");
+        Path link = this.game.resolve("dailies/dh/links/worlds/abc-world/minecraft_overworld");
+        FarTerrainFolders.openable(other, link);
+        Files.writeString(other.resolve("keep.txt"), "kept");
+        assertEquals(link, FarTerrainFolders.openable(folder, link));
+        assertTrue(Files.isSameFile(link, folder));
+        assertEquals("kept", Files.readString(other.resolve("keep.txt")));
+    }
+
+    /** The spare copies an earlier build made beside a folder go once nothing holds them */
+    @Test
+    void spareCopiesBesideTheFolderAreDeleted() throws Exception {
+        Path folder = this.game.resolve("dailies/dh/worlds/abc-world/minecraft_overworld");
+        Path spare = folder.resolveSibling("minecraft_overworld-spare2");
+        Files.createDirectories(spare);
+        Files.writeString(spare.resolve("DistantHorizons.sqlite"), "old copy");
+        FarTerrainFolders.openable(folder, this.game.resolve("dailies/dh/links/worlds/abc-world/minecraft_overworld"));
+        assertFalse(Files.exists(spare));
+        assertTrue(Files.isDirectory(folder));
     }
 
 }
