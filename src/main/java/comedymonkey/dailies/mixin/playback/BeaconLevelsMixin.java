@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class BeaconLevelsMixin {
 
     @Shadow
-    int levels;
+    private int levels;
 
     @Inject(method = "loadAdditional(Lnet/minecraft/world/level/storage/ValueInput;)V", at = @At("TAIL"))
     private void dailies$levelsFromSnapshot(ValueInput input, CallbackInfo ci) {
