@@ -231,6 +231,8 @@ public final class SelfTest {
             always("trains", "TrainSteps.run", () -> TrainSteps.run(this)),
             // Powder snow, snowballs and the void, in a recording of their own
             always("edges", "EdgeSteps.run", () -> EdgeSteps.run(this)),
+            // Effects and music in playback (PLAN-EFFECTS.md)
+            always("effects", "EffectSteps.run", () -> EffectSteps.run(this)),
             // A recording made on a server that numbers its sounds differently from this game, simulated by numbering them so
             // before a world opens, plays each sound as itself (REC-37, PLAY-25); two short recordings in a world of their own
             always("registries", "RegistrySteps.run", () -> RegistrySteps.run(this)),

@@ -36,6 +36,8 @@ public final class Drawn {
         last = new int[]{entities, players, terrainLayers, terrainLayersHidden, blockEntities, blockEntitiesHidden, beams, beamsHidden};
         frames++;
         entities = players = terrainLayers = terrainLayersHidden = blockEntities = blockEntitiesHidden = beams = beamsHidden = 0;
+        armourLast = new int[]{armour, armourTrimmed, armourOnInvisible};
+        armour = armourTrimmed = armourOnInvisible = 0;
         clear = barsNow;
         solidBars = solidNow;
         barsNow = null;
@@ -48,6 +50,45 @@ public final class Drawn {
         } else {
             entities++;
         }
+    }
+
+    // Armour drawn this frame and the last: pieces, pieces with a trim, and pieces on entities invisible to the viewer
+    private static int armour, armourTrimmed, armourOnInvisible;
+    private static int[] armourLast = new int[3];
+
+    /** The armour of one entity about to be drawn. Render thread */
+    public static void armour(net.minecraft.world.entity.LivingEntity entity) {
+        net.minecraft.client.player.LocalPlayer viewer = net.minecraft.client.Minecraft.getInstance().player;
+        boolean invisible = viewer != null && entity.isInvisibleTo(viewer);
+        for (net.minecraft.world.entity.EquipmentSlot slot : new net.minecraft.world.entity.EquipmentSlot[]{net.minecraft.world.entity.EquipmentSlot.HEAD,
+            net.minecraft.world.entity.EquipmentSlot.CHEST, net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET}) {
+            net.minecraft.world.item.ItemStack piece = entity.getItemBySlot(slot);
+            if (piece.isEmpty() || !(piece.getItem() instanceof net.minecraft.world.item.ArmorItem)) {
+                continue;
+            }
+            armour++;
+            if (piece.has(net.minecraft.core.component.DataComponents.TRIM)) {
+                armourTrimmed++;
+            }
+            if (invisible) {
+                armourOnInvisible++;
+            }
+        }
+    }
+
+    /** Armour pieces drawn in the last whole frame */
+    public static int armourDrawn() {
+        return armourLast[0];
+    }
+
+    /** Of those, the pieces with a trim */
+    public static int armourTrimmedDrawn() {
+        return armourLast[1];
+    }
+
+    /** Of those, the pieces worn by entities invisible to the viewer, which the game still draws */
+    public static int armourOnInvisibleDrawn() {
+        return armourLast[2];
     }
 
     public static void terrainLayer(boolean hidden) {

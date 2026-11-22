@@ -23,19 +23,20 @@ entity. `minecraft.player` is the viewer's own, an invisible spectator. Most of 
 
 Sizes: **S** under an hour, **M** a session, **L** several sessions.
 
-## Progress (22 November 2026)
+## Progress (22 November 2026, on 26.3 and 1.21.1)
 
 | Step | Status | Notes |
 |---|---|---|
-| 0 What is recorded already | Not started | |
-| 1 Potion particles | Not started | |
-| 2.1 Frost (powder snow) | Not started | |
-| 2.2 Darkness | Not started | |
-| 2.3 Nausea | Not started | |
-| 2.4 Portal wobble | Not started | |
-| 2.5 The other first-person overlays | Not started | |
-| 3 No music in playback | Not started | |
-| 4 Spec, tests, both versions | Not started | |
+| 0 What is recorded already | Done | Missing and now recorded: the recorder's portal intensity and being on fire (the server never tells the burning player's own game), in a `dailies:own_state` record and in snapshots. Snapshots did not carry the recorder's potion effects, so a jump lost them; they do now |
+| 1 Potion particles | Done | They already came through playback; the test counts them around the husk and the recorder in first and third person, and none after the effects wear off |
+| 1.5 Invisibility, armour and trims | Done | Invisible entities are judged by the recorder, not the spectator viewer (`InvisibleMixin`); armour and its trims are still drawn on them; seen again when it wears off |
+| 2.1 Frost (powder snow) | Done | `CameraOverlaysMixin` |
+| 2.2 Darkness | Done | Lightmap (`LightmapEyesMixin`), fog only through their eyes (`EffectFogMixin`) |
+| 2.3 Nausea | Done | Warp intensity, fade and spin, as the game keeps them (`RecorderEyes`). On 1.21.1 the game keeps the portal's and nausea's warp as one value on its own player, its spinning effect intensity: that is what `dailies:own_state` records there, and its renderer's reads of it are answered from the ridden player (`WarpMixin`) |
+| 2.4 Portal wobble | Done | Recorded; warp and purple overlay. On 1.21.1 with nausea, in the one value of 2.3 |
+| 2.5 The other first-person overlays | Done | Carved pumpkin and worn overlays (with a **Pumpkin overlay** look, a checkbox of its own), spyglass, fire, water, a block in the face, night vision and underwater sight, the sleep fade, a totem going off. The vignette was already drawn from the camera |
+| 3 No music in playback | Done | `MusicMixin` |
+| 4 Spec, tests, both versions | Done on 26.3, ported to 1.21.1 | Test group `effects` passes on 26.3. Ported to 1.21.1 (22 November) and compiled there, its test group not yet run. On 1.21.1 fire, water and a block in the face are drawn from the ridden player by `ScreenEffectsMixin`, the lightmap by redirecting what the game asks of its own player |
 
 ## 0. What is recorded already (S)
 
@@ -63,6 +64,15 @@ stretch previews drop particles (`ParticleEngineMixin`).
 - **Test** (`effects` group): record a mob given an effect (say a zombie with speed) and the recorder with one
   (regeneration). In playback, count the effect particles spawned near each one, in first person and in third person.
   Export a still in each view, and check the particles are in it.
+
+## 1.5 Invisibility, armour and trims (S)
+
+Added by the owner (22 November): entities with invisibility are invisible in playback, as they were to the recorder, and
+are seen again when it wears off; their armour, trims and all, is still drawn on them, as in the game. The viewer is a
+spectator, who would see invisible entities as ghosts, so they are judged by the recorder instead.
+
+**Test:** a husk in gold-trimmed iron armour made invisible for a few seconds, and the recorder invisible in a trimmed
+chestplate: invisible to the viewer, all armour drawn with its trims, and seen again once it wears off.
 
 ## 2. First-person screen effects from the recorder (M each, 2.4 is L)
 
@@ -160,3 +170,5 @@ merging, not accepted.
 2. Every gap is filled: each first-person overlay or effect drawn from the player's own state is covered (step 2.5).
 3. No separate look for the screen effects. In first person only: with Show HUD on (a let's play), overlays and effects
    show; with it off, none do. In third person or with the camera flying free they never show, whatever the HUD.
+4. A **Pumpkin overlay** look, with a checkbox in the looks, turns the carved pumpkin's view (and other worn items'
+   overlays) off; on by default.

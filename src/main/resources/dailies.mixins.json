@@ -44,7 +44,16 @@
     "export.WindowMixin",
     "export.ExportPreviewMixin",
     "export.WorkerOptionsMixin",
-    "export.WorkerQuickPlayMixin"
+    "export.WorkerQuickPlayMixin",
+    "effects.CameraOverlaysMixin",
+    "effects.WarpMixin",
+    "effects.ScreenEffectsMixin",
+    "effects.LightmapEyesMixin",
+    "effects.EffectFogMixin",
+    "effects.TotemMixin",
+    "effects.MusicMixin",
+    "effects.InvisibleMixin",
+    "effects.ParticleWatchMixin"
   ],
   "injectors": {
     "defaultRequire": 1

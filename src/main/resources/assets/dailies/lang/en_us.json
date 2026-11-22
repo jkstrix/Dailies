@@ -711,6 +711,8 @@
   "dailies.editor.looks.show_hud": "The recorder's HUD",
   "dailies.editor.looks.show_hud.tip": "Draw the hotbar, health and the rest of the recorder's HUD",
   "dailies.editor.looks.show_windows": "Open windows",
+  "dailies.editor.looks.show_pumpkin_overlay": "Pumpkin overlay",
+  "dailies.editor.looks.show_pumpkin_overlay.tip": "Draw the carved pumpkin's view, and any other worn item's overlay, through the recorder's eyes. Needs the recorder's HUD",
   "dailies.editor.looks.show_windows.tip": "Draw the windows the recorder had open, a chest, a furnace or their inventory, with the pointer, riding along in first person. Needs the recorder's HUD; off keeps the rest of the HUD",
   "dailies.editor.looks.show_chat": "Chat",
   "dailies.editor.looks.show_chat.tip": "Draw chat messages",

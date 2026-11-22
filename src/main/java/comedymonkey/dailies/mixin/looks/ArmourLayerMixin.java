@@ -20,7 +20,9 @@ public abstract class ArmourLayerMixin {
                                   float partialTick, float age, float headYaw, float headPitch, CallbackInfo ci) {
         if (LooksRenderer.hidesArmour(entity)) {
             ci.cancel();
+            return;
         }
+        comedymonkey.dailies.looks.Drawn.armour(entity);
     }
 
 }
