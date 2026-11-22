@@ -65,6 +65,7 @@
     "effects.MusicMixin",
     "effects.InvisibleMixin",
     "effects.ParticleWatchMixin",
+    "effects.SkyBlockMixin",
     "export.GuiRendererTargetMixin",
     "export.ExportChunkFadeMixin",
     "playback.PlaybackSessionDataMixin"

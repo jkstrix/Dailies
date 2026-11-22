@@ -128,6 +128,27 @@ public final class RecorderEyes {
         return Playback.loaded();
     }
 
+    private static volatile boolean skyBlocked = false;
+    private static volatile int iconsShown = 0;
+
+    /** How many potion effect icons the HUD was given in the last frame it drew them, for the self test */
+    public static int iconsShown() {
+        return iconsShown;
+    }
+
+    public static void iconsShown(int count) {
+        iconsShown = count;
+    }
+
+    /** Whether an effect took the sky away in the last frame, for the self test */
+    public static boolean skyBlocked() {
+        return skyBlocked;
+    }
+
+    public static void skyBlocked(boolean blocked) {
+        skyBlocked = blocked;
+    }
+
     /** What the overlays and effects showed in the last frame, for the self test */
     public static Shown shown() {
         return shown;
@@ -300,6 +321,25 @@ public final class RecorderEyes {
             float brightness = Lightmap.getBrightness(subject.level().dimensionType(), subject.level().getMaxLocalRawBrightness(eyes));
             state.waterOverlay = new PlayerRenderState.WaterOverlay(ARGB.colorFromFloat(0.1F, brightness, brightness, brightness),
                 -subject.getYRot() / 64.0F, subject.getXRot() / 64.0F);
+        }
+        else {
+            // A mod's fluid: its overlay texture, drawn as NeoForge draws it by default (its hook asks for the game's own
+            // player, so a mod that draws its overlay all by itself cannot be asked for the recorder's)
+            var fluid = subject.getFluidInteraction().getFirstEyeInFluid();
+            if (!fluid.isAir()) {
+                Minecraft minecraft = Minecraft.getInstance();
+                var texture = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions.of(fluid).getRenderOverlayTexture(minecraft);
+                if (texture != null) {
+                    BlockPos eyes = BlockPos.containing(subject.getEyePosition());
+                    float brightness = Lightmap.getBrightness(subject.level().dimensionType(), subject.level().getMaxLocalRawBrightness(eyes));
+                    PlayerRenderState.WaterOverlay overlay = new PlayerRenderState.WaterOverlay(ARGB.colorFromFloat(0.1F, brightness, brightness, brightness),
+                        -subject.getYRot() / 64.0F, subject.getXRot() / 64.0F);
+                    state.customFluidOverlayRenderer = (playerState, cameraState, collector, poseStack, sprites, partialTicks, hideGui) -> {
+                        net.minecraft.client.renderer.ScreenEffectRenderer.submitFluid(overlay, poseStack, collector, texture);
+                        return true;
+                    };
+                }
+            }
         }
     }
 

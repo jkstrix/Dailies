@@ -117,6 +117,27 @@ public abstract class CameraOverlaysMixin {
         }
     }
 
+    // The potion effect icons at the top of the screen are the recorder's, through their eyes with the HUD shown
+    @Redirect(method = "extractEffects", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getActiveEffects()Ljava/util/Collection;"))
+    private java.util.Collection<net.minecraft.world.effect.MobEffectInstance> dailies$theirEffects(LocalPlayer player) {
+        if (!RecorderEyes.inPlayback()) {
+            return player.getActiveEffects();
+        }
+        LivingEntity subject = RecorderEyes.subject();
+        java.util.Collection<net.minecraft.world.effect.MobEffectInstance> effects = subject == null ? java.util.List.of() : subject.getActiveEffects();
+        RecorderEyes.iconsShown(effects.size());
+        return effects;
+    }
+
+    // The spyglass's scope is drawn from the item the recorder looks through (a mod's scope has a texture of its own)
+    @Redirect(method = "extractSpyglassOverlay", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getUseItem()Lnet/minecraft/world/item/ItemStack;"))
+    private ItemStack dailies$theirScope(LocalPlayer player) {
+        if (RecorderEyes.inPlayback() && RecorderEyes.subject() instanceof LivingEntity subject) {
+            return subject.getUseItem();
+        }
+        return player.getUseItem();
+    }
+
     // The sleep fade, from whoever's eyes the view is through
     @Redirect(method = "extractSleepOverlay", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getSleepTimer()I"))
     private int dailies$theirSleep(LocalPlayer player) {

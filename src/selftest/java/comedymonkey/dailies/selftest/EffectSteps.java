@@ -331,6 +331,15 @@ final class EffectSteps {
 
         // Through the recorder's eyes, and never in third person or with the HUD hidden
         through(test, minecraft, "darkness", shown -> shown.darkness() > 0.01F, "the darkness");
+        // Darkness takes the sky away through their eyes only; their effect icons are at the top of the screen
+        at(test, minecraft, "darkness", CameraType.FIRST_PERSON, false);
+        check(RecorderEyes.skyBlocked(), "darkness does not take the sky away through the recorder's eyes");
+        check(RecorderEyes.iconsShown() >= 2, "the recorder's potion effect icons are not on the screen through their eyes: " + RecorderEyes.iconsShown());
+        at(test, minecraft, "darkness", CameraType.THIRD_PERSON_BACK, false);
+        check(!RecorderEyes.skyBlocked(), "darkness takes the sky away in third person");
+        check(RecorderEyes.iconsShown() == 0, "the recorder's potion effect icons are on the screen in third person: " + RecorderEyes.iconsShown());
+        at(test, minecraft, "darkness", CameraType.FIRST_PERSON, true);
+        check(!RecorderEyes.skyBlocked(), "darkness takes the sky away with the HUD hidden");
         through(test, minecraft, "nausea", shown -> shown.nausea() > 0.1F, "the nausea warp");
         RecorderEyes.Shown gone = at(test, minecraft, "nausea gone", CameraType.FIRST_PERSON, false);
         check(gone.nausea() < 0.05F, "the nausea did not fade in playback: " + gone.nausea());
