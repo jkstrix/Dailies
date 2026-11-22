@@ -25,6 +25,8 @@ public final class Viewer {
     private static float yaw, pitch;
     private static float roll = 0.0F;
     private static double fov = 0.0;
+    /** Whether the game is working out the field of view the hand is drawn with, which is not the configured one and is left alone */
+    public static boolean hudFov = false;
     private static boolean placed = false;
     private static Vec3 velocity = Vec3.ZERO;
     private static long lastNanos = 0;
@@ -63,8 +65,8 @@ public final class Viewer {
             }
         });
         NeoForge.EVENT_BUS.addListener((ViewportEvent.ComputeFov event) -> {
-            if (Playback.loaded() && fov > 0.0 && event.usedConfiguredFov()) {
-                event.setFOV(fov);
+            if (Playback.loaded() && fov > 0.0 && !hudFov) {
+                event.setFOV((float) fov);
             }
         });
     }

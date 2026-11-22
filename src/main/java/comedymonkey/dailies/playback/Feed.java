@@ -422,8 +422,8 @@ final class Feed {
         minecraft.gui.hud.getBossOverlay().reset();
         minecraft.gui.hud.getChat().clearMessages(false);
         new net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(true).handle(listener);
-        // The snapshot says how hard it is raining, and that it has begun when it has; never that it has stopped
-        level.getLevelData().setRaining(false);
+        // The snapshot says how hard it is raining; since 26.1 the rain level is all a game keeps of the weather, so there
+        // is no "raining" flag left over to clear
     }
 
     /** At the end of a snapshot read into a kept world: chunks the world holds that the snapshot does not have go */
@@ -444,12 +444,12 @@ final class Feed {
             if (!kept.contains(key)) {
                 this.chunksLetGo++;
                 try {
-                    net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(key);
+                    net.minecraft.world.level.ChunkPos pos = net.minecraft.world.level.ChunkPos.unpack(key);
                     if (level != null) {
                         // A game lets go of a chunk only within reach of the place its chunks are centred on, and the
                         // snapshot has just moved that place. A chunk left behind by a long journey would otherwise stay,
                         // unseen, and show itself as it was at the later time when the recorder next came that way
-                        level.getChunkSource().updateViewCenter(pos.x, pos.z);
+                        level.getChunkSource().updateViewCenter(pos.x(), pos.z());
                         moved = true;
                     }
                     new net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket(pos).handle(this.session.listener);
@@ -516,12 +516,12 @@ final class Feed {
      * them, and so does taking the miner out. After a jump back the log the recorder was about to mine stood cracked
      */
     private static void clearCracks(Minecraft minecraft) {
-        net.minecraft.client.renderer.LevelRenderer renderer = minecraft.levelRenderer;
-        if (renderer == null) {
+        net.minecraft.client.multiplayer.ClientLevel level = minecraft.level;
+        if (level == null) {
             return;
         }
-        for (int breaker : new it.unimi.dsi.fastutil.ints.IntArrayList(renderer.destroyingBlocks.keySet())) {
-            renderer.destroyBlockProgress(breaker, net.minecraft.core.BlockPos.ZERO, -1);
+        for (int breaker : new it.unimi.dsi.fastutil.ints.IntArrayList(level.destroyingBlocks.keySet())) {
+            level.destroyBlockProgress(breaker, net.minecraft.core.BlockPos.ZERO, -1);
         }
     }
 
@@ -529,7 +529,7 @@ final class Feed {
     private static boolean holds(net.minecraft.client.multiplayer.ClientLevel level, int x, int z) {
         net.minecraft.client.multiplayer.ClientChunkCache.Storage storage = level.getChunkSource().storage;
         net.minecraft.world.level.chunk.LevelChunk chunk = storage.chunks.get(storage.getIndex(x, z));
-        return chunk != null && chunk.getPos().x == x && chunk.getPos().z == z;
+        return chunk != null && chunk.getPos().x() == x && chunk.getPos().z() == z;
     }
 
     /**
@@ -548,14 +548,14 @@ final class Feed {
         }
         if (packet instanceof net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket forgotten) {
             long key = forgotten.pos().pack();
-            if (holds(level, forgotten.pos().x, forgotten.pos().z)) {
+            if (holds(level, forgotten.pos().x(), forgotten.pos().z())) {
                 this.loadedChunks.add(key);
             } else {
                 this.loadedChunks.remove(key);
             }
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket chunk) {
             if (!holds(level, chunk.x(), chunk.z())) {
-                this.loadedChunks.remove(net.minecraft.world.level.ChunkPos.asLong(chunk.x(), chunk.z()));
+                this.loadedChunks.remove(net.minecraft.world.level.ChunkPos.pack(chunk.x(), chunk.z()));
             }
         }
     }
@@ -618,7 +618,9 @@ final class Feed {
         for (Object[] each : told) {
             try {
                 // A copy: the remembered tag is told again at the next jump, and a block entity may take what it reads
-                ((net.minecraft.world.level.block.entity.BlockEntity) each[0]).handleUpdateTag(((net.minecraft.nbt.CompoundTag) each[1]).copy(), registries);
+                net.minecraft.world.level.block.entity.BlockEntity blockEntity = (net.minecraft.world.level.block.entity.BlockEntity) each[0];
+                blockEntity.handleUpdateTag(net.minecraft.world.level.storage.TagValueInput.create(net.minecraft.util.ProblemReporter.DISCARDING, registries,
+                    ((net.minecraft.nbt.CompoundTag) each[1]).copy()));
             } catch (Throwable t) {
                 this.warnOnce("telling a block entity what it held when going back", t);
             }
@@ -655,7 +657,7 @@ final class Feed {
             return null;
         }
         List<Held> held = new ArrayList<>();
-        packet.getChunkData().getBlockEntitiesTagsConsumer(packet.x(), packet.z()).accept((pos, type, tag) -> held.add(new Held(pos.immutable(), type, tag)));
+        packet.chunkData().forEachBlockEntityTag(packet.x(), packet.z(), (pos, type, tag) -> held.add(new Held(pos.immutable(), type, tag)));
         List<Held> kept = held.isEmpty() ? List.of() : List.copyOf(held);
         this.heldOfStored.put(stored, kept);
         return kept;
@@ -676,7 +678,7 @@ final class Feed {
                 // Part of a physics craft, which is taken out and put back whole
                 return;
             }
-            long key = net.minecraft.world.level.ChunkPos.asLong(chunk.x(), chunk.z());
+            long key = net.minecraft.world.level.ChunkPos.pack(chunk.x(), chunk.z());
             this.loadedChunks.add(key);
             if (this.loading) {
                 this.chunksBuilt++;
@@ -700,7 +702,7 @@ final class Feed {
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundLightUpdatePacket light) {
             // A snapshot gives a chunk whose blocks are as stored its new light this way, straight after naming the chunk
             // (capture.Snapshots): that chunk is still the stored one, with that light on it, and a jump may keep it
-            long key = net.minecraft.world.level.ChunkPos.asLong(light.x(), light.z());
+            long key = net.minecraft.world.level.ChunkPos.pack(light.x(), light.z());
             if (this.loading && this.storedNow != null) {
                 this.chunks.lit(key, this.storedNow);
             } else {
@@ -713,8 +715,6 @@ final class Feed {
             this.chunks.changed(forgotten.pos().pack());
         } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket biomes) {
             biomes.chunkBiomeData().forEach(data -> this.chunks.changed(data.pos().pack()));
-        } else if (packet instanceof net.minecraft.network.protocol.game.ClientboundExplodePacket explosion) {
-            explosion.getToBlow().forEach(pos -> this.changed(pos, true));
         } else if (packet instanceof ClientboundBundlePacket bundle) {
             bundle.subPackets().forEach(part -> this.track(part, minecraft));
         }
@@ -731,7 +731,7 @@ final class Feed {
             return true;
         }
         int reach = Math.max(2, ((comedymonkey.dailies.mixin.access.ClientPacketListenerAccess) this.session.listener).dailies$serverChunkRadius()) + 3;
-        return Math.abs(pos.x - this.centreX) <= reach && Math.abs(pos.z - this.centreZ) <= reach;
+        return Math.abs(pos.x() - this.centreX) <= reach && Math.abs(pos.z() - this.centreZ) <= reach;
     }
 
     /**
@@ -967,7 +967,7 @@ final class Feed {
             // later in the recording: one place by flowing lava stayed a level too bright after a jump back. So the stored
             // chunk is put in first, as a world built from nothing would have it, and its light goes on that; unless the
             // chunk already has this very light on it, when there is nothing to do
-            KeptChunks.Light choice = this.chunks.light(net.minecraft.world.level.ChunkPos.asLong(light.x(), light.z()), this.storedNow);
+            KeptChunks.Light choice = this.chunks.light(net.minecraft.world.level.ChunkPos.pack(light.x(), light.z()), this.storedNow);
             if (choice.leaveOut()) {
                 return;
             }
@@ -1008,7 +1008,7 @@ final class Feed {
             if (packet instanceof ClientboundLoginPacket) {
                 // The viewer is a spectator who is in nobody's tab list
                 ClientboundPlayerInfoUpdatePacket viewer = PlayerInfoPackets.build(this.session.codec, PlayerInfoPackets.allButChat(),
-                    List.of(new ClientboundPlayerInfoUpdatePacket.Entry(Session.VIEWER.id(), Session.VIEWER, false, 0, GameType.SPECTATOR, null, null)));
+                    List.of(new ClientboundPlayerInfoUpdatePacket.Entry(Session.VIEWER.id(), Session.VIEWER, false, 0, GameType.SPECTATOR, null, false, 0, null)));
                 viewer.handle(this.session.listener);
                 Playback.viewerJoined(minecraft);
             }
@@ -1067,13 +1067,13 @@ final class Feed {
             this.lightSettled = true;
             comedymonkey.dailies.capture.LightPasses.settle(level);
         }
-        net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData light = packet.getLightData();
+        net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData light = packet.lightData();
         for (int index = 0; index < engine.getLightSectionCount(); index++) {
             net.minecraft.core.SectionPos section = net.minecraft.core.SectionPos.of(packet.x(), engine.getMinLightSection() + index, packet.z());
-            if (!light.getBlockYMask().get(index) && !light.getEmptyBlockYMask().get(index) && engine.getLayerListener(net.minecraft.world.level.LightLayer.BLOCK).getDataLayerData(section) != null) {
+            if (!light.blockYMask().get(index) && !light.emptyBlockYMask().get(index) && engine.getLayerListener(net.minecraft.world.level.LightLayer.BLOCK).getDataLayerData(section) != null) {
                 return true;
             }
-            if (!light.getSkyYMask().get(index) && !light.getEmptySkyYMask().get(index) && engine.getLayerListener(net.minecraft.world.level.LightLayer.SKY).getDataLayerData(section) != null) {
+            if (!light.skyYMask().get(index) && !light.emptySkyYMask().get(index) && engine.getLayerListener(net.minecraft.world.level.LightLayer.SKY).getDataLayerData(section) != null) {
                 return true;
             }
         }

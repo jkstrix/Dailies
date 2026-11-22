@@ -4,7 +4,7 @@ import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
+import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
@@ -154,7 +154,7 @@ final class OwnPlayer {
                 double far = this.known ? (player.getX() - this.x) * (player.getX() - this.x) + (player.getY() - this.y) * (player.getY() - this.y)
                     + (player.getZ() - this.z) * (player.getZ() - this.z) : 0.0;
                 this.report(player, true);
-                out.accept(new ClientboundTeleportEntityPacket(player));
+                out.accept(teleport(player));
                 if (far > JUMP_BLOCKS * JUMP_BLOCKS) {
                     this.jumped = true;
                     this.shownX = this.targetX;
@@ -201,8 +201,15 @@ final class OwnPlayer {
         }
     }
 
-    static Packet<? super ClientGamePacketListener> swing(LocalPlayer player, InteractionHand hand) {
-        return new ClientboundAnimatePacket(player, hand == InteractionHand.MAIN_HAND ? ClientboundAnimatePacket.SWING_MAIN_HAND : ClientboundAnimatePacket.SWING_OFF_HAND);
+    /** Where the player is now, outright, leaving how they move as it was (as the teleport packet did before 26.1) */
+    static ClientboundTeleportEntityPacket teleport(LocalPlayer player) {
+        return new ClientboundTeleportEntityPacket(player.getId(),
+            new net.minecraft.world.entity.PositionMoveRotation(player.position(), net.minecraft.world.phys.Vec3.ZERO, player.getYRot(), player.getXRot()),
+            net.minecraft.world.entity.Relative.DELTA, player.onGround());
+    }
+
+    static Packet<? super ClientGamePacketListener> swing(LocalPlayer player, InteractionHand hand, net.minecraft.world.item.component.SwingAnimation animation) {
+        return new ClientboundSwingAnimationPacket(player, hand, animation);
     }
 
     private static byte angle(float degrees) {

@@ -8,14 +8,11 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.Map;
 
-/** The game's fonts and the one it last used, for the scripted test to prove that a resource reload left it a live one */
+/** The game's fonts (26.3 keeps no cache of the last one used), for the scripted test to prove that a resource reload left it a live one */
 @Mixin(FontManager.class)
 public interface FontManagerAccess {
 
     @Accessor("fontSets")
     Map<Identifier, FontSet> dailies$fontSets();
-
-    @Accessor("lastFontSetCache")
-    FontSet dailies$lastFontSet();
 
 }

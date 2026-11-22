@@ -1329,7 +1329,7 @@ public final class MomentsTools {
 
         Object token = new Object();
         pendingCue = token;
-        minecraft.tell(() -> {
+        minecraft.schedule(() -> {
             try {
                 Host.get().openRecording(file);
             } catch (Throwable t) {

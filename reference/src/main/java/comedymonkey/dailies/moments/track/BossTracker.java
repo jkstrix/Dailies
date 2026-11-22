@@ -52,7 +52,7 @@ class BossTracker {
         if (entity instanceof Player) {
             return false;
         }
-        return entity.getType().is(Tags.EntityTypes.BOSSES)
+        return entity.typeHolder().is(Tags.EntityTypes.BOSSES)
             || MomentsConfig.notableEntities().contains(GameplayTracker.id(entity.getType()))
             || entity.getMaxHealth() >= MomentsConfig.bossHealthThreshold();
     }

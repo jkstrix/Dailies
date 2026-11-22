@@ -7,6 +7,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry;
+import net.minecraft.world.level.GameType;
 
 import java.util.Collection;
 import java.util.EnumSet;
@@ -22,7 +23,8 @@ public final class PlayerInfoPackets {
 
     /** Everything about a player except the chat-signing session, which a recording must never hold */
     public static EnumSet<Action> allButChat() {
-        return EnumSet.of(Action.ADD_PLAYER, Action.UPDATE_GAME_MODE, Action.UPDATE_LISTED, Action.UPDATE_LATENCY, Action.UPDATE_DISPLAY_NAME);
+        return EnumSet.of(Action.ADD_PLAYER, Action.UPDATE_GAME_MODE, Action.UPDATE_LISTED, Action.UPDATE_LATENCY, Action.UPDATE_DISPLAY_NAME,
+            Action.UPDATE_LIST_ORDER, Action.UPDATE_HAT);
     }
 
     public static ClientboundPlayerInfoUpdatePacket build(GameCodec codec, EnumSet<Action> actions, Collection<Entry> entries) {
@@ -32,23 +34,27 @@ public final class PlayerInfoPackets {
         RegistryFriendlyByteBuf buffer = codec.buffer();
         try {
             buffer.writeEnumSet(actions, Action.class);
-            buffer.writeCollection(entries, (target, entry) -> {
+            buffer.writeVarInt(entries.size());
+            for (Entry entry : entries) {
+                RegistryFriendlyByteBuf target = buffer;
                 target.writeUUID(entry.profileId());
                 for (Action action : actions) {
                     switch (action) {
                         case ADD_PLAYER -> {
-                            target.writeUtf(entry.profile().getName(), 16);
-                            ByteBufCodecs.GAME_PROFILE_PROPERTIES.encode(target, entry.profile().getProperties());
+                            ByteBufCodecs.PLAYER_NAME.encode(target, entry.profile().name());
+                            ByteBufCodecs.GAME_PROFILE_PROPERTIES.encode(target, entry.profile().properties());
                         }
-                        case UPDATE_GAME_MODE -> target.writeVarInt(entry.gameMode().getId());
+                        case UPDATE_GAME_MODE -> GameType.STREAM_CODEC.encode(target, entry.gameMode());
                         case UPDATE_LISTED -> target.writeBoolean(entry.listed());
                         case UPDATE_LATENCY -> target.writeVarInt(entry.latency());
-                        case UPDATE_DISPLAY_NAME -> FriendlyByteBuf.writeNullable((RegistryFriendlyByteBuf) target, entry.displayName(), ComponentSerialization.TRUSTED_STREAM_CODEC);
+                        case UPDATE_DISPLAY_NAME -> FriendlyByteBuf.writeNullable(target, entry.displayName(), ComponentSerialization.TRUSTED_STREAM_CODEC);
+                        case UPDATE_LIST_ORDER -> target.writeVarInt(entry.listOrder());
+                        case UPDATE_HAT -> target.writeBoolean(entry.showHat());
                         default -> {
                         }
                     }
                 }
-            });
+            }
             return ClientboundPlayerInfoUpdatePacket.STREAM_CODEC.decode(buffer);
         } finally {
             buffer.release();

@@ -57,7 +57,8 @@ public abstract class FontManagerMixin {
         this.dailies$current = Map.copyOf(this.fontSets);
     }
 
-    @Inject(method = "getFontSetCached", at = @At("HEAD"), cancellable = true)
+    // 26.1 dropped the one-field cache; every lookup now reads the table the reload rewrites, here
+    @Inject(method = "getFontSetRaw", at = @At("HEAD"), cancellable = true)
     private void dailies$fromAnotherThread(Identifier name, CallbackInfoReturnable<FontSet> cir) {
         if (!RenderSystem.isOnRenderThread()) {
             cir.setReturnValue(this.dailies$current.getOrDefault(name, this.missingFontSet));

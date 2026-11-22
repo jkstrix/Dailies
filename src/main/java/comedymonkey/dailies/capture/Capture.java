@@ -87,9 +87,9 @@ public final class Capture {
         }
     }
 
-    public static void ownSwing(LocalPlayer player, InteractionHand hand) {
+    public static void ownSwing(LocalPlayer player, InteractionHand hand, net.minecraft.world.item.component.SwingAnimation animation) {
         try {
-            Recorder.get().onOwnSwing(player, hand);
+            Recorder.get().onOwnSwing(player, hand, animation);
         } catch (Throwable t) {
             failed(t);
         }

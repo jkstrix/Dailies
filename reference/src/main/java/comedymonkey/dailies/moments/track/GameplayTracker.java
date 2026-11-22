@@ -600,7 +600,7 @@ public class GameplayTracker {
             // The full list sent on login: things earned earlier, not now
             return;
         }
-        for (Map.Entry<Identifier, AdvancementProgress> entry : packet.getProgress().entrySet()) {
+        for (Map.Entry<Identifier, AdvancementProgress> entry : packet.progress().entrySet()) {
             AdvancementNode node = tree.get(entry.getKey());
             if (node == null || !entry.getValue().isDone() || node.advancement().display().isEmpty()) {
                 continue; // recipe unlocks have no display
@@ -612,10 +612,10 @@ public class GameplayTracker {
             DisplayInfo display = node.advancement().display().get();
             this.emit("advancement", advancementId, false, event -> {
                 JsonObject metadata = MJson.meta(event);
-                metadata.addProperty("title", display.getTitle().getString());
-                metadata.addProperty("description", display.getDescription().getString());
-                metadata.addProperty("frame", display.getType().getSerializedName());
-                if (display.getType() == AdvancementType.CHALLENGE) {
+                metadata.addProperty("title", display.title().getString());
+                metadata.addProperty("description", display.description().getString());
+                metadata.addProperty("frame", display.type().getSerializedName());
+                if (display.type() == AdvancementType.CHALLENGE) {
                     metadata.addProperty("rare", true);
                 }
                 String structure = STRUCTURE_ADVANCEMENTS.get(advancementId);
