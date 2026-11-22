@@ -42,6 +42,6 @@ side = "CLIENT"
 [[dependencies.dailies_jade]]
 modId = "jade"
 type = "optional"
-versionRange = "[15.10.6,)"
+versionRange = "[26.3.5,)"
 ordering = "AFTER"
 side = "BOTH"

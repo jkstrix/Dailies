@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reads and sets the fields Jade keeps to itself on its elements, its progress styles and its settings, by name, as Jade
- * 15.10.6 names them. Jade's classes keep their own names in a built game, so a name found here stays found; when a
+ * 26.3.5 names them. Jade's classes keep their own names in a built game, so a name found here stays found; when a
  * later Jade renames one, the element using it is recorded as one the compat cannot draw, logged once, and the rest of
  * the box goes on.
  */

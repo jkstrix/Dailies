@@ -18,7 +18,8 @@ import java.util.Objects;
  * Text is kept as the game's own JSON for a component, items and fluids as the game's JSON for them, and a box's style
  * as Jade's own JSON for a style, made and read on the game's side; here each is only a string. Version 1 of the compat
  * writes these; a later version must still read them, so the box only ever gains fields at its end, and an element only
- * gains entries at the ends of its texts, numbers and children, whose lengths are written before them.
+ * gains entries at the ends of its texts, numbers and children, whose lengths are written before them. Version 2, for
+ * Jade 26 on Minecraft 26.3, keeps the same shape with what Jade 26's elements hold in them, as each kind says.
  */
 public final class JadeStates {
 
@@ -31,7 +32,7 @@ public final class JadeStates {
 
     /** An element of a plugin's own, which only that plugin can draw: its place is kept, empty, and its class named */
     public static final int OTHER = 0;
-    /** Text: {@code texts} its JSON; {@code floats} empty, or the scale and the depth of a scaled text */
+    /** Text: {@code texts} its JSON; {@code floats} its scale and how solid it is */
     public static final int TEXT = 1;
     /**
      * An item: {@code texts} its JSON, as one of it, and, when one is drawn over it, its count text; {@code ints} how many;
@@ -39,19 +40,27 @@ public final class JadeStates {
      */
     public static final int ITEM = 2;
     /**
-     * A progress bar: {@code texts} the bar's box style and, when it has one, its text; {@code floats} how far along;
-     * {@code ints} whether it may go down, the bar's kind ({@link #SIMPLE_BAR} and the rest), its colours, its text colour,
-     * whether the text colour is worked out, its direction and whether it fits its line across and down; {@code children}
-     * what fills it, when something does (a fluid)
+     * A progress bar: {@code texts} the bar's box style, the sprite drawn over it (or empty) and its text (or empty);
+     * {@code ints} whether it may go down, the bar's kind ({@link #SIMPLE_BAR} and the rest), its colour, whether its text
+     * colour is worked out, its direction, whether it fits its line across and down, its width and height and how many
+     * parts fill it, then for each part its id, its message type (or -1), its colour and whether something fills it;
+     * {@code floats} for each part how far along, its speed and its target; {@code children} what fills the parts that
+     * have something (a fluid), in order
      */
     public static final int PROGRESS = 3;
-    /** A fluid: {@code texts} its JSON */
+    /** A fluid: {@code texts} its JSON; {@code ints} its width and height */
     public static final int FLUID = 4;
-    /** Hearts: {@code floats} the health; {@code ints} hearts to a row, rows and hearts; {@code texts} the figures drawn instead, if any */
+    /**
+     * Hearts: {@code floats} the health, the most health and the absorption; {@code ints} hearts to a row, rows, hearts and
+     * the kind of heart; {@code texts} the figures drawn instead, if any
+     */
     public static final int HEALTH = 5;
-    /** Armour: as for hearts, with the armour */
+    /** Armour: {@code floats} the armour; {@code ints} icons to a row, rows and icons; {@code texts} the figures drawn instead, if any */
     public static final int ARMOR = 6;
-    /** A sprite: {@code texts} its id; {@code ints} its width and height */
+    /**
+     * A sprite: {@code texts} its id; {@code ints} the sprite's own width and height, the width and height it was drawn
+     * at, the way it was tiled (or -1) and its colour
+     */
     public static final int SPRITE = 7;
     /** Space only */
     public static final int SPACER = 8;
@@ -59,8 +68,9 @@ public final class JadeStates {
     public static final int RULE = 9;
     /**
      * A box of lines, the main box itself or one inside it: {@code texts} its style; {@code ints} its padding (up, right,
-     * down, left), its progress's kind (or -1 for none) and whether it hints at more details; {@code floats} its
-     * progress and the size of its lines; {@code children} its icon, when it has one; {@code lines} its lines
+     * down, left), the kind of the line along its foot (or -1 for none: on the main box, the block being broken), whether
+     * it hints at more details, whether that line has a colour of its own and the colour; {@code floats} how far along the
+     * line is and how far it has faded in; {@code children} its icon, when it has one; {@code lines} its lines
      */
     public static final int BOX = 10;
     /** A large element with a small one over its corner: {@code children} both */
@@ -68,7 +78,7 @@ public final class JadeStates {
 
     /** A progress bar of Jade's simple kind, which may be coloured, have text and run upwards */
     public static final int SIMPLE_BAR = 0;
-    /** A progress bar of Jade's slim kind, a thin coloured bar */
+    /** A progress bar of Jade's slim kind, a thin coloured bar (Jade 15; Jade 26 has only the simple kind) */
     public static final int SLIM_BAR = 1;
     /** A progress bar of a plugin's own kind, drawn as the simple kind */
     public static final int OTHER_BAR = 2;
@@ -77,8 +87,9 @@ public final class JadeStates {
     }
 
     /**
-     * One element as Jade laid it out: its kind, which side of its line it keeps to, how far it was moved, the size it
-     * took, its tag, and what its kind needs (see each kind).
+     * One element as Jade laid it out: its kind, which side of its line it keeps to (by the order of Jade's alignments, or
+     * -1 for its line's own), how far it was moved inside the room it took, the room it took in its line (its padding
+     * included), its tag, and what its kind needs (see each kind).
      */
     public record Element(int kind, int align, float moveX, float moveY, float width, float height, String tag, List<String> texts, int[] ints,
                           float[] floats, List<Element> children, List<Line> lines) {
@@ -150,15 +161,16 @@ public final class JadeStates {
      * @param anchorX      the point of the screen the box keeps to, as a share of the interface across, after flipping
      *                     for a left hand
      * @param anchorY      the same, down
-     * @param square       whether the recorder had Jade's square corners
+     * @param square       whether the recorder had Jade's square corners (always false from Jade 26, which has none)
      * @param opacity      Jade's own setting for how solid the box's background is
      * @param iconMode     where Jade put the block's icon, by the order of Jade's icon modes
      * @param theme        the theme's id
      * @param themeStored  the theme as Jade's JSON for a theme, stored once in the recording, by its handle; empty when it
      *                     could not be stored
-     * @param breakingFade how far the line of a block being broken had faded in, 0 for none
-     * @param breaking     how far the block was broken, 0 to 1
-     * @param canHarvest   whether the block broken drops something, which colours the line
+     * @param breakingFade how far the line of a block being broken had faded in, 0 for none (always 0 from Jade 26, where
+     *                     the line is the main box's own, see {@link #BOX})
+     * @param breaking     how far the block was broken, 0 to 1 (always 0 from Jade 26)
+     * @param canHarvest   whether the block broken drops something, which colours the line (always true from Jade 26)
      * @param root         the box's own element, a {@link #BOX}
      */
     public record Box(int x, int y, int width, int height, float scale, float fade, int guiWidth, int guiHeight, float anchorX, float anchorY,
