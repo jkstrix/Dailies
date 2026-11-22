@@ -16,6 +16,9 @@ import net.minecraft.client.Options;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import com.google.gson.JsonObject;
 import comedymonkey.dailies.compat.iris.IrisShaders;
@@ -133,7 +136,6 @@ public final class EditorScreen extends Screen {
     /** Once, when the game starts: the hooks the editor and what belongs to it need */
     static void hook() {
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> watch());
-        ViewPick.init();
         ExportProgress.hook();
         // The editor is the way a recording is watched and worked on, so it is there as soon as one opens. The scripted
         // test runs drive the game through its tools and put the editor up themselves when they want it
@@ -522,7 +524,7 @@ public final class EditorScreen extends Screen {
 
     /** No blur and no dimming: only the panels */
     @Override
-    public void renderBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
@@ -541,6 +543,9 @@ public final class EditorScreen extends Screen {
     public void removed() {
         this.input.end();
         this.stopFlying();
+        if (this.minecraft != null) {
+            this.minecraft.textInputManager().stopTextInput(this);
+        }
         if (this.minecraft != null) {
             // Whatever comes next is drawn at the game's own size
             int usual = usualScale(this.minecraft);
@@ -581,7 +586,9 @@ public final class EditorScreen extends Screen {
     // ------------------------------------------------------------------ Drawing
 
     @Override
-    public void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        // Letters only for an open menu, which narrows as they are typed: otherwise the movement keys must stay keys
+        InputRouter.textInput(this, Menu.open != null);
         // Nothing of the editor may be in an exported picture
         if (!this.usable()) {
             return;
@@ -622,10 +629,8 @@ public final class EditorScreen extends Screen {
             if (menu != null) {
                 menu.draw(graphics, this.font, mouseX, mouseY, this.width, this.height);
             } else if (!this.flying && this.input.held() == null && !this.timeline.dragging()) {
-                Component words = this.tipAt(mouseX, mouseY);
-                if (words != null) {
-                    this.setTooltipForNextRenderPass(words);
-                }
+                // In the house colours, as every other Dailies screen draws them; drawn last, so over everything
+                Kit.tooltip(graphics, this.font, this.tipAt(mouseX, mouseY), mouseX, mouseY, this.width, this.height);
             }
         } catch (RuntimeException | LinkageError e) {
             if (!failureLogged) {
@@ -1015,10 +1020,13 @@ public final class EditorScreen extends Screen {
     // ------------------------------------------------------------------ The mouse
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (!this.usable()) {
             return true;
         }
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         EditorState.guard(() -> this.pressed(mouseX, mouseY, button));
         return true;
     }
@@ -1029,7 +1037,7 @@ public final class EditorScreen extends Screen {
             return;
         }
         if (this.hidden()) {
-            if (button == 1) {
+            if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
                 this.startFlying();
             }
             return;
@@ -1041,11 +1049,11 @@ public final class EditorScreen extends Screen {
             this.input.hold(this.pressPanels(mouseX, mouseY, button));
             return;
         }
-        if (button == 1) {
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
             this.startFlying();
-        } else if (button == 0 && EditorState.pick != null) {
+        } else if (button == InputConstants.MOUSE_BUTTON_LEFT && EditorState.pick != null) {
             this.pickAt(mouseX, mouseY);
-        } else if (button == 0) {
+        } else if (button == InputConstants.MOUSE_BUTTON_LEFT) {
             this.clickWorld(mouseX, mouseY);
         }
     }
@@ -1125,8 +1133,11 @@ public final class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 1) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
             this.stopFlying();
         }
         Gadget was = this.input.letGo();
@@ -1135,7 +1146,7 @@ public final class EditorScreen extends Screen {
                 if (was != null) {
                     was.release(mouseX, mouseY);
                 }
-                if (button == 0) {
+                if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                     this.timeline.release(mouseX, mouseY);
                 }
             });
@@ -1144,11 +1155,14 @@ public final class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (this.flying) {
             return true;
         }
-        if (button == 0 && this.usable() && !this.hidden()) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && this.usable() && !this.hidden()) {
             EditorState.guard(() -> {
                 this.input.drag(mouseX, mouseY);
                 this.timeline.dragTo(mouseX, mouseY);
@@ -1200,7 +1214,10 @@ public final class EditorScreen extends Screen {
     // ------------------------------------------------------------------ The keys
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        int scanCode = event.keycode();
+        int modifiers = event.modifiers();
         if (!this.usable()) {
             return keyCode != InputConstants.KEY_ESCAPE || this.escape();
         }
@@ -1345,10 +1362,10 @@ public final class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean charTyped(char character, int modifiers) {
+    public boolean charTyped(CharacterEvent event) {
         Entry typing = Entry.focused;
         if (typing != null && this.usable()) {
-            EditorState.guard(() -> typing.typed(character, modifiers));
+            EditorState.guard(() -> typing.typed(event.codepoint()));
         }
         return true;
     }
@@ -1387,8 +1404,8 @@ public final class EditorScreen extends Screen {
 
     private boolean down(KeyMapping key) {
         InputConstants.Key bound = key.getKey();
-        return bound.getType() == InputConstants.Type.KEYSYM && bound.getValue() > 0
-                && InputConstants.isKeyDown(this.minecraft.getWindow().handle(), bound.getValue());
+        return bound.getType() == InputConstants.Type.KEYBOARD && bound.getValue() > 0
+                && InputConstants.isKeyDown(bound.getValue());
     }
 
     /**
@@ -1448,7 +1465,7 @@ public final class EditorScreen extends Screen {
         double sensitivity = options.sensitivity().get() * 0.6 + 0.2;
         double perPixel = sensitivity * sensitivity * sensitivity * 8.0 * 0.15;
         float yaw = Viewer.yaw() + (float) (turnX * perPixel);
-        float pitch = Mth.clamp(Viewer.pitch() + (float) (turnY * perPixel * (options.invertYMouse().get() ? -1.0 : 1.0)), -90.0F, 90.0F);
+        float pitch = Mth.clamp(Viewer.pitch() + (float) (turnY * perPixel * (options.invertMouseY().get() ? -1.0 : 1.0)), -90.0F, 90.0F);
 
         boolean lookRelative = EditorState.setting("flightLookRelative", false);
         Vec3 ahead = Vec3.directionFromRotation(lookRelative ? pitch : 0.0F, yaw);
@@ -1513,8 +1530,8 @@ public final class EditorScreen extends Screen {
             // Turned a quarter of the way round, so the name reads from the top down
             graphics.pose().pushMatrix();
             try {
-                graphics.pose().translate(this.x + this.width / 2.0F + 4.0F, this.y + this.height / 2.0F, 0.0F);
-                graphics.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90.0F));
+                graphics.pose().translate(this.x + this.width / 2.0F + 4.0F, this.y + this.height / 2.0F);
+                graphics.pose().rotate((float) Math.toRadians(90.0));
                 String words = this.label.getString();
                 graphics.text(font, words, -font.width(words) / 2, 0, Controls.PARCHMENT, false);
             } finally {
@@ -1524,7 +1541,7 @@ public final class EditorScreen extends Screen {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             Kit.click();

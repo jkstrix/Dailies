@@ -4,6 +4,7 @@ import net.minecraft.client.gui.font.TextFieldHelper;
 import net.minecraft.client.gui.screens.inventory.AbstractSignEditScreen;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -18,13 +19,13 @@ public interface SignEditScreenAccess {
     SignBlockEntity dailies$sign();
 
     @Accessor("text")
-    SignText dailies$text();
+    SignText.Mutable dailies$text();
 
     @Accessor("messages")
     String[] dailies$messages();
 
-    @Accessor("isFrontText")
-    boolean dailies$front();
+    @Accessor("slot")
+    SignTextSlot dailies$slot();
 
     @Accessor("line")
     int dailies$line();

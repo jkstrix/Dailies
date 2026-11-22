@@ -98,7 +98,7 @@ abstract class LibraryView {
     }
 
     /** A letter typed while no box is being typed into */
-    void typed(char character, int modifiers) {
+    void typed(int codepoint) {
     }
 
 }

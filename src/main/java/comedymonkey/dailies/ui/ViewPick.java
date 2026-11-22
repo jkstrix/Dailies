@@ -10,11 +10,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.neoforge.client.event.ViewportEvent;
-import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -43,16 +40,15 @@ final class ViewPick {
     private ViewPick() {
     }
 
-    static void init() {
-        // Last of all, so that this is the field of view really used
-        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ViewportEvent.ComputeFov event) -> {
-            if (event.usedConfiguredFov()) {
-                fieldOfView = event.getFOV();
-            }
-        });
-    }
-
+    /**
+     * The camera keeps the field of view the world was drawn with, after every mod has had its say; the one the hand
+     * is drawn with is kept apart from it
+     */
     static double fieldOfView() {
+        Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
+        if (camera.isInitialized() && camera.getFov() > 0.0F) {
+            fieldOfView = camera.getFov();
+        }
         return fieldOfView;
     }
 
@@ -74,11 +70,11 @@ final class ViewPick {
             across = (across - shift[1]) / shift[0];
             up = (up - shift[2]) / shift[0];
         }
-        double tangent = Math.tan(Math.toRadians(Math.max(1.0, Math.min(170.0, fieldOfView)) / 2.0));
+        double tangent = Math.tan(Math.toRadians(Math.max(1.0, Math.min(170.0, fieldOfView())) / 2.0));
         double aspect = (double) minecraft.getWindow().getWidth() / Math.max(1, minecraft.getWindow().getHeight());
-        Vector3f look = camera.forwardVector();
-        Vector3f above = camera.upVector();
-        Vector3f left = camera.leftVector();
+        Vector3fc look = camera.forwardVector();
+        Vector3fc above = camera.upVector();
+        Vector3fc left = camera.leftVector();
         double sideways = -across * tangent * aspect;
         double upwards = up * tangent;
         Vec3 direction = new Vec3(
@@ -98,7 +94,7 @@ final class ViewPick {
         if (!camera.isInitialized()) {
             return null;
         }
-        Vector3f look = camera.forwardVector();
+        Vector3fc look = camera.forwardVector();
         return new Ray(camera.position(), new Vec3(look.x(), look.y(), look.z()).normalize());
     }
 

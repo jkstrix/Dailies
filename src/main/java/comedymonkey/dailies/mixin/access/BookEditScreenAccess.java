@@ -1,6 +1,6 @@
 package comedymonkey.dailies.mixin.access;
 
-import net.minecraft.client.gui.font.TextFieldHelper;
+import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.screens.inventory.BookEditScreen;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -10,7 +10,8 @@ import java.util.List;
 
 /**
  * What a book and quill's screen holds as it is written in, which it keeps to itself: read while recording, and put on
- * the read-only copy playback draws, before it is laid out
+ * the read-only copy playback draws, before it is laid out. The page is typed into a box that is only made as the
+ * screen is laid out
  */
 @Mixin(BookEditScreen.class)
 public interface BookEditScreenAccess {
@@ -27,19 +28,7 @@ public interface BookEditScreenAccess {
     @Accessor("currentPage")
     void dailies$setCurrentPage(int page);
 
-    @Accessor("isSigning")
-    boolean dailies$signing();
-
-    @Accessor("isSigning")
-    void dailies$setSigning(boolean signing);
-
-    @Accessor("title")
-    String dailies$title();
-
-    @Accessor("title")
-    void dailies$setTitle(String title);
-
-    @Accessor("pageEdit")
-    TextFieldHelper dailies$pageEdit();
+    @Accessor("page")
+    MultiLineEditBox dailies$page();
 
 }

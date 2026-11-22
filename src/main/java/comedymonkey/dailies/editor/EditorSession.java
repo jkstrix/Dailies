@@ -11,12 +11,16 @@ import comedymonkey.dailies.edit.Track;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
+import net.minecraft.client.ClientClockManager;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.world.clock.ClockNetworkState;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -292,7 +296,7 @@ public final class EditorSession {
             Viewer.setFov(fov != null ? fov[0] : scene.looks().fov);
             Double time = Evaluator.timeOfDay(scene, tick);
             if (time != null && minecraft.level != null) {
-                minecraft.level.getLevelData().setDayTime(Math.round(time));
+                setTimeOfDay(minecraft.level, Math.round(time));
             }
             if (followCamera || exporting) {
                 CameraSteps.catchUp();
@@ -327,6 +331,18 @@ public final class EditorSession {
             Viewer.setRoll(0.0F);
             rollFromLooks = false;
         }
+    }
+
+    /**
+     * Sets the clock the world's sky follows (the overworld's day, in the overworld) to this many ticks. It keeps
+     * the speed the recording gave it
+     */
+    private static void setTimeOfDay(ClientLevel level, long ticks) {
+        level.dimensionType().defaultClock().ifPresent(clock -> {
+            ClientClockManager clocks = level.clockManager();
+            float rate = clocks.getInstance(clock).rate();
+            clocks.handleUpdates(level.getGameTime(), Map.of(clock, new ClockNetworkState(ticks, 0.0F, rate)));
+        });
     }
 
     private static boolean placeCamera(Minecraft minecraft, Scene scene, double tick) {

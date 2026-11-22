@@ -11,6 +11,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.core.ClientAsset;
+import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
@@ -94,8 +96,8 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
             Identifier elytra = this.register(id, "elytra", in, textures);
             PlayerSkin builtIn = DefaultPlayerSkin.get(id);
             PlayerSkin shown = skin == null
-                ? new PlayerSkin(builtIn.texture(), null, cape, elytra, builtIn.model(), true)
-                : new PlayerSkin(skin, null, cape, elytra, slim ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE, true);
+                ? new PlayerSkin(builtIn.body(), asset(cape), asset(elytra), builtIn.model(), true)
+                : new PlayerSkin(asset(skin), asset(cape), asset(elytra), slim ? PlayerModelType.SLIM : PlayerModelType.WIDE, true);
             this.held.put(id, new Held(shown, textures, mark, Arrays.copyOfRange(data, from, from + length)));
             if (before != null) {
                 this.release(before);
@@ -122,9 +124,14 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
         }
         byte[] png = in.readBytes(length);
         Identifier location = Identifier.fromNamespaceAndPath(Dailies.ID, "recorded_skins/" + id + "/" + kind + "_" + this.counter++);
-        Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(NativeImage.read(png)));
+        Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(location::toString, NativeImage.read(png)));
         textures.add(location);
         return location;
+    }
+
+    /** A texture registered here, as a skin names its pictures: under the same name it was registered by */
+    private static ClientAsset.@Nullable Texture asset(@Nullable Identifier location) {
+        return location == null ? null : new ClientAsset.ResourceTexture(location, location);
     }
 
     private void release(Held old) {

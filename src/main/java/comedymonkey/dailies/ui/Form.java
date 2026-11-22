@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -223,7 +224,7 @@ final class Form {
         if (!this.over(mouseX, mouseY)) {
             return null;
         }
-        if (this.overBar(mouseX, mouseY) && button == 0) {
+        if (this.overBar(mouseX, mouseY) && button == InputConstants.MOUSE_BUTTON_LEFT) {
             // Taking hold of the thumb drags it from where it was taken; a click beside it brings its middle there
             int[] thumb = Kit.thumb(this.y, this.height, this.content, this.scroll);
             boolean onThumb = mouseY >= thumb[0] && mouseY < thumb[0] + thumb[1];

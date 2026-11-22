@@ -60,7 +60,7 @@ public final class HudState {
     static HudState of(LocalPlayer player, GameType gameMode) {
         HudState state = new HudState();
         state.gameMode = gameMode;
-        state.selected = player.getInventory().selected;
+        state.selected = player.getInventory().getSelectedSlot();
         state.rightHanded = player.getMainArm() == HumanoidArm.RIGHT;
         state.underWater = player.isEyeInFluid(FluidTags.WATER);
         state.hardcore = player.level().getLevelData().isHardcore();
@@ -75,7 +75,7 @@ public final class HudState {
         state.level = player.experienceLevel;
         state.progress = player.experienceProgress;
         for (int slot = 0; slot < 9; slot++) {
-            state.stacks[slot] = player.getInventory().items.get(slot);
+            state.stacks[slot] = player.getInventory().getNonEquipmentItems().get(slot);
         }
         state.stacks[OFF_HAND] = player.getOffhandItem();
         return state;

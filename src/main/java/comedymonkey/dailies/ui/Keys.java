@@ -5,6 +5,8 @@ import comedymonkey.dailies.Host;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
@@ -24,7 +26,8 @@ import java.util.List;
  */
 public final class Keys {
 
-    private static final String CATEGORY = "key.categories.dailies";
+    /** Shared with the extras, whose key sits with these */
+    public static final KeyMapping.Category CATEGORY = new KeyMapping.Category(Identifier.fromNamespaceAndPath("dailies", "dailies"));
 
     /** Live only while a recording is being watched and no screen is open */
     private static final IKeyConflictContext WATCHING = new IKeyConflictContext() {
@@ -56,13 +59,13 @@ public final class Keys {
             return;
         }
         int unbound = InputConstants.UNKNOWN.getValue();
-        RECORDING.add(new Bound(new KeyMapping("dailies.key.record", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, unbound, CATEGORY), Controls::toggleRecording));
-        RECORDING.add(new Bound(new KeyMapping("dailies.key.pause_recording", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, unbound, CATEGORY), Controls::togglePauseRecording));
+        RECORDING.add(new Bound(new KeyMapping("dailies.key.record", KeyConflictContext.IN_GAME, InputConstants.Type.KEYBOARD, unbound, CATEGORY), Controls::toggleRecording));
+        RECORDING.add(new Bound(new KeyMapping("dailies.key.pause_recording", KeyConflictContext.IN_GAME, InputConstants.Type.KEYBOARD, unbound, CATEGORY), Controls::togglePauseRecording));
         for (int marker = 1; marker <= 4; marker++) {
             int number = marker;
-            RECORDING.add(new Bound(new KeyMapping("dailies.key.marker" + number, KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, unbound, CATEGORY), () -> Controls.dropMarker(number)));
+            RECORDING.add(new Bound(new KeyMapping("dailies.key.marker" + number, KeyConflictContext.IN_GAME, InputConstants.Type.KEYBOARD, unbound, CATEGORY), () -> Controls.dropMarker(number)));
         }
-        RECORDING.add(new Bound(new KeyMapping("dailies.key.moment", KeyConflictContext.IN_GAME, InputConstants.Type.KEYSYM, unbound, CATEGORY), Controls::logMoment));
+        RECORDING.add(new Bound(new KeyMapping("dailies.key.moment", KeyConflictContext.IN_GAME, InputConstants.Type.KEYBOARD, unbound, CATEGORY), Controls::logMoment));
 
         PLAYBACK.add(new Bound(watching("dailies.key.play", InputConstants.KEY_P), Controls::togglePlay));
         PLAYBACK.add(new Bound(watching("dailies.key.step", InputConstants.KEY_PERIOD), Controls::stepOneTick));
@@ -75,13 +78,14 @@ public final class Keys {
         PLAYBACK.add(new Bound(watching("dailies.key.redo", unbound), Controls::redo));
         PLAYBACK.add(new Bound(watching("dailies.key.timeline", InputConstants.KEY_T), Controls::openTimeline));
 
+        event.registerCategory(CATEGORY);
         RECORDING.forEach(bound -> event.register(bound.key()));
         PLAYBACK.forEach(bound -> event.register(bound.key()));
         registered = true;
     }
 
     private static KeyMapping watching(String name, int key) {
-        return new KeyMapping(name, WATCHING, InputConstants.Type.KEYSYM, key, CATEGORY);
+        return new KeyMapping(name, WATCHING, InputConstants.Type.KEYBOARD, key, CATEGORY);
     }
 
     public static void init() {
@@ -159,7 +163,7 @@ public final class Keys {
      */
     static boolean playbackKeyPressed(int keyCode, int scanCode) {
         for (Bound bound : PLAYBACK) {
-            if (!bound.key().isUnbound() && bound.key().matches(keyCode, scanCode)) {
+            if (!bound.key().isUnbound() && bound.key().matches(new KeyEvent(keyCode, scanCode, 0))) {
                 run(bound);
                 return true;
             }
@@ -171,7 +175,7 @@ public final class Keys {
     static boolean isTimelineKey(int keyCode, int scanCode) {
         for (Bound bound : PLAYBACK) {
             if (bound.key().getName().equals("dailies.key.timeline")) {
-                return !bound.key().isUnbound() && bound.key().matches(keyCode, scanCode);
+                return !bound.key().isUnbound() && bound.key().matches(new KeyEvent(keyCode, scanCode, 0));
             }
         }
         return false;

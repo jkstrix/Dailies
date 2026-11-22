@@ -348,7 +348,7 @@ public final class Controls {
             // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token.
             // A scripted run must not put browser windows on the desk of whoever is watching it
             if (!comedymonkey.dailies.ScriptedRun.asked()) {
-                net.minecraft.util.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
+                com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
             }
             opened[0] = true;
             tell(Component.translatable("dailies.ui.notice.moments_page_opened"));

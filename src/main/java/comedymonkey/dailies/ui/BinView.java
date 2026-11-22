@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.library.Bin;
 import comedymonkey.dailies.library.Library;
 import comedymonkey.dailies.library.Retention;
@@ -227,7 +228,7 @@ final class BinView extends LibraryView {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             BinView.this.chosen = this.item.id;

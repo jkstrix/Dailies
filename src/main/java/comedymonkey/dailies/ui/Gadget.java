@@ -279,7 +279,7 @@ abstract class Gadget {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (this.action == null || button != 0 || !this.over(mouseX, mouseY)) {
+            if (this.action == null || button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             Kit.click();
@@ -372,7 +372,7 @@ abstract class Gadget {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             if (this.usable.getAsBoolean()) {
@@ -463,7 +463,7 @@ abstract class Gadget {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             if (this.usable.getAsBoolean()) {
@@ -605,7 +605,7 @@ abstract class Gadget {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             if (this.ready()) {
@@ -714,7 +714,7 @@ abstract class Gadget {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.overSwitch(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.overSwitch(mouseX, mouseY)) {
                 return null;
             }
             if (this.usable.getAsBoolean()) {
@@ -829,7 +829,7 @@ abstract class Gadget {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             if (this.usable.getAsBoolean()) {

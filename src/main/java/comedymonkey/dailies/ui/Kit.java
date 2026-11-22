@@ -4,8 +4,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
@@ -49,7 +49,7 @@ final class Kit {
 
     /** A label by its key when the language file has it, else the given words */
     static Component named(String key, String otherwise) {
-        return I18n.exists(KEYS + key) ? Component.translatable(KEYS + key) : Component.literal(otherwise);
+        return Language.getInstance().has(KEYS + key) ? Component.translatable(KEYS + key) : Component.literal(otherwise);
     }
 
     /** some_name as "Some name" */
@@ -312,7 +312,6 @@ final class Kit {
         x = Math.max(4, Math.min(x, screenWidth - 4 - width));
         y = Math.max(4, Math.min(y, screenHeight - 4 - height));
         graphics.pose().pushMatrix();
-        graphics.pose().translate(0.0F, 0.0F, 400.0F);
         try {
             shadow(graphics, x, y, x + width, y + height, 3);
             graphics.fill(x, y, x + width, y + height, 0xFA1C1308);

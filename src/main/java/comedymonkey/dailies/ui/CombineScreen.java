@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.library.Library;
@@ -465,7 +466,7 @@ public final class CombineScreen extends KitScreen {
                     return hit;
                 }
             }
-            if (button != 0 || CombineScreen.this.running()) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || CombineScreen.this.running()) {
                 return null;
             }
             CombineScreen.this.dragging = this.index;

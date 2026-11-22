@@ -1,16 +1,16 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
 import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.config.Setting;
 import net.minecraft.ChatFormatting;
-import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.resources.language.I18n;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.fml.loading.FMLPaths;
@@ -116,12 +116,12 @@ public final class SettingsScreen extends KitScreen {
 
     private static Component label(Setting<?> setting) {
         String key = "dailies.configuration." + setting.name();
-        return I18n.exists(key) ? Component.translatable(key) : Component.literal(Kit.pretty(Find.plain(setting.name())));
+        return Language.getInstance().has(key) ? Component.translatable(key) : Component.literal(Kit.pretty(Find.plain(setting.name())));
     }
 
     private static Component groupTitle(String group) {
         String key = "dailies.configuration." + group;
-        return I18n.exists(key) ? Component.translatable(key) : Component.literal(Kit.pretty(Find.plain(group)));
+        return Language.getInstance().has(key) ? Component.translatable(key) : Component.literal(Kit.pretty(Find.plain(group)));
     }
 
     private static String groupComment(String group) {
@@ -135,7 +135,7 @@ public final class SettingsScreen extends KitScreen {
 
     private static Component choiceName(String id) {
         String key = KEYS + "choice." + id.toLowerCase(Locale.ROOT);
-        return I18n.exists(key) ? Component.translatable(key) : Component.literal(Kit.pretty(id.toLowerCase(Locale.ROOT)));
+        return Language.getInstance().has(key) ? Component.translatable(key) : Component.literal(Kit.pretty(id.toLowerCase(Locale.ROOT)));
     }
 
     private static Component languageName(String code) {
@@ -254,7 +254,7 @@ public final class SettingsScreen extends KitScreen {
 
     private static void openFile() {
         Path path = FMLPaths.CONFIGDIR.get().resolve("dailies-client.toml");
-        Controls.offThread(() -> Util.getPlatform().openPath(path), t("open_file.failed"), () -> {
+        Controls.offThread(() -> Blaze3D.openPath(path), t("open_file.failed"), () -> {
         });
     }
 
@@ -350,11 +350,11 @@ public final class SettingsScreen extends KitScreen {
     }
 
     @Override
-    void typedElsewhere(char character, int modifiers) {
+    void typedElsewhere(int codepoint) {
         // Typing anywhere starts a search, as it does in a list of files
-        if (character > ' ' && character != 127) {
+        if (codepoint > ' ' && codepoint != 127) {
             this.search.focus();
-            this.search.typed(character, modifiers);
+            this.search.typed(codepoint);
         }
     }
 
@@ -606,7 +606,7 @@ public final class SettingsScreen extends KitScreen {
             if (hit != null) {
                 return hit;
             }
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             this.toggle();

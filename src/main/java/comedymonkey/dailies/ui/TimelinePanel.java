@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.edit.EditHistory;
 import comedymonkey.dailies.edit.Keyframe;
 import comedymonkey.dailies.edit.KeyframeKind;
@@ -679,7 +680,7 @@ final class TimelinePanel {
             return null;
         }
         if (this.overViews(mouseX, mouseY)) {
-            if (button == 0) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                 PointOfViewLanes.press(this.viewsTop, mouseY, this.tickAt(mouseX));
             }
             return null;
@@ -687,7 +688,7 @@ final class TimelinePanel {
         Scene scene = EditorState.scene();
         int total = Math.max(1, PointOfView.total());
         if (this.overLaneBar(mouseX, mouseY)) {
-            if (button == 0) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                 // Taking hold of the thumb drags it from where it was taken; a click beside it brings its middle there
                 int[] thumb = Kit.thumb(this.lanesTop, this.visibleLanes() * LANE, scene.tracks().size() * LANE, EditorState.laneScroll * LANE);
                 this.laneBarGrab = mouseY >= thumb[0] && mouseY < thumb[0] + thumb[1] ? (int) mouseY - thumb[0] : thumb[1] / 2;
@@ -696,7 +697,7 @@ final class TimelinePanel {
             }
             return null;
         }
-        if (button == 0 && this.overRuler(mouseX, mouseY)) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && this.overRuler(mouseX, mouseY)) {
             if (scene.hasExportRange() && mouseY >= this.rulerBottom - 7) {
                 double start = this.across(scene.exportStart());
                 double end = this.across(scene.exportEnd());
@@ -717,7 +718,7 @@ final class TimelinePanel {
         }
         if (this.overLanes(mouseX, mouseY)) {
             KeyframeRef hit = this.keyframeAt(mouseX, mouseY);
-            if (button == 1) {
+            if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
                 if (hit != null) {
                     if (!EditorState.selection.contains(hit)) {
                         EditorState.selection.clear();
@@ -727,7 +728,7 @@ final class TimelinePanel {
                 }
                 return null;
             }
-            if (button != 0) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT) {
                 return null;
             }
             if (hit != null) {
@@ -773,7 +774,7 @@ final class TimelinePanel {
             }
             return null;
         }
-        if (button == 0 && EditorState.viewSpan < total && mouseY >= this.lanesBottom + 1 && mouseY < this.lanesBottom + 7 && mouseX >= this.laneLeft) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && EditorState.viewSpan < total && mouseY >= this.lanesBottom + 1 && mouseY < this.lanesBottom + 7 && mouseX >= this.laneLeft) {
             this.drag = Drag.PAN;
             this.dragTo(mouseX, mouseY);
         }
@@ -784,9 +785,9 @@ final class TimelinePanel {
         Track track = scene.track(index);
         EditHistory history = EditorState.history();
         int buttons = this.laneLeft - 1 - 3 * 12;
-        if (button == 1) {
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
             this.openTrackMenu(index, mouseX, mouseY);
-        } else if (button != 0) {
+        } else if (button != InputConstants.MOUSE_BUTTON_LEFT) {
             return;
         } else if (mouseX < this.left + 15) {
             Kit.click();

@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.editor.EditorSession;
@@ -708,7 +709,7 @@ final class ExportForms {
         }
         Controls.offThread(() -> {
             Files.createDirectories(target);
-            Util.getPlatform().openPath(target);
+            Blaze3D.openPath(target);
         }, Kit.t("export.folder_failed"), () -> {
         });
     }

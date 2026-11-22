@@ -47,9 +47,9 @@ final class CompatLayer {
     }
 
     static void register(RegisterGuiLayersEvent event) {
-        // Overlays where the HUD is, under the recorder's windows (registered just above the saving indicator before this);
+        // Overlays where the HUD is, under the recorder's windows (registered just above the subtitles, the last of the game's layers, before this);
         // screens over the windows, as either is the screen the recorder's game had open
-        event.registerAbove(VanillaGuiLayers.SAVING_INDICATOR, Identifier.fromNamespaceAndPath(Dailies.ID, "compat_overlays"), CompatLayer::drawOverlays);
+        event.registerAbove(VanillaGuiLayers.SUBTITLE_OVERLAY, Identifier.fromNamespaceAndPath(Dailies.ID, "compat_overlays"), CompatLayer::drawOverlays);
         event.registerAbove(Identifier.fromNamespaceAndPath(Dailies.ID, "recorder_windows"), Identifier.fromNamespaceAndPath(Dailies.ID, "compat_screens"),
             CompatLayer::drawScreens);
     }

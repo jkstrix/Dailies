@@ -1,6 +1,5 @@
 package comedymonkey.dailies.extras;
 
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.GameCodec;
@@ -10,18 +9,26 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.core.ClientAsset;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.world.entity.player.PlayerModelType;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL11;
+import org.lwjgl.stb.STBIWriteCallback;
+import org.lwjgl.stb.STBImageWrite;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -126,19 +133,20 @@ final class SkinCapture {
         }
         boolean whole = true;
         // Without an address the skin is one of the game's own, which every game has
-        byte[] skinPicture = skin.textureUrl() == null ? null : picture(skin.texture());
-        whole &= skin.textureUrl() == null || skinPicture != null;
-        byte[] cape = skin.capeTexture() == null ? null : picture(skin.capeTexture());
-        whole &= skin.capeTexture() == null || cape != null;
-        byte[] elytra = skin.elytraTexture() == null ? null : picture(skin.elytraTexture());
-        whole &= skin.elytraTexture() == null || elytra != null;
+        boolean downloaded = skin.body() instanceof ClientAsset.DownloadedTexture;
+        byte[] skinPicture = !downloaded ? null : picture(skin.body());
+        whole &= !downloaded || skinPicture != null;
+        byte[] cape = skin.cape() == null ? null : picture(skin.cape());
+        whole &= skin.cape() == null || cape != null;
+        byte[] elytra = skin.elytra() == null ? null : picture(skin.elytra());
+        whole &= skin.elytra() == null || elytra != null;
 
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(4096);
         DataOutputStream out = new DataOutputStream(bytes);
         out.writeByte(VERSION);
         out.writeLong(id.getMostSignificantBits());
         out.writeLong(id.getLeastSignificantBits());
-        out.writeByte(skin.model() == PlayerSkin.Model.SLIM ? 1 : 0);
+        out.writeByte(skin.model() == PlayerModelType.SLIM ? 1 : 0);
         for (byte[] picture : new byte[][]{skinPicture, cape, elytra}) {
             out.writeInt(picture == null ? 0 : picture.length);
             if (picture != null && picture.length > 0) {
@@ -154,39 +162,69 @@ final class SkinCapture {
     }
 
     /**
-     * @return the picture a registered texture holds, as a PNG, or null when the game has not finished loading it
+     * A downloaded picture is registered as a texture that keeps its pixels, which are written out as a PNG; one that
+     * comes with the game or a resource pack is read as the PNG it is.
+     *
+     * @return the picture a texture holds, as a PNG, or null when the game has not finished loading it
      */
-    private static @Nullable byte[] picture(Identifier location) {
+    private static @Nullable byte[] picture(ClientAsset.Texture asset) {
+        Identifier location = asset.texturePath();
         byte[] known = PICTURES.get(location);
         if (known != null) {
             return known;
         }
         try {
-            AbstractTexture texture = Minecraft.getInstance().getTextureManager().getTexture(location, null);
-            if (texture == null) {
-                return null;
-            }
-            texture.bind();
-            int width = GlStateManager._getTexLevelParameter(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
-            int height = GlStateManager._getTexLevelParameter(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
-            if (width <= 0 || height <= 0 || width > LARGEST_SIDE || height > LARGEST_SIDE) {
-                return null;
-            }
-            try (NativeImage image = new NativeImage(width, height, false)) {
-                image.downloadTexture(0, false);
-                byte[] png = image.asByteArray();
-                if (PICTURES.size() >= MOST_KEPT) {
-                    PICTURES.clear();
+            byte[] png;
+            if (asset instanceof ClientAsset.DownloadedTexture) {
+                // The game registers a downloaded picture before it hands out the skin naming it
+                AbstractTexture texture = Minecraft.getInstance().getTextureManager().getTexture(location);
+                if (!(texture instanceof DynamicTexture dynamic)) {
+                    throw new IllegalStateException("the texture " + location + " keeps no pixels");
                 }
-                PICTURES.put(location, png);
-                return png;
+                NativeImage image = dynamic.getPixels();
+                if (image == null) {
+                    return null;
+                }
+                if (image.getWidth() <= 0 || image.getHeight() <= 0 || image.getWidth() > LARGEST_SIDE || image.getHeight() > LARGEST_SIDE) {
+                    return null;
+                }
+                png = png(image);
+            } else {
+                Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(location);
+                if (resource.isEmpty()) {
+                    throw new IllegalStateException("no resource holds " + location);
+                }
+                try (InputStream in = resource.get().open()) {
+                    png = in.readAllBytes();
+                }
             }
+            if (PICTURES.size() >= MOST_KEPT) {
+                PICTURES.clear();
+            }
+            PICTURES.put(location, png);
+            return png;
         } catch (Throwable t) {
             failOnce("reading a skin picture back from the game", t);
             // Not tried again: a picture that cannot be read once will not be readable ten ticks later either
             PICTURES.put(location, UNREADABLE);
             return UNREADABLE;
         }
+    }
+
+    /** The picture as a PNG, written the way the game writes its own */
+    private static byte[] png(NativeImage image) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(4096);
+        try (STBIWriteCallback writer = STBIWriteCallback.create((context, data, size) -> {
+            ByteBuffer chunk = STBIWriteCallback.getData(data, size);
+            byte[] part = new byte[size];
+            chunk.get(part);
+            bytes.write(part, 0, size);
+        })) {
+            if (!STBImageWrite.stbi_write_png_to_func(writer, 0L, image.getWidth(), image.getHeight(), image.format().components(), image.getPixelBytes(), 0)) {
+                throw new IOException("the picture could not be written as a PNG");
+            }
+        }
+        return bytes.toByteArray();
     }
 
     private static void failOnce(String what, Throwable problem) {

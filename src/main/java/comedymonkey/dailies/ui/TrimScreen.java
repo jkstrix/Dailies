@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
@@ -483,7 +484,7 @@ public final class TrimScreen extends KitScreen {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY) || TrimScreen.this.running()) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY) || TrimScreen.this.running()) {
                 return null;
             }
             this.dragging = true;

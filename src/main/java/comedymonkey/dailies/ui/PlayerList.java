@@ -8,7 +8,7 @@ import comedymonkey.dailies.playback.Viewer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -221,7 +221,7 @@ public final class PlayerList {
             int top = this.y + (this.height - FACE) / 2;
             PlayerSkin skin = skin(this.listed.id());
             if (skin != null) {
-                PlayerFaceRenderer.draw(graphics, skin, this.x + 1, top, FACE);
+                PlayerFaceExtractor.extractRenderState(graphics, skin, this.x + 1, top, FACE);
             } else {
                 graphics.fill(this.x + 1, top, this.x + 1 + FACE, top + FACE, Controls.FIELD);
             }
