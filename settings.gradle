@@ -9,8 +9,11 @@ pluginManagement {
     }
 }
 
-// The Dailies Companion in companion/ is a separate build with its own settings file
 rootProject.name = 'dailies'
+
+// The Dailies Companion in companion/ is a build of its own, with its own settings file, that also builds on its own.
+// Included so Dailies can carry its jar inside its own (jar-in-jar): singleplayer then needs no separate companion
+includeBuild('companion')
 
 // Compats for other people's mods, each a mod of its own built with Dailies (specification CPT-5): the template that
 // each is started from, Create's, Jade's, Create Aeronautics' and the rest of the pack's
