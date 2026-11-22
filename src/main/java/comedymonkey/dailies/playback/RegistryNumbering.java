@@ -9,7 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
 import net.neoforged.neoforge.registries.RegistryManager;
 import net.neoforged.neoforge.registries.RegistrySnapshot;
@@ -58,14 +58,14 @@ public final class RegistryNumbering {
         restore();
         inForce = worldName;
         try {
-            Map<ResourceLocation, RegistrySnapshot> own = RegistryManager.takeSnapshot(RegistryManager.SnapshotType.SYNC_TO_CLIENT);
+            Map<Identifier, RegistrySnapshot> own = RegistryManager.takeSnapshot(RegistryManager.SnapshotType.SYNC_TO_CLIENT);
             Map<String, Map<Integer, String>> ownNumbers = new LinkedHashMap<>();
             Map<String, String> fillers = new HashMap<>();
             own.forEach((registry, snapshot) -> {
                 Map<Integer, String> numbers = new HashMap<>();
                 snapshot.getIds().forEach((number, name) -> numbers.put(number, name.toString()));
                 ownNumbers.put(registry.toString(), numbers);
-                ResourceLocation filler = filler(registry);
+                Identifier filler = filler(registry);
                 if (filler != null) {
                     fillers.put(registry.toString(), filler.toString());
                 }
@@ -89,11 +89,11 @@ public final class RegistryNumbering {
             if (plan.changesNothing()) {
                 return;
             }
-            Map<ResourceLocation, RegistrySnapshot> snapshots = new LinkedHashMap<>();
+            Map<Identifier, RegistrySnapshot> snapshots = new LinkedHashMap<>();
             plan.apply().forEach((registry, numbering) -> {
-                ResourceLocation name = ResourceLocation.parse(registry);
-                SortedMap<Integer, ResourceLocation> numbers = new TreeMap<>();
-                numbering.forEach((number, entry) -> numbers.put(number, ResourceLocation.parse(entry)));
+                Identifier name = Identifier.parse(registry);
+                SortedMap<Integer, Identifier> numbers = new TreeMap<>();
+                numbering.forEach((number, entry) -> numbers.put(number, Identifier.parse(entry)));
                 // The game's own aliases go with it: putting a numbering in force clears them, as NeoForge's own does
                 snapshots.put(name, snapshot(numbers, own.get(name).getAliases()));
             });
@@ -131,11 +131,11 @@ public final class RegistryNumbering {
      * A numbering in the form NeoForge's handover from a server takes, read from the bytes the server would have sent,
      * since nothing else can make one
      */
-    public static RegistrySnapshot snapshot(SortedMap<Integer, ResourceLocation> numbers, Map<ResourceLocation, ResourceLocation> aliases) {
+    public static RegistrySnapshot snapshot(SortedMap<Integer, Identifier> numbers, Map<Identifier, Identifier> aliases) {
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
-            buffer.writeMap(numbers, FriendlyByteBuf::writeVarInt, FriendlyByteBuf::writeResourceLocation);
-            buffer.writeMap(aliases, FriendlyByteBuf::writeResourceLocation, FriendlyByteBuf::writeResourceLocation);
+            buffer.writeMap(numbers, FriendlyByteBuf::writeVarInt, FriendlyByteBuf::writeIdentifier);
+            buffer.writeMap(aliases, FriendlyByteBuf::writeIdentifier, FriendlyByteBuf::writeIdentifier);
             return RegistrySnapshot.STREAM_CODEC.decode(buffer);
         } finally {
             buffer.release();
@@ -143,8 +143,8 @@ public final class RegistryNumbering {
     }
 
     /** The entry that stands for nothing in a registry, for a number whose own entry this game lacks: a silent sound, air */
-    private static @Nullable ResourceLocation filler(ResourceLocation registry) {
-        if (registry.equals(Registries.SOUND_EVENT.location())) {
+    private static @Nullable Identifier filler(Identifier registry) {
+        if (registry.equals(Registries.SOUND_EVENT.identifier())) {
             return SoundEvents.EMPTY.getLocation();
         }
         Registry<?> found = BuiltInRegistries.REGISTRY.get(registry);

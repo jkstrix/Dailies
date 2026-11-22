@@ -16,7 +16,7 @@ import comedymonkey.dailies.playback.Viewer;
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -31,11 +31,11 @@ import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -128,7 +128,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
     static void register(RegisterGuiLayersEvent event) {
         // Above every layer of the game's own, as the game draws its screen over them all, and under the layers that are
         // registered above everything (Dailies' own playback bar, notices and frame guides among them)
-        event.registerAbove(VanillaGuiLayers.SAVING_INDICATOR, ResourceLocation.fromNamespaceAndPath(Dailies.ID, "recorder_windows"), INSTANCE::draw);
+        event.registerAbove(VanillaGuiLayers.SAVING_INDICATOR, Identifier.fromNamespaceAndPath(Dailies.ID, "recorder_windows"), INSTANCE::draw);
     }
 
     // --- The recording ---
@@ -186,7 +186,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
      * overlay, which is part of the HUD) the "open windows" look too
      */
     static boolean shown(Minecraft minecraft, boolean window) {
-        if (minecraft.options.hideGui || !minecraft.options.getCameraType().isFirstPerson()) {
+        if (comedymonkey.dailies.ui.HudHidden.get() || !minecraft.options.getCameraType().isFirstPerson()) {
             return false;
         }
         RecordingManifest manifest = Playback.manifest();
@@ -210,7 +210,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
         };
     }
 
-    private void draw(GuiGraphics graphics, DeltaTracker delta) {
+    private void draw(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         if (!this.state.open() || !Playback.loaded()) {
             return;
         }
@@ -249,8 +249,8 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
                 x = WindowPointer.fromShare(pointer[0], graphics.guiWidth());
                 y = WindowPointer.fromShare(pointer[1], graphics.guiHeight());
             } else {
-                x = WindowPointer.toScreen(pointer[0], container.getGuiLeft());
-                y = WindowPointer.toScreen(pointer[1], container.getGuiTop());
+                x = WindowPointer.toScreen(pointer[0], container.getLeftPos());
+                y = WindowPointer.toScreen(pointer[1], container.getTopPos());
             }
             int mouseX = (int) Math.floor(x);
             int mouseY = (int) Math.floor(y);
@@ -271,7 +271,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
      * layers below in the way, as the viewer with the recorder's numbers, the recorder standing in for the game's player
      * where the screen draws them. For the recorder's windows and a compat's screens
      */
-    static void drawScreen(GuiGraphics graphics, Minecraft minecraft, Screen screen, int mouseX, int mouseY, float partial) {
+    static void drawScreen(GuiGraphicsExtractor graphics, Minecraft minecraft, Screen screen, int mouseX, int mouseY, float partial) {
         graphics.flush();
         RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         recorder = Viewer.riding() instanceof LivingEntity living ? living : null;
@@ -373,7 +373,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
                 screen = new HorseInventoryScreen(horseMenu, inventory, horse, state.horseColumns);
             }
             default -> {
-                ResourceLocation key = ResourceLocation.tryParse(state.menuType);
+                Identifier key = Identifier.tryParse(state.menuType);
                 MenuType type = key == null ? null : BuiltInRegistries.MENU.getOptional(key).orElse(null);
                 if (type == null) {
                     throw new IllegalStateException("this game has no window of that type");
@@ -445,10 +445,10 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
         }
     }
 
-    static void drawPointer(GuiGraphics graphics, Minecraft minecraft, double x, double y) {
+    static void drawPointer(GuiGraphicsExtractor graphics, Minecraft minecraft, double x, double y) {
         double scale = minecraft.getWindow().getGuiScale();
         double unit = Math.max(1L, Math.round(graphics.guiHeight() * scale / 1080.0)) / scale;
-        graphics.pose().pushPose();
+        graphics.pose().pushMatrix();
         try {
             graphics.pose().translate(x, y, 700.0);
             graphics.pose().scale((float) unit, (float) unit, 1.0F);
@@ -468,7 +468,7 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
                 }
             }
         } finally {
-            graphics.pose().popPose();
+            graphics.pose().popMatrix();
         }
         graphics.flush();
     }

@@ -470,7 +470,7 @@ final class ExportPresetSteps {
         check(shorts.contains("preset=Shorts and Reels modified=false size=1080x1920"), "choosing Shorts did not fill the tab in: " + shorts);
         test.onClientRun(() -> {
             invoke(choose, "YouTube 1080p60");
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
         test.log("the Export tab: " + master + " | " + shorts + "; pictures of it are in " + folder);
     }

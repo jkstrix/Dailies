@@ -340,7 +340,7 @@ public final class SmartCameraDriver {
         } catch (IllegalArgumentException notAnId) {
             if (minecraft.level != null) {
                 for (Player player : minecraft.level.players()) {
-                    if (player.getGameProfile().getName().equalsIgnoreCase(wanted)) {
+                    if (player.getGameProfile().name().equalsIgnoreCase(wanted)) {
                         return player.getUUID();
                     }
                 }

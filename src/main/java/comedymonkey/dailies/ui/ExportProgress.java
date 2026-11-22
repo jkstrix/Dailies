@@ -1,20 +1,21 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.export.Export;
+import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
-import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
@@ -65,14 +66,14 @@ public final class ExportProgress extends Screen {
         Minecraft minecraft = Minecraft.getInstance();
         try {
             if (Export.holdsClock()) {
-                if (minecraft.screen == null) {
-                    minecraft.setScreen(new ExportProgress());
+                if (minecraft.gui.screen() == null) {
+                    minecraft.gui.setScreen(new ExportProgress());
                     ours = true;
                 }
             } else if (ours) {
                 ours = false;
-                if (minecraft.screen instanceof ExportProgress) {
-                    minecraft.setScreen(null);
+                if (minecraft.gui.screen() instanceof ExportProgress) {
+                    minecraft.gui.setScreen(null);
                 }
             }
         } catch (RuntimeException | LinkageError e) {
@@ -95,16 +96,16 @@ public final class ExportProgress extends Screen {
 
     /** Nothing: whatever a screen draws would be in the exported picture */
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             cancel();
         }
         return true;
@@ -129,16 +130,11 @@ public final class ExportProgress extends Screen {
     /** Whether the real mouse is over the place Cancel was last painted at, both in pixels of the real window */
     private static boolean overCancel() {
         Minecraft minecraft = Minecraft.getInstance();
-        long window = minecraft.getWindow().getWindow();
-        int[] pixelsWide = new int[1];
-        int[] pixelsHigh = new int[1];
-        GLFW.glfwGetFramebufferSize(window, pixelsWide, pixelsHigh);
-        int[] screenWide = new int[1];
-        int[] screenHigh = new int[1];
-        GLFW.glfwGetWindowSize(window, screenWide, screenHigh);
+        Window window = minecraft.getWindow();
+        Window.FramebufferSize pixels = window.queryFramebufferSize();
         // The mouse is reported in the desktop's units, which on a scaled display are not pixels
-        double x = minecraft.mouseHandler.xpos() * pixelsWide[0] / Math.max(1, screenWide[0]);
-        double y = minecraft.mouseHandler.ypos() * pixelsHigh[0] / Math.max(1, screenHigh[0]);
+        double x = minecraft.mouseHandler.xpos() * pixels.width() / Math.max(1, window.getScreenWidth());
+        double y = minecraft.mouseHandler.ypos() * pixels.height() / Math.max(1, window.getScreenHeight());
         return x >= cancelLeft && x < cancelRight && y >= cancelTop && y < cancelBottom;
     }
 
@@ -150,13 +146,10 @@ public final class ExportProgress extends Screen {
     public static void showInWindow() {
         Minecraft minecraft = Minecraft.getInstance();
         try {
-            long window = minecraft.getWindow().getWindow();
-            int[] pixelsWide = new int[1];
-            int[] pixelsHigh = new int[1];
-            GLFW.glfwGetFramebufferSize(window, pixelsWide, pixelsHigh);
-            int wideInPixels = pixelsWide[0];
-            int highInPixels = pixelsHigh[0];
-            if (wideInPixels <= 0 || highInPixels <= 0) {
+            Window.FramebufferSize pixels = minecraft.getWindow().queryFramebufferSize();
+            int wideInPixels = pixels.width();
+            int highInPixels = pixels.height();
+            if (minecraft.getWindow().isIconified()) {
                 // Minimised: there is nothing to draw on
                 return;
             }
@@ -179,8 +172,8 @@ public final class ExportProgress extends Screen {
             stack.translation(0.0F, 0.0F, -2000.0F);
             RenderSystem.applyModelViewMatrix();
             try {
-                GuiGraphics graphics = new GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
-                cancelHovered = minecraft.screen instanceof ExportProgress && overCancel();
+                GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, minecraft.renderBuffers().bufferSource());
+                cancelHovered = minecraft.gui.screen() instanceof ExportProgress && overCancel();
                 plate(graphics, minecraft.font, (int) wide, (int) high, unit);
                 graphics.flush();
             } finally {
@@ -197,7 +190,7 @@ public final class ExportProgress extends Screen {
         }
     }
 
-    private static void plate(GuiGraphics graphics, Font font, int wide, int high, float unit) {
+    private static void plate(GuiGraphicsExtractor graphics, Font font, int wide, int high, float unit) {
         int width = Math.min(PLATE_WIDTH, Math.max(120, wide - 8));
         int left = (wide - width) / 2;
         // The picture being exported is not shown: nobody should have to sit through the video to get the video

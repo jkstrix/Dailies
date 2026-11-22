@@ -3,7 +3,7 @@ package comedymonkey.dailies.mixin.packs;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.font.FontManager;
 import net.minecraft.client.gui.font.FontSet;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -38,14 +38,14 @@ public abstract class FontManagerMixin {
 
     @Shadow
     @Final
-    private Map<ResourceLocation, FontSet> fontSets;
+    private Map<Identifier, FontSet> fontSets;
 
     @Shadow
     @Final
     private FontSet missingFontSet;
 
     @Unique
-    private volatile Map<ResourceLocation, FontSet> dailies$current = Map.of();
+    private volatile Map<Identifier, FontSet> dailies$current = Map.of();
 
     @Inject(method = "apply", at = @At("HEAD"))
     private void dailies$applying(CallbackInfo ci) {
@@ -58,7 +58,7 @@ public abstract class FontManagerMixin {
     }
 
     @Inject(method = "getFontSetCached", at = @At("HEAD"), cancellable = true)
-    private void dailies$fromAnotherThread(ResourceLocation name, CallbackInfoReturnable<FontSet> cir) {
+    private void dailies$fromAnotherThread(Identifier name, CallbackInfoReturnable<FontSet> cir) {
         if (!RenderSystem.isOnRenderThread()) {
             cir.setReturnValue(this.dailies$current.getOrDefault(name, this.missingFontSet));
         }

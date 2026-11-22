@@ -179,9 +179,9 @@ public final class ModDifferences {
             pressed = true;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (pressed && Playback.loaded() && minecraft.screen == null) {
+        if (pressed && Playback.loaded() && minecraft.gui.screen() == null) {
             try {
-                minecraft.setScreen(new ModDifferencesScreen(differences));
+                minecraft.gui.setScreen(new ModDifferencesScreen(differences));
             } catch (Throwable t) {
                 Host.LOGGER.warn("Dailies: the list of mods that differ could not be shown", t);
             }

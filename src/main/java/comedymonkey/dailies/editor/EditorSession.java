@@ -397,7 +397,7 @@ public final class EditorSession {
         if (entity == null) {
             return null;
         }
-        float partial = minecraft.getTimer().getGameTimeDeltaPartialTick(true);
+        float partial = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true);
         Vec3 feet = entity.getPosition(partial);
         double up = switch (follow.part()) {
             case FEET -> 0.0;

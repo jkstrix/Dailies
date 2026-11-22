@@ -1,11 +1,11 @@
 package comedymonkey.dailies.ui;
 
-import net.minecraft.Util;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -221,7 +221,7 @@ final class Menu {
 
     // ------------------------------------------------------------------ Drawing
 
-    void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY, int screenWidth, int screenHeight) {
+    void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY, int screenWidth, int screenHeight) {
         this.fit(font, screenWidth, screenHeight);
         if (this.barHeld) {
             if (Kit.mouseDown()) {
@@ -243,7 +243,7 @@ final class Menu {
         float opened = Kit.ease((Util.getMillis() - this.openedAt) / (float) OPENING_MILLIS);
         int visible = Math.max(1, Math.round(this.height * opened));
         int top = this.above ? this.y + this.height - visible : this.y;
-        graphics.pose().pushPose();
+        graphics.pose().pushMatrix();
         // Above the panels and whatever they have drawn
         graphics.pose().translate(0.0F, 0.0F, 300.0F);
         try {
@@ -254,13 +254,13 @@ final class Menu {
             } finally {
                 graphics.disableScissor();
             }
-            graphics.renderOutline(this.x, top, this.width, visible, Controls.BRASS_BRIGHT);
+            graphics.outline(this.x, top, this.width, visible, Controls.BRASS_BRIGHT);
         } finally {
-            graphics.pose().popPose();
+            graphics.pose().popMatrix();
         }
     }
 
-    private void drawLines(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    private void drawLines(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         graphics.fill(this.x, this.y, this.x + this.width, this.y + this.height, 0xFF21160A);
         int right = this.x + this.width - 1 - (this.scrolls() ? Kit.BAR + 1 : 0);
         if (!this.query.isEmpty()) {
@@ -298,7 +298,7 @@ final class Menu {
                 int textLeft = this.x + GUTTER;
                 if (item.swatch() >= 0) {
                     graphics.fill(textLeft, line + 3, textLeft + 8, line + LINE - 3, 0xFF000000 | (item.swatch() & 0xFFFFFF));
-                    graphics.renderOutline(textLeft, line + 3, 8, LINE - 6, Controls.BRASS_DIM);
+                    graphics.outline(textLeft, line + 3, 8, LINE - 6, Controls.BRASS_DIM);
                     textLeft += 12;
                 }
                 int colour = !item.enabled() ? Controls.PARCHMENT_FAINT : item.marked() ? Controls.BRASS_BRIGHT : Controls.PARCHMENT;
@@ -409,19 +409,19 @@ final class Menu {
     void key(int keyCode, int modifiers) {
         int page = Math.max(1, this.listHeight / LINE - 1);
         switch (keyCode) {
-            case GLFW.GLFW_KEY_ESCAPE, GLFW.GLFW_KEY_TAB -> close();
-            case GLFW.GLFW_KEY_DOWN -> this.move(1);
-            case GLFW.GLFW_KEY_UP -> this.move(-1);
-            case GLFW.GLFW_KEY_HOME -> this.moveTo(0, 1);
-            case GLFW.GLFW_KEY_END -> this.moveTo(this.shown.size() - 1, -1);
-            case GLFW.GLFW_KEY_PAGE_DOWN -> this.moveTo(Math.max(0, this.highlight) + page, -1);
-            case GLFW.GLFW_KEY_PAGE_UP -> this.moveTo(Math.max(0, this.highlight) - page, 1);
-            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
+            case InputConstants.KEY_ESCAPE, InputConstants.KEY_TAB -> close();
+            case InputConstants.KEY_DOWN -> this.move(1);
+            case InputConstants.KEY_UP -> this.move(-1);
+            case InputConstants.KEY_HOME -> this.moveTo(0, 1);
+            case InputConstants.KEY_END -> this.moveTo(this.shown.size() - 1, -1);
+            case InputConstants.KEY_PAGEDOWN -> this.moveTo(Math.max(0, this.highlight) + page, -1);
+            case InputConstants.KEY_PAGEUP -> this.moveTo(Math.max(0, this.highlight) - page, 1);
+            case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
                 if (this.highlight >= 0) {
                     this.choose(this.highlight);
                 }
             }
-            case GLFW.GLFW_KEY_BACKSPACE -> {
+            case InputConstants.KEY_BACKSPACE -> {
                 if (!this.query.isEmpty()) {
                     this.find(this.query.substring(0, this.query.length() - 1));
                 }

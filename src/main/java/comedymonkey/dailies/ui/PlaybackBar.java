@@ -8,9 +8,9 @@ import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,12 +35,12 @@ public final class PlaybackBar {
     }
 
     public static void register(RegisterGuiLayersEvent event) {
-        event.registerAboveAll(ResourceLocation.fromNamespaceAndPath(Dailies.ID, "playback_bar"), PlaybackBar::draw);
+        event.registerAboveAll(Identifier.fromNamespaceAndPath(Dailies.ID, "playback_bar"), PlaybackBar::draw);
     }
 
-    private static void draw(GuiGraphics graphics, DeltaTracker delta) {
+    private static void draw(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!Playback.loaded() || Notices.hidden() || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active() || minecraft.screen instanceof EditorScreen || minecraft.screen instanceof ExportProgress) {
+        if (!Playback.loaded() || Notices.hidden() || comedymonkey.dailies.ui.HudHidden.get() || comedymonkey.dailies.export.Export.active() || minecraft.gui.screen() instanceof EditorScreen || minecraft.gui.screen() instanceof ExportProgress) {
             return;
         }
         try {
@@ -63,26 +63,26 @@ public final class PlaybackBar {
      *
      * @param instead drawn on the right in place of the camera, or null
      */
-    static void drawStatus(GuiGraphics graphics, Font font, int left, int top, int width, @Nullable Component instead) {
+    static void drawStatus(GuiGraphicsExtractor graphics, Font font, int left, int top, int width, @Nullable Component instead) {
         Component time = Component.translatable("dailies.ui.bar.time", Controls.time(Playback.shown()), Controls.time(Playback.total()));
         Component doing = Component.translatable(Playback.jumping() ? "dailies.ui.bar.jumping" : Playback.paused() ? "dailies.ui.bar.paused" : "dailies.ui.bar.playing");
         int x = left;
-        graphics.drawString(font, time, x, top, Controls.PARCHMENT, false);
+        graphics.text(font, time, x, top, Controls.PARCHMENT, false);
         x += font.width(time) + 8;
-        graphics.drawString(font, doing, x, top, Controls.BRASS_BRIGHT, false);
+        graphics.text(font, doing, x, top, Controls.BRASS_BRIGHT, false);
         x += font.width(doing) + 8;
 
         int right = left + width;
         Component last = instead != null ? instead : Component.translatable(EditorSession.followCamera() ? "dailies.ui.bar.camera_track" : "dailies.ui.bar.camera_free");
         if (right - font.width(last) >= x) {
             right -= font.width(last);
-            graphics.drawString(font, last, right, top, Controls.PARCHMENT_DIM, false);
+            graphics.text(font, last, right, top, Controls.PARCHMENT_DIM, false);
             right -= 8;
         }
         if (Math.abs(Playback.ticksPerSecond() - 20.0) > 0.001) {
             Component speed = Component.translatable("dailies.ui.bar.speed", Controls.speed(Playback.ticksPerSecond()));
             if (right - font.width(speed) >= x) {
-                graphics.drawString(font, speed, right - font.width(speed), top, Controls.PARCHMENT, false);
+                graphics.text(font, speed, right - font.width(speed), top, Controls.PARCHMENT, false);
             }
         }
     }
@@ -90,7 +90,7 @@ public final class PlaybackBar {
     /**
      * The recording as a gauge. Marker flags stand up to 4 pixels above it and the hand 2 pixels above and below.
      */
-    static void drawGauge(GuiGraphics graphics, int left, int top, int width, int height) {
+    static void drawGauge(GuiGraphicsExtractor graphics, int left, int top, int width, int height) {
         if (width <= 0) {
             return;
         }

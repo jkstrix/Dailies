@@ -62,7 +62,7 @@ public final class MarkerRings {
             drawn = List.of();
             return;
         }
-        String dimension = minecraft.level.dimension().location().toString();
+        String dimension = minecraft.level.dimension().identifier().toString();
         List<Ring> rings = new ArrayList<>();
         for (int index = 0; index < manifest.markers.size(); index++) {
             RecordingManifest.Marker marker = manifest.markers.get(index);
@@ -144,10 +144,10 @@ public final class MarkerRings {
     /** Where the middle of a ring is on the screen that is open, in that screen's own measure: {x, y}, or null when it is behind the camera */
     public static double @Nullable [] onScreen(Ring ring) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen == null) {
+        if (minecraft.gui.screen() == null) {
             return null;
         }
-        return WorldLines.onScreen(new Vec3(ring.x(), ring.y(), ring.z()), minecraft.screen.width, minecraft.screen.height);
+        return WorldLines.onScreen(new Vec3(ring.x(), ring.y(), ring.z()), minecraft.gui.screen().width, minecraft.gui.screen().height);
     }
 
     /** What the pointer over a ring says: the description, when there is one, and the moment it marks */

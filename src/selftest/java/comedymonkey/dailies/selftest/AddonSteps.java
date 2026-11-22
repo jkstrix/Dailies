@@ -435,7 +435,7 @@ final class AddonSteps {
         float pitch = (float) -Math.toDegrees(Math.atan2(Y + 1.0 - (VANTAGE.y + 1.62),
             Math.hypot(SEAT.getX() + 0.5 - VANTAGE.x, SEAT.getZ() + 0.5 - VANTAGE.z)));
         c(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f %.1f %.1f", VANTAGE.x, VANTAGE.y, VANTAGE.z, yaw, pitch));
-        test.onClientRun(() -> minecraft.options.hideGui = true);
+        test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(true));
         Path folder = Host.get().dataDirectory().resolve("addon");
         int tradeStart = -1, cheered = -1;
         int began = tick(), nextMark = began + 100;
@@ -468,7 +468,7 @@ final class AddonSteps {
                 }
             }
         } finally {
-            test.onClientRun(() -> minecraft.options.hideGui = false);
+            test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(false));
         }
         if (tradeStart >= 0) {
             // The trade beat once more, jumped back to from later in the recording (the stills are taken in this order)

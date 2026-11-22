@@ -4,7 +4,7 @@ import comedymonkey.dailies.sound.ExportSound;
 import net.minecraft.client.sounds.AudioStream;
 import net.minecraft.client.sounds.SoundBufferLibrary;
 import com.mojang.blaze3d.audio.SoundBuffer;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,12 +21,12 @@ import java.util.concurrent.CompletableFuture;
 public abstract class SoundBufferLibraryMixin {
 
     @Inject(method = "getCompleteBuffer", at = @At("RETURN"))
-    private void dailies$noteBuffer(ResourceLocation location, CallbackInfoReturnable<CompletableFuture<SoundBuffer>> cir) {
+    private void dailies$noteBuffer(Identifier location, CallbackInfoReturnable<CompletableFuture<SoundBuffer>> cir) {
         ExportSound.loading(cir.getReturnValue());
     }
 
     @Inject(method = "getStream", at = @At("RETURN"))
-    private void dailies$noteStream(ResourceLocation location, boolean looping, CallbackInfoReturnable<CompletableFuture<AudioStream>> cir) {
+    private void dailies$noteStream(Identifier location, boolean looping, CallbackInfoReturnable<CompletableFuture<AudioStream>> cir) {
         ExportSound.loading(cir.getReturnValue());
     }
 

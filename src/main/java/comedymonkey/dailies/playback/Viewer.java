@@ -172,7 +172,7 @@ public final class Viewer {
     }
 
     private static boolean movementWanted(Minecraft minecraft) {
-        if (minecraft.screen != null || !minecraft.mouseHandler.isMouseGrabbed()) {
+        if (minecraft.gui.screen() != null || !minecraft.mouseHandler.isMouseGrabbed()) {
             return false;
         }
         Options options = minecraft.options;
@@ -341,7 +341,7 @@ public final class Viewer {
             // Out of the world for now (a jump, or too far away): the camera waits and catches up when they are back
             return;
         }
-        Vec3 feet = target.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
+        Vec3 feet = target.getPosition(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true));
         Vec3 eyes = feet.add(0.0, target.getEyeHeight(), 0.0);
         double fov = Viewer.fov > 0.0 ? Viewer.fov : minecraft.options.fov().get();
         double aspect = minecraft.getWindow().getWidth() / (double) Math.max(1, minecraft.getWindow().getHeight());
@@ -390,7 +390,7 @@ public final class Viewer {
             // The game draws the terrain around its own player, wherever the picture is taken from. A server moves a
             // spectator along with whoever they watch; here there is none, so the viewer is carried along, or the ground
             // would vanish as soon as the one ridden with had gone further than the eye can see from where the viewer was left
-            Vec3 at = ridden.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true));
+            Vec3 at = ridden.getPosition(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true));
             x = at.x;
             y = at.y;
             z = at.z;
@@ -400,7 +400,7 @@ public final class Viewer {
 
     private static void fly(Minecraft minecraft, double seconds) {
         Vec3 wanted = Vec3.ZERO;
-        if (minecraft.screen == null && minecraft.mouseHandler.isMouseGrabbed() && riding() == null) {
+        if (minecraft.gui.screen() == null && minecraft.mouseHandler.isMouseGrabbed() && riding() == null) {
             Options options = minecraft.options;
             double forward = (options.keyUp.isDown() ? 1 : 0) - (options.keyDown.isDown() ? 1 : 0);
             double strafe = (options.keyLeft.isDown() ? 1 : 0) - (options.keyRight.isDown() ? 1 : 0);

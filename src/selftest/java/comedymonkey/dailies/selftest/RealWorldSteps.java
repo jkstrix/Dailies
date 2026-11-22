@@ -328,7 +328,7 @@ final class RealWorldSteps {
                 options.keyAttack.setDown(false);
                 options.keyUse.setDown(false);
                 minecraft.player.setSprinting(false);
-                grabMouse(minecraft, minecraft.isWindowActive() && minecraft.screen == null);
+                grabMouse(minecraft, minecraft.isWindowActive() && minecraft.gui.screen() == null);
             }
         }
         Runnable task;
@@ -379,14 +379,14 @@ final class RealWorldSteps {
         noteHud = false;
         test.waitTicks(2);
         test.onClientRun(() -> {
-            if (minecraft.screen != null && minecraft.player != null) {
-                if (minecraft.screen instanceof DeathScreen) {
+            if (minecraft.gui.screen() != null && minecraft.player != null) {
+                if (minecraft.gui.screen() instanceof DeathScreen) {
                     minecraft.player.respawn();
                 }
                 minecraft.player.closeContainer();
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
             }
-            minecraft.options.hideGui = false;
+            comedymonkey.dailies.ui.HudHidden.set(false);
         });
         if (minecraft.getSingleplayerServer() != null && minecraft.player != null) {
             test.command("gamemode creative");
@@ -499,7 +499,7 @@ final class RealWorldSteps {
                     return new int[]{0, 0};
                 }
                 boolean here = minecraft.level.getChunkSource().getChunk(minecraft.player.chunkPosition().x, minecraft.player.chunkPosition().z, ChunkStatus.FULL, false) != null;
-                boolean clear = minecraft.screen == null && minecraft.level.isLightUpdateQueueEmpty();
+                boolean clear = minecraft.gui.screen() == null && minecraft.level.isLightUpdateQueueEmpty();
                 return new int[]{minecraft.level.getChunkSource().getLoadedChunksCount(), here && clear ? 1 : 0};
             });
             if (state[1] == 1 && state[0] == last && state[0] > 20) {
@@ -565,7 +565,7 @@ final class RealWorldSteps {
     /** A note with a picture of what the live game was showing, to set beside playback at the same tick */
     private static WorldProbe noteWithStill(SelfTest test, String label, String name) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
-        test.onClientRun(() -> minecraft.options.hideGui = true);
+        test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(true));
         int before = frames;
         test.waitFor(() -> frames >= before + 3, 10, "frames without the HUD");
         WorldProbe probe = note(test, label);
@@ -577,7 +577,7 @@ final class RealWorldSteps {
                 size[0] = image.getWidth();
                 size[1] = image.getHeight();
             }
-            minecraft.options.hideGui = false;
+            comedymonkey.dailies.ui.HudHidden.set(false);
         });
         BufferedImage full = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);
         full.setRGB(0, 0, size[0], size[1], picture[0], 0, size[0]);
@@ -1750,7 +1750,7 @@ final class RealWorldSteps {
         test.command("give @s minecraft:diamond 3");
         ticks(test, 10);
         test.command("damage @s 1000 minecraft:generic");
-        test.waitFor(() -> minecraft.screen instanceof DeathScreen, 15, "the death screen");
+        test.waitFor(() -> minecraft.gui.screen() instanceof DeathScreen, 15, "the death screen");
         ticks(test, 15);
         WorldProbe dead = note(test, "dead");
         long dropped = dead.entities.values().stream().filter(kind -> kind.equals("item")).count();
@@ -1758,9 +1758,9 @@ final class RealWorldSteps {
         ticks(test, 25);
         test.onClientRun(() -> {
             minecraft.player.respawn();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
-        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn");
+        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.gui.screen() == null, 30, "the respawn");
         ticks(test, 10);
         settle(test);
         ticks(test, 30);
@@ -2084,7 +2084,7 @@ final class RealWorldSteps {
         drive = new Drive(0, 0, true, false, false, false, false);
         test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.NETHER, 30, "the walk through the portal into the Nether");
         drive = null;
-        test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Nether to appear");
+        test.waitFor(() -> minecraft.gui.screen() == null && minecraft.player != null, 60, "the Nether to appear");
         test.waitTicks(20);
         settle(test);
         Vec3 arrived = playerAt(test);
@@ -2141,7 +2141,7 @@ final class RealWorldSteps {
         note(test, "back at the portal in the Nether");
         command(test, "tp @s %.2f %.2f %.2f", arrived.x, arrived.y, arrived.z);
         test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD, 40, "the step back through the portal");
-        test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Overworld to appear again");
+        test.waitFor(() -> minecraft.gui.screen() == null && minecraft.player != null, 60, "the Overworld to appear again");
         test.waitTicks(20);
         settle(test);
         Vec3 home = playerAt(test);

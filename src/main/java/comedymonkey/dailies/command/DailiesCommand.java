@@ -247,7 +247,7 @@ public final class DailiesCommand {
     private static int config(CommandSourceStack source) {
         Minecraft minecraft = Minecraft.getInstance();
         // Once the chat has closed itself, or it would take the settings with it
-        minecraft.tell(() -> Screens.openSettings(minecraft.screen));
+        minecraft.tell(() -> Screens.openSettings(minecraft.gui.screen()));
         return say(source, "config");
     }
 
@@ -279,7 +279,7 @@ public final class DailiesCommand {
             return false;
         }
         lastAnswer = "only_own";
-        Minecraft.getInstance().gui.getChat().addMessage(Component.translatable(KEYS + "only_own").withStyle(ChatFormatting.RED));
+        Minecraft.getInstance().gui.hud.getChat().addMessage(Component.translatable(KEYS + "only_own").withStyle(ChatFormatting.RED));
         return true;
     }
 

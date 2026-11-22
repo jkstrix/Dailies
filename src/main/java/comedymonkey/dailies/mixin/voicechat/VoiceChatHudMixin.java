@@ -2,8 +2,8 @@ package comedymonkey.dailies.mixin.voicechat;
 
 import comedymonkey.dailies.compat.voicechat.VoiceChatLook;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,12 +26,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class VoiceChatHudMixin {
 
     @Shadow(remap = false)
-    private void renderIcon(GuiGraphics graphics, ResourceLocation texture) {
+    private void renderIcon(GuiGraphicsExtractor graphics, Identifier texture) {
         throw new AssertionError();
     }
 
-    @Inject(method = "onRenderHUD(Lnet/minecraft/client/gui/GuiGraphics;F)V", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void dailies$recordersCorner(GuiGraphics graphics, float delta, CallbackInfo info) {
+    @Inject(method = "onRenderHUD(Lnet/minecraft/client/gui/GuiGraphicsExtractor;F)V", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
+    private void dailies$recordersCorner(GuiGraphicsExtractor graphics, float delta, CallbackInfo info) {
         if (!Playback.active()) {
             return;
         }
@@ -41,7 +41,7 @@ public abstract class VoiceChatHudMixin {
         }
         String icon = VoiceChatLook.hudIcon();
         if (icon != null) {
-            this.renderIcon(graphics, ResourceLocation.fromNamespaceAndPath("voicechat", icon));
+            this.renderIcon(graphics, Identifier.fromNamespaceAndPath("voicechat", icon));
         }
         VoiceChatLook.drawGroup(graphics);
     }

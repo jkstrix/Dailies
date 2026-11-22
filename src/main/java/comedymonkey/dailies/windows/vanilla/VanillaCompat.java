@@ -23,7 +23,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -250,7 +250,7 @@ public final class VanillaCompat implements DailiesCompat {
             String others = pages.size() > 1 ? this.stored.handle(VanillaStates.others(pages, page), each -> each) : null;
             TextFieldHelper field = book.dailies$pageEdit();
             return VanillaStates.bookWrite(new VanillaStates.BookWrite(others, page, pageText, field.getCursorPos(), field.getSelectionPos(), book.dailies$signing(),
-                book.dailies$title(), book.dailies$owner().getGameProfile().getName()));
+                book.dailies$title(), book.dailies$owner().getGameProfile().name()));
         }
 
         @Override
@@ -311,7 +311,7 @@ public final class VanillaCompat implements DailiesCompat {
             SignEditScreenAccess editing = (SignEditScreenAccess) screen;
             SignBlockEntity sign = editing.dailies$sign();
             Block block = sign.getBlockState().getBlock();
-            ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+            Identifier key = BuiltInRegistries.BLOCK.getKey(block);
             TextFieldHelper field = editing.dailies$signField();
             SignText text = editing.dailies$text();
             return VanillaStates.signEdit(new VanillaStates.SignEdit(sign.getBlockPos().asLong(), key.toString(), SignBlock.getWoodType(block).name(),
@@ -322,7 +322,7 @@ public final class VanillaCompat implements DailiesCompat {
         @Override
         public @Nullable Screen build(byte[] state, int version) {
             VanillaStates.SignEdit recorded = VanillaStates.readSignEdit(state);
-            ResourceLocation key = ResourceLocation.tryParse(recorded.block());
+            Identifier key = Identifier.tryParse(recorded.block());
             Block block = key == null ? null : BuiltInRegistries.BLOCK.getOptional(key).orElse(null);
             if (!(block instanceof EntityBlock maker)) {
                 return null;

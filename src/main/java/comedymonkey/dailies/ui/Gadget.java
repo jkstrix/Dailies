@@ -1,12 +1,12 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,7 +81,7 @@ abstract class Gadget {
     }
 
     static boolean activates(int keyCode) {
-        return keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_SPACE;
+        return keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER || keyCode == InputConstants.KEY_SPACE;
     }
 
     Gadget tip(@Nullable Component words) {
@@ -126,7 +126,7 @@ abstract class Gadget {
                 && mouseY >= this.clipTop && mouseY < this.clipBottom;
     }
 
-    abstract void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY);
+    abstract void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY);
 
     /**
      * A mouse button went down on this control.
@@ -185,7 +185,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             // Room above sets a group apart from the one before; the rule under the words ties it to what follows
             Kit.text(graphics, font, Kit.clip(font, this.words.get().getString(), this.width - 2), this.x + 1, this.y + 6, Controls.BRASS_BRIGHT);
             Kit.rule(graphics, this.x, this.y + this.height - 2, this.x + this.width);
@@ -217,7 +217,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             Kit.text(graphics, font, Kit.clip(font, this.words.get().getString(), this.width), this.x + 1, this.y + (this.height - 8) / 2, this.colour);
         }
 
@@ -264,7 +264,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             Component now = this.words.get();
             if (now.getString().isEmpty()) {
                 return;
@@ -272,7 +272,7 @@ abstract class Gadget {
             int line = this.y + 1;
             boolean bright = this.action != null && this.over(mouseX, mouseY);
             for (FormattedCharSequence part : font.split(now, Math.max(20, this.width - 2))) {
-                graphics.drawString(font, part, this.x + 1, line, bright ? Controls.PARCHMENT : this.colour, false);
+                graphics.text(font, part, this.x + 1, line, bright ? Controls.PARCHMENT : this.colour, false);
                 line += 10;
             }
         }
@@ -352,7 +352,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean enabled = this.usable.getAsBoolean();
             boolean hovered = this.over(mouseX, mouseY);
             boolean on = this.lit.getAsBoolean();
@@ -431,7 +431,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean enabled = this.usable.getAsBoolean();
             boolean hovered = enabled && this.over(mouseX, mouseY);
             boolean on = this.value.getAsBoolean();
@@ -440,7 +440,7 @@ abstract class Gadget {
             if (on) {
                 // A ticked box is filled with brass, so a column of them can be read at a glance
                 graphics.fill(this.x, top, this.x + 10, top + 10, enabled ? (hovered ? 0xFF85682A : Controls.FACE_LIT) : 0xFF4A3A1C);
-                graphics.renderOutline(this.x, top, 10, 10, enabled ? Controls.BRASS_BRIGHT : Controls.BRASS_DIM);
+                graphics.outline(this.x, top, 10, 10, enabled ? Controls.BRASS_BRIGHT : Controls.BRASS_DIM);
                 Kit.icon(graphics, Kit.Icon.TICK, this.x + 5, top + 5, enabled ? Controls.PARCHMENT : Controls.PARCHMENT_FAINT);
             } else {
                 Kit.field(graphics, this.x, top, 10, 10, edge);
@@ -565,7 +565,7 @@ abstract class Gadget {
 
         @Override
         boolean key(int keyCode, int modifiers) {
-            if ((activates(keyCode) || keyCode == GLFW.GLFW_KEY_DOWN) && this.ready()) {
+            if ((activates(keyCode) || keyCode == InputConstants.KEY_DOWN) && this.ready()) {
                 Kit.click();
                 this.open();
                 return true;
@@ -574,7 +574,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean enabled = this.ready();
             boolean hovered = this.over(mouseX, mouseY);
             boolean opened = Menu.openFor(this);
@@ -586,7 +586,7 @@ abstract class Gadget {
                 int patch = this.swatch.applyAsInt(now);
                 if (patch >= 0) {
                     graphics.fill(textLeft, this.y + 3, textLeft + 8, this.y + Kit.ROW - 3, 0xFF000000 | (patch & 0xFFFFFF));
-                    graphics.renderOutline(textLeft, this.y + 3, 8, Kit.ROW - 6, Controls.BRASS_DIM);
+                    graphics.outline(textLeft, this.y + 3, 8, Kit.ROW - 6, Controls.BRASS_DIM);
                     textLeft += 12;
                 }
             }
@@ -681,12 +681,12 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean enabled = this.usable.getAsBoolean();
             boolean hovered = enabled && this.overSwitch(mouseX, mouseY);
             boolean on = this.value.getAsBoolean();
             // The knob slides across in a tenth of a second
-            long now = net.minecraft.Util.getMillis();
+            long now = net.minecraft.util.Util.getMillis();
             float target = on ? 1.0F : 0.0F;
             if (this.slid < 0.0F || now - this.drawnAt > 500) {
                 this.slid = target;
@@ -767,10 +767,10 @@ abstract class Gadget {
         /** The left and right arrows move it a step at a time; each press is one change */
         @Override
         boolean key(int keyCode, int modifiers) {
-            if ((keyCode != GLFW.GLFW_KEY_LEFT && keyCode != GLFW.GLFW_KEY_RIGHT) || !this.usable.getAsBoolean()) {
+            if ((keyCode != InputConstants.KEY_LEFT && keyCode != InputConstants.KEY_RIGHT) || !this.usable.getAsBoolean()) {
                 return false;
             }
-            int way = keyCode == GLFW.GLFW_KEY_RIGHT ? 1 : -1;
+            int way = keyCode == InputConstants.KEY_RIGHT ? 1 : -1;
             double now = this.value.getAsDouble();
             double next;
             if (this.ratio) {
@@ -807,7 +807,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean enabled = this.usable.getAsBoolean();
             double now = this.dragging ? this.dragged : this.value.getAsDouble();
             boolean hot = this.dragging || (enabled && this.over(mouseX, mouseY));
@@ -823,7 +823,7 @@ abstract class Gadget {
             }
             // With a shadow, so that the value reads where the knob stands behind it
             String value = Kit.clip(font, this.words.apply(now), this.width - 4);
-            graphics.drawString(font, value, this.x + (this.width - font.width(value)) / 2, this.y + (this.height - 8) / 2,
+            graphics.text(font, value, this.x + (this.width - font.width(value)) / 2, this.y + (this.height - 8) / 2,
                     enabled ? Controls.PARCHMENT : Controls.PARCHMENT_FAINT, true);
         }
 
@@ -926,7 +926,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             this.cut = font.width(this.label) > this.labelWidth(this.width) - 3;
             Kit.text(graphics, font, Kit.clip(font, this.label.getString(), this.labelWidth(this.width) - 3), this.x + 1, this.y + 3,
                     this.usable.getAsBoolean() ? Controls.PARCHMENT : Controls.PARCHMENT_FAINT);
@@ -1035,7 +1035,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             for (Gadget part : this.parts) {
                 part.draw(graphics, font, mouseX, mouseY);
             }
@@ -1100,7 +1100,7 @@ abstract class Gadget {
         }
 
         private float advance() {
-            long now = net.minecraft.Util.getMillis();
+            long now = net.minecraft.util.Util.getMillis();
             float target = this.open.getAsBoolean() ? 1.0F : 0.0F;
             if (this.shown < 0.0F || now - this.drawnAt > 1000) {
                 this.shown = target;
@@ -1168,7 +1168,7 @@ abstract class Gadget {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             if (this.height <= 0) {
                 return;
             }

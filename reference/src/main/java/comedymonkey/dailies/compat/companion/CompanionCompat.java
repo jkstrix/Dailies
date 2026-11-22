@@ -11,7 +11,7 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.Event;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
@@ -63,7 +63,7 @@ public final class CompanionCompat {
 
     /** The shared channel's format, see the companion's CompatPayload */
     public record Payload(int kind, String id, int version, byte[] data) implements CustomPacketPayload {
-        public static final Type<Payload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(COMPANION, "compat"));
+        public static final Type<Payload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(COMPANION, "compat"));
         public static final StreamCodec<ByteBuf, Payload> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, Payload::kind,
             ByteBufCodecs.stringUtf8(128), Payload::id, ByteBufCodecs.VAR_INT, Payload::version, ByteBufCodecs.byteArray(262144), Payload::data, Payload::new);
 

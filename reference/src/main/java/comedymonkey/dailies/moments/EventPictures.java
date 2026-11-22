@@ -110,7 +110,7 @@ public final class EventPictures {
         if (Host.get().inPlayback() || Host.get().exportRunning() || minecraft.level == null) {
             return;
         }
-        RenderTarget main = minecraft.getMainRenderTarget();
+        RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
         if (main.width < 16 || main.height < 16) {
             return;
         }

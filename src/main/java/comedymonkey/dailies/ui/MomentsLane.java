@@ -13,7 +13,7 @@ import comedymonkey.dailies.moments.MomentsTimeline.Timeline;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -268,7 +268,7 @@ public final class MomentsLane {
     }
 
     /** Draws the rows; the caller has already clipped drawing to the lanes */
-    static void draw(GuiGraphics graphics, Font font, Place place, int laneRight, int mouseX, int mouseY) {
+    static void draw(GuiGraphicsExtractor graphics, Font font, Place place, int laneRight, int mouseX, int mouseY) {
         Timeline now = timeline();
         int height = height();
         if (height <= 0) {
@@ -336,14 +336,14 @@ public final class MomentsLane {
                 int half = clusterHalfWidth(font, cluster);
                 // A dark plate with the number in the colour of its best mark: a number on a bright plate does not read
                 graphics.fill(x - half, place.top(), x + half + 1, place.top() + MARKS, Controls.FIELD);
-                graphics.renderOutline(x - half, place.top(), half * 2 + 1, MARKS, lit ? Controls.PARCHMENT : colour);
+                graphics.outline(x - half, place.top(), half * 2 + 1, MARKS, lit ? Controls.PARCHMENT : colour);
                 Kit.text(graphics, font, count, x - half + 4, place.top() + 2, colour);
             }
         }
     }
 
     /** The names of the rows, in the column the track names stand in */
-    static void drawColumn(GuiGraphics graphics, Font font, Place place, int columnRight, int mouseX, int mouseY) {
+    static void drawColumn(GuiGraphicsExtractor graphics, Font font, Place place, int columnRight, int mouseX, int mouseY) {
         Timeline now = timeline();
         int height = height();
         if (height <= 0) {

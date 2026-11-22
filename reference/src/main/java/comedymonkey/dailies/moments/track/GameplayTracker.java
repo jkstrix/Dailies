@@ -26,7 +26,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionResult;
@@ -337,7 +337,7 @@ public class GameplayTracker {
     public void tick(Minecraft minecraft, LocalPlayer player, ClientLevel level, @Nullable String biome) {
         this.ticks += 1;
 
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         if (!dimension.equals(this.lastDimension)) {
             if (this.lastDimension == null) {
                 // Where the session starts is not an "entry", but it is no longer new either
@@ -362,7 +362,7 @@ public class GameplayTracker {
             }
             if (other.isDeadOrDying()) {
                 if (this.deadPlayers.add(other.getUUID())) {
-                    this.recordDeath(new DeathMessages.Party(other.getGameProfile().getName(), other.getUUID(), "minecraft:player", true),
+                    this.recordDeath(new DeathMessages.Party(other.getGameProfile().name(), other.getUUID(), "minecraft:player", true),
                         null, "observed", other.position());
                 }
             } else {
@@ -428,7 +428,7 @@ public class GameplayTracker {
         }
 
         // First night survived: saw the night and then the morning without dying in between
-        long timeOfDay = level.getDayTime() % 24000;
+        long timeOfDay = level.getOverworldClockTime() % 24000;
         if (timeOfDay >= 13000 && timeOfDay < 23000) {
             this.nightSeen = true;
         } else if (this.nightSeen && timeOfDay < 12000) {
@@ -502,7 +502,7 @@ public class GameplayTracker {
             if (existing != null && System.currentTimeMillis() - existing.time() < DEATH_MERGE_MILLIS) {
                 return; // the death message already said so
             }
-            DeathMessages.Party party = new DeathMessages.Party(victim.getGameProfile().getName(), victim.getUUID(), "minecraft:player", true);
+            DeathMessages.Party party = new DeathMessages.Party(victim.getGameProfile().name(), victim.getUUID(), "minecraft:player", true);
             JsonObject event = this.base("player_kill", party.name());
             JsonObject metadata = MJson.meta(event);
             metadata.addProperty("attribution", "heuristic");
@@ -600,7 +600,7 @@ public class GameplayTracker {
             // The full list sent on login: things earned earlier, not now
             return;
         }
-        for (Map.Entry<ResourceLocation, AdvancementProgress> entry : packet.getProgress().entrySet()) {
+        for (Map.Entry<Identifier, AdvancementProgress> entry : packet.getProgress().entrySet()) {
             AdvancementNode node = tree.get(entry.getKey());
             if (node == null || !entry.getValue().isDone() || node.advancement().display().isEmpty()) {
                 continue; // recipe unlocks have no display
@@ -1010,7 +1010,7 @@ public class GameplayTracker {
             } else if (item.getDefaultInstance().isDamageableItem()) {
                 this.confirmOrBackfill("tool_first_use", id(item), backfill, null);
             }
-        } else if (stat.getType() == Stats.CUSTOM && subject instanceof ResourceLocation custom) {
+        } else if (stat.getType() == Stats.CUSTOM && subject instanceof Identifier custom) {
             if (custom.equals(Stats.DEATHS)) {
                 this.addTotal("deaths", delta);
                 this.confirmLocalDeath(backfill, killedBy);

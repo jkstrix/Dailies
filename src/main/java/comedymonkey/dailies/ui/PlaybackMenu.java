@@ -4,7 +4,7 @@ import comedymonkey.dailies.export.QueueRunner;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -47,7 +47,7 @@ public final class PlaybackMenu extends KitScreen {
             this.add(new Gadget.Push(Component.translatable("dailies.ui.playback_menu.open_editor"), EditorScreen::open).when(Playback::loaded));
         }
         this.add(new Gadget.Push(Component.translatable("dailies.ui.pause.moments"), Controls::openMomentsPage).tip(Component.translatable("dailies.ui.moments.tip")));
-        this.add(new Gadget.Push(Component.translatable("dailies.ui.playback_menu.recordings"), () -> this.minecraft.setScreen(new RecordingsScreen(this))));
+        this.add(new Gadget.Push(Component.translatable("dailies.ui.playback_menu.recordings"), () -> this.minecraft.gui.setScreen(new RecordingsScreen(this))));
         this.add(new Gadget.Push(Component.translatable("dailies.ui.playback_menu.settings"), () -> Screens.openSettings(this)));
         if (!QueueRunner.view().jobs().isEmpty()) {
             this.add(new Gadget.Push(Component.translatable("dailies.ui.playback_menu.queue"), this::openQueue)
@@ -76,7 +76,7 @@ public final class PlaybackMenu extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         this.heading(graphics, font, this.under);
     }
 
@@ -91,13 +91,13 @@ public final class PlaybackMenu extends KitScreen {
         if (this.fromEditor && Playback.loaded()) {
             EditorScreen.open();
         } else {
-            this.minecraft.setScreen(null);
+            this.minecraft.gui.setScreen(null);
         }
     }
 
     private void hideEditor() {
         EditorScreen.letGo();
-        this.minecraft.setScreen(null);
+        this.minecraft.gui.setScreen(null);
     }
 
     private void openQueue() {

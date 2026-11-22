@@ -243,7 +243,7 @@ public final class Playback {
         }
         // While the world stands still (REC-36) the game's clock holds the world where it stood, but the recording's time
         // goes on, and the pointer over a book and the camera move with it: read the clock that keeps running
-        DeltaTracker timer = Minecraft.getInstance().getTimer();
+        DeltaTracker timer = Minecraft.getInstance().getDeltaTracker();
         float partial = standing ? ((TimerAccess) timer).dailies$partialTick() : timer.getGameTimeDeltaPartialTick(true);
         return Math.max(0.0, position - 1 + partial);
     }
@@ -533,8 +533,8 @@ public final class Playback {
                     jumpLoads += String.format(java.util.Locale.ROOT, " [snapshot at %d: %.1f ms, %d chunks kept (%d with only their block entities retold), %d built, %d let go]",
                         load.tick(), load.millis(), load.chunksKept(), load.chunksSoft(), load.chunksBuilt(), load.chunksLetGo());
                 }
-                if (minecraft.screen instanceof ReceivingLevelScreen || minecraft.screen instanceof GenericMessageScreen) {
-                    minecraft.setScreen(null);
+                if (minecraft.gui.screen() instanceof ReceivingLevelScreen || minecraft.gui.screen() instanceof GenericMessageScreen) {
+                    minecraft.gui.setScreen(null);
                 }
             }
             if (jumpTarget >= 0) {
@@ -651,7 +651,7 @@ public final class Playback {
                 leaving = false;
             }
         }
-        minecraft.setScreen(new GenericMessageScreen(Component.translatable("dailies.playback.opening")));
+        minecraft.gui.setScreen(new GenericMessageScreen(Component.translatable("dailies.playback.opening")));
 
         // No server will send its settings, so every mod's server settings take their defaults, as on a vanilla server
         if (!serverConfigsLoaded) {
@@ -700,8 +700,8 @@ public final class Playback {
         position = feed.position();
         skipping = false;
         feed.skipping = false;
-        if (minecraft.screen instanceof ReceivingLevelScreen || minecraft.screen instanceof GenericMessageScreen) {
-            minecraft.setScreen(null);
+        if (minecraft.gui.screen() instanceof ReceivingLevelScreen || minecraft.gui.screen() instanceof GenericMessageScreen) {
+            minecraft.gui.setScreen(null);
         }
         Viewer.startNear(minecraft, manifest.recorderId);
         settle(minecraft);
@@ -821,7 +821,7 @@ public final class Playback {
 
     /** Shows the world exactly as it is at the end of the tick just played, not part way into the next */
     private static void settle(Minecraft minecraft) {
-        TimerAccess timer = (TimerAccess) minecraft.getTimer();
+        TimerAccess timer = (TimerAccess) minecraft.getDeltaTracker();
         timer.dailies$setPausedPartialTick(1.0F);
         timer.dailies$setPartialTick(0.0F);
         // The switch is for the tests, which measure what the light is like without this
@@ -929,7 +929,7 @@ public final class Playback {
         if (skipping || paused) {
             return;
         }
-        DeltaTracker.Timer timer = (DeltaTracker.Timer) minecraft.getTimer();
+        DeltaTracker.Timer timer = (DeltaTracker.Timer) minecraft.getDeltaTracker();
         if (!still) {
             ((TimerAccess) timer).dailies$setPausedPartialTick(((TimerAccess) timer).dailies$partialTick());
         }
@@ -956,7 +956,7 @@ public final class Playback {
             leaving = false;
         }
         cleanUp();
-        minecraft.setScreen(new TitleScreen());
+        minecraft.gui.setScreen(new TitleScreen());
     }
 
     private static void cleanUp() {

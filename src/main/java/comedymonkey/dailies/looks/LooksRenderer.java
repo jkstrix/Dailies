@@ -17,7 +17,7 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
@@ -59,7 +59,7 @@ public final class LooksRenderer {
     private static final float NO_FOG_END = 2.0e6F;
 
     /** The layers that make up the recorder's HUD when riding along */
-    private static final Set<ResourceLocation> HUD = Set.of(VanillaGuiLayers.HOTBAR, VanillaGuiLayers.CROSSHAIR, VanillaGuiLayers.PLAYER_HEALTH,
+    private static final Set<Identifier> HUD = Set.of(VanillaGuiLayers.HOTBAR, VanillaGuiLayers.CROSSHAIR, VanillaGuiLayers.PLAYER_HEALTH,
             VanillaGuiLayers.ARMOR_LEVEL, VanillaGuiLayers.FOOD_LEVEL, VanillaGuiLayers.VEHICLE_HEALTH, VanillaGuiLayers.AIR_LEVEL,
             VanillaGuiLayers.JUMP_METER, VanillaGuiLayers.EXPERIENCE_BAR, VanillaGuiLayers.EXPERIENCE_LEVEL, VanillaGuiLayers.SELECTED_ITEM_NAME,
             VanillaGuiLayers.SPECTATOR_TOOLTIP, VanillaGuiLayers.EFFECTS, VanillaGuiLayers.SCOREBOARD_SIDEBAR, VanillaGuiLayers.TAB_LIST);
@@ -125,7 +125,7 @@ public final class LooksRenderer {
 
         IEventBus modBus = ModList.get().getModContainerById(Dailies.ID).map(ModContainer::getEventBus).orElse(null);
         if (modBus != null) {
-            modBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(ResourceLocation.fromNamespaceAndPath(Dailies.ID, "frame_guides"),
+            modBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(Identifier.fromNamespaceAndPath(Dailies.ID, "frame_guides"),
                     FrameGuides::draw));
         } else {
             failOnce("registering the frame guides", new IllegalStateException("The mod's event bus was not found"));
@@ -143,7 +143,7 @@ public final class LooksRenderer {
      */
     public static double framedRatio() {
         Looks now = looks;
-        if (now == null || Export.active() || Minecraft.getInstance().options.hideGui) {
+        if (now == null || Export.active() || comedymonkey.dailies.ui.HudHidden.get()) {
             return 0.0;
         }
         return now.frameRatio();
@@ -277,7 +277,7 @@ public final class LooksRenderer {
                 seenEntityTypes = List.copyOf(now.hiddenEntityTypes);
                 Set<EntityType<?>> types = new HashSet<>();
                 for (String id : seenEntityTypes) {
-                    ResourceLocation key = ResourceLocation.tryParse(id);
+                    Identifier key = Identifier.tryParse(id);
                     if (key != null) {
                         BuiltInRegistries.ENTITY_TYPE.getOptional(key).ifPresent(types::add);
                     }
@@ -288,7 +288,7 @@ public final class LooksRenderer {
                 seenParticleTypes = List.copyOf(now.hiddenParticleTypes);
                 Set<ParticleType<?>> types = new HashSet<>();
                 for (String id : seenParticleTypes) {
-                    ResourceLocation key = ResourceLocation.tryParse(id);
+                    Identifier key = Identifier.tryParse(id);
                     if (key != null) {
                         BuiltInRegistries.PARTICLE_TYPE.getOptional(key).ifPresent(types::add);
                     }
@@ -319,7 +319,7 @@ public final class LooksRenderer {
         if (now == null) {
             return;
         }
-        ResourceLocation layer = event.getName();
+        Identifier layer = event.getName();
         if (!now.showChat && layer.equals(VanillaGuiLayers.CHAT)
                 || !now.showBossBars && layer.equals(VanillaGuiLayers.BOSS_OVERLAY)
                 || !now.showTitles && (layer.equals(VanillaGuiLayers.TITLE) || layer.equals(VanillaGuiLayers.OVERLAY_MESSAGE))

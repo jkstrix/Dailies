@@ -20,7 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundResourcePackPopPacket;
 import net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -60,9 +60,9 @@ import static comedymonkey.dailies.selftest.SelfTestSupport.emptyFolder;
 final class ResourcePackSteps {
 
     /** A file only the test pack has */
-    private static final ResourceLocation MARKER = ResourceLocation.fromNamespaceAndPath("minecraft", "dailies_selftest/marker.txt");
+    private static final Identifier MARKER = Identifier.fromNamespaceAndPath("minecraft", "dailies_selftest/marker.txt");
     /** A file only the pack that is declined has */
-    private static final ResourceLocation DECLINED_MARKER = ResourceLocation.fromNamespaceAndPath("minecraft", "dailies_selftest/declined.txt");
+    private static final Identifier DECLINED_MARKER = Identifier.fromNamespaceAndPath("minecraft", "dailies_selftest/declined.txt");
     private static final String LANG_KEY = "dailies.selftest.server_pack";
 
     private static Path recording;
@@ -440,8 +440,8 @@ final class ResourcePackSteps {
             for (int i = 0; i < 6; i++) {
                 fresh.append((char) (0x00C0 + (freshText++ % 0x180)));
             }
-            net.minecraft.client.gui.GuiGraphics graphics = new net.minecraft.client.gui.GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
-            graphics.drawString(minecraft.font, fresh.toString(), 2, 2, 0xFFFFFFFF, false);
+            net.minecraft.client.gui.GuiGraphicsExtractor graphics = new net.minecraft.client.gui.GuiGraphicsExtractor(minecraft, minecraft.renderBuffers().bufferSource());
+            graphics.text(minecraft.font, fresh.toString(), 2, 2, 0xFFFFFFFF, false);
             graphics.flush();
         });
     }
@@ -462,17 +462,17 @@ final class ResourcePackSteps {
 
     // ------------------------------------------------------------------ Helpers
 
-    private static boolean on(Minecraft minecraft, ResourceLocation marker) {
+    private static boolean on(Minecraft minecraft, Identifier marker) {
         return minecraft.getResourceManager().getResource(marker).isPresent();
     }
 
     /** Waits for the game's question about the pack and presses yes or no */
     private static void answer(SelfTest test, Minecraft minecraft, boolean yes) throws Exception {
-        test.waitFor(() -> minecraft.screen instanceof ConfirmScreen && minecraft.screen.getClass().getName().contains("PackConfirmScreen"), 30,
+        test.waitFor(() -> minecraft.gui.screen() instanceof ConfirmScreen && minecraft.gui.screen().getClass().getName().contains("PackConfirmScreen"), 30,
             "the game to ask about the server's resource pack");
         test.onClientRun(() -> {
             List<Button> buttons = new ArrayList<>();
-            for (GuiEventListener child : minecraft.screen.children()) {
+            for (GuiEventListener child : minecraft.gui.screen().children()) {
                 if (child instanceof Button button) {
                     buttons.add(button);
                 }
@@ -480,7 +480,7 @@ final class ResourcePackSteps {
             check(buttons.size() == 2, "the resource pack question has " + buttons.size() + " buttons");
             buttons.get(yes ? 0 : 1).onPress();
         });
-        test.waitFor(() -> !(minecraft.screen instanceof ConfirmScreen), 30, "the resource pack question to close");
+        test.waitFor(() -> !(minecraft.gui.screen() instanceof ConfirmScreen), 30, "the resource pack question to close");
     }
 
     static void waitForReload(SelfTest test, Minecraft minecraft) throws Exception {

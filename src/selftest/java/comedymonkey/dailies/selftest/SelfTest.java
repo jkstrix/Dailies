@@ -366,8 +366,8 @@ public final class SelfTest {
             try {
                 this.onClientRun(() -> {
                     Minecraft minecraft = Minecraft.getInstance();
-                    if (minecraft.screen != null && minecraft.level != null) {
-                        minecraft.setScreen(null);
+                    if (minecraft.gui.screen() != null && minecraft.level != null) {
+                        minecraft.gui.setScreen(null);
                     }
                 });
             } catch (Throwable ignored) {

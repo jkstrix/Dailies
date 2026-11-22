@@ -2,7 +2,7 @@ package comedymonkey.dailies.mixin.extras;
 
 import com.mojang.authlib.GameProfile;
 import comedymonkey.dailies.extras.RecordedSkins;
-import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.client.resources.SkinManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

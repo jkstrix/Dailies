@@ -20,7 +20,7 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundHorseScreenOpenPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.MerchantMenu;
@@ -90,7 +90,7 @@ final class WindowCapture {
     }
 
     private static String key(net.minecraft.world.inventory.MenuType<?> type) {
-        ResourceLocation key = type == null ? null : BuiltInRegistries.MENU.getKey(type);
+        Identifier key = type == null ? null : BuiltInRegistries.MENU.getKey(type);
         return key == null ? "" : key.toString();
     }
 
@@ -121,7 +121,7 @@ final class WindowCapture {
 
     /** The window on the recorder's screen now, if it is one a recording keeps; null otherwise */
     private static Window current(Minecraft minecraft, LocalPlayer player) {
-        Screen screen = minecraft.screen;
+        Screen screen = minecraft.gui.screen();
         if (screen == null) {
             return null;
         }
@@ -174,8 +174,8 @@ final class WindowCapture {
         double rawY = minecraft.mouseHandler.ypos();
         if (screen instanceof AbstractContainerScreen<?> container) {
             window.share = false;
-            window.x = (float) WindowPointer.toWindow(rawX, gameWindow.getScreenWidth(), gameWindow.getGuiScaledWidth(), container.getGuiLeft());
-            window.y = (float) WindowPointer.toWindow(rawY, gameWindow.getScreenHeight(), gameWindow.getGuiScaledHeight(), container.getGuiTop());
+            window.x = (float) WindowPointer.toWindow(rawX, gameWindow.getScreenWidth(), gameWindow.getGuiScaledWidth(), container.getLeftPos());
+            window.y = (float) WindowPointer.toWindow(rawY, gameWindow.getScreenHeight(), gameWindow.getGuiScaledHeight(), container.getTopPos());
             Slot hovered = container.getSlotUnderMouse();
             window.hovered = hovered == null ? -1 : hovered.index;
         } else {

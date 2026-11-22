@@ -117,7 +117,7 @@ final class LibraryScreenSteps {
 
     /** The list: search and sort (REC-5), a folder, and every control explained and uncrowded in each view */
     private static void searchAndSort() throws Exception {
-        test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
+        test.onClientRun(() -> minecraft.gui.setScreen(new RecordingsScreen(null)));
         list = listScreen(test, minecraft);
         test.waitFor(() -> !list.stillLooking() && list.namesShown().contains(FARM), 30, "the list to show the recordings made for it");
         expectNames(test, list, "library kingdom", "NEWEST", List.of(EDITED, CASTLE, NETHER));
@@ -254,7 +254,7 @@ final class LibraryScreenSteps {
 
     /** The combine screen: the oldest first, reordered, combined */
     private static void combineScreen() throws Exception {
-        test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
+        test.onClientRun(() -> minecraft.gui.setScreen(new RecordingsScreen(null)));
         RecordingsScreen again = listScreen(test, minecraft);
         test.waitFor(() -> !again.stillLooking() && again.namesShown().contains(FARM), 30, "the list to come back");
         test.onClientRun(() -> {
@@ -263,8 +263,8 @@ final class LibraryScreenSteps {
             check(again.chosenCount() == 2, "two recordings could not be chosen together");
             check(again.press("combine"), "Combine could not be pressed with two recordings chosen");
         });
-        test.waitFor(() -> minecraft.screen instanceof CombineScreen, 10, "the combine screen to open");
-        CombineScreen combine = (CombineScreen) minecraft.screen;
+        test.waitFor(() -> minecraft.gui.screen() instanceof CombineScreen, 10, "the combine screen to open");
+        CombineScreen combine = (CombineScreen) minecraft.gui.screen();
         check(test.onClient(combine::orderShown).equals(List.of(FARM, CASTLE)), "the combine screen should start with the oldest footage first: " + test.onClient(combine::orderShown));
         check(test.onClient(combine::boundariesShown) == 1, "two recordings should have one boundary between them");
         test.onClientRun(() -> {
@@ -285,8 +285,8 @@ final class LibraryScreenSteps {
 
     /** Storage (REC-8): the view, the tool, and the low-disk threshold */
     private static void storageView() throws Exception {
-        test.waitFor(() -> minecraft.screen instanceof RecordingsScreen, 10, "the list to come back after combining");
-        storage = (RecordingsScreen) minecraft.screen;
+        test.waitFor(() -> minecraft.gui.screen() instanceof RecordingsScreen, 10, "the list to come back after combining");
+        storage = (RecordingsScreen) minecraft.gui.screen();
         test.onClientRun(() -> storage.showView("storage"));
         test.waitFor(() -> storage.storageShown() != null && !storage.stillLooking(), 60, "the storage view to measure");
         StorageReport report = test.onClient(storage::storageShown);
@@ -345,14 +345,14 @@ final class LibraryScreenSteps {
         test.onClientRun(() -> Previews.answerAsk(false));
         test.waitTicks(4);
         check(!Library.bin().list().isEmpty(), "answering no still emptied the bin");
-        test.waitFor(() -> minecraft.screen instanceof RecordingsScreen, 10, "the list to come back after the question");
-        RecordingsScreen last = (RecordingsScreen) minecraft.screen;
+        test.waitFor(() -> minecraft.gui.screen() instanceof RecordingsScreen, 10, "the list to come back after the question");
+        RecordingsScreen last = (RecordingsScreen) minecraft.gui.screen();
         test.waitFor(() -> !last.stillLooking(), 30, "the list to look again");
         test.onClientRun(() -> check(last.press("empty_bin"), "Empty bin could not be pressed a second time"));
         test.waitFor(Previews::asking, 10, "emptying the bin to ask again");
         test.onClientRun(() -> Previews.answerAsk(true));
         test.waitFor(() -> Library.bin().list().isEmpty(), 60, "the bin to be emptied");
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         test.log("library: searched, sorted, foldered, starred and detailed; deleted into the bin and restored by screen and tool; combined by the screen; storage measured; "
             + "old recordings binned unless starred; an expired item went; emptying asked first");
     }
@@ -379,9 +379,9 @@ final class LibraryScreenSteps {
 
         // The trim screen opened from the editor starts from the scene's export range
         test.tool("scene_set_export_range", args("start_tick", 40, "end_tick", 139));
-        test.onClientRun(() -> minecraft.setScreen(TrimScreen.fromEditor(null)));
-        test.waitFor(() -> minecraft.screen instanceof TrimScreen, 10, "the trim screen to open");
-        TrimScreen trim = (TrimScreen) minecraft.screen;
+        test.onClientRun(() -> minecraft.gui.setScreen(TrimScreen.fromEditor(null)));
+        test.waitFor(() -> minecraft.gui.screen() instanceof TrimScreen, 10, "the trim screen to open");
+        TrimScreen trim = (TrimScreen) minecraft.gui.screen();
         List<int[]> kept = test.onClient(trim::kept);
         check(kept.size() == 1 && kept.get(0)[0] == 40 && kept.get(0)[1] == 140, "the trim screen did not start from the export range 40 to 139: " + describe(kept));
         test.onClientRun(() -> {
@@ -392,7 +392,7 @@ final class LibraryScreenSteps {
         check(kept.size() == 2 && kept.get(0)[1] == 60 && kept.get(1)[0] == 80, "cutting a stretch from what is kept did not split it: " + describe(kept));
         test.waitTicks(20);
         test.log("the trim timeline shows " + test.onClient(trim::momentsShown) + " moment marks and clip bands for the open recording");
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         test.tool("scene_set_export_range", args("clear", true));
         test.tool("replay_close", new JsonObject());
         test.waitFor(() -> !Playback.active() && minecraft.level == null, 60, "the recording to close after the scene steps");
@@ -419,8 +419,8 @@ final class LibraryScreenSteps {
     }
 
     private static RecordingsScreen listScreen(SelfTest test, Minecraft minecraft) throws Exception {
-        test.waitFor(() -> minecraft.screen instanceof RecordingsScreen, 10, "the list of recordings to open");
-        return (RecordingsScreen) minecraft.screen;
+        test.waitFor(() -> minecraft.gui.screen() instanceof RecordingsScreen, 10, "the list of recordings to open");
+        return (RecordingsScreen) minecraft.gui.screen();
     }
 
     private static void expectNames(SelfTest test, RecordingsScreen list, String search, String sort, List<String> wanted) throws Exception {

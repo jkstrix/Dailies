@@ -796,7 +796,7 @@ final class Census {
     private static String defaultAttachment(String name) {
         String known = DEFAULT_ATTACHMENTS.computeIfAbsent(name, missing -> {
             try {
-                net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(missing);
+                net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.tryParse(missing);
                 net.neoforged.neoforge.attachment.AttachmentType<?> type = id == null ? null : net.neoforged.neoforge.registries.NeoForgeRegistries.ATTACHMENT_TYPES.get(id);
                 ClientLevel level = Minecraft.getInstance().level;
                 if (type == null || level == null) {

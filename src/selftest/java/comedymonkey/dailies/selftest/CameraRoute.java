@@ -286,9 +286,9 @@ final class CameraRoute {
             test.command("ride @s dismount");
             test.command("gamemode creative");
             test.onClientRun(() -> {
-                if (minecraft.screen != null && minecraft.player != null) {
+                if (minecraft.gui.screen() != null && minecraft.player != null) {
                     minecraft.player.closeContainer();
-                    minecraft.setScreen(null);
+                    minecraft.gui.setScreen(null);
                 }
             });
         }
@@ -818,7 +818,7 @@ final class CameraRoute {
                     return "no player or level";
                 }
                 return String.format(java.util.Locale.ROOT, "player at %.2f %.2f %.2f facing %.0f in %s, screen %s, portal %s: %s and %s", player.getX(), player.getY(), player.getZ(),
-                    player.getYRot(), minecraft.level.dimension().location(), minecraft.screen == null ? "none" : minecraft.screen.getClass().getSimpleName(), portal,
+                    player.getYRot(), minecraft.level.dimension().location(), minecraft.gui.screen() == null ? "none" : minecraft.gui.screen().getClass().getSimpleName(), portal,
                     portal == null ? "-" : minecraft.level.getBlockState(portal), portal == null ? "-" : minecraft.level.getBlockState(portal.east()));
             }));
             net.minecraft.client.server.IntegratedServer server = minecraft.getSingleplayerServer();
@@ -847,7 +847,7 @@ final class CameraRoute {
             check(false, notThere.getMessage() + "; " + whereAtThePortal(test));
         }
         RealWorldSteps.drive = null;
-        test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Nether to appear");
+        test.waitFor(() -> minecraft.gui.screen() == null && minecraft.player != null, 60, "the Nether to appear");
         RealWorldSteps.flying(test, false, 0.05F);
         RealWorldSteps.ticks(test, 20);
         walk(test, end, wandering(test, here(test), 60.0), false, 0, null);
@@ -860,7 +860,7 @@ final class CameraRoute {
         int x = plains.getX() + 200;
         int z = plains.getZ() + 200;
         test.command("execute in minecraft:overworld run tp @s " + x + " 220 " + z);
-        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD && minecraft.screen == null, 60, "the overworld again");
+        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD && minecraft.gui.screen() == null, 60, "the overworld again");
         RealWorldSteps.flying(test, true, 0.05F);
         int ground = RealWorldSteps.surface(x, z, Heightmap.Types.MOTION_BLOCKING);
         RealWorldSteps.goTo(test, x + 0.5, Math.max(ground, 63) + 60, z + 0.5, 0, 10);

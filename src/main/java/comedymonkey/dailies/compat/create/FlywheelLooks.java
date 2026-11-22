@@ -105,8 +105,8 @@ public final class FlywheelLooks {
             if (hideBlocks) {
                 // Every frame while they are hidden: chunks arrive, and a jump puts a whole new world in
                 int reach = minecraft.options.getEffectiveRenderDistance() + 1;
-                int centreX = minecraft.gameRenderer.getMainCamera().getBlockPosition().getX() >> 4;
-                int centreZ = minecraft.gameRenderer.getMainCamera().getBlockPosition().getZ() >> 4;
+                int centreX = minecraft.gameRenderer.mainCamera().getBlockPosition().getX() >> 4;
+                int centreZ = minecraft.gameRenderer.mainCamera().getBlockPosition().getZ() >> 4;
                 // Flywheel puts a block entity back by itself when its block changes. While it draws none, only those
                 // not taken out yet need asking for; while it still draws any, every one is asked for again
                 boolean noneDrawn = (int) visualCount.invoke(blockList) == 0;

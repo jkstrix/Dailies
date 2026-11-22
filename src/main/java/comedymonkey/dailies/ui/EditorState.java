@@ -129,7 +129,7 @@ final class EditorState {
     static void say(Component words) {
         notice = words;
         noticeAt = System.currentTimeMillis();
-        if (!(net.minecraft.client.Minecraft.getInstance().screen instanceof EditorScreen)) {
+        if (!(net.minecraft.client.Minecraft.getInstance().gui.screen() instanceof EditorScreen)) {
             // The editor's top bar would cover it
             Notices.show(words);
         }

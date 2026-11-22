@@ -60,7 +60,7 @@ final class WindowSteps {
             Villager villager = player.serverLevel().getEntitiesOfClass(Villager.class, player.getBoundingBox().inflate(6.0)).get(0);
             villager.mobInteract(player, InteractionHand.MAIN_HAND);
         })),
-        new Display("the inventory", "inventory", (test, minecraft) -> test.onClientRun(() -> minecraft.setScreen(new InventoryScreen(minecraft.player)))));
+        new Display("the inventory", "inventory", (test, minecraft) -> test.onClientRun(() -> minecraft.gui.setScreen(new InventoryScreen(minecraft.player)))));
 
     static void run(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
@@ -80,12 +80,12 @@ final class WindowSteps {
         test.waitTicks(30);
         for (Display window : WINDOWS) {
             window.opener().open(test, minecraft);
-            test.waitFor(() -> minecraft.screen != null, 10, window.label() + " to open in the live game");
+            test.waitFor(() -> minecraft.gui.screen() != null, 10, window.label() + " to open in the live game");
             test.waitTicks(20);
             ticks.add(test.onClient(() -> Recorder.get().recordingTick()));
             test.waitTicks(20);
             test.onClientRun(() -> minecraft.player.closeContainer());
-            test.waitFor(() -> minecraft.screen == null, 10, window.label() + " to close in the live game");
+            test.waitFor(() -> minecraft.gui.screen() == null, 10, window.label() + " to close in the live game");
             test.waitTicks(20);
         }
         JsonObject finished = test.tool("recording_finish", args("name", "Windows"));

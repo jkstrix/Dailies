@@ -5,7 +5,7 @@ import comedymonkey.dailies.export.Export;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /**
  * What is drawn over the view while framing a shot (specification chapter V, "The frame"): bars that leave a frame of
@@ -25,7 +25,7 @@ final class FrameGuides {
     private FrameGuides() {
     }
 
-    static void draw(GuiGraphics graphics, DeltaTracker delta) {
+    static void draw(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         Looks looks = LooksRenderer.current();
         if (looks == null || Export.active()) {
             return;

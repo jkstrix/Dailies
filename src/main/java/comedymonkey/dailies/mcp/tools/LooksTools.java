@@ -12,7 +12,7 @@ import comedymonkey.dailies.mcp.McpSchema;
 import comedymonkey.dailies.mcp.McpToolException;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -218,7 +218,7 @@ final class LooksTools {
         }
         List<String> ids = new ArrayList<>();
         for (String text : given) {
-            ResourceLocation id = ResourceLocation.tryParse(text.trim());
+            Identifier id = Identifier.tryParse(text.trim());
             if (id == null || !registry.containsKey(id)) {
                 throw new McpToolException("'" + argument + "' has \"" + text + "\", which is not the id of a known " + what);
             }

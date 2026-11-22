@@ -21,7 +21,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.MenuAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import org.jetbrains.annotations.Nullable;
@@ -120,7 +120,7 @@ public final class Compats {
     }
 
     private static String menuKey(String menuType) {
-        ResourceLocation key = menuType == null ? null : ResourceLocation.tryParse(menuType);
+        Identifier key = menuType == null ? null : Identifier.tryParse(menuType);
         if (key == null) {
             throw new IllegalArgumentException("'" + menuType + "' is not a menu type id such as 'mymod:press'");
         }
@@ -160,7 +160,7 @@ public final class Compats {
             return null;
         }
         try {
-            ResourceLocation key = BuiltInRegistries.MENU.getKey(menu.getType());
+            Identifier key = BuiltInRegistries.MENU.getKey(menu.getType());
             return key == null ? null : key.toString();
         } catch (UnsupportedOperationException none) {
             return null;

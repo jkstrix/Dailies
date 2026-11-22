@@ -5,7 +5,7 @@ import comedymonkey.dailies.library.DiskGuard;
 import comedymonkey.dailies.library.Retention;
 import comedymonkey.dailies.library.StorageReport;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -163,7 +163,7 @@ final class StorageView extends LibraryView {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             int labelWidth = Math.min(110, this.width * 30 / 100);
             int numberWidth = 64;
             Kit.text(graphics, font, Kit.clip(font, this.label.getString(), labelWidth - 4), this.x + 1, this.y + 3, Controls.PARCHMENT);
@@ -189,7 +189,7 @@ final class StorageView extends LibraryView {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             int column = Math.max(48, Math.min(70, this.width / 6));
             int nameWidth = this.width - column * 4;
             int colour = this.world == null ? Controls.BRASS_BRIGHT : Controls.PARCHMENT;

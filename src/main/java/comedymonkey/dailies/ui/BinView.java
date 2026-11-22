@@ -4,10 +4,10 @@ import comedymonkey.dailies.library.Bin;
 import comedymonkey.dailies.library.Library;
 import comedymonkey.dailies.library.Retention;
 import comedymonkey.dailies.library.StorageReport;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -156,8 +156,8 @@ final class BinView extends LibraryView {
         long size = this.screen.binItems.stream().mapToLong(item -> item.size).sum();
         int count = this.screen.binItems.size();
         Minecraft game = Minecraft.getInstance();
-        game.setScreen(new AskScreen(yes -> {
-            game.setScreen(this.screen);
+        game.gui.setScreen(new AskScreen(yes -> {
+            game.gui.setScreen(this.screen);
             if (yes) {
                 this.chosen = null;
                 this.screen.work(Library::emptyBin, t("bin.emptied", count));
@@ -193,7 +193,7 @@ final class BinView extends LibraryView {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean picked = this.item.id.equals(BinView.this.chosen);
             boolean hovered = this.over(mouseX, mouseY);
             if (picked) {

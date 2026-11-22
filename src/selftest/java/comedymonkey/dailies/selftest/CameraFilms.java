@@ -140,7 +140,7 @@ final class CameraFilms {
         // A scene of its own, at the start of the stretch, with the viewer where a person setting up a shot would stand
         int scene = test.onClient(() -> EditorSession.history().addScene("Camera test: " + camera + " in the " + place));
         test.onClientRun(() -> {
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
             Playback.jumpTo(start, true);
         });
         test.waitFor(() -> !Playback.jumping() && Playback.position() == start, 120, "the jump to the start of the " + place + " stretch");

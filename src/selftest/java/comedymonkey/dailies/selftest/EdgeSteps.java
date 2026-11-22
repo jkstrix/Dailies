@@ -255,7 +255,7 @@ final class EdgeSteps {
         int at = mark("the recorder falls out of the world");
         still("edges-void-falling", at + 10, 46.5, -80.0, 8.5, 40.5, -100.0, 2.5, false);
         try {
-            test.waitFor(() -> minecraft.screen instanceof DeathScreen, 30, "the recorder to die in the void");
+            test.waitFor(() -> minecraft.gui.screen() instanceof DeathScreen, 30, "the recorder to die in the void");
         } catch (Throwable never) {
             problems.add("the recorder did not die in the void within thirty seconds");
             c("gamemode creative");
@@ -265,9 +265,9 @@ final class EdgeSteps {
         waitTicks(30);
         test.onClientRun(() -> {
             minecraft.player.respawn();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
-        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn");
+        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.gui.screen() == null, 30, "the respawn");
         waitTicks(10);
         checkEmptied(test, minecraft, "dying in the void");
         at = mark("the recorder respawned");
@@ -303,7 +303,7 @@ final class EdgeSteps {
     /** What the server holds of the rule and the game mode that decide whether a death spills what is carried, for the log */
     private static void sayRules(SelfTest test, String before) throws Exception {
         BestiarySteps.server("the rules before " + before, (level, player) -> test.log("edges: before " + before + " keepInventory is "
-            + level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY) + ", the recorder is in "
+            + level.getGameRules().getBoolean(net.minecraft.world.level.gamerules.GameRules.RULE_KEEPINVENTORY) + ", the recorder is in "
             + ((net.minecraft.server.level.ServerPlayer) player).gameMode.getGameModeForPlayer() + " carrying " + (36 - countEmpty(((net.minecraft.server.level.ServerPlayer) player).getInventory())) + " stacks"));
     }
 
@@ -356,7 +356,7 @@ final class EdgeSteps {
         c(String.format(java.util.Locale.ROOT, "tp @s %.1f %d %.1f 0 60", landX, Y + 60, landZ));
         int at = mark("the recorder falls sixty blocks");
         try {
-            test.waitFor(() -> minecraft.screen instanceof DeathScreen, 20, "the recorder to die from the fall");
+            test.waitFor(() -> minecraft.gui.screen() instanceof DeathScreen, 20, "the recorder to die from the fall");
         } catch (Throwable never) {
             problems.add("the recorder did not die from a sixty block fall");
             c("gamemode creative");
@@ -367,9 +367,9 @@ final class EdgeSteps {
         waitTicks(40);
         test.onClientRun(() -> {
             minecraft.player.respawn();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
-        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn after the fall");
+        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.gui.screen() == null, 30, "the respawn after the fall");
         waitTicks(10);
         checkEmptied(test, minecraft, "the sixty block fall");
         waitTicks(30);

@@ -10,8 +10,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.texture.AbstractTexture;
-import net.minecraft.client.resources.PlayerSkin;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.player.PlayerSkin;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 
@@ -55,7 +55,7 @@ final class SkinCapture {
 
     private static final Map<UUID, Built> BUILT = new HashMap<>();
     /** Each picture as a PNG, by the name the game registered its texture under */
-    private static final Map<ResourceLocation, byte[]> PICTURES = new HashMap<>();
+    private static final Map<Identifier, byte[]> PICTURES = new HashMap<>();
     /** What the recording being made holds for each player since its latest snapshot */
     private static final Map<UUID, PlayerSkin> WRITTEN = new HashMap<>();
     /** Stands for a picture that could not be read: written as "none" */
@@ -80,7 +80,7 @@ final class SkinCapture {
         }
         for (PlayerInfo info : new ArrayList<>(listener.getOnlinePlayers())) {
             try {
-                UUID id = info.getProfile().getId();
+                UUID id = info.getProfile().id();
                 Built built = build(id, info.getSkin());
                 out.extension(ID, built.record());
                 if (built.whole()) {
@@ -102,7 +102,7 @@ final class SkinCapture {
                 return;
             }
             for (PlayerInfo info : new ArrayList<>(listener.getOnlinePlayers())) {
-                UUID id = info.getProfile().getId();
+                UUID id = info.getProfile().id();
                 PlayerSkin skin = info.getSkin();
                 if (skin.equals(WRITTEN.get(id))) {
                     continue;
@@ -156,7 +156,7 @@ final class SkinCapture {
     /**
      * @return the picture a registered texture holds, as a PNG, or null when the game has not finished loading it
      */
-    private static @Nullable byte[] picture(ResourceLocation location) {
+    private static @Nullable byte[] picture(Identifier location) {
         byte[] known = PICTURES.get(location);
         if (known != null) {
             return known;

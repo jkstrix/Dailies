@@ -63,7 +63,7 @@ final class WorldLines {
     /** Whether anything of Dailies may be drawn into the world just now */
     static boolean allowed() {
         Minecraft minecraft = Minecraft.getInstance();
-        return Playback.loaded() && !Export.active() && !Notices.hidden() && !minecraft.options.hideGui && minecraft.level != null;
+        return Playback.loaded() && !Export.active() && !Notices.hidden() && !comedymonkey.dailies.ui.HudHidden.get() && minecraft.level != null;
     }
 
     private static void draw(Camera camera, Matrix4f modelView) {
@@ -108,14 +108,14 @@ final class WorldLines {
      */
     static double @Nullable [] onScreen(Vec3 point, int screenWidth, int screenHeight) {
         Minecraft minecraft = Minecraft.getInstance();
-        Camera camera = minecraft.gameRenderer.getMainCamera();
+        Camera camera = minecraft.gameRenderer.mainCamera();
         if (!camera.isInitialized()) {
             return null;
         }
-        Vec3 from = point.subtract(camera.getPosition());
-        Vector3f look = camera.getLookVector();
-        Vector3f above = camera.getUpVector();
-        Vector3f left = camera.getLeftVector();
+        Vec3 from = point.subtract(camera.position());
+        Vector3f look = camera.forwardVector();
+        Vector3f above = camera.upVector();
+        Vector3f left = camera.leftVector();
         double ahead = from.x * look.x() + from.y * look.y() + from.z * look.z();
         if (ahead < NEAR) {
             return null;
@@ -152,8 +152,8 @@ final class WorldLines {
         private final FloatList middles = new FloatList();
 
         Batch(Camera camera) {
-            this.eye = camera.getPosition();
-            Vector3f look = camera.getLookVector();
+            this.eye = camera.position();
+            Vector3f look = camera.forwardVector();
             this.lookX = look.x();
             this.lookY = look.y();
             this.lookZ = look.z();
@@ -277,9 +277,9 @@ final class WorldLines {
             if (ahead < NEAR) {
                 return;
             }
-            Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
-            Vector3f up = camera.getUpVector();
-            Vector3f left = camera.getLeftVector();
+            Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
+            Vector3f up = camera.upVector();
+            Vector3f left = camera.leftVector();
             double unit = this.perPixel * ahead * this.scale;
             float strength = fade(ahead) * alpha;
             this.facing(this.borders, x, y, z, up, left, unit * (pixels + BORDER_PIXELS * 1.5F), BORDER, strength * 0.85F);

@@ -395,12 +395,12 @@ public final class Moments {
 
         if (session.ticks % 20 == 1) {
             BlockPos pos = player.blockPosition();
-            session.biome = level.getBiome(pos).unwrapKey().map(key -> key.location().toString()).orElse(null);
+            session.biome = level.getBiome(pos).unwrapKey().map(key -> key.identifier().toString()).orElse(null);
 
             ClientPacketListener connection = minecraft.getConnection();
             if (connection != null) {
                 for (PlayerInfo info : connection.getOnlinePlayers()) {
-                    PLAYER_NAMES.put(info.getProfile().getId(), info.getProfile().getName());
+                    PLAYER_NAMES.put(info.getProfile().id(), info.getProfile().name());
                 }
             }
         }
@@ -415,7 +415,7 @@ public final class Moments {
                 session.session.addReplay(replayUuid);
             }
         }
-        current = new TimeRef(System.currentTimeMillis(), level.getGameTime(), level.getDayTime(), level.dimension().location().toString(),
+        current = new TimeRef(System.currentTimeMillis(), level.getGameTime(), level.getOverworldClockTime(), level.dimension().identifier().toString(),
             session.biome, player.getX(), player.getY(), player.getZ(), replayUuid, replayTick);
 
         session.gameplay.tick(minecraft, player, level, session.biome);
@@ -454,7 +454,7 @@ public final class Moments {
         meta.addProperty("world_type", worldType);
         meta.addProperty("world_key", worldKey);
         meta.addProperty("server_address", address);
-        meta.add("local_player", MJson.player(player.getUUID().toString(), player.getGameProfile().getName()));
+        meta.add("local_player", MJson.player(player.getUUID().toString(), player.getGameProfile().name()));
         meta.add("replays", new com.google.gson.JsonArray());
         meta.addProperty("mod_version", Host.get().modVersion());
 
@@ -463,9 +463,9 @@ public final class Moments {
         session.firsts = storage.getFirsts(worldKey);
         // Right after logging in the server sends every statistic on the first request; later it only sends changes
         boolean statsBaselineComplete = ticksSinceLogin < 20 * 30;
-        session.gameplay = new GameplayTracker(session.session, session.firsts, player.getUUID(), player.getGameProfile().getName(), statsBaselineComplete);
+        session.gameplay = new GameplayTracker(session.session, session.firsts, player.getUUID(), player.getGameProfile().name(), statsBaselineComplete);
         session.interactions = new InteractionTracker(session.session, session.firsts);
-        PLAYER_NAMES.put(player.getUUID(), player.getGameProfile().getName());
+        PLAYER_NAMES.put(player.getUUID(), player.getGameProfile().name());
         active = session;
         Host.LOGGER.info("Moments: started session {} ({} '{}')", session.session.id, worldType, worldName);
         return session;

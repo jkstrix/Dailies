@@ -1,6 +1,6 @@
 package comedymonkey.dailies.api.compat;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.jetbrains.annotations.Nullable;
 
 /** An overlay drawn over play: see {@link Claims#overlay} */
@@ -19,7 +19,7 @@ public interface OverlayPart {
      *
      * @param version the compat's version that wrote the state
      */
-    void draw(GuiGraphics graphics, byte[] state, int version, float partialTick);
+    void draw(GuiGraphicsExtractor graphics, byte[] state, int version, float partialTick);
 
     /** The fewest ticks between two writes of a changed state, as for {@link ScreenPart#ticksBetweenWrites} */
     default int ticksBetweenWrites() {

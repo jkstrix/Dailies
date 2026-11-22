@@ -8,7 +8,7 @@ import comedymonkey.dailies.file.SafePaths;
 import comedymonkey.dailies.packs.GamePacks;
 import comedymonkey.dailies.packs.PackLog;
 import comedymonkey.dailies.ui.Notices;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.server.DownloadedPackSource;
 import net.minecraft.network.chat.Component;
@@ -216,7 +216,7 @@ public final class PackPlayback implements GamePacks.Listener {
             hold();
             return;
         }
-        if (ownPacksLost && minecraft.getOverlay() == null) {
+        if (ownPacksLost && minecraft.gui.overlay() == null) {
             restoreOwnPacks(minecraft);
         }
 
@@ -225,7 +225,7 @@ public final class PackPlayback implements GamePacks.Listener {
         if (wantedShas.equals(appliedShas())) {
             // The recording can run on while the game's loading screen fades, but nothing may take a picture through it
             busy = false;
-            covered = covered && minecraft.getOverlay() != null;
+            covered = covered && minecraft.gui.overlay() != null;
             return;
         }
         hold();

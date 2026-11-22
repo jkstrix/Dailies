@@ -38,7 +38,7 @@ public final class FrameHold {
         }
         try {
             Minecraft minecraft = Minecraft.getInstance();
-            RenderTarget main = minecraft.getMainRenderTarget();
+            RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
             if (!Playback.loaded() || comedymonkey.dailies.export.Export.active()) {
                 whole = false;
                 return;
@@ -78,7 +78,7 @@ public final class FrameHold {
         GL30.glBlitFramebuffer(0, 0, from.width, from.height, 0, 0, to.width, to.height, GL30.GL_COLOR_BUFFER_BIT, GL30.GL_NEAREST);
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
         // The game draws the panels and the HUD into the window's picture next, and expects it to be the one bound
-        Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        Minecraft.getInstance().gameRenderer.mainRenderTarget().bindWrite(false);
     }
 
 }

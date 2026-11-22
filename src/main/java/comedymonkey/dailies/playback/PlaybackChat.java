@@ -37,7 +37,7 @@ public final class PlaybackChat {
     public static void say(Component message) {
         ours++;
         try {
-            net.minecraft.client.Minecraft.getInstance().gui.getChat().addMessage(message);
+            net.minecraft.client.Minecraft.getInstance().gui.hud.getChat().addMessage(message);
         } finally {
             ours--;
         }

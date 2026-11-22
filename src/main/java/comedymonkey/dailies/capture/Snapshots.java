@@ -30,7 +30,7 @@ import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -253,7 +253,7 @@ public final class Snapshots {
      * hundreds of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
      */
     static void arrived(int x, int z, byte[] name) {
-        CHUNKS.put(ChunkPos.asLong(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
+        CHUNKS.put(ChunkPos.pack(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
     }
 
     /** Why each chunk has to be described afresh at the next snapshot, the first reason seen: for the log of what storing costs */
@@ -262,7 +262,7 @@ public final class Snapshots {
     public static final Map<String, Integer> REASONS = new java.util.TreeMap<>();
 
     private static void because(net.minecraft.core.BlockPos pos, String reason) {
-        WHY.putIfAbsent(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), reason);
+        WHY.putIfAbsent(ChunkPos.pack(pos.getX() >> 4, pos.getZ() >> 4), reason);
     }
 
     /** A packet is about to be applied. Any chunk it changes has to be described afresh in the next snapshot */
@@ -293,13 +293,13 @@ public final class Snapshots {
             // New light and nothing else: the chunk's blocks are as stored, so it keeps its stored form and the next snapshot
             // adds its light as it is then, as for a chunk whose neighbour changed. Forgetting it had the chunks the server
             // sends light for, the ones round any change, described whole again
-            CHUNKS.computeIfPresent(ChunkPos.asLong(light.getX(), light.getZ()), (key, stored) -> stored.withLightChanged());
+            CHUNKS.computeIfPresent(ChunkPos.asLong(light.x(), light.z()), (key, stored) -> stored.withLightChanged());
         } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
-            CHUNKS.remove(ChunkPos.asLong(chunk.getX(), chunk.getZ()));
+            CHUNKS.remove(ChunkPos.asLong(chunk.x(), chunk.z()));
         } else if (packet instanceof ClientboundForgetLevelChunkPacket forgotten) {
-            CHUNKS.remove(forgotten.pos().toLong());
+            CHUNKS.remove(forgotten.pos().pack());
         } else if (packet instanceof ClientboundChunksBiomesPacket biomes) {
-            biomes.chunkBiomeData().forEach(data -> CHUNKS.remove(data.pos().toLong()));
+            biomes.chunkBiomeData().forEach(data -> CHUNKS.remove(data.pos().pack()));
         } else if (packet instanceof ClientboundExplodePacket explosion) {
             explosion.getToBlow().forEach(pos -> changed(pos, null));
         }
@@ -312,7 +312,7 @@ public final class Snapshots {
      */
     private static void dirty(BlockPos pos) {
         int x = pos.getX() >> 4, z = pos.getZ() >> 4;
-        CHUNKS.remove(ChunkPos.asLong(x, z));
+        CHUNKS.remove(ChunkPos.pack(x, z));
         lightNextDoor(x, z);
     }
 
@@ -326,7 +326,7 @@ public final class Snapshots {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 if (dx != 0 || dz != 0) {
-                    CHUNKS.computeIfPresent(ChunkPos.asLong(x + dx, z + dz), (key, stored) -> stored.withLightChanged());
+                    CHUNKS.computeIfPresent(ChunkPos.pack(x + dx, z + dz), (key, stored) -> stored.withLightChanged());
                 }
             }
         }
@@ -344,7 +344,7 @@ public final class Snapshots {
     private static void changed(BlockPos pos, @org.jetbrains.annotations.Nullable net.minecraft.world.level.block.state.BlockState to) {
         int x = pos.getX() >> 4;
         int z = pos.getZ() >> 4;
-        CHUNKS.remove(ChunkPos.asLong(x, z));
+        CHUNKS.remove(ChunkPos.pack(x, z));
         ClientLevel level = Minecraft.getInstance().level;
         if (to != null && level != null && !lightMayChange(level, pos, level.getBlockState(pos), to)) {
             return;
@@ -518,7 +518,7 @@ public final class Snapshots {
         out.packet(new ClientboundSetSimulationDistancePacket(distances.dailies$serverSimulationDistance()));
         out.packet(new ClientboundChangeDifficultyPacket(level.getDifficulty(), level.getLevelData().isDifficultyLocked()));
         out.packet(new ClientboundSetDefaultSpawnPositionPacket(level.getSharedSpawnPos(), level.getSharedSpawnAngle()));
-        out.packet(new ClientboundSetTimePacket(level.getGameTime(), level.getDayTime(), level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)));
+        out.packet(new ClientboundSetTimePacket(level.getGameTime(), level.getOverworldClockTime(), level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)));
         out.packet(new ClientboundInitializeBorderPacket(level.getWorldBorder()));
         if (level.getRainLevel(1.0F) > 0.0F) {
             out.packet(new ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 0.0F));
@@ -530,10 +530,10 @@ public final class Snapshots {
         List<ClientboundPlayerInfoUpdatePacket.Entry> players = new ArrayList<>();
         Set<PlayerInfo> listed = new HashSet<>(listener.getListedOnlinePlayers());
         for (PlayerInfo info : listener.getOnlinePlayers()) {
-            if (playback != null && info.getProfile().getId().equals(playback.viewerProfile())) {
+            if (playback != null && info.getProfile().id().equals(playback.viewerProfile())) {
                 continue;
             }
-            players.add(new ClientboundPlayerInfoUpdatePacket.Entry(info.getProfile().getId(), info.getProfile(), listed.contains(info), info.getLatency(),
+            players.add(new ClientboundPlayerInfoUpdatePacket.Entry(info.getProfile().id(), info.getProfile(), listed.contains(info), info.getLatency(),
                 info.getGameMode(), info.getTabListDisplayName(), null));
         }
         if (!players.isEmpty()) {
@@ -557,7 +557,7 @@ public final class Snapshots {
         for (PlayerTeam team : scoreboard.getPlayerTeams()) {
             out.packet(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
         }
-        minecraft.gui.getBossOverlay().events.values().forEach(bar -> out.packet(addBar(bar)));
+        minecraft.gui.hud.getBossOverlay().events.values().forEach(bar -> out.packet(addBar(bar)));
     }
 
     /**
@@ -619,7 +619,7 @@ public final class Snapshots {
                 if (chunk == null) {
                     continue;
                 }
-                long key = ChunkPos.asLong(x, z);
+                long key = ChunkPos.pack(x, z);
                 present.add(key);
                 count++;
                 openLids(chunk, lids);

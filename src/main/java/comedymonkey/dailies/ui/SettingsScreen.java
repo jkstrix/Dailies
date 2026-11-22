@@ -1,20 +1,20 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.config.Setting;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.fml.loading.FMLPaths;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -79,7 +79,7 @@ public final class SettingsScreen extends KitScreen {
 
     /** Opens the settings. From the mods list, the pause menu, the title screen and the /dailies config command */
     public static void open(@Nullable Screen parent) {
-        Minecraft.getInstance().setScreen(new SettingsScreen(parent));
+        Minecraft.getInstance().gui.setScreen(new SettingsScreen(parent));
     }
 
     /** The screen without putting it up, for the mods list, which does that itself */
@@ -323,7 +323,7 @@ public final class SettingsScreen extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         this.heading(graphics, font, null);
         Kit.icon(graphics, Kit.Icon.SEARCH, this.search.x - 8, this.search.y + Kit.ROW / 2, Controls.PARCHMENT_DIM);
         int different = 0;
@@ -360,7 +360,7 @@ public final class SettingsScreen extends KitScreen {
 
     @Override
     boolean keyElsewhere(int keyCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_F && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
+        if (keyCode == InputConstants.KEY_F && (modifiers & InputConstants.MOD_CONTROL) != 0) {
             this.search.focus();
             return true;
         }
@@ -565,7 +565,7 @@ public final class SettingsScreen extends KitScreen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean hovered = this.over(mouseX, mouseY) && !this.reset.over(mouseX, mouseY);
             int top = this.y + 3;
             int bottom = this.y + this.height - 1;
@@ -814,7 +814,7 @@ public final class SettingsScreen extends KitScreen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean different = SettingsScreen.this.changed(this.setting);
             if (this.over(mouseX, mouseY)) {
                 // The row under the mouse, so the eye can follow from a name to its control
@@ -975,7 +975,7 @@ public final class SettingsScreen extends KitScreen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             this.box.draw(graphics, font, mouseX, mouseY);
             this.test.draw(graphics, font, mouseX, mouseY);
             Component said = this.result;

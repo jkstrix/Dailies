@@ -8,9 +8,9 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.PlaybackExtensions;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import org.jetbrains.annotations.Nullable;
@@ -49,8 +49,8 @@ final class CompatLayer {
     static void register(RegisterGuiLayersEvent event) {
         // Overlays where the HUD is, under the recorder's windows (registered just above the saving indicator before this);
         // screens over the windows, as either is the screen the recorder's game had open
-        event.registerAbove(VanillaGuiLayers.SAVING_INDICATOR, ResourceLocation.fromNamespaceAndPath(Dailies.ID, "compat_overlays"), CompatLayer::drawOverlays);
-        event.registerAbove(ResourceLocation.fromNamespaceAndPath(Dailies.ID, "recorder_windows"), ResourceLocation.fromNamespaceAndPath(Dailies.ID, "compat_screens"),
+        event.registerAbove(VanillaGuiLayers.SAVING_INDICATOR, Identifier.fromNamespaceAndPath(Dailies.ID, "compat_overlays"), CompatLayer::drawOverlays);
+        event.registerAbove(Identifier.fromNamespaceAndPath(Dailies.ID, "recorder_windows"), Identifier.fromNamespaceAndPath(Dailies.ID, "compat_screens"),
             CompatLayer::drawScreens);
     }
 
@@ -116,7 +116,7 @@ final class CompatLayer {
 
     // --- Drawing ---
 
-    private static void drawOverlays(GuiGraphics graphics, DeltaTracker delta) {
+    private static void drawOverlays(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         if (PLAYED.isEmpty() || !Playback.loaded()) {
             return;
         }
@@ -129,19 +129,19 @@ final class CompatLayer {
             if (held == null || SAID.contains(claim.drawnAs())) {
                 continue;
             }
-            graphics.pose().pushPose();
+            graphics.pose().pushMatrix();
             try {
                 ((OverlayPart) claim.part()).draw(graphics, held.state(), held.version(), delta.getGameTimeDeltaPartialTick(false));
                 drawn(claim);
             } catch (Throwable t) {
                 leaveOut(claim, "could not be drawn", t);
             } finally {
-                graphics.pose().popPose();
+                graphics.pose().popMatrix();
             }
         }
     }
 
-    private static void drawScreens(GuiGraphics graphics, DeltaTracker delta) {
+    private static void drawScreens(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         if (PLAYED.isEmpty() || !Playback.loaded()) {
             return;
         }
@@ -161,7 +161,7 @@ final class CompatLayer {
         }
     }
 
-    private static void drawScreen(GuiGraphics graphics, DeltaTracker delta, Minecraft minecraft, Played played, CompatClaims.Claim claim) {
+    private static void drawScreen(GuiGraphicsExtractor graphics, DeltaTracker delta, Minecraft minecraft, Played played, CompatClaims.Claim claim) {
         CompatHeld.Held held = played.held.held(claim.name());
         ScreenPart part = (ScreenPart) claim.part();
         int width = graphics.guiWidth();

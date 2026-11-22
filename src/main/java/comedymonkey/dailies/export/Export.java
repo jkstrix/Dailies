@@ -23,7 +23,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 
 /**
  * Renders a scene's range to pictures or a video, one frame at a time, however long each frame takes (specification
@@ -347,14 +347,12 @@ public final class Export {
 
     /** The size of the window on the desktop, in pixels, whatever size the game is drawing at */
     private static int[] realWindowSize(Window window) {
-        int[] width = new int[1];
-        int[] height = new int[1];
-        org.lwjgl.glfw.GLFW.glfwGetFramebufferSize(window.getWindow(), width, height);
-        if (width[0] <= 0 || height[0] <= 0) {
+        if (window.isIconified()) {
             // Minimised: the game's record is the best there is
             return new int[]{window.getWidth(), window.getHeight()};
         }
-        return new int[]{width[0], height[0]};
+        Window.FramebufferSize size = window.queryFramebufferSize();
+        return new int[]{size.width(), size.height()};
     }
 
     public static void windowResized(int width, int height) {
@@ -470,7 +468,7 @@ public final class Export {
             int[] real = realWindowSize(window);
             savedWidth = realWidth = real[0];
             savedHeight = realHeight = real[1];
-            savedHideGui = minecraft.options.hideGui;
+            savedHideGui = comedymonkey.dailies.ui.HudHidden.get();
             savedFollow = EditorSession.followCamera();
             startedNanos = System.nanoTime();
             active = true;
@@ -478,7 +476,7 @@ public final class Export {
             // An export draws each frame once and moves on: nothing should make it wait for the monitor or a frame limit
             window.updateVsync(false);
             window.setFramerateLimit(260);
-            minecraft.options.hideGui = wanted.hideGui || !scene.looks().showHud;
+            comedymonkey.dailies.ui.HudHidden.set(wanted.hideGui || !scene.looks().showHud);
             window.setWidth(wanted.width * scale);
             window.setHeight(wanted.height * scale);
             minecraft.resizeDisplay();
@@ -772,7 +770,7 @@ public final class Export {
                 framesToThrowAway--;
                 return;
             }
-            RenderTarget target = minecraft.getMainRenderTarget();
+            RenderTarget target = minecraft.gameRenderer.mainRenderTarget();
             if (settings.burnCaptions && !settings.still) {
                 List<Captions.Cue> cues = burnCues;
                 if (cues == null && System.currentTimeMillis() - captionWaitSince < CAPTION_WAIT_MILLIS) {
@@ -1023,7 +1021,7 @@ public final class Export {
         window.setWidth(realWidth > 0 ? realWidth : savedWidth);
         window.setHeight(realHeight > 0 ? realHeight : savedHeight);
         minecraft.resizeDisplay();
-        minecraft.options.hideGui = savedHideGui;
+        comedymonkey.dailies.ui.HudHidden.set(savedHideGui);
         minecraft.updateTitle();
         if (!wasStill) {
             EditorSession.setExporting(false);

@@ -62,7 +62,7 @@ final class ViewPick {
         if (minecraft.level == null || screenWidth <= 0 || screenHeight <= 0) {
             return null;
         }
-        Camera camera = minecraft.gameRenderer.getMainCamera();
+        Camera camera = minecraft.gameRenderer.mainCamera();
         if (!camera.isInitialized()) {
             return null;
         }
@@ -76,16 +76,16 @@ final class ViewPick {
         }
         double tangent = Math.tan(Math.toRadians(Math.max(1.0, Math.min(170.0, fieldOfView)) / 2.0));
         double aspect = (double) minecraft.getWindow().getWidth() / Math.max(1, minecraft.getWindow().getHeight());
-        Vector3f look = camera.getLookVector();
-        Vector3f above = camera.getUpVector();
-        Vector3f left = camera.getLeftVector();
+        Vector3f look = camera.forwardVector();
+        Vector3f above = camera.upVector();
+        Vector3f left = camera.leftVector();
         double sideways = -across * tangent * aspect;
         double upwards = up * tangent;
         Vec3 direction = new Vec3(
                 look.x() + left.x() * sideways + above.x() * upwards,
                 look.y() + left.y() * sideways + above.y() * upwards,
                 look.z() + left.z() * sideways + above.z() * upwards).normalize();
-        return new Ray(camera.getPosition(), direction);
+        return new Ray(camera.position(), direction);
     }
 
     /** The line of sight straight ahead of the viewer */
@@ -94,12 +94,12 @@ final class ViewPick {
         if (minecraft.level == null) {
             return null;
         }
-        Camera camera = minecraft.gameRenderer.getMainCamera();
+        Camera camera = minecraft.gameRenderer.mainCamera();
         if (!camera.isInitialized()) {
             return null;
         }
-        Vector3f look = camera.getLookVector();
-        return new Ray(camera.getPosition(), new Vec3(look.x(), look.y(), look.z()).normalize());
+        Vector3f look = camera.forwardVector();
+        return new Ray(camera.position(), new Vec3(look.x(), look.y(), look.z()).normalize());
     }
 
     /** The first block the line of sight meets, or null when it meets none within reach */

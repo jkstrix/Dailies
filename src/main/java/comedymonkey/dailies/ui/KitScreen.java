@@ -1,12 +1,12 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +49,7 @@ public abstract class KitScreen extends Screen {
     abstract void arrange(Font font);
 
     /** Draws what is on the plate besides the controls: its title, its words */
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
     }
 
     /** Whether the world behind is blurred and dimmed. A screen a recording keeps playing behind leaves it alone */
@@ -82,13 +82,13 @@ public abstract class KitScreen extends Screen {
     }
 
     /** The title at the top of the plate with a rule under it. Returns where what follows may start */
-    int heading(GuiGraphics graphics, Font font, @Nullable Component under) {
+    int heading(GuiGraphicsExtractor graphics, Font font, @Nullable Component under) {
         int line = this.top + 8;
         Kit.text(graphics, font, Kit.clip(font, this.title.getString(), this.right - this.left - 16), this.left + 8, line, Controls.BRASS_BRIGHT);
         line += 12;
         if (under != null) {
             for (net.minecraft.util.FormattedCharSequence part : font.split(under, Math.max(40, this.right - this.left - 16))) {
-                graphics.drawString(font, part, this.left + 8, line, Controls.PARCHMENT_DIM, false);
+                graphics.text(font, part, this.left + 8, line, Controls.PARCHMENT_DIM, false);
                 line += 10;
             }
             line += 2;
@@ -149,18 +149,18 @@ public abstract class KitScreen extends Screen {
 
     @Override
     public void onClose() {
-        this.minecraft.setScreen(this.parent);
+        this.minecraft.gui.setScreen(this.parent);
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         if (this.dimsWorld()) {
             super.renderBackground(graphics, mouseX, mouseY, partialTick);
         }
     }
 
     @Override
-    public void render(GuiGraphics graphics, int realMouseX, int realMouseY, float partialTick) {
+    public void render(GuiGraphicsExtractor graphics, int realMouseX, int realMouseY, float partialTick) {
         int mouseX = this.pointX >= 0 ? this.pointX : realMouseX;
         int mouseY = this.pointX >= 0 ? this.pointY : realMouseY;
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
@@ -290,7 +290,7 @@ public abstract class KitScreen extends Screen {
         boolean back = InputRouter.back(modifiers);
         if (Entry.typing()) {
             Entry box = Entry.focused;
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE && !box.dirty()) {
+            if (keyCode == InputConstants.KEY_ESCAPE && !box.dirty()) {
                 // Nothing typed would be lost, so Escape means what it means everywhere else
                 Entry.drop();
                 this.onClose();
@@ -299,9 +299,9 @@ public abstract class KitScreen extends Screen {
             }
             return;
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             this.onClose();
-        } else if (keyCode == GLFW.GLFW_KEY_TAB) {
+        } else if (keyCode == InputConstants.KEY_TAB) {
             this.moveFocus(Gadget.focus, back);
         } else if (Gadget.focus != null && Gadget.focus.key(keyCode, modifiers)) {
             return;

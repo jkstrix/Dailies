@@ -5,10 +5,10 @@ import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.library.Library;
 import comedymonkey.dailies.library.LibraryIndex;
 import comedymonkey.dailies.library.LibraryJob;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -78,7 +78,7 @@ public final class CombineScreen extends KitScreen {
         this.total.tip(t("total.tip"));
         this.notes = new Gadget() {
             @Override
-            void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
                 boolean refused = CombineScreen.this.versionTrouble() != null;
                 Kit.text(graphics, font, Kit.clip(font, CombineScreen.this.notesWords().getString(), this.width), this.x + 1, this.y + 3,
                     refused ? Controls.ALERT : Controls.PARCHMENT_DIM);
@@ -248,7 +248,7 @@ public final class CombineScreen extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         this.heading(graphics, font, t("explained"));
         Kit.text(graphics, font, t("name").getString(), this.left + 9, this.nameBox.y + 3, Controls.PARCHMENT);
     }
@@ -408,7 +408,7 @@ public final class CombineScreen extends KitScreen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             if (CombineScreen.this.order.isEmpty()) {
                 return;
             }
@@ -416,7 +416,7 @@ public final class CombineScreen extends KitScreen {
             boolean held = CombineScreen.this.dragging == this.index;
             boolean hovered = this.over(mouseX, mouseY);
             graphics.fill(this.x, this.y, this.x + this.width, this.y + this.height, held ? Controls.HIGHLIGHT : hovered ? 0x28D4B25A : 0x18000000);
-            graphics.renderOutline(this.x, this.y, this.width, this.height, held ? Controls.BRASS_BRIGHT : 0x40D4B25A);
+            graphics.outline(this.x, this.y, this.width, this.height, held ? Controls.BRASS_BRIGHT : 0x40D4B25A);
             // The handle: six dots, the sign of something that can be dragged
             for (int row = 0; row < 3; row++) {
                 for (int column = 0; column < 2; column++) {
@@ -541,7 +541,7 @@ public final class CombineScreen extends KitScreen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             if (this.next >= CombineScreen.this.order.size()) {
                 return;
             }

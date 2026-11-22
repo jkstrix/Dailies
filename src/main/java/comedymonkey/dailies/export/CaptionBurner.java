@@ -10,14 +10,14 @@ import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.moments.Moments;
 import comedymonkey.dailies.moments.MomentsTranscript;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -41,8 +41,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class CaptionBurner {
 
-    private static final ResourceLocation UNIFORM = ResourceLocation.withDefaultNamespace("uniform");
-    private static final ResourceLocation DEFAULT = ResourceLocation.withDefaultNamespace("default");
+    private static final Identifier UNIFORM = Identifier.withDefaultNamespace("uniform");
+    private static final Identifier DEFAULT = Identifier.withDefaultNamespace("default");
 
     // --- The preview's captions for the open recording, worked out away from the client thread ---
     private static volatile @Nullable List<Captions.Cue> previewCues = null;
@@ -70,7 +70,7 @@ public final class CaptionBurner {
         });
         IEventBus modBus = ModList.get().getModContainerById(Dailies.ID).map(ModContainer::getEventBus).orElse(null);
         if (modBus != null) {
-            modBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(ResourceLocation.fromNamespaceAndPath(Dailies.ID, "caption_preview"),
+            modBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(Identifier.fromNamespaceAndPath(Dailies.ID, "caption_preview"),
                 CaptionBurner::preview));
         }
     }
@@ -78,7 +78,7 @@ public final class CaptionBurner {
     // ------------------------------------------------------------------ The look
 
     /** How captions look, from the settings */
-    record Look(Captions.Style style, ResourceLocation font, double size, int colour, int outline, boolean outlined, String place) {
+    record Look(Captions.Style style, Identifier font, double size, int colour, int outline, boolean outlined, String place) {
         static Look fromSettings(@Nullable Captions.Style style) {
             Host.Mod host = Host.get();
             String styleSetting = host.setting("captionStyle", "LINES");
@@ -128,7 +128,7 @@ public final class CaptionBurner {
             modelView.translate(0.0F, 0.0F, -11000.0F);
             RenderSystem.applyModelViewMatrix();
             RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-            GuiGraphics graphics = new GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
+            GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, minecraft.renderBuffers().bufferSource());
             draw(graphics, minecraft.font, 0, 0, target.width, target.height, text, look);
             graphics.flush();
         } finally {
@@ -139,7 +139,7 @@ public final class CaptionBurner {
     }
 
     /** Draws the text in the box, rows centred, as the look says */
-    static void draw(GuiGraphics graphics, Font font, int left, int top, int width, int height, String text, Look look) {
+    static void draw(GuiGraphicsExtractor graphics, Font font, int left, int top, int width, int height, String text, Look look) {
         float scale = (float) Math.max(0.25, height * look.size() / 100.0 / font.lineHeight);
         int room = Math.max(10, (int) (width * 0.9 / scale));
         Style style = Style.EMPTY.withFont(look.font());
@@ -161,7 +161,7 @@ public final class CaptionBurner {
         };
         int colour = 0xFF000000 | look.colour();
         int outline = 0xFF000000 | look.outline();
-        graphics.pose().pushPose();
+        graphics.pose().pushMatrix();
         graphics.pose().translate(left, top, 0.0F);
         graphics.pose().scale(scale, scale, 1.0F);
         float boxWidth = width / scale;
@@ -172,15 +172,15 @@ public final class CaptionBurner {
             if (look.outlined()) {
                 font.drawInBatch8xOutline(row, x, y, colour, outline, graphics.pose().last().pose(), graphics.bufferSource(), 0xF000F0);
             } else {
-                graphics.drawString(font, row, (int) x, (int) y, colour, true);
+                graphics.text(font, row, (int) x, (int) y, colour, true);
             }
         }
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
     }
 
     // ------------------------------------------------------------------ The editor's preview
 
-    private static void preview(GuiGraphics graphics, DeltaTracker delta) {
+    private static void preview(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         try {
             if (Export.active() || !Playback.loaded() || !EditorSession.open() || !Host.get().setting("captionPreview", false)) {
                 return;

@@ -150,7 +150,7 @@ final class WorldProbe {
             Vec3 colour = level.getSkyColor(recorder.getEyePosition(), 1.0F);
             probe.sky = new double[]{colour.x, colour.y, colour.z};
         }
-        probe.screen = minecraft.screen == null ? "none" : minecraft.screen.getClass().getName();
+        probe.screen = minecraft.gui.screen() == null ? "none" : minecraft.gui.screen().getClass().getName();
         if (recorder != null) {
             probe.recorder = tracked(recorder);
         }

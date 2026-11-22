@@ -1,8 +1,8 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -112,7 +112,7 @@ final class InputRouter {
 
     /** Whether Shift was held, which sends Tab the other way */
     static boolean back(int modifiers) {
-        return (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        return (modifiers & InputConstants.MOD_SHIFT) != 0;
     }
 
     /**
@@ -122,7 +122,7 @@ final class InputRouter {
      */
     static boolean typeKey(Entry box, int keyCode, int scanCode, int modifiers) {
         box.key(keyCode, scanCode, modifiers);
-        return keyCode == GLFW.GLFW_KEY_TAB && Entry.focused == null;
+        return keyCode == InputConstants.KEY_TAB && Entry.focused == null;
     }
 
     /**

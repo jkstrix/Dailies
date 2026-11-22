@@ -785,7 +785,7 @@ public final class SableCompat implements Host.Crafts {
                 // Gathered first and written only when whole, so a failure never leaves a craft that has no blocks
                 Object plot = this.getPlot.invoke(subLevel);
                 ChunkPos pos = (ChunkPos) this.plotPos.get(plot);
-                long plotCoordinate = ChunkPos.asLong(pos.x - this.originX.getInt(origin), pos.z - this.originY.getInt(origin));
+                long plotCoordinate = ChunkPos.pack(pos.x - this.originX.getInt(origin), pos.z - this.originY.getInt(origin));
                 Object pose = this.logicalPose.invoke(subLevel);
                 Object start = this.startTracking.newInstance(plotCoordinate, this.getUniqueId.invoke(subLevel), pose, pose, this.plotBounds.invoke(plot),
                     this.getName.invoke(subLevel), tick);

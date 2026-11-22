@@ -30,7 +30,7 @@ public final class Keys {
     private static final IKeyConflictContext WATCHING = new IKeyConflictContext() {
         @Override
         public boolean isActive() {
-            return Playback.loaded() && Minecraft.getInstance().screen == null;
+            return Playback.loaded() && Minecraft.getInstance().gui.screen() == null;
         }
 
         @Override
@@ -99,7 +99,7 @@ public final class Keys {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        boolean usable = minecraft.level != null && minecraft.screen == null;
+        boolean usable = minecraft.level != null && minecraft.gui.screen() == null;
         for (Bound bound : RECORDING) {
             if (pressed(bound.key()) && usable) {
                 run(bound);
@@ -114,7 +114,7 @@ public final class Keys {
         Minecraft minecraft = Minecraft.getInstance();
         for (Bound bound : PLAYBACK) {
             // Read even when nothing may be done with it, so a press is never kept for later
-            if (pressed(bound.key()) && Playback.loaded() && minecraft.screen == null) {
+            if (pressed(bound.key()) && Playback.loaded() && minecraft.gui.screen() == null) {
                 silenceOthers(minecraft, bound.key());
                 run(bound);
             }

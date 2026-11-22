@@ -179,25 +179,25 @@ public final class DeathMessages {
             if (uuid != null && isPlayer) {
                 PlayerInfo info = connection.getPlayerInfo(uuid);
                 if (info != null) {
-                    name = info.getProfile().getName();
+                    name = info.getProfile().name();
                 }
             } else if (uuid == null) {
                 // No entity link (plugins often strip it): match the plain or team-decorated name against the tab list
                 PlayerInfo match = null;
                 for (PlayerInfo info : connection.getOnlinePlayers()) {
-                    String profileName = info.getProfile().getName();
+                    String profileName = info.getProfile().name();
                     Component display = info.getTabListDisplayName();
                     if (name.equals(profileName) || (display != null && name.equals(display.getString()))) {
                         match = info;
                         break;
                     }
-                    if (name.contains(profileName) && (match == null || profileName.length() > match.getProfile().getName().length())) {
+                    if (name.contains(profileName) && (match == null || profileName.length() > match.getProfile().name().length())) {
                         match = info;
                     }
                 }
                 if (match != null) {
-                    uuid = match.getProfile().getId();
-                    name = match.getProfile().getName();
+                    uuid = match.getProfile().id();
+                    name = match.getProfile().name();
                     type = "minecraft:player";
                     isPlayer = true;
                 }

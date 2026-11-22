@@ -8,7 +8,7 @@ import comedymonkey.dailies.edit.Looks;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
 
@@ -223,7 +223,7 @@ final class LooksForms {
             EditorState.say(Kit.t("looks.list.empty"));
             return;
         }
-        ResourceLocation id = ResourceLocation.tryParse(typed.trim().toLowerCase(java.util.Locale.ROOT));
+        Identifier id = Identifier.tryParse(typed.trim().toLowerCase(java.util.Locale.ROOT));
         if (id == null) {
             EditorState.say(Kit.t("looks.list.bad_id", typed));
             return;

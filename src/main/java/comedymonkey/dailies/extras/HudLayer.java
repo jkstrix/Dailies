@@ -11,9 +11,9 @@ import comedymonkey.dailies.playback.Viewer;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -31,30 +31,30 @@ import java.util.Arrays;
  */
 public final class HudLayer implements PlaybackExtensions.Extension {
 
-    private static final ResourceLocation HOTBAR = sprite("hud/hotbar");
-    private static final ResourceLocation HOTBAR_SELECTION = sprite("hud/hotbar_selection");
-    private static final ResourceLocation OFF_HAND_LEFT = sprite("hud/hotbar_offhand_left");
-    private static final ResourceLocation OFF_HAND_RIGHT = sprite("hud/hotbar_offhand_right");
-    private static final ResourceLocation EXPERIENCE_BACKGROUND = sprite("hud/experience_bar_background");
-    private static final ResourceLocation EXPERIENCE_PROGRESS = sprite("hud/experience_bar_progress");
-    private static final ResourceLocation ARMOUR_EMPTY = sprite("hud/armor_empty");
-    private static final ResourceLocation ARMOUR_HALF = sprite("hud/armor_half");
-    private static final ResourceLocation ARMOUR_FULL = sprite("hud/armor_full");
-    private static final ResourceLocation FOOD_EMPTY = sprite("hud/food_empty");
-    private static final ResourceLocation FOOD_HALF = sprite("hud/food_half");
-    private static final ResourceLocation FOOD_FULL = sprite("hud/food_full");
-    private static final ResourceLocation AIR = sprite("hud/air");
-    private static final ResourceLocation AIR_BURSTING = sprite("hud/air_bursting");
-    private static final ResourceLocation HEART_CONTAINER = sprite("hud/heart/container");
-    private static final ResourceLocation HEART_CONTAINER_HARDCORE = sprite("hud/heart/container_hardcore");
-    private static final ResourceLocation HEART_FULL = sprite("hud/heart/full");
-    private static final ResourceLocation HEART_HALF = sprite("hud/heart/half");
-    private static final ResourceLocation HEART_FULL_HARDCORE = sprite("hud/heart/hardcore_full");
-    private static final ResourceLocation HEART_HALF_HARDCORE = sprite("hud/heart/hardcore_half");
-    private static final ResourceLocation ABSORBING_FULL = sprite("hud/heart/absorbing_full");
-    private static final ResourceLocation ABSORBING_HALF = sprite("hud/heart/absorbing_half");
-    private static final ResourceLocation ABSORBING_FULL_HARDCORE = sprite("hud/heart/absorbing_hardcore_full");
-    private static final ResourceLocation ABSORBING_HALF_HARDCORE = sprite("hud/heart/absorbing_hardcore_half");
+    private static final Identifier HOTBAR = sprite("hud/hotbar");
+    private static final Identifier HOTBAR_SELECTION = sprite("hud/hotbar_selection");
+    private static final Identifier OFF_HAND_LEFT = sprite("hud/hotbar_offhand_left");
+    private static final Identifier OFF_HAND_RIGHT = sprite("hud/hotbar_offhand_right");
+    private static final Identifier EXPERIENCE_BACKGROUND = sprite("hud/experience_bar_background");
+    private static final Identifier EXPERIENCE_PROGRESS = sprite("hud/experience_bar_progress");
+    private static final Identifier ARMOUR_EMPTY = sprite("hud/armor_empty");
+    private static final Identifier ARMOUR_HALF = sprite("hud/armor_half");
+    private static final Identifier ARMOUR_FULL = sprite("hud/armor_full");
+    private static final Identifier FOOD_EMPTY = sprite("hud/food_empty");
+    private static final Identifier FOOD_HALF = sprite("hud/food_half");
+    private static final Identifier FOOD_FULL = sprite("hud/food_full");
+    private static final Identifier AIR = sprite("hud/air");
+    private static final Identifier AIR_BURSTING = sprite("hud/air_bursting");
+    private static final Identifier HEART_CONTAINER = sprite("hud/heart/container");
+    private static final Identifier HEART_CONTAINER_HARDCORE = sprite("hud/heart/container_hardcore");
+    private static final Identifier HEART_FULL = sprite("hud/heart/full");
+    private static final Identifier HEART_HALF = sprite("hud/heart/half");
+    private static final Identifier HEART_FULL_HARDCORE = sprite("hud/heart/hardcore_full");
+    private static final Identifier HEART_HALF_HARDCORE = sprite("hud/heart/hardcore_half");
+    private static final Identifier ABSORBING_FULL = sprite("hud/heart/absorbing_full");
+    private static final Identifier ABSORBING_HALF = sprite("hud/heart/absorbing_half");
+    private static final Identifier ABSORBING_FULL_HARDCORE = sprite("hud/heart/absorbing_hardcore_full");
+    private static final Identifier ABSORBING_HALF_HARDCORE = sprite("hud/heart/absorbing_hardcore_half");
 
     /** How far the playback bar reaches up from the bottom of the screen: the HUD sits above it */
     private static final int PLAYBACK_BAR = 22;
@@ -73,8 +73,8 @@ public final class HudLayer implements PlaybackExtensions.Extension {
     private HudLayer() {
     }
 
-    private static ResourceLocation sprite(String path) {
-        return ResourceLocation.withDefaultNamespace(path);
+    private static Identifier sprite(String path) {
+        return Identifier.withDefaultNamespace(path);
     }
 
     static void init() {
@@ -83,7 +83,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
     }
 
     static void register(RegisterGuiLayersEvent event) {
-        event.registerAbove(VanillaGuiLayers.HOTBAR, ResourceLocation.fromNamespaceAndPath(Dailies.ID, "recorder_hud"), INSTANCE::draw);
+        event.registerAbove(VanillaGuiLayers.HOTBAR, Identifier.fromNamespaceAndPath(Dailies.ID, "recorder_hud"), INSTANCE::draw);
     }
 
     @Override
@@ -190,13 +190,13 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         return state == null || state.selected < 0 || state.selected >= 9 ? null : state.stacks[state.selected];
     }
 
-    private void draw(GuiGraphics graphics, DeltaTracker delta) {
+    private void draw(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         if (this.record == null || !Playback.loaded()) {
             return;
         }
         try {
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.options.hideGui) {
+            if (comedymonkey.dailies.ui.HudHidden.get()) {
                 // Hidden with the rest of the HUD: F1, or a picture asked for without it
                 return;
             }
@@ -218,7 +218,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
                 return;
             }
             boolean barShown = !comedymonkey.dailies.export.Export.active() && !comedymonkey.dailies.ui.Notices.hidden();
-            graphics.pose().pushPose();
+            graphics.pose().pushMatrix();
             try {
                 graphics.pose().translate(0.0F, barShown ? -PLAYBACK_BAR : 0.0F, 0.0F);
                 if (hotbar) {
@@ -229,7 +229,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
                     this.drawExperience(graphics, minecraft.font, hud);
                 }
             } finally {
-                graphics.pose().popPose();
+                graphics.pose().popMatrix();
             }
         } catch (Throwable t) {
             if (!this.drawFailed) {
@@ -241,7 +241,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
 
     // The arithmetic below is the game's own (net.minecraft.client.gui.Gui), so everything lands where the recorder saw it
 
-    private void drawHotbar(GuiGraphics graphics, Minecraft minecraft, Player recorder, HudState hud) {
+    private void drawHotbar(GuiGraphicsExtractor graphics, Minecraft minecraft, Player recorder, HudState hud) {
         int centre = graphics.guiWidth() / 2;
         int bottom = graphics.guiHeight();
         ItemStack offHand = hud.stacks[HudState.OFF_HAND];
@@ -249,7 +249,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         boolean offHandLeft = hud.rightHanded;
 
         RenderSystem.enableBlend();
-        graphics.pose().pushPose();
+        graphics.pose().pushMatrix();
         graphics.pose().translate(0.0F, 0.0F, -90.0F);
         graphics.blitSprite(HOTBAR, centre - 91, bottom - 22, 182, 22);
         graphics.blitSprite(HOTBAR_SELECTION, centre - 91 - 1 + hud.selected * 20, bottom - 22 - 1, 24, 23);
@@ -260,7 +260,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
                 graphics.blitSprite(OFF_HAND_RIGHT, centre + 91, bottom - 23, 29, 24);
             }
         }
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
         RenderSystem.disableBlend();
 
         int seed = 1;
@@ -273,14 +273,14 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         }
     }
 
-    private void drawStack(GuiGraphics graphics, Font font, Player recorder, ItemStack stack, int x, int y, int seed) {
+    private void drawStack(GuiGraphicsExtractor graphics, Font font, Player recorder, ItemStack stack, int x, int y, int seed) {
         if (!stack.isEmpty()) {
-            graphics.renderItem(recorder, stack, x, y, seed);
+            graphics.item(recorder, stack, x, y, seed);
             graphics.renderItemDecorations(font, stack, x, y);
         }
     }
 
-    private void drawBars(GuiGraphics graphics, HudState hud) {
+    private void drawBars(GuiGraphicsExtractor graphics, HudState hud) {
         int left = graphics.guiWidth() / 2 - 91;
         int right = graphics.guiWidth() / 2 + 91;
         int bottom = graphics.guiHeight();
@@ -352,7 +352,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         RenderSystem.disableBlend();
     }
 
-    private void drawExperience(GuiGraphics graphics, Font font, HudState hud) {
+    private void drawExperience(GuiGraphicsExtractor graphics, Font font, HudState hud) {
         int left = graphics.guiWidth() / 2 - 91;
         int top = graphics.guiHeight() - 32 + 3;
         int filled = Mth.clamp((int) (hud.progress * 183.0F), 0, 182);
@@ -366,11 +366,11 @@ public final class HudLayer implements PlaybackExtensions.Extension {
             String level = Integer.toString(hud.level);
             int x = (graphics.guiWidth() - font.width(level)) / 2;
             int y = graphics.guiHeight() - 31 - 4;
-            graphics.drawString(font, level, x + 1, y, 0, false);
-            graphics.drawString(font, level, x - 1, y, 0, false);
-            graphics.drawString(font, level, x, y + 1, 0, false);
-            graphics.drawString(font, level, x, y - 1, 0, false);
-            graphics.drawString(font, level, x, y, LEVEL_COLOUR, false);
+            graphics.text(font, level, x + 1, y, 0, false);
+            graphics.text(font, level, x - 1, y, 0, false);
+            graphics.text(font, level, x, y + 1, 0, false);
+            graphics.text(font, level, x, y - 1, 0, false);
+            graphics.text(font, level, x, y, LEVEL_COLOUR, false);
         }
     }
 

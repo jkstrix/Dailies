@@ -4,10 +4,10 @@ import comedymonkey.dailies.Host;
 import comedymonkey.dailies.ScriptedRun;
 import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.SpriteIconButton;
@@ -50,7 +50,7 @@ public final class Screens {
         NeoForge.EVENT_BUS.addListener(Screens::screenOpening);
         // Explanations in the editor are drawn by the game; they are given the house colours here
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderTooltipEvent.Color event) -> {
-            if (Minecraft.getInstance().screen instanceof EditorScreen) {
+            if (Minecraft.getInstance().gui.screen() instanceof EditorScreen) {
                 event.setBackground(0xFA1C1308);
                 event.setBorderStart(BRASS_EDGE);
                 event.setBorderEnd(BRASS_EDGE);
@@ -140,13 +140,13 @@ public final class Screens {
         if (state == Recorder.State.IDLE) {
             event.addListener(Button.builder(Component.translatable("dailies.ui.pause.start"), button -> {
                 Controls.startRecording();
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
             }).bounds(x, y, width, 20).build());
             y += 24;
         } else {
             event.addListener(Button.builder(Component.translatable(state == Recorder.State.PAUSED ? "dailies.ui.pause.resume" : "dailies.ui.pause.pause"), button -> {
                 Controls.togglePauseRecording();
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
             }).bounds(x, y, width, 20).build());
             y += 24;
             event.addListener(Button.builder(Component.translatable("dailies.ui.pause.finish"), button -> Controls.finishRecording(null)).bounds(x, y, width, 20).build());
@@ -154,7 +154,7 @@ public final class Screens {
             event.addListener(Button.builder(Component.translatable("dailies.ui.pause.cancel"), button -> Controls.cancelRecording(pause)).bounds(x, y, width, 20).build());
             y += 24;
         }
-        event.addListener(Button.builder(Component.translatable("dailies.ui.pause.recordings"), button -> minecraft.setScreen(new RecordingsScreen(pause))).bounds(x, y, width, 20).build());
+        event.addListener(Button.builder(Component.translatable("dailies.ui.pause.recordings"), button -> minecraft.gui.setScreen(new RecordingsScreen(pause))).bounds(x, y, width, 20).build());
         y += 24;
         event.addListener(momentsButton(x, y, width));
         y += 24;
@@ -213,7 +213,7 @@ public final class Screens {
         int y = place[1];
         int stepX = place[2];
         int stepY = place[3];
-        event.addListener(new ReelButton(x, y, false, Component.translatable("dailies.ui.title.recordings"), button -> minecraft.setScreen(new RecordingsScreen(title))));
+        event.addListener(new ReelButton(x, y, false, Component.translatable("dailies.ui.title.recordings"), button -> minecraft.gui.setScreen(new RecordingsScreen(title))));
         event.addListener(new ReelButton(x + stepX, y + stepY, true, Component.translatable("dailies.ui.title.settings"), button -> SettingsScreen.open(title)));
         event.addListener(new MomentsButton(x + 2 * stepX, y + 2 * stepY, Component.translatable("dailies.ui.title.moments"), button -> Controls.openMomentsPage()));
 
@@ -293,12 +293,12 @@ public final class Screens {
 
     private static void offerRecovery(Minecraft minecraft) {
         List<Path> found = unfinished;
-        if (found == null || !(minecraft.screen instanceof TitleScreen title)) {
+        if (found == null || !(minecraft.gui.screen() instanceof TitleScreen title)) {
             return;
         }
         unfinished = null;
         if (!found.isEmpty()) {
-            minecraft.setScreen(new RecoveryScreen(found, title));
+            minecraft.gui.setScreen(new RecoveryScreen(found, title));
         }
     }
 
@@ -311,7 +311,7 @@ public final class Screens {
         }
 
         @Override
-        public void renderString(GuiGraphics graphics, Font font, int colour) {
+        public void renderString(GuiGraphicsExtractor graphics, Font font, int colour) {
             int left = this.getX() + 5;
             int top = this.getY() + 5;
             int brass = this.active ? Controls.BRASS_BRIGHT : Controls.BRASS;
@@ -335,7 +335,7 @@ public final class Screens {
         }
 
         @Override
-        public void renderString(GuiGraphics graphics, Font font, int colour) {
+        public void renderString(GuiGraphicsExtractor graphics, Font font, int colour) {
             int centreX = this.getX() + this.getWidth() / 2;
             int centreY = this.getY() + this.getHeight() / 2;
             int brass = this.active ? Controls.BRASS_BRIGHT : Controls.BRASS;

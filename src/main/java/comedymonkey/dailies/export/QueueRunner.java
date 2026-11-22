@@ -546,7 +546,7 @@ public final class QueueRunner {
             return;
         }
         if (Worker.active()) {
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         }
         Playback.open(recording);
     }
@@ -582,7 +582,7 @@ public final class QueueRunner {
         try {
             Export.Settings settings = prepare(job);
             if (Worker.active()) {
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
                 Worker.mute(minecraft, !settings.audio || settings.still);
             }
             Export.start(settings);

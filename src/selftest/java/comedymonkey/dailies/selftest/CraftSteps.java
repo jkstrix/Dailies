@@ -5,7 +5,7 @@ import comedymonkey.dailies.compat.sable.SableCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
@@ -253,10 +253,10 @@ final class CraftSteps {
      *                    want and the camera route, which films the flight as it is, does not
      */
     private static void buildBalloon(SelfTest test, Minecraft minecraft, BlockPos origin, boolean goBack, boolean speedRecord) throws Exception {
-        ResourceLocation name = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope");
+        Identifier name = Identifier.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope");
         ServerLevel level = minecraft.getSingleplayerServer().overworld();
         // The structure is one of the mod's own demonstration scenes, which live with its client resources
-        ResourceLocation file = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope.nbt");
+        Identifier file = Identifier.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope.nbt");
         Optional<net.minecraft.server.packs.resources.Resource> resource = minecraft.getResourceManager().getResource(file);
         if (resource.isEmpty()) {
             test.skip("the balloon structure " + file + " is not in this version of Aeronautics: no balloon was built");
@@ -776,7 +776,7 @@ final class CraftSteps {
     }
 
     private static boolean isContraption(Entity entity) {
-        ResourceLocation type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        Identifier type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return type.getNamespace().equals("create") && type.getPath().contains("contraption");
     }
 

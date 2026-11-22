@@ -51,7 +51,7 @@ public final class Capture {
                 SPAWN_EXTRAS.put(entity, extras);
             }
         } else if (packet instanceof ClientboundRemoveEntitiesPacket removed) {
-            for (int id : removed.getEntityIds()) {
+            for (int id : removed.entityIds()) {
                 SPAWN_EXTRAS.remove(id);
             }
         } else if (packet instanceof ClientboundLoginPacket) {

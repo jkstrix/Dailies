@@ -1,7 +1,7 @@
 package comedymonkey.dailies.ui;
 
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +35,7 @@ final class Form {
     private int barGrab = 0;
     private final Gadget bar = new Gadget() {
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         }
 
         @Override
@@ -189,7 +189,7 @@ final class Form {
         return this.scrolls() && this.over(mouseX, mouseY) && mouseX >= this.x + this.width - BAR;
     }
 
-    void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         if (this.width <= 0 || this.height <= 0) {
             return;
         }

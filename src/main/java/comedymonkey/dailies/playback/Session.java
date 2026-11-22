@@ -100,7 +100,7 @@ final class Session {
         data.tags.forEach((location, members) -> {
             FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
             try {
-                buffer.writeMap(members, FriendlyByteBuf::writeResourceLocation, FriendlyByteBuf::writeIntIdList);
+                buffer.writeMap(members, FriendlyByteBuf::writeIdentifier, FriendlyByteBuf::writeIntIdList);
                 tags.put(WorldData.registryKey(location), TagNetworkSerialization.NetworkPayload.read(buffer));
             } finally {
                 buffer.release();

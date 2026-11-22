@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -46,7 +46,7 @@ final class WorldSteps {
             minecraft.createWorldOpenFlows().createFreshLevel(name, settings, new WorldOptions(20261117L, false, false),
                 registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).createWorldDimensions(), new TitleScreen());
         });
-        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
+        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.gui.screen() == null,
             120, "the test world to open");
         // Let the first chunks arrive and the player settle on the ground
         test.waitTicks(60);
@@ -69,7 +69,7 @@ final class WorldSteps {
             minecraft.createWorldOpenFlows().createFreshLevel(name, settings, new WorldOptions(seed, true, false),
                 registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.NORMAL).createWorldDimensions(), new TitleScreen());
         });
-        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
+        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.gui.screen() == null,
             300, "the generated test world to open");
         test.waitTicks(60);
         test.log("generated test world ready");
@@ -81,7 +81,7 @@ final class WorldSteps {
             if (minecraft.level != null) {
                 minecraft.level.disconnect();
                 minecraft.disconnect();
-                minecraft.setScreen(new TitleScreen());
+                minecraft.gui.setScreen(new TitleScreen());
             }
         });
         test.waitFor(() -> minecraft.level == null && !minecraft.isLocalServer(), 60, "the world to close");
