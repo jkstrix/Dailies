@@ -58,6 +58,7 @@
     "export.WorkerQuickPlayMixin",
     "export.FrameThrottleMixin",
     "export.GuiRendererTargetMixin",
+    "export.ExportChunkFadeMixin",
     "playback.PlaybackSessionDataMixin"
   ],
   "injectors": {
