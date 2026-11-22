@@ -53,7 +53,8 @@
     "effects.TotemMixin",
     "effects.MusicMixin",
     "effects.InvisibleMixin",
-    "effects.ParticleWatchMixin"
+    "effects.ParticleWatchMixin",
+    "effects.SkyBlockMixin"
   ],
   "injectors": {
     "defaultRequire": 1

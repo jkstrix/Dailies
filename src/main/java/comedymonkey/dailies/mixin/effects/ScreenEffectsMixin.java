@@ -76,7 +76,15 @@ public abstract class ScreenEffectsMixin {
                 if (subject.isEyeInFluid(FluidTags.WATER)) {
                     water = true;
                     if (player == null || !ClientHooks.renderWaterOverlay(player, poseStack)) {
-                        dailies$renderWater(subject, poseStack);
+                        dailies$renderFluid(subject, poseStack, DAILIES$UNDERWATER);
+                    }
+                } else if (!subject.getEyeInFluidType().isAir()) {
+                    // A mod's fluid: its overlay texture, drawn as NeoForge draws it by default (its hook asks for the game's
+                    // own player, so a mod that draws its overlay all by itself cannot be asked for the recorder's)
+                    ResourceLocation texture = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions.of(subject.getEyeInFluidType())
+                        .getRenderOverlayTexture(minecraft);
+                    if (texture != null) {
+                        dailies$renderFluid(subject, poseStack, texture);
                     }
                 }
                 if (subject.isOnFire()) {
@@ -92,11 +100,11 @@ public abstract class ScreenEffectsMixin {
         }
     }
 
-    /** The water over the eyes, lit and turned with the one whose eyes they are, as the game draws it for its own player */
+    /** Water, or a mod's fluid, over the eyes, lit and turned with the one whose eyes they are, as the game draws it for its own player */
     @Unique
-    private static void dailies$renderWater(LivingEntity subject, PoseStack poseStack) {
+    private static void dailies$renderFluid(LivingEntity subject, PoseStack poseStack, ResourceLocation texture) {
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderTexture(0, DAILIES$UNDERWATER);
+        RenderSystem.setShaderTexture(0, texture);
         BlockPos eyes = BlockPos.containing(subject.getX(), subject.getEyeY(), subject.getZ());
         float brightness = LightTexture.getBrightness(subject.level().dimensionType(), subject.level().getMaxLocalRawBrightness(eyes));
         RenderSystem.enableBlend();

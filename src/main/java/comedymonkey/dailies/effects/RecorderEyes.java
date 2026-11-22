@@ -128,6 +128,27 @@ public final class RecorderEyes {
         return Playback.loaded();
     }
 
+    private static volatile boolean skyBlocked = false;
+    private static volatile int iconsShown = 0;
+
+    /** How many potion effect icons the HUD was given in the last frame it drew them, for the self test */
+    public static int iconsShown() {
+        return iconsShown;
+    }
+
+    public static void iconsShown(int count) {
+        iconsShown = count;
+    }
+
+    /** Whether an effect took the sky away in the last frame, for the self test */
+    public static boolean skyBlocked() {
+        return skyBlocked;
+    }
+
+    public static void skyBlocked(boolean blocked) {
+        skyBlocked = blocked;
+    }
+
     /** What the overlays and effects showed in the last frame, for the self test */
     public static Shown shown() {
         return shown;

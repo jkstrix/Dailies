@@ -122,6 +122,18 @@ public abstract class CameraOverlaysMixin {
         return player.getUseItem();
     }
 
+    // The potion effect icons at the top of the screen are the recorder's, through their eyes with the HUD shown
+    @Redirect(method = "renderEffects", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getActiveEffects()Ljava/util/Collection;"))
+    private java.util.Collection<net.minecraft.world.effect.MobEffectInstance> dailies$theirEffects(LocalPlayer player) {
+        if (!RecorderEyes.inPlayback()) {
+            return player.getActiveEffects();
+        }
+        LivingEntity subject = RecorderEyes.subject();
+        java.util.Collection<net.minecraft.world.effect.MobEffectInstance> effects = subject == null ? java.util.List.of() : subject.getActiveEffects();
+        RecorderEyes.iconsShown(effects.size());
+        return effects;
+    }
+
     // The sleep fade, from whoever's eyes the view is through
     @Redirect(method = "renderSleepOverlay", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getSleepTimer()I"))
     private int dailies$theirSleep(LocalPlayer player) {
