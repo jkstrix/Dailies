@@ -438,7 +438,8 @@ final class ResourcePackSteps {
             comedymonkey.dailies.mixin.access.FontManagerAccess fonts = (comedymonkey.dailies.mixin.access.FontManagerAccess) manager;
             minecraft.font.width("Dailies");
             Object used = lastGlyphs(manager);
-            check(used != null && fonts.dailies$fontSets().values().stream().anyMatch(set -> set.source(false) == used),
+            // Nothing held is safe too: the next lookup takes the live fonts
+            check(used == null || fonts.dailies$fontSets().values().stream().anyMatch(set -> set.source(false) == used),
                 when + ", the game draws text with a font that a resource reload has closed: the next new character would crash it");
             StringBuilder fresh = new StringBuilder();
             for (int i = 0; i < 6; i++) {

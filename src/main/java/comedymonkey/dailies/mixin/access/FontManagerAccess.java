@@ -5,6 +5,7 @@ import net.minecraft.client.gui.font.FontSet;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
 import java.util.Map;
 
@@ -14,5 +15,8 @@ public interface FontManagerAccess {
 
     @Accessor("fontSets")
     Map<Identifier, FontSet> dailies$fontSets();
+
+    @Invoker("getFontSetRaw")
+    FontSet dailies$fontSetRaw(Identifier id);
 
 }

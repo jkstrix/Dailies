@@ -212,7 +212,7 @@ final class RecordingSteps {
             Audit audit = Audit.of(file, codec, true);
             check(audit.problems.isEmpty(), "the recording has problems: " + audit.problems);
             check(audit.snapshots == manifest.segments.size(), "not every segment starts with a snapshot");
-            check(audit.count(ClientboundAnimatePacket.class) >= 1, "the recorder's arm swing was not captured");
+            check(audit.count(net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket.class) >= 1, "the recorder's arm swing was not captured");
             check(audit.count(ClientboundSetEquipmentPacket.class) >= 1, "the recorder's held item was not captured");
             long ownMoves = audit.seen.stream().filter(seen -> seen.packet() instanceof ClientboundTeleportEntityPacket move && move.id() == ownId).count();
             check(ownMoves >= 10, "the recorder's own movement was captured only " + ownMoves + " times");

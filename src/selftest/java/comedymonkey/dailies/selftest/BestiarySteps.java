@@ -233,6 +233,8 @@ final class BestiarySteps {
             };
             server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSource(sink), command);
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+        // 26.3 refuses to set a game rule to the value it already has; the world is as the step wants it
+        said.removeIf(line -> line.startsWith("Game rule ") && line.contains(" is already set to "));
         if (!said.isEmpty()) {
             problems.add("command refused: " + command + " -> " + said);
         }

@@ -16,6 +16,7 @@
     "packs.ServerPackManagerMixin",
     "packs.PackPushMixin",
     "packs.FontManagerMixin",
+    "packs.FontCacheMixin",
     "access.FontManagerAccess",
     "access.ClientPacketListenerAccess",
     "access.BiomeManagerAccess",
