@@ -1,5 +1,6 @@
 package comedymonkey.dailiescompat.template.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.api.DailiesApi;
 import comedymonkey.dailies.api.compat.Claims;
 import comedymonkey.dailies.api.compat.DailiesCompat;
@@ -11,9 +12,10 @@ import comedymonkey.dailies.api.compat.ServerHalf;
 import comedymonkey.dailiescompat.template.TemplateMod;
 import comedymonkey.dailiescompat.template.HomeFact;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
@@ -87,7 +89,7 @@ final class TemplateDailies implements DailiesCompat {
             }
 
             @Override
-            public void draw(GuiGraphics graphics, byte[] state, int version, float partialTick) {
+            public void draw(GuiGraphicsExtractor graphics, byte[] state, int version, float partialTick) {
                 HomeOverlay.draw(graphics, new String(state, StandardCharsets.UTF_8));
             }
         });
@@ -115,11 +117,12 @@ final class TemplateDailies implements DailiesCompat {
                     new Display("the example overlay", ID + "/home", stage -> {
                     }),
                     new Display("the example screen", ID + "/note", stage -> {
-                        stage.onClient(() -> Minecraft.getInstance().setScreen(new ExampleScreen(0, false)));
+                        stage.onClient(() -> Minecraft.getInstance().gui.setScreen(new ExampleScreen(0, false)));
                         stage.waitTicks(5);
                         stage.onClient(() -> {
-                            if (Minecraft.getInstance().screen instanceof ExampleScreen screen) {
-                                screen.children().stream().filter(Button.class::isInstance).map(Button.class::cast).findFirst().ifPresent(Button::onPress);
+                            if (Minecraft.getInstance().gui.screen() instanceof ExampleScreen screen) {
+                                screen.children().stream().filter(Button.class::isInstance).map(Button.class::cast).findFirst()
+                                    .ifPresent(button -> button.onPress(new KeyEvent(InputConstants.KEY_RETURN, 0, 0)));
                             }
                         });
                     }));

@@ -34,7 +34,8 @@ public final class TemplateServer {
 
             @Override
             public byte[] describe(ServerPlayer player, int clientVersion) {
-                return HomeFact.write(player.getRespawnPosition());
+                ServerPlayer.RespawnConfig respawn = player.getRespawnConfig();
+                return HomeFact.write(respawn == null ? null : respawn.respawnData().pos());
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerSetSpawnEvent event) -> {
