@@ -6,8 +6,8 @@ license = "MIT"
 modId = "dailies_extras"
 version = "${version}"
 displayName = "Dailies Extras Compat"
-logoFile = "dailies_extras.png"
-logoBlur = false
+iconFile = "dailies_extras.png"
+iconBlur = false
 authors = "James Knight"
 description = '''
 The rest of the pack's play screens and overlays in Dailies recordings: the lines Explorer's Compass and Nature's Compass
