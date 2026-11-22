@@ -434,10 +434,17 @@ final class WatchingSteps {
     private static void markers(SelfTest test, Minecraft minecraft, RecordingManifest manifest) throws Exception {
         RecordingManifest.Marker well = manifest.markers.get(0);
         Vec3 spot = new Vec3(well.position[0], well.position[1], well.position[2]);
+        // The settings are saved between runs: an earlier run that stopped half way could have left them off
+        setting(test, "showMarkersInWorld", true);
+        setting(test, "showCameraPath", true);
         jump(test, Math.min(Playback.total() - 5, well.tick + 60));
         editor(test);
         lookFrom(test, spot.add(-5.0, 2.0, -5.0), spot);
 
+        // The rings are noted as they are drawn, once a frame: wait for a frame drawn since the camera turned
+        test.waitFor(() -> !MarkerRings.drawn().isEmpty(), 5, "the marker rings to be drawn (loaded " + Playback.loaded()
+            + ", exporting " + comedymonkey.dailies.export.Export.active() + ", Dailies hidden " + comedymonkey.dailies.ui.Notices.hidden()
+            + ", HUD hidden " + test.onClient(() -> minecraft.options.hideGui) + ", markers " + manifest.markers.size() + ")");
         List<MarkerRings.Ring> rings = MarkerRings.drawn();
         check(rings.size() == 1, rings.size() + " marker rings are drawn, not one for the one marker that stored a position");
         MarkerRings.Ring ring = rings.get(0);
@@ -545,10 +552,11 @@ final class WatchingSteps {
         frames(test, 4);
         check(!PathPreview.drawn() && MarkerRings.drawn().isEmpty(), "the path or the rings are still drawn after being switched off");
         Path without = still(test, "overlays-off", 640, 360, false);
-        check(Arrays.equals(Files.readAllBytes(with), Files.readAllBytes(without)),
-            "a still exported with the camera path, marker rings and editor on screen is not the same file as one without (" + differing(with, without) + " pixels differ)");
+        // Back on before judging: the settings are saved, and a failed check must not leave them off for later runs
         setting(test, "showCameraPath", true);
         setting(test, "showMarkersInWorld", true);
+        check(Arrays.equals(Files.readAllBytes(with), Files.readAllBytes(without)),
+            "a still exported with the camera path, marker rings and editor on screen is not the same file as one without (" + differing(with, without) + " pixels differ)");
         check(!PathPreview.drawn(), "the camera path is drawn with the editor closed");
         editor(test);
 

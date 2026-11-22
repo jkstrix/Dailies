@@ -1332,36 +1332,21 @@ public final class MomentsTools {
         minecraft.tell(() -> {
             try {
                 Host.get().openRecording(file);
+                // Once that recording is up; opening any other first drops this, so a cue never jumps a recording
+                // opened later for some other reason
+                Host.get().whenLoaded(() -> {
+                    if (pendingCue == token && minecraft.player != null && minecraft.level != null && bestId.equals(Host.get().openRecordingId())) {
+                        jump(target, pause, finalCameraArgs);
+                    }
+                    if (pendingCue == token) {
+                        pendingCue = null;
+                    }
+                });
             } catch (Throwable t) {
                 Host.LOGGER.error("Moments: failed to open recording {} for a cue", file, t);
                 pendingCue = null;
             }
         });
-        Thread waiter = new Thread(() -> {
-            long deadline = System.currentTimeMillis() + 180_000;
-            try {
-                while (pendingCue == token && System.currentTimeMillis() < deadline) {
-                    Thread.sleep(250);
-                    boolean done = minecraft.submit(() -> {
-                        if (pendingCue != token || minecraft.player == null || minecraft.level == null || !bestId.equals(Host.get().openRecordingId())) {
-                            return false;
-                        }
-                        jump(target, pause, finalCameraArgs);
-                        return true;
-                    }).get(10, java.util.concurrent.TimeUnit.SECONDS);
-                    if (done) {
-                        break;
-                    }
-                }
-            } catch (Exception ignored) {
-                // The game is closing, or the recording never loaded
-            }
-            if (pendingCue == token) {
-                pendingCue = null;
-            }
-        }, "Dailies-Moments-Cue");
-        waiter.setDaemon(true);
-        waiter.start();
 
         json.addProperty("cued", false);
         json.addProperty("opening", true);

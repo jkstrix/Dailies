@@ -122,10 +122,32 @@ public final class Alignment {
         return -1;
     }
 
-    /** The tick of the other recording that shows the same moment as this tick of this one, or -1 when it does not */
+    /**
+     * The tick of the other recording that shows the same moment as this tick of this one, or -1 when it does not. A
+     * game time can stand at two ticks of one recording: the server sends its time every second, and a game a tick
+     * ahead of it is set back, often just as a segment begins. Of the ticks of the other with this game time, the one
+     * nearest in real time is taken, so a copy lines up with itself tick for tick and two players' recordings as
+     * nearly as their clocks agree.
+     */
     public int map(int tick, Alignment other) {
         long game = this.gameAt(tick);
-        return game == Long.MIN_VALUE ? -1 : other.tickAtGame(game);
+        if (game == Long.MIN_VALUE) {
+            return -1;
+        }
+        long real = this.realAt(tick);
+        int best = -1;
+        long bestGap = Long.MAX_VALUE;
+        for (Run run : other.runs) {
+            if (run.startGame() <= game && game <= run.endGame()) {
+                int there = run.startTick() + (int) (game - run.startGame());
+                long gap = Math.abs(other.realAt(there) - real);
+                if (best < 0 || gap < bestGap) {
+                    best = there;
+                    bestGap = gap;
+                }
+            }
+        }
+        return best;
     }
 
     /** {@link #map} for a moment between two ticks: the part of a tick goes across as it is */
