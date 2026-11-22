@@ -460,6 +460,9 @@ public final class SelfTest {
             if (minecraft != null && minecraft.options != null && !focusSet) {
                 // The owner watches runs and types elsewhere, so losing focus must not pause the game
                 minecraft.options.pauseOnLostFocus = false;
+                // Nor must the game drop to 30 frames a second after a minute without input: the run never touches the
+                // keys, and the frame times it measures would be the throttle's
+                minecraft.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
                 focusSet = true;
             }
             this.port = McpHttpServer.getListeningPort();

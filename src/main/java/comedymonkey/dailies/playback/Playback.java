@@ -146,6 +146,14 @@ public final class Playback {
     }
 
     /** Whether the recording's world is up and can be watched */
+    /** True only while playback's own connection is being made, render thread */
+    static volatile boolean creatingSession;
+
+    /** Whether playback's own connection is being made just now (for the mixins that must tell it from a real one) */
+    public static boolean creatingSession() {
+        return creatingSession;
+    }
+
     public static boolean loaded() {
         return loaded;
     }

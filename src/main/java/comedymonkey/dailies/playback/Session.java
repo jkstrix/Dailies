@@ -86,9 +86,15 @@ final class Session {
         // Every mod message this game can read is accepted, as if a server with the same mods had agreed to it
         NetworkRegistry.configureMockConnection(connection);
 
-        ClientPacketListener listener = new ClientPacketListener(minecraft, connection, new CommonListenerCookie(new net.minecraft.client.multiplayer.LevelLoadTracker(), VIEWER,
+        ClientPacketListener listener;
+        Playback.creatingSession = true;
+        try {
+            listener = new ClientPacketListener(minecraft, connection, new CommonListenerCookie(new net.minecraft.client.multiplayer.LevelLoadTracker(), VIEWER,
             minecraft.getTelemetryManager().createWorldSessionManager(false, null, null, java.util.UUID.randomUUID()), registries, FeatureFlags.REGISTRY.fromNames(data.features),
             "dailies", null, null, Map.of(), null, Map.of(), ServerLinks.EMPTY, Map.of(), false, data.connectionType));
+        } finally {
+            Playback.creatingSession = false;
+        }
         ((ConnectionAccess) connection).dailies$setPacketListener(listener);
         return new Session(connection, listener, new GameCodec(registries, data.connectionType), worldName, channel);
     }

@@ -54,7 +54,9 @@
     "export.WindowMixin",
     "export.ExportPreviewMixin",
     "export.WorkerOptionsMixin",
-    "export.WorkerQuickPlayMixin"
+    "export.WorkerQuickPlayMixin",
+    "export.FrameThrottleMixin",
+    "playback.PlaybackSessionDataMixin"
   ],
   "injectors": {
     "defaultRequire": 1
