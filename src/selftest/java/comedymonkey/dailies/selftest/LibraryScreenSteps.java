@@ -445,8 +445,8 @@ final class LibraryScreenSteps {
         manifest.players = new ArrayList<>(players);
         manifest.recorderName = players.isEmpty() ? "" : players.get(0);
         manifest.created = created;
-        manifest.gameVersion = net.minecraft.SharedConstants.getCurrentVersion().getName();
-        manifest.dataVersion = net.minecraft.SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+        manifest.gameVersion = net.minecraft.SharedConstants.getCurrentVersion().name();
+        manifest.dataVersion = net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version();
         manifest.protocolVersion = net.minecraft.SharedConstants.getProtocolVersion();
         if (!spans.isEmpty()) {
             manifest.edited = created;

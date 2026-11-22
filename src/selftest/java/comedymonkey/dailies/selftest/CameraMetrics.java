@@ -89,13 +89,13 @@ final class CameraMetrics {
             frame.seconds = frame.frame / framesPerSecond;
             frame.tick = Playback.frameTime();
 
-            Camera camera = minecraft.gameRenderer.getMainCamera();
-            Vec3 eye = camera.getPosition();
+            Camera camera = minecraft.gameRenderer.mainCamera();
+            Vec3 eye = camera.position();
             frame.camX = eye.x;
             frame.camY = eye.y;
             frame.camZ = eye.z;
-            frame.yaw = camera.getYRot();
-            frame.pitch = camera.getXRot();
+            frame.yaw = camera.yRot();
+            frame.pitch = camera.xRot();
             frame.roll = Viewer.roll();
             frame.fov = Viewer.fov() > 0.0 ? Viewer.fov() : minecraft.options.fov().get();
             frame.aspect = minecraft.getWindow().getHeight() > 0 ? minecraft.getWindow().getWidth() / (double) minecraft.getWindow().getHeight() : 16.0 / 9.0;
@@ -104,7 +104,7 @@ final class CameraMetrics {
             UUID wanted = subject;
             Entity entity = wanted == null ? null : minecraft.level.getEntities().get(wanted);
             if (entity != null && entity != minecraft.player) {
-                float partial = minecraft.getTimer().getGameTimeDeltaPartialTick(true);
+                float partial = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true);
                 Vec3 feet = where(minecraft, entity, partial);
                 double half = entity.getBbWidth() / 2.0;
                 AABB box = new AABB(feet.x - half, feet.y, feet.z - half, feet.x + half, feet.y + entity.getBbHeight(), feet.z + half);
@@ -114,7 +114,7 @@ final class CameraMetrics {
                 frame.eyeZ = feet.z;
                 frame.subjectYaw = entity.getVisualRotationYInDegrees();
                 frame.vehicle = entity.getVehicle() == null ? -1 : entity.getVehicle().getId();
-                frame.dimension = minecraft.level.dimension().location().toString();
+                frame.dimension = minecraft.level.dimension().identifier().toString();
                 frame.minX = box.minX;
                 frame.minY = box.minY;
                 frame.minZ = box.minZ;

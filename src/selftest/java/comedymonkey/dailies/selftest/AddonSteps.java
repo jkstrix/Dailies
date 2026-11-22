@@ -124,10 +124,10 @@ final class AddonSteps {
     private static void record(SelfTest test, Minecraft minecraft, Path recording) throws Exception {
         WorldSteps.createWorld(test, WORLD);
         Census.watch(OVERWORLD, 0, -3, -61, 2, 66, -55, 25);
-        c("gamerule commandModificationBlockLimit 4000000");
-        c("gamerule sendCommandFeedback false");
+        c("gamerule max_block_modifications 4000000");
+        c("gamerule send_command_feedback false");
         // The Cuckoo Clock strikes as the day passes the hour, and Trade Bot only works by day
-        c("gamerule doDaylightCycle true");
+        c("gamerule advance_time true");
         c("time set 1000");
         machines();
         boolean bot = tradeBot(test, minecraft);
@@ -335,7 +335,7 @@ final class AddonSteps {
     private static boolean tradeBot(SelfTest test, Minecraft minecraft) throws Exception {
         c("setblock " + SEAT.getX() + " " + Y + " " + SEAT.getZ() + " create:white_seat");
         c("setblock " + (SEAT.getX() + 1) + " " + Y + " " + SEAT.getZ() + " minecraft:composter");
-        c("summon minecraft:villager " + (SEAT.getX() + 0.5) + " " + (Y + 0.6) + " " + (SEAT.getZ() + 0.5) + " {CustomName:'\"Buyer\"',PersistenceRequired:1b,"
+        c("summon minecraft:villager " + (SEAT.getX() + 0.5) + " " + (Y + 0.6) + " " + (SEAT.getZ() + 0.5) + " {CustomName:\"Buyer\",PersistenceRequired:1b,"
             + "VillagerData:{profession:\"minecraft:farmer\",level:1,type:\"minecraft:plains\"},"
             + "Offers:{Recipes:[{buy:{id:\"minecraft:wheat\",count:20},sell:{id:\"minecraft:emerald\",count:1},maxUses:16,uses:0,rewardExp:1b,xp:2}]}}");
         // A full charge, so that he sets off at once instead of winding up first
@@ -381,7 +381,7 @@ final class AddonSteps {
      */
     private static void wheatOffer() throws Exception {
         BestiarySteps.server("the farmer's wheat offer", (level, player) -> {
-            for (net.minecraft.world.entity.npc.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
+            for (net.minecraft.world.entity.npc.villager.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.villager.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
                 net.minecraft.world.item.trading.MerchantOffers offers = new net.minecraft.world.item.trading.MerchantOffers();
                 offers.add(new net.minecraft.world.item.trading.MerchantOffer(new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.WHEAT, 20),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD), 16, 2, 0.05F));
@@ -525,19 +525,19 @@ final class AddonSteps {
         try {
             return minecraft.getSingleplayerServer().submit(() -> {
                 net.minecraft.server.level.ServerLevel level = minecraft.getSingleplayerServer().overworld();
-                StringBuilder seen = new StringBuilder("day=" + level.isDay() + " time=" + level.getDayTime());
+                StringBuilder seen = new StringBuilder("day=" + level.isBrightOutside() + " time=" + level.getOverworldClockTime());
                 BlockEntity station = level.getBlockEntity(STATION);
                 seen.append(" station=").append(station == null ? "missing" : station.saveWithoutMetadata(level.registryAccess()));
-                net.neoforged.neoforge.items.IItemHandler input = level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, INPUT, null);
+                net.neoforged.neoforge.transfer.ResourceHandler<net.neoforged.neoforge.transfer.item.ItemResource> input = level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.Item.BLOCK, INPUT, null);
                 int wheat = 0;
                 if (input != null) {
-                    for (int slot = 0; slot < input.getSlots(); slot++) {
-                        wheat += input.getStackInSlot(slot).is(net.minecraft.world.item.Items.WHEAT) ? input.getStackInSlot(slot).getCount() : 0;
+                    for (int slot = 0; slot < input.size(); slot++) {
+                        wheat += input.getResource(slot).is(net.minecraft.world.item.Items.WHEAT) ? input.getAmountAsInt(slot) : 0;
                     }
                 }
                 seen.append(" input=").append(input == null ? "no item handler" : wheat + " wheat");
-                seen.append(" output=").append(level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, OUTPUT, null) == null ? "no item handler" : "a container");
-                for (net.minecraft.world.entity.npc.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
+                seen.append(" output=").append(level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.Item.BLOCK, OUTPUT, null) == null ? "no item handler" : "a container");
+                for (net.minecraft.world.entity.npc.villager.Villager villager : level.getEntitiesOfClass(net.minecraft.world.entity.npc.villager.Villager.class, new net.minecraft.world.phys.AABB(SEAT).inflate(4))) {
                     seen.append(" villager riding ").append(villager.getVehicle() == null ? "nothing" : BuiltInRegistries.ENTITY_TYPE.getKey(villager.getVehicle().getType()))
                         .append(" offers ").append(villager.getOffers().size());
                     for (net.minecraft.world.item.trading.MerchantOffer offer : villager.getOffers()) {

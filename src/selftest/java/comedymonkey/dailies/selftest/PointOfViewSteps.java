@@ -198,7 +198,7 @@ final class PointOfViewSteps {
         WorldSteps.createWorld(test, WORLD);
         test.tool("recording_start", none);
         test.waitTicks(20);
-        test.command("summon minecraft:cow 3 -60 3 {CustomName:'\"Witness\"',NoAI:1b}");
+        test.command("summon minecraft:cow 3 -60 3 {CustomName:\"Witness\",NoAI:1b}");
         test.waitTicks(40);
         JsonObject added = test.tool("moments_event_add", args("label", "Seen by two", "type", "point_of_view_test"));
         test.waitTicks(80);
@@ -207,7 +207,7 @@ final class PointOfViewSteps {
         String session = added.get("session").getAsString();
         String mineId = added.getAsJsonObject("event").get("replay_uuid").getAsString();
         String myUuid = minecraft.player.getUUID().toString();
-        String myName = minecraft.player.getGameProfile().getName();
+        String myName = minecraft.player.getGameProfile().name();
         WorldSteps.leaveWorld(test);
         test.tool("moments_clips_generate", args("session", session, "min_importance", 0));
 

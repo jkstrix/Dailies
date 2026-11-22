@@ -285,7 +285,7 @@ final class WatchingSteps {
         frames(test, 3);
         test.onClientRun(() -> {
             Minecraft minecraft = Minecraft.getInstance();
-            net.minecraft.client.Screenshot.grab(minecraft.gameDirectory, name + ".png", minecraft.getMainRenderTarget(), said -> { });
+            net.minecraft.client.Screenshot.grab(minecraft.gameDirectory, name + ".png", minecraft.gameRenderer.mainRenderTarget(), 1, said -> { });
         });
     }
 
@@ -353,7 +353,7 @@ final class WatchingSteps {
     private static boolean layerCancelled(SelfTest test, Identifier layer) throws Exception {
         return test.onClient(() -> {
             Minecraft minecraft = Minecraft.getInstance();
-            GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, minecraft.renderBuffers().bufferSource());
+            GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, new net.minecraft.client.renderer.state.gui.GuiRenderState(), 0, 0);
             return NeoForge.EVENT_BUS.post(new RenderGuiLayerEvent.Pre(graphics, DeltaTracker.ZERO, layer, (drawn, delta) -> { })).isCanceled();
         });
     }
@@ -408,15 +408,16 @@ final class WatchingSteps {
         // Any other command is turned away before it could be sent anywhere (PLAY-4)
         test.onClientRun(() -> minecraft.player.connection.sendCommand("time set day"));
         check(DailiesCommand.lastAnswer().equals("only_own"), "a command that is not Dailies' own was not turned away while watching");
-        check(test.onClient(() -> minecraft.player.connection.sendUnsignedCommand("gamemode creative")) && DailiesCommand.lastAnswer().equals("only_own"),
-            "an unsigned command that is not Dailies' own was not turned away while watching");
+        // A command from a clicked link, which the game sends without asking for a signature
+        test.onClientRun(() -> minecraft.player.connection.sendUnattendedCommand("gamemode creative", null));
+        check(DailiesCommand.lastAnswer().equals("only_own"), "an unsigned command that is not Dailies' own was not turned away while watching");
         check(minecraft.player.isSpectator(), "the viewer is no longer a spectator after a command");
 
         // The chat never opens while watching: the chat key opens the editor and the command key does nothing
-        test.onClientRun(() -> minecraft.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("/")));
+        test.onClientRun(() -> minecraft.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("/", false)));
         test.waitTicks(2);
         check(minecraft.gui.screen() == null, "the command key opened a screen while watching: " + minecraft.gui.screen());
-        test.onClientRun(() -> minecraft.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("")));
+        test.onClientRun(() -> minecraft.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false)));
         test.waitFor(() -> minecraft.gui.screen() instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the chat key to open the editor while watching");
         test.onClientRun(() -> minecraft.gui.screen().onClose());
         test.waitTicks(2);
@@ -425,7 +426,7 @@ final class WatchingSteps {
         test.onClientRun(() -> minecraft.pauseGame(false));
         test.waitTicks(2);
         check(minecraft.gui.screen() instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape while watching brought up " + minecraft.gui.screen() + " rather than Dailies' menu");
-        test.onClientRun(() -> minecraft.gui.screen().keyPressed(org.lwjgl.glfw.InputConstants.KEY_ESCAPE, 0, 0));
+        test.onClientRun(() -> minecraft.gui.screen().keyPressed(Inputs.key(com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE)));
         test.waitTicks(2);
         check(minecraft.gui.screen() == null, "Escape in Dailies' menu did not go back to watching: " + minecraft.gui.screen());
     }
@@ -452,8 +453,8 @@ final class WatchingSteps {
         test.onClientRun(() -> {
             double[] at = MarkerRings.onScreen(ring);
             check(at != null, "the ring is behind the camera that was turned to it");
-            minecraft.gui.screen().mouseClicked(at[0], at[1], 0);
-            minecraft.gui.screen().mouseReleased(at[0], at[1], 0);
+            minecraft.gui.screen().mouseClicked(Inputs.leftClick(at[0], at[1]), false);
+            minecraft.gui.screen().mouseReleased(Inputs.leftClick(at[0], at[1]));
         });
         test.waitFor(() -> !Playback.jumping() && Playback.position() == well.tick, 60, "the jump a click on a marker's ring makes");
         editor(test);
@@ -517,8 +518,8 @@ final class WatchingSteps {
             PathPreview.Mark second = PathPreview.marks().get(1);
             double[] at = PathPreview.onScreen(second);
             check(at != null, "a keyframe mark is behind the camera that was turned to the path");
-            minecraft.gui.screen().mouseClicked(at[0], at[1], 0);
-            minecraft.gui.screen().mouseReleased(at[0], at[1], 0);
+            minecraft.gui.screen().mouseClicked(Inputs.leftClick(at[0], at[1]), false);
+            minecraft.gui.screen().mouseReleased(Inputs.leftClick(at[0], at[1]));
             List<PathPreview.Mark> selected = PathPreview.selectedMarks();
             check(selected.size() == 1 && selected.get(0).tick() == ticks[1], "a click on the second keyframe's mark selected " + selected);
         });
@@ -888,7 +889,7 @@ final class WatchingSteps {
         while (!(Playback.paused() && Playback.position() == walkEnd)) {
             worst = Math.max(worst, test.onClient(() -> {
                 Player there = minecraft.level.getPlayerByUUID(recorderId);
-                return there == null ? 0.0 : offAim(there.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true)).add(0.0, there.getEyeHeight(), 0.0));
+                return there == null ? 0.0 : offAim(there.getPosition(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true)).add(0.0, there.getEyeHeight(), 0.0));
             }));
             looked++;
             check(looked < 2000, "the walk never finished playing");
@@ -978,8 +979,8 @@ final class WatchingSteps {
             if (recorder == null) {
                 return Double.MAX_VALUE;
             }
-            Vec3 eyes = recorder.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true)).add(0.0, recorder.getEyeHeight(), 0.0);
-            return minecraft.gameRenderer.getMainCamera().getPosition().distanceTo(eyes);
+            Vec3 eyes = recorder.getPosition(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true)).add(0.0, recorder.getEyeHeight(), 0.0);
+            return minecraft.gameRenderer.mainCamera().position().distanceTo(eyes);
         });
     }
 
@@ -990,12 +991,12 @@ final class WatchingSteps {
             comedymonkey.dailies.capture.GameCodec codec = new comedymonkey.dailies.capture.GameCodec(listener.registryAccess(), listener.getConnectionType());
             List<net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry> entries = List.of(
                 new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry(ADA, new com.mojang.authlib.GameProfile(ADA, ADA_NAME), true, 0,
-                    net.minecraft.world.level.GameType.SURVIVAL, null, null),
+                    net.minecraft.world.level.GameType.SURVIVAL, null, true, 0, null),
                 new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry(BRUNEL, new com.mojang.authlib.GameProfile(BRUNEL, "Brunel"), true, 0,
-                    net.minecraft.world.level.GameType.SURVIVAL, null, null));
+                    net.minecraft.world.level.GameType.SURVIVAL, null, true, 0, null));
             listener.handlePlayerInfoUpdate(comedymonkey.dailies.capture.PlayerInfoPackets.build(codec, comedymonkey.dailies.capture.PlayerInfoPackets.allButChat(), entries));
             listener.handleAddEntity(new net.minecraft.network.protocol.game.ClientboundAddEntityPacket(90001, ADA, at.x, at.y, at.z, 0.0F, 90.0F,
-                net.minecraft.world.entity.EntityType.PLAYER, 0, Vec3.ZERO, 90.0));
+                net.minecraft.world.entity.EntityTypes.PLAYER, 0, Vec3.ZERO, 90.0));
         });
         frames(test, 6);
     }
@@ -1183,7 +1184,7 @@ final class WatchingSteps {
             minecraft.options.guiScale().set(scale);
         });
         test.waitTicks(8);
-        test.onClientRun(minecraft::resizeDisplay);
+        test.onClientRun(minecraft::resizeGui);
         test.waitTicks(8);
     }
 
@@ -1214,8 +1215,8 @@ final class WatchingSteps {
                 test.onClientRun(() -> {
                     double[] at = PathPreview.onScreen(PathPreview.marks().get(1));
                     if (at != null) {
-                        minecraft.gui.screen().mouseClicked(at[0], at[1], 0);
-                        minecraft.gui.screen().mouseReleased(at[0], at[1], 0);
+                        minecraft.gui.screen().mouseClicked(Inputs.leftClick(at[0], at[1]), false);
+                        minecraft.gui.screen().mouseReleased(Inputs.leftClick(at[0], at[1]));
                     }
                 });
                 picture(test, "eye-path-sky");

@@ -174,9 +174,10 @@ final class BudgetSteps {
         int idleFrames = 0, recordingFrames = 0;
         try {
             // As fast as the game will draw, so the frame's own cost is what is measured and not the monitor's pace
+            // The window takes the vsync setting when its surface is next set up, which changing the option asks for
             test.onClientRun(() -> {
-                minecraft.getWindow().updateVsync(false);
-                minecraft.getWindow().setFramerateLimit(260);
+                minecraft.options.enableVsync().set(false);
+                minecraft.getFramerateLimitTracker().setFramerateLimit(260);
             });
             for (int turn = 0; turn < 4; turn++) {
                 test.tool("recording_pause", none);
@@ -192,8 +193,8 @@ final class BudgetSteps {
             }
         } finally {
             test.onClientRun(() -> {
-                minecraft.getWindow().updateVsync(vsync);
-                minecraft.getWindow().setFramerateLimit(limit);
+                minecraft.options.enableVsync().set(vsync);
+                minecraft.getFramerateLimitTracker().setFramerateLimit(limit);
             });
         }
         double idle = idleSum / Math.max(1, idleFrames);

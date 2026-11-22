@@ -8,7 +8,6 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -120,7 +119,7 @@ final class SupplementariesPlacingSteps {
         }
         WorldSteps.createWorld(test, "Dailies Supplementaries Placing");
         test.onClientRun(() -> minecraft.options.setCameraType(CameraType.FIRST_PERSON));
-        test.command("gamerule sendCommandFeedback false");
+        test.command("gamerule send_command_feedback false");
         test.command("gamemode survival");
         test.command("effect give @s minecraft:resistance 600 4 true");
         test.command("time set noon");
@@ -308,13 +307,9 @@ final class SupplementariesPlacingSteps {
 
     /** A picture of the screen as last drawn, kept for a person to look at too */
     private static void picture(SelfTest test, Minecraft minecraft, Path file) throws Exception {
-        test.onClientRun(() -> {
-            try (NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
-                image.writeToFile(file);
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        });
+        try (NativeImage image = SelfTestSupport.screenshot(test)) {
+            image.writeToFile(file);
+        }
     }
 
     /** The mean difference of a pixel between two pictures, of 255, across the middle of the screen, as the bestiary compares */

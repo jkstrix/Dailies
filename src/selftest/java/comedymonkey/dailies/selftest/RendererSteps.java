@@ -131,7 +131,7 @@ final class RendererSteps {
         PlaybackSteps.jump(test, RecordingSteps.notes.get(0).tick());
         test.waitFor(() -> {
             try {
-                return test.onClient(() -> minecraft.levelRenderer.hasRenderedAllSections() && minecraft.levelRenderer.countRenderedSections() > 0);
+                return test.onClient(() -> minecraft.levelRenderer.hasRenderedAllSections() && minecraft.levelExtractor.countRenderedSections() > 0);
             } catch (Exception e) {
                 return false;
             }

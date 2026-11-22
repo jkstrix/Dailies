@@ -16,7 +16,6 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.selftest.WorldProbe.Region;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
-import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -390,7 +389,7 @@ final class RealWorldSteps {
         });
         if (minecraft.getSingleplayerServer() != null && minecraft.player != null) {
             test.command("gamemode creative");
-            test.command("gamerule randomTickSpeed 3");
+            test.command("gamerule random_tick_speed 3");
         }
         if (Recorder.get().state() == Recorder.State.PAUSED) {
             test.tool("recording_resume", new JsonObject());
@@ -432,7 +431,7 @@ final class RealWorldSteps {
     }
 
     private static ServerLevel serverLevel(IntegratedServer server) {
-        return server.getPlayerList().getPlayers().get(0).serverLevel();
+        return server.getPlayerList().getPlayers().get(0).level();
     }
 
     /** The nearest of some structures to a place, in the dimension the player is in; null when none is within reach */
@@ -441,15 +440,15 @@ final class RealWorldSteps {
         long started = System.currentTimeMillis();
         BlockPos found = onServer(() -> {
             ServerLevel level = serverLevel(Minecraft.getInstance().getSingleplayerServer());
-            Registry<Structure> registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+            Registry<Structure> registry = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
             List<Holder<Structure>> holders = new ArrayList<>();
             for (ResourceKey<Structure> kind : kinds) {
-                registry.getHolder(kind).ifPresent(holders::add);
+                registry.get(kind).ifPresent(holders::add);
             }
             Pair<BlockPos, Holder<Structure>> nearest = level.getChunkSource().getGenerator().findNearestMapStructure(level, HolderSet.direct(holders), from, 100, false);
             return nearest == null ? null : nearest.getFirst();
         });
-        test.log("real world: nearest " + kinds[0].location().getPath() + " to " + from.toShortString() + ": "
+        test.log("real world: nearest " + kinds[0].identifier().getPath() + " to " + from.toShortString() + ": "
             + (found == null ? "none" : found.toShortString() + ", " + (int) Math.sqrt(found.distSqr(new BlockPos(from.getX(), found.getY(), from.getZ()))) + " blocks away")
             + " (looked for " + (System.currentTimeMillis() - started) + " ms)");
         return found;
@@ -498,8 +497,8 @@ final class RealWorldSteps {
                 if (minecraft.level == null || minecraft.player == null) {
                     return new int[]{0, 0};
                 }
-                boolean here = minecraft.level.getChunkSource().getChunk(minecraft.player.chunkPosition().x, minecraft.player.chunkPosition().z, ChunkStatus.FULL, false) != null;
-                boolean clear = minecraft.gui.screen() == null && minecraft.level.isLightUpdateQueueEmpty();
+                boolean here = minecraft.level.getChunkSource().getChunk(minecraft.player.chunkPosition().x(), minecraft.player.chunkPosition().z(), ChunkStatus.FULL, false) != null;
+                boolean clear = minecraft.gui.screen() == null && ((comedymonkey.dailies.mixin.access.ClientLevelAccess) minecraft.level).dailies$lightQueue().isEmpty();
                 return new int[]{minecraft.level.getChunkSource().getLoadedChunksCount(), here && clear ? 1 : 0};
             });
             if (state[1] == 1 && state[0] == last && state[0] > 20) {
@@ -571,14 +570,13 @@ final class RealWorldSteps {
         WorldProbe probe = note(test, label);
         int[][] picture = new int[1][];
         int[] size = new int[2];
-        test.onClientRun(() -> {
-            try (NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
-                picture[0] = image.makePixelArray();
-                size[0] = image.getWidth();
-                size[1] = image.getHeight();
-            }
-            comedymonkey.dailies.ui.HudHidden.set(false);
-        });
+        try (NativeImage image = SelfTestSupport.screenshot(test)) {
+            picture[0] = image.makePixelArray();
+            size[0] = image.getWidth();
+            size[1] = image.getHeight();
+        } finally {
+            test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(false));
+        }
         BufferedImage full = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);
         full.setRGB(0, 0, size[0], size[1], picture[0], 0, size[0]);
         BufferedImage small = new BufferedImage(STILL_WIDTH, STILL_HEIGHT, BufferedImage.TYPE_INT_RGB);
@@ -612,7 +610,7 @@ final class RealWorldSteps {
         test.onClientRun(() -> {
             Vec3 middle = Vec3.atCenterOf(pos).add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
             minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND, new BlockHitResult(middle, face, pos, false));
-            minecraft.player.swing(InteractionHand.MAIN_HAND);
+            minecraft.player.swing(InteractionHand.MAIN_HAND, minecraft.player.getMainHandItem().getInteractAnimation(), false);
         });
     }
 
@@ -646,7 +644,7 @@ final class RealWorldSteps {
             BlockPos best = null;
             for (BlockPos pos : BlockPos.betweenClosed(target.offset(-reach, -reach, -reach), target.offset(reach, reach, reach))) {
                 ClientLevel level = minecraft.level;
-                if (level.getBlockState(pos).isAir() && level.getBlockState(pos.above()).isAir() && level.getBlockState(pos.below()).isSolidRender(level, pos.below())
+                if (level.getBlockState(pos).isAir() && level.getBlockState(pos.above()).isAir() && level.getBlockState(pos.below()).isSolidRender()
                     && (best == null || pos.distSqr(target) < best.distSqr(target)) && pos.distSqr(target) >= 2) {
                     best = pos.immutable();
                 }
@@ -664,13 +662,12 @@ final class RealWorldSteps {
         test.onClientRun(() -> {
             if (on) {
                 before[0] = minecraft.options.enableVsync().get();
+                // The window takes the vsync setting when its surface is next set up, which changing the option asks for
                 minecraft.options.enableVsync().set(false);
-                minecraft.getWindow().updateVsync(false);
-                minecraft.getWindow().setFramerateLimit(260);
+                minecraft.getFramerateLimitTracker().setFramerateLimit(260);
             } else {
                 minecraft.options.enableVsync().set(before[0]);
-                minecraft.getWindow().updateVsync(before[0]);
-                minecraft.getWindow().setFramerateLimit(minecraft.options.framerateLimit().get());
+                minecraft.getFramerateLimitTracker().setFramerateLimit(minecraft.options.framerateLimit().get());
             }
         });
     }
@@ -1140,9 +1137,9 @@ final class RealWorldSteps {
         command(test, "execute unless entity @e[type=minecraft:villager,distance=..64] run summon minecraft:villager %d %d %d", x + 2, ground + 1, z + 2);
         command(test, "execute unless entity @e[type=minecraft:iron_golem,distance=..64] run summon minecraft:iron_golem %d %d %d", x - 3, ground + 1, z + 2);
         test.waitTicks(10);
-        test.command("data merge entity @e[type=minecraft:villager,limit=1,sort=nearest] {CustomName:'\"Mayor\"'}");
-        test.command("data merge entity @e[type=minecraft:iron_golem,limit=1,sort=nearest] {CustomName:'\"Guard\"'}");
-        command(test, "summon minecraft:cat %d %d %d {CustomName:'\"Tom\"',PersistenceRequired:1b}", x + 3, ground + 1, z - 2);
+        test.command("data merge entity @e[type=minecraft:villager,limit=1,sort=nearest] {CustomName:\"Mayor\"}");
+        test.command("data merge entity @e[type=minecraft:iron_golem,limit=1,sort=nearest] {CustomName:\"Guard\"}");
+        command(test, "summon minecraft:cat %d %d %d {CustomName:\"Tom\",PersistenceRequired:1b}", x + 3, ground + 1, z - 2);
 
         // A chest whose loot has not been made yet, as the village's own are until someone looks
         BlockPos chest = new BlockPos(x + 1, surface(x + 1, z - 4, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES), z - 4);
@@ -1256,7 +1253,7 @@ final class RealWorldSteps {
             int cx = x + 4 + (i % 4) * 3;
             int cz = z + 4 + (i / 4) * 3;
             int cy = surface(cx, cz, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES) + (cast[i][0].equals("bat") ? 4 : 0);
-            command(test, "summon minecraft:%s %d %d %d {CustomName:'\"%s\"',PersistenceRequired:1b%s}", cast[i][0], cx, cy, cz, cast[i][1], cast[i][2]);
+            command(test, "summon minecraft:%s %d %d %d {CustomName:\"%s\",PersistenceRequired:1b%s}", cast[i][0], cx, cy, cz, cast[i][1], cast[i][2]);
         }
         command(test, "setblock %d %d %d minecraft:bee_nest", x + 2, surface(x + 2, z + 2, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES), z + 2);
         ticks(test, 40);
@@ -1353,7 +1350,7 @@ final class RealWorldSteps {
         goTo(test, x + 0.5, y + 14, z + 0.5, 0, 75);
         command(test, "fill %d %d %d %d %d %d minecraft:fire", x + 11, y + 2, z + 10, x + 13, y + 2, z + 12);
         command(test, "fill %d %d %d %d %d %d minecraft:air replace #minecraft:logs", x - 15, y, z + 3, x - 9, y + 12, z + 9);
-        test.command("gamerule randomTickSpeed 300");
+        test.command("gamerule random_tick_speed 300");
         ticks(test, 12);
         note(test, "leaves starting to go, fire catching");
         ticks(test, 60);
@@ -1361,7 +1358,7 @@ final class RealWorldSteps {
         test.command("tick sprint 900");
         IntegratedServer server = minecraft.getSingleplayerServer();
         test.waitFor(() -> !server.tickRateManager().isSprinting(), 180, "the hurried ticks in the laboratory");
-        test.command("gamerule randomTickSpeed 3");
+        test.command("gamerule random_tick_speed 3");
         ticks(test, 40);
         WorldProbe after = note(test, "after the fire");
 
@@ -1664,7 +1661,7 @@ final class RealWorldSteps {
         SelfTest test = yard.test;
         Minecraft minecraft = yard.minecraft;
         test.command("effect give @s minecraft:instant_health 1 3");
-        command(test, "summon minecraft:zombie %d %d %d {CustomName:'\"Biter\"',PersistenceRequired:1b,ArmorItems:[{},{},{},{id:\"minecraft:leather_helmet\",count:1}]}", yard.x + 2, yard.y, yard.z - 2);
+        command(test, "summon minecraft:zombie %d %d %d {CustomName:\"Biter\",PersistenceRequired:1b,equipment:{head:{id:\"minecraft:leather_helmet\",count:1}}}", yard.x + 2, yard.y, yard.z - 2);
         float[] healthBefore = {20};
         test.onClientRun(() -> healthBefore[0] = minecraft.player.getHealth());
         try {
@@ -1782,19 +1779,15 @@ final class RealWorldSteps {
 
     /** How far the cracks have spread over a block, 0 to 9, or -1 when it has none */
     private static int cracks(Minecraft minecraft, BlockPos pos) {
-        try {
-            java.lang.reflect.Field field = minecraft.levelRenderer.getClass().getDeclaredField("destroyingBlocks");
-            field.setAccessible(true);
-            int most = -1;
-            for (Object progress : ((Map<?, ?>) field.get(minecraft.levelRenderer)).values()) {
-                if (progress instanceof BlockDestructionProgress cracking && cracking.getPos().equals(pos)) {
-                    most = Math.max(most, cracking.getProgress());
-                }
+        // The world keeps the cracks now, by block, where the level renderer used to
+        java.util.SortedSet<BlockDestructionProgress> cracking = minecraft.level == null ? null : minecraft.level.destructionProgress().get(pos.asLong());
+        int most = -1;
+        if (cracking != null) {
+            for (BlockDestructionProgress progress : cracking) {
+                most = Math.max(most, progress.getProgress());
             }
-            return most;
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
         }
+        return most;
     }
 
     // --- 2. Depth: a cave down in the deepslate, lit by a torch and dark again
@@ -1817,7 +1810,7 @@ final class RealWorldSteps {
                 for (int dz = -44; dz <= 44; dz++) {
                     for (int py = -58; py <= 20; py++) {
                         pos.set(x + dx, py, z + dz);
-                        if (!level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir() || !level.getBlockState(pos.below()).isSolidRender(level, pos.below())) {
+                        if (!level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir() || !level.getBlockState(pos.below()).isSolidRender()) {
                             continue;
                         }
                         if (level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, pos) > 6) {
@@ -1953,8 +1946,8 @@ final class RealWorldSteps {
         command(test, "setblock %d %d %d minecraft:magma_block", x - 2, floor - 1, z + 3);
         command(test, "fill %d %d %d %d %d %d minecraft:kelp_plant replace minecraft:water", x, floor, z + 4, x, Math.min(top - 3, floor + 4), z + 4);
         command(test, "setblock %d %d %d minecraft:kelp", x, Math.min(top - 2, floor + 5), z + 4);
-        command(test, "summon minecraft:tropical_fish %d %d %d {CustomName:'\"Nemo\"',PersistenceRequired:1b}", x + 1, y, z + 3);
-        command(test, "summon minecraft:drowned %d %d %d {CustomName:'\"Davy\"',PersistenceRequired:1b}", x - 3, floor, z + 5);
+        command(test, "summon minecraft:tropical_fish %d %d %d {CustomName:\"Nemo\",PersistenceRequired:1b}", x + 1, y, z + 3);
+        command(test, "summon minecraft:drowned %d %d %d {CustomName:\"Davy\",PersistenceRequired:1b}", x - 3, floor, z + 5);
         for (int i = 0; i < 5; i++) {
             command(test, "summon minecraft:cod %d %d %d", x - 1 + i, y + 1, z + 5);
         }
@@ -2098,8 +2091,8 @@ final class RealWorldSteps {
 
         // A little way through the Nether on the wing
         flying(test, true, 0.05F);
-        command(test, "summon minecraft:ghast %.1f %.1f %.1f {CustomName:'\"Casper\"',PersistenceRequired:1b}", arrived.x + 12, arrived.y + 10, arrived.z + 12);
-        command(test, "summon minecraft:piglin %.1f %.1f %.1f {CustomName:'\"Porky\"',PersistenceRequired:1b,IsImmuneToZombification:1b}", arrived.x + 2, arrived.y, arrived.z + 1);
+        command(test, "summon minecraft:ghast %.1f %.1f %.1f {CustomName:\"Casper\",PersistenceRequired:1b}", arrived.x + 12, arrived.y + 10, arrived.z + 12);
+        command(test, "summon minecraft:piglin %.1f %.1f %.1f {CustomName:\"Porky\",PersistenceRequired:1b,IsImmuneToZombification:1b}", arrived.x + 2, arrived.y, arrived.z + 1);
         for (int i = 0; i < 3; i++) {
             // The Nether is mostly rock: each leg starts from the nearest open place thirty blocks on, facing the way that is clearest
             BlockPos from = openSpot(test, BlockPos.containing(arrived.x + 30 * (i + 1), arrived.y, arrived.z), 14);
@@ -2162,7 +2155,7 @@ final class RealWorldSteps {
             double bestScore = Double.MAX_VALUE;
             for (BlockPos pos : BlockPos.betweenClosed(near.offset(-reach, -40, -reach), near.offset(reach, 40, reach))) {
                 if (pos.getY() < 33 || pos.getY() > 116 || !level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir() || !level.getBlockState(pos.above(2)).isAir()
-                    || !level.getBlockState(pos.below()).isSolidRender(level, pos.below())) {
+                    || !level.getBlockState(pos.below()).isSolidRender()) {
                     continue;
                 }
                 int room = 0;
@@ -2193,7 +2186,7 @@ final class RealWorldSteps {
                 float yaw = turn * 45.0F;
                 Vec3 ahead = Vec3.directionFromRotation(0, yaw);
                 int clear = 0;
-                while (clear < 64 && !minecraft.level.getBlockState(BlockPos.containing(eyes.add(ahead.scale(clear + 1)))).isSolidRender(minecraft.level, BlockPos.containing(eyes.add(ahead.scale(clear + 1))))) {
+                while (clear < 64 && !minecraft.level.getBlockState(BlockPos.containing(eyes.add(ahead.scale(clear + 1)))).isSolidRender()) {
                     clear++;
                 }
                 if (clear > furthest) {
@@ -2342,7 +2335,7 @@ final class RealWorldSteps {
     }
 
     private static String dimensionNow(SelfTest test, Minecraft minecraft) throws Exception {
-        return test.onClient(() -> minecraft.level == null ? "" : minecraft.level.dimension().location().toString());
+        return test.onClient(() -> minecraft.level == null ? "" : minecraft.level.dimension().identifier().toString());
     }
 
     /** How long some jumps took, by whether they stayed inside one stretch between snapshots */
@@ -2480,7 +2473,7 @@ final class RealWorldSteps {
             while (System.currentTimeMillis() < until && steady < 12) {
                 int before = frames;
                 test.waitFor(() -> frames >= before + 2, 10, "frames through the recorder's eyes");
-                int[] drawn = test.onClient(() -> new int[]{minecraft().levelRenderer.countRenderedSections(), minecraft().levelRenderer.hasRenderedAllSections() ? 1 : 0});
+                int[] drawn = test.onClient(() -> new int[]{minecraft().levelExtractor.countRenderedSections(), minecraft().levelRenderer.hasRenderedAllSections() ? 1 : 0});
                 steady = drawn[0] > 0 && drawn[1] == 1 && drawn[0] == last ? steady + 1 : 0;
                 last = drawn[0];
             }
