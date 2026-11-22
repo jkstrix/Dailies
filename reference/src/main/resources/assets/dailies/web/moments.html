@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dailies Moments</title>
+<style>
+  /* The house style of the Dailies specification: walnut, brass and notice paper. Everything is in this one file:
+     no fonts, scripts or pictures are fetched from anywhere but the game itself, so the page works offline. */
+  :root {
+    --ground: #e8e6e0; --sheet: #f4f1ea; --ink: #2b1d0e; --muted: #6b5a49; --walnut: #4e3626; --walnut-ink: #f4f1ea;
+    --brass: #9a7a34; --brass-hi: #c9a75a; --verdigris: #3f7f6f; --rust: #8a3412; --rule: #cdbf9f; --well: #ebe6da;
+    --on-brass: #fffaf0;
+    --display: "Bahnschrift", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", system-ui, sans-serif;
+    --body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #17120e; --sheet: #221a14; --ink: #efe6d6; --muted: #b6a48e; --walnut: #2e2018; --walnut-ink: #efe6d6;
+      --brass: #c9a75a; --brass-hi: #e0c27a; --verdigris: #6fb3a1; --rust: #e0805a; --rule: #3e3127; --well: #1b1510;
+      --on-brass: #17120e;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 120px; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.5 var(--body); }
+  h1, h2 { font-family: var(--display); text-transform: uppercase; letter-spacing: .04em; line-height: 1.05; margin: 0; }
+  code { font: .86em var(--mono); background: var(--well); border: 1px solid var(--rule); border-radius: 3px; padding: 0 5px; }
+  :focus-visible { outline: 3px solid var(--brass-hi); outline-offset: 2px; }
+
+  /* Masthead: a walnut bar with a brass rule, which stays put while the lists scroll */
+  header { position: sticky; top: 0; z-index: 5; background: var(--walnut); color: var(--walnut-ink); border-bottom: 3px solid var(--brass);
+    padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; max-width: 1180px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: 6px; }
+  .brand svg { width: 34px; height: 34px; flex: none; }
+  h1 { font-size: 24px; font-weight: 700; white-space: nowrap; }
+  h1 span { color: #e0c27a; }
+  header select { flex: 1 1 220px; min-width: 0; max-width: 420px; }
+  .right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 18px max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left)); }
+
+  select, input[type=text], input[type=number], input[type=password] { font: inherit; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 6px 9px; min-height: 36px; }
+  button { font: 600 15px var(--body); cursor: pointer; border-radius: 4px; border: 1px solid var(--brass); background: var(--sheet); color: var(--ink);
+    padding: 6px 13px; min-height: 36px; }
+  button:hover:not(:disabled) { background: var(--brass-hi); color: #2b1d0e; }
+  button.primary { background: var(--brass); color: var(--on-brass); border-color: var(--brass); }
+  button.small { padding: 3px 10px; min-height: 30px; font-size: 14px; font-weight: 500; }
+  button:disabled { opacity: .45; cursor: default; }
+  header button { background: transparent; color: var(--walnut-ink); border-color: #c9a75a; }
+
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .03em; padding: 2px 9px; border-radius: 999px; background: var(--well); color: var(--muted);
+    border: 1px solid var(--rule); white-space: nowrap; }
+  .pill.on { color: var(--verdigris); border-color: var(--verdigris); }
+  .pill.first { color: var(--brass); border-color: var(--brass); }
+  .pill.warn { color: var(--rust); border-color: var(--rust); }
+  header .pill { background: rgba(0, 0, 0, .22); color: var(--walnut-ink); border-color: rgba(255, 255, 255, .25); }
+  header .pill.on { color: #9fd8c6; border-color: #9fd8c6; }
+
+  /* The live lamp: green and breathing while the feed is open, brass while the page is falling back on the clock */
+  .live { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none; padding: 3px 10px 3px 8px;
+    border-radius: 999px; border: 1px solid rgba(255, 255, 255, .25); background: rgba(0, 0, 0, .22); white-space: nowrap; }
+  .live input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .live i { width: 10px; height: 10px; border-radius: 50%; background: #8d7f70; flex: none; }
+  .live.on i { background: #7fd3b8; box-shadow: 0 0 0 0 rgba(127, 211, 184, .7); animation: lamp 2s infinite; }
+  .live.slow i { background: #e0c27a; }
+  .live:focus-within { outline: 3px solid var(--brass-hi); outline-offset: 2px; }
+  @keyframes lamp { 70% { box-shadow: 0 0 0 7px rgba(127, 211, 184, 0); } 100% { box-shadow: 0 0 0 0 rgba(127, 211, 184, 0); } }
+  @media (prefers-reduced-motion: reduce) { .live.on i { animation: none; } }
+
+  .notice { background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--verdigris); border-radius: 4px; padding: 10px 14px; margin-bottom: 14px;
+    font-size: 14px; color: var(--muted); }
+  .notice.sending { border-left-color: var(--rust); }
+  .notice b { color: var(--ink); }
+  .notice p { margin: 0; overflow-wrap: anywhere; }
+  .notice p + p { margin-top: 3px; }
+
+  .strip { position: relative; height: 54px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; margin-bottom: 14px; overflow: hidden; }
+  .strip .band { position: absolute; top: 0; bottom: 0; background: var(--brass); opacity: .22; cursor: pointer; min-width: 2px; }
+  .strip .band:hover { opacity: .45; }
+  .strip .dot { position: absolute; bottom: 5px; width: 3px; background: var(--muted); border-radius: 2px; cursor: pointer; transform: translateX(-1px); }
+  .strip .dot.pictured { background: var(--verdigris); }
+  .strip .dot:hover { background: var(--rust); }
+  .strip .ends { position: absolute; top: 3px; font-size: 11px; color: var(--muted); padding: 0 6px; pointer-events: none; }
+  .strip.people .dot { bottom: auto; height: 12px !important; }
+  .strip .person { position: absolute; left: 0; right: 0; height: 20px; border-top: 1px solid var(--rule); }
+  .strip .person .name { position: absolute; left: 6px; top: 3px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  .strip .person.theirs .name { color: var(--verdigris); }
+
+  .tabs { display: flex; gap: 2px; margin: 0 0 14px; border-bottom: 2px solid var(--rule); overflow-x: auto; }
+  .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 9px 14px; color: var(--muted);
+    font: 700 17px var(--display); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; margin-bottom: -2px; }
+  .tabs button:hover:not(:disabled) { background: none; color: var(--ink); border-bottom-color: var(--brass-hi); }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--brass); }
+  .tabs button small { font: 600 12px var(--body); color: var(--brass); margin-left: 5px; letter-spacing: 0; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+  .controls label { display: flex; gap: 6px; align-items: center; }
+  .controls input[type=number] { width: 74px; }
+
+  .card { background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--brass); border-radius: 4px; padding: 12px 14px; margin-bottom: 10px; }
+  .card.plain { border-left-width: 1px; }
+  .card.flash { outline: 3px solid var(--brass-hi); }
+  .row { display: flex; gap: 14px; align-items: flex-start; }
+  .grow { flex: 1; min-width: 0; }
+  .score { flex: none; width: 48px; text-align: center; }
+  .score b { display: block; font: 700 24px/1.05 var(--display); }
+  .score i { display: block; height: 4px; border-radius: 2px; background: var(--well); margin-top: 5px; overflow: hidden; }
+  .score i u { display: block; height: 100%; background: var(--brass); }
+  .shot { flex: none; width: 160px; aspect-ratio: 16 / 9; background: var(--well); border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; display: block; padding: 0; min-height: 0; }
+  .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shot:hover:not(:disabled) { border-color: var(--brass); background: var(--well); }
+  .title { font-weight: 650; font-size: 17px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .summary { margin: 7px 0 0; overflow-wrap: anywhere; max-width: 78ch; }
+  .actions { flex: none; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 128px; }
+  .pick { flex: none; width: 20px; height: 20px; margin: 4px 0 0; accent-color: var(--brass); cursor: pointer; }
+  .pick:disabled { cursor: default; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .lines { margin: 6px 0 0; padding: 0; list-style: none; font-size: 14px; }
+  .lines li { padding: 3px 0; overflow-wrap: anywhere; }
+  .lines .who { font-weight: 650; }
+  .lines .when { color: var(--muted); font: 12px var(--mono); margin-right: 8px; }
+  .lines .quiet { color: var(--muted); font-style: italic; }
+  pre { margin: 6px 0 0; padding: 9px; background: var(--well); border: 1px solid var(--rule); border-radius: 4px; font: 12px/1.5 var(--mono); overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip { font-size: 13px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--rule); background: var(--sheet); cursor: pointer; color: var(--muted); overflow-wrap: anywhere; }
+  .chip:hover { border-color: var(--brass); color: var(--ink); }
+  .chip.sel { background: var(--brass); color: var(--on-brass); border-color: var(--brass); }
+  .empty { color: var(--muted); padding: 34px 0; text-align: center; }
+  h2 { font-size: 20px; margin: 22px 0 8px; }
+  h2:first-child { margin-top: 0; }
+  .prose { color: var(--muted); font-size: 15px; max-width: 78ch; margin: 0 0 12px; }
+  .prose b { color: var(--ink); }
+
+  #toast { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--walnut); color: var(--walnut-ink);
+    border: 1px solid var(--brass); padding: 10px 16px; border-radius: 4px; max-width: 90vw; display: none; z-index: 9; }
+  #toast.bad { background: var(--rust); color: var(--on-brass); border-color: var(--rust); }
+
+  /* The token prompt and the enlarged picture share one curtain */
+  .curtain { position: fixed; inset: 0; z-index: 20; background: rgba(23, 18, 14, .74); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .curtain[hidden] { display: none; }
+  .sheet { background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-top: 4px solid var(--brass); border-radius: 4px; padding: 20px 22px;
+    width: 100%; max-width: 440px; }
+  .sheet h2 { margin: 0 0 8px; }
+  .sheet p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  .sheet p b { color: var(--ink); }
+  .sheet input { width: 100%; margin-bottom: 6px; font-family: var(--mono); }
+  .sheet .error { color: var(--rust); font-size: 13px; min-height: 20px; margin-bottom: 6px; }
+  .sheet .buttons { display: flex; justify-content: flex-end; gap: 8px; }
+  #viewer { cursor: zoom-out; }
+  #viewer figure { margin: 0; width: min(96vw, 960px); }
+  #viewer img { width: 100%; border: 3px solid #c9a75a; border-radius: 3px; background: #1b1510; display: block; }
+  #viewer figcaption { color: #efe6d6; font-size: 14px; margin-top: 8px; text-align: center; }
+
+  @media (max-width: 720px) {
+    .row { flex-wrap: wrap; }
+    .grow { flex-basis: calc(100% - 62px); }
+    .shot { width: 100%; order: 3; }
+    .actions { flex-direction: row; flex-wrap: wrap; width: 100%; order: 4; min-width: 0; }
+    .actions button { flex: 1 1 auto; }
+    .right { margin-left: 0; }
+    h1 { font-size: 20px; }
+  }
+  @media (min-width: 1500px) { main, .bar { max-width: 1400px; } .shot { width: 200px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">
+      <svg viewBox="0 0 200 200" role="img" aria-label="The Dailies seal">
+        <circle cx="100" cy="100" r="88" fill="none" stroke="#c9a75a" stroke-width="16" stroke-dasharray="14 9"/>
+        <circle cx="100" cy="100" r="82" fill="#c9a75a"/>
+        <circle cx="100" cy="100" r="70" fill="#f4f1ea" stroke="#4e3626" stroke-width="3"/>
+        <circle cx="100" cy="100" r="46" fill="none" stroke="#4e3626" stroke-width="6"/>
+        <g fill="#4e3626"><circle cx="100" cy="72" r="10"/><circle cx="126.6" cy="91.3" r="10"/><circle cx="116.5" cy="122.7" r="10"/><circle cx="83.5" cy="122.7" r="10"/><circle cx="73.4" cy="91.3" r="10"/></g>
+        <circle cx="100" cy="100" r="6" fill="#c9a75a"/>
+      </svg>
+      <h1>Dailies <span>Moments</span></h1>
+    </div>
+    <select id="session" title="Play session" aria-label="Play session"></select>
+    <button id="refresh" title="Read everything again now">Refresh</button>
+    <div class="right">
+      <label class="live" id="live" title="Keeps this page up to date while you play. Click to pause"><input type="checkbox" id="auto" checked><i></i><span id="liveText">Connecting</span></label>
+      <span id="status" class="meta" style="margin:0"></span>
+    </div>
+  </div>
+</header>
+<main>
+  <!-- Specification MOM-37: where voice goes, said plainly and always in view -->
+  <div class="notice" id="notice">
+    <p id="noticeNow"><b>Voice:</b> checking where voice audio goes.</p>
+    <p>With AI on, voice audio from voice chat is sent to the Whisper address set in the Dailies settings. With AI off, nothing is sent anywhere. Players on the Privacy tab's list are never captured at all.</p>
+  </div>
+
+  <div class="strip" id="strip" title="The session from start to end. Bands are clips, bars are events; green bars have a picture"></div>
+  <div class="tabs">
+    <button data-tab="clips" class="active">Clips</button>
+    <button data-tab="events">Events</button>
+    <button data-tab="dialogue">Voice</button>
+    <button data-tab="ignored">Ignored</button>
+    <button data-tab="privacy">Privacy</button>
+  </div>
+
+  <section id="tab-clips">
+    <div class="controls">
+      <button class="primary" id="generate" title="Build clips from this session's events and voice">Find clips</button>
+      <label>min importance <input type="number" id="clipMin" value="25" min="0" max="100"></label>
+      <label>up to <input type="number" id="clipMax" value="20" min="1" max="200"> clips</label>
+      <span id="clipInfo"></span>
+    </div>
+    <div class="controls" id="exportBar">
+      <label title="The export preset the Export buttons use">export as <select id="exportPreset" aria-label="Export preset"></select></label>
+      <button id="exportSelected" disabled title="Make a scene of each ticked clip and put an export of it on the export queue, one job per clip. Files are named from the clip's title and date">Export selected</button>
+      <button id="queueStart" title="Start the export queue in a hidden second game, so the game you are in stays playable. If one cannot start, the queue runs in the game and says why">Start queue</button>
+      <span id="queueInfo"></span>
+    </div>
+    <div id="clips"></div>
+  </section>
+
+  <section id="tab-events" hidden>
+    <div class="controls">
+      <input type="text" id="search" placeholder="Search events" style="flex:1;min-width:160px" aria-label="Search events">
+      <label>min importance <input type="number" id="evMin" value="0" min="0" max="100"></label>
+      <label><input type="checkbox" id="firsts"> firsts only</label>
+      <label>sort <select id="sort"><option value="time">by time</option><option value="newest">newest first</option><option value="importance">by importance</option></select></label>
+    </div>
+    <div class="chips" id="types"></div>
+    <div id="events"></div>
+  </section>
+
+  <section id="tab-dialogue" hidden>
+    <div id="dialogue"></div>
+  </section>
+
+  <section id="tab-ignored" hidden>
+    <p class="prose">Ignored events are hidden from this page, from queries and from clips. Nothing is deleted: remove an entry and they come back.</p>
+    <div class="controls">
+      <input type="text" id="ignoreEntry" placeholder="block_mined, mob_kill:minecraft:zombie, close_call, job_*" style="flex:1;min-width:200px" aria-label="Events to ignore">
+      <button id="ignoreAdd">Ignore</button>
+    </div>
+    <div id="ignored"></div>
+  </section>
+
+  <section id="tab-privacy" hidden>
+    <h2>Whose voice is left out</h2>
+    <p class="prose">A player on this list is <b>never captured for Moments and never transcribed</b>. You still hear them while you play, and they are still in a recording's own voice chat when that setting is on; nothing of their voice reaches this log or any server. It takes effect at once. Recording other people's voices is yours to agree with them.</p>
+    <div class="controls">
+      <input type="text" id="excludeEntry" placeholder="A player's name or uuid" style="flex:1;min-width:200px" aria-label="Player to leave out">
+      <button id="excludeAdd">Leave out</button>
+    </div>
+    <div id="excluded"></div>
+    <div id="speakers"></div>
+    <h2>Where voice audio goes</h2>
+    <p class="prose" id="privacyNow"></p>
+    <p class="prose">With AI on, each voice segment is sent to the Whisper address set in the Dailies settings to be written down, and clip details go to the summary address. With AI off, which is how Dailies arrives, nothing is sent anywhere: who spoke and when is still logged, and the audio stays in the moments folder on this computer.</p>
+    <div id="tokenBox" hidden>
+      <h2>This browser</h2>
+      <p class="prose">This page is open from another machine, so it keeps the game's token in this browser to stay connected.</p>
+      <button id="forget">Forget the token</button>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+
+<div class="curtain" id="tokenPrompt" hidden>
+  <form class="sheet" id="tokenForm" autocomplete="off">
+    <h2>Token needed</h2>
+    <p>This page is being read from another machine, so the game wants its token before it shows anything. It is the <b>Remote Access Token</b> (<code>mcpToken</code>) in the Dailies settings on the computer running the game. This browser will remember it.</p>
+    <input type="password" id="tokenInput" placeholder="Paste the token" aria-label="Token" spellcheck="false" autocapitalize="off">
+    <div class="error" id="tokenError"></div>
+    <div class="buttons"><button class="primary" type="submit">Connect</button></div>
+  </form>
+</div>
+
+<div class="curtain" id="viewer" hidden>
+  <figure><img id="viewerImage" alt="The screen when this happened"><figcaption id="viewerCaption"></figcaption></figure>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let rpcId = 0;
+const state = { session: null, sessions: [], events: [], clips: [], dialogue: [], ignored: [], excluded: [], types: new Set(), meta: null, byId: new Map(), selected: new Set(), rows: [] };
+
+// ---- Talking to the game ----
+
+// Reached from another machine, the game speaks HTTPS and wants its token (mcpToken) on everything but this page.
+// The page asks for it once, the first time the game says 401, and keeps it in this browser.
+const TOKEN_KEY = 'dailies.mcpToken';
+let token = null;
+try { token = localStorage.getItem(TOKEN_KEY); } catch (error) { /* a browser that keeps nothing still works, it just asks every time */ }
+let asking = null;
+
+function askToken(message) {
+  if (asking) return asking;
+  asking = new Promise(resolve => {
+    $('tokenError').textContent = message || '';
+    $('tokenPrompt').hidden = false;
+    $('tokenInput').value = '';
+    $('tokenInput').focus();
+    $('tokenForm').onsubmit = event => {
+      event.preventDefault();
+      const value = $('tokenInput').value.trim();
+      if (!value) return;
+      token = value;
+      try { localStorage.setItem(TOKEN_KEY, value); } catch (error) { /* see above */ }
+      $('tokenPrompt').hidden = true;
+      asking = null;
+      resolve();
+    };
+  });
+  return asking;
+}
+
+async function api(path, options) {
+  for (;;) {
+    const request = Object.assign({}, options);
+    request.headers = Object.assign({}, options && options.headers);
+    if (token) request.headers['Authorization'] = 'Bearer ' + token;
+    const response = await fetch(path, request);
+    if (response.status === 401) {
+      await askToken(token ? 'The game did not accept that token.' : '');
+      continue;
+    }
+    if (response.status === 429) throw new Error('Too many wrong tokens were sent from this machine. The game will listen again in a minute.');
+    return response;
+  }
+}
+
+async function tool(name, args) {
+  const response = await api('/mcp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args || {} } })
+  });
+  if (!response.ok) throw new Error('The game answered ' + response.status);
+  const json = await response.json();
+  if (json.error) throw new Error(json.error.message);
+  const text = json.result.content[0].text;
+  if (json.result.isError) throw new Error(text);
+  return JSON.parse(text);
+}
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (key === 'class') node.className = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else if (value !== null && value !== undefined && value !== false) node.setAttribute(key, value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child.nodeType ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+let toastTimer = null;
+function toast(message, bad) {
+  const node = $('toast');
+  node.textContent = message;
+  node.className = bad ? 'bad' : '';
+  node.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.style.display = 'none', bad ? 7000 : 3500);
+}
+
+const clock = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const day = ms => new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+function span(seconds) {
+  seconds = Math.round(seconds);
+  return seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + (seconds % 60 ? (seconds % 60) + ' s' : '');
+}
+const pretty = text => String(text || '').replace(/^minecraft:/, '').replace(/[_:/.]+/g, ' ');
+
+function scoreBox(value) {
+  const score = Math.round(value || 0);
+  return el('div', { class: 'score', title: 'Importance, 0 to 100' }, el('b', {}, score), el('i', {}, el('u', { style: 'width:' + Math.min(100, score) + '%' })));
+}
+
+// ---- Event pictures ----
+
+// A picture is a small JPEG the game took when a big event happened. With a token it has to be fetched by script,
+// since a plain <img> cannot send one; fetched pictures are kept, so a redraw costs nothing.
+const pictureUrls = new Map();
+function pictureInto(image, event) {
+  const path = '/pictures/' + encodeURIComponent(state.session) + '/' + encodeURIComponent(event.id) + '.jpg';
+  if (!token) { image.src = path; return; }
+  const key = state.session + '/' + event.id;
+  if (pictureUrls.has(key)) { image.src = pictureUrls.get(key); return; }
+  api(path).then(response => response.ok ? response.blob() : null).then(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    pictureUrls.set(key, url);
+    image.src = url;
+  }).catch(() => {});
+}
+
+function shot(event, caption) {
+  if (!event || !event.picture) return null;
+  const image = el('img', { alt: 'The screen when this happened', loading: 'lazy' });
+  pictureInto(image, event);
+  return el('button', { class: 'shot', title: 'The screen when this happened. Click to enlarge', onclick: () => {
+    $('viewerImage').src = image.src;
+    $('viewerCaption').textContent = caption + '  ·  ' + clock(event.real_time);
+    $('viewer').hidden = false;
+  } }, image);
+}
+
+// A clip shows the picture of its best event that has one
+function clipPicture(clip) {
+  let best = null;
+  for (const inside of clip.events || []) {
+    const event = state.byId.get(inside.id);
+    if (event && event.picture && (!best || (event.importance || 0) > (best.importance || 0))) best = event;
+  }
+  return shot(best, clip.title || 'Clip');
+}
+
+async function cue(args, label) {
+  try {
+    let result;
+    try {
+      result = await tool('moments_cue', Object.assign({ session: state.session }, args));
+    } catch (error) {
+      if (!String(error.message).startsWith('LEAVE_WORLD_NEEDED')) throw error;
+      if (!confirm('You are in a world right now.\n\nCueing this will leave it and open the replay. Carry on?')) return;
+      result = await tool('moments_cue', Object.assign({ session: state.session, leave_world: true }, args));
+    }
+    const camera = result.camera_added && result.suggested_camera ? ' with a ' + result.suggested_camera.label.toLowerCase() + ' camera' : '';
+    if (result.cut_from_open) label += ' (cut from the recording that was open; ' + (result.opening ? 'opening' : 'showing') + ' "' + (result.recording_name || 'another') + '")';
+    toast(result.opening ? 'Opening the replay, it will jump to "' + label + '" once loaded' + camera : 'Cued' + camera + ': ' + label);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+// A friend's event on the strip: their session knows their recording, so it is cued from their session
+async function cueTheirs(row, event) {
+  try {
+    let result;
+    try {
+      result = await tool('moments_cue', { session: row.session, event_id: event.id });
+    } catch (error) {
+      if (!String(error.message).startsWith('LEAVE_WORLD_NEEDED')) throw error;
+      if (!confirm('You are in a world right now.\n\nCueing this will leave it and open the replay. Carry on?')) return;
+      result = await tool('moments_cue', { session: row.session, event_id: event.id, leave_world: true });
+    }
+    toast((result.opening ? 'Opening ' : 'Cued ') + ((row.player && row.player.name) || 'their') + "'s recording: " + (event.description || event.type));
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+// "Export every point of view": the clip's stretch from this recording and every linked one, queued as one batch. The
+// game works out the other recordings' ticks from the one that is open, so the clip is cued first when it is not.
+async function exportEveryView(clip, button) {
+  const place = (clip.locations || [])[0];
+  const piece = place && (place.stretches || [])[0];
+  const args = { start_tick: piece ? piece.tick : clip.start_replay_tick, end_tick: piece ? piece.end_tick : clip.end_replay_tick };
+  if (button) button.disabled = true;
+  try {
+    let result = null;
+    try {
+      result = await tool('export_points_of_view', args);
+    } catch (error) {
+      if (!/^No recording is open/.test(String(error.message))) throw error;
+      await cue({ clip_id: clip.id }, clip.title || 'clip');
+      const deadline = Date.now() + 180000;
+      while (!result) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          result = await tool('export_points_of_view', args);
+        } catch (waiting) {
+          if (Date.now() > deadline || !/^No recording is open/.test(String(waiting.message))) throw waiting;
+        }
+      }
+    }
+    const count = (result.jobs || []).length;
+    toast(result.queued ? 'Queued ' + count + ' exports, one for each point of view' : count + ' points of view found. ' + (result.note || ''));
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+// "Make scene": a scene of the recording for this clip, with its export range and the suggested camera. The game can
+// only do that in the recording that holds the clip, so when another is open, or none, the clip is cued first and
+// the scene is made as soon as the recording has loaded.
+const NOT_OPEN = /^(No recording is open|The open recording is a different one|CUT:)/;
+
+// A scene of the clip, opening its recording first when another is open. Null when the person would rather not leave
+// the world they are in. 'asked' is shared by the clips of one "Export selected", so they are asked once
+async function sceneFor(clip, extra, asked) {
+  const args = Object.assign({ session: state.session, clip_id: clip.id }, extra || {});
+  const label = clip.title || 'clip';
+  try {
+    return await tool('moments_clip_to_scene', args);
+  } catch (error) {
+    if (!NOT_OPEN.test(String(error.message))) throw error;
+  }
+  try {
+    await tool('moments_cue', { session: state.session, clip_id: clip.id });
+  } catch (cueError) {
+    if (!String(cueError.message).startsWith('LEAVE_WORLD_NEEDED')) throw cueError;
+    if (!asked.leave) {
+      if (asked.refused || !confirm('You are in a world right now.\n\nThis will leave it and open the replay. Carry on?')) { asked.refused = true; return null; }
+      asked.leave = true;
+    }
+    await tool('moments_cue', { session: state.session, clip_id: clip.id, leave_world: true });
+  }
+  toast('Opening the replay for "' + label + '"');
+  const deadline = Date.now() + 180000;
+  for (;;) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      return await tool('moments_clip_to_scene', args);
+    } catch (waiting) {
+      if (Date.now() > deadline || !/^(No recording is open|The open recording is a different one)/.test(String(waiting.message))) throw waiting;
+    }
+  }
+}
+
+async function makeScene(clip, button) {
+  if (button) button.disabled = true;
+  try {
+    const result = await sceneFor(clip, null, {});
+    if (!result) return;
+    toast('Made the scene "' + result.scene_name + '"' + (result.camera_added ? ', with a ' + result.suggested_camera.label.toLowerCase() + ' camera' : '')
+      + '. Undo in the editor takes it away');
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button) button.disabled = !(clip.replay_uuid != null) || !!clip.cut_everywhere;
+  }
+}
+
+// "Export" and "Export selected": a scene of each clip, and an export of it on the export queue, one job per clip. The
+// game names each file from the clip's title and date. Clips go one after another, since each may open its recording
+async function exportClips(clips, button) {
+  if (!clips.length) return;
+  const preset = $('exportPreset').value || undefined;
+  const asked = {};
+  let queued = 0;
+  const failed = [];
+  if (button) button.disabled = true;
+  try {
+    for (const clip of clips) {
+      try {
+        const result = await sceneFor(clip, preset ? { export: true, preset } : { export: true }, asked);
+        if (!result) break;
+        queued++;
+        state.selected.delete(clip.id);
+      } catch (error) {
+        failed.push((clip.title || 'clip') + ': ' + error.message);
+      }
+    }
+  } finally {
+    if (button) button.disabled = false;
+    renderClips();
+  }
+  if (failed.length) toast((queued ? queued + ' on the export queue. ' : '') + 'Not queued: ' + failed.join('; '), true);
+  else if (queued) toast((queued === 1 ? 'On the export queue' : queued + ' exports on the queue') + '. Start queue runs it, here or from the editor\'s Export tab');
+  loadQueue();
+}
+
+async function loadPresets() {
+  try {
+    const list = await tool('export_presets_list');
+    const select = $('exportPreset');
+    const wanted = select.value;
+    select.replaceChildren(...list.presets.map(preset => el('option', { value: preset.name, title: preset.summary }, preset.name)));
+    if (list.presets.some(preset => preset.name === wanted)) select.value = wanted;
+  } catch (error) {
+    $('exportBar').hidden = true;
+  }
+}
+
+async function loadQueue() {
+  try {
+    const queue = await tool('export_queue_list');
+    const waiting = queue.waiting || 0;
+    $('queueInfo').textContent = queue.background_running ? 'A background game is exporting the queue'
+      : queue.running_here ? 'The queue is running in the game' : waiting ? waiting + ' waiting on the export queue' : '';
+  } catch (error) {
+    $('queueInfo').textContent = '';
+  }
+}
+
+async function startQueue() {
+  try {
+    const result = await tool('export_queue_start', { background: true });
+    toast(result.started);
+  } catch (error) {
+    toast(error.message, true);
+  }
+  loadQueue();
+}
+
+// ---- Loading ----
+
+async function loadSessions() {
+  const list = await tool('moments_sessions_list', { limit: 100 });
+  state.sessions = list.sessions;
+  const select = $('session');
+  const wanted = state.session;
+  select.replaceChildren(...list.sessions.map(session => {
+    const name = session.world_name || session.server_address || session.id;
+    const when = session.start_real_time ? day(session.start_real_time) + ' ' + clock(session.start_real_time) : '';
+    const theirs = session.theirs ? ((session.shared_by && session.shared_by.name) || 'A friend') + "'s  ·  " : '';
+    return el('option', { value: session.id }, (session.running ? '● ' : '') + theirs + name + '  ·  ' + when);
+  }));
+  if (!list.sessions.length) { state.session = null; return; }
+  state.session = list.sessions.some(session => session.id === wanted) ? wanted : list.sessions[0].id;
+  select.value = state.session;
+}
+
+async function loadStatus() {
+  try {
+    const status = await tool('moments_status');
+    const ai = status.transcription && status.transcription.configured;
+    $('status').replaceChildren(
+      el('span', { class: 'pill ' + (status.tracking ? 'on' : 'off') }, status.tracking ? 'tracking' : (status.in_replay ? 'in a replay' : 'not tracking')),
+      el('span', { class: 'pill ' + (ai ? 'on' : 'off'), title: 'Use AI Services (momentsAiEnabled) in the Dailies settings' }, ai ? 'AI on' : 'AI off'));
+    const goesTo = status.privacy && status.privacy.voice_goes_to;
+    if (goesTo) {
+      $('noticeNow').replaceChildren(el('b', {}, 'Voice: '), goesTo);
+      $('privacyNow').replaceChildren(el('b', {}, 'Right now. '), goesTo);
+      $('notice').classList.toggle('sending', !!ai);
+    }
+    if (status.privacy) state.excluded = status.privacy.voice_excluded || [];
+  } catch (error) {
+    $('status').replaceChildren(el('span', { class: 'pill warn' }, 'no status'));
+  }
+}
+
+async function loadAll() {
+  await loadStatus();
+  if (!state.session) {
+    for (const id of ['clips', 'events', 'dialogue']) $(id).replaceChildren(el('div', { class: 'empty' }, 'No play sessions have been recorded yet. One starts when you join a world.'));
+    renderIgnored(); renderPrivacy(); renderCounts();
+    return;
+  }
+  const args = { session: state.session };
+  const [events, clips, dialogue, ignored, everyone] = await Promise.all([
+    tool('moments_events_query', Object.assign({ limit: 5000 }, args)),
+    tool('moments_clips_list', Object.assign({ limit: 500 }, args)),
+    tool('moments_dialogue_query', Object.assign({ limit: 2000 }, args)),
+    tool('moments_ignored_events'),
+    tool('moments_everyone', Object.assign({ min_importance: 10 }, args)).catch(() => ({ rows: [] }))
+  ]);
+  state.rows = everyone.rows || [];
+  state.events = events.events;
+  state.clips = clips.clips;
+  state.dialogue = dialogue.dialogue;
+  state.ignored = ignored.ignored;
+  state.byId = new Map(state.events.map(event => [event.id, event]));
+  state.meta = state.sessions.find(session => session.id === state.session) || null;
+  render();
+}
+
+// ---- Rendering ----
+
+function render() { renderStrip(); renderClips(); renderTypes(); renderEvents(); renderDialogue(); renderIgnored(); renderPrivacy(); renderCounts(); }
+
+function renderCounts() {
+  const counts = { clips: state.clips.length, events: state.events.length, dialogue: state.dialogue.length, ignored: state.ignored.length, privacy: state.excluded.length };
+  for (const button of document.querySelectorAll('.tabs button')) {
+    const count = counts[button.dataset.tab];
+    button.replaceChildren(button.firstChild, count ? el('small', {}, count) : '');
+  }
+}
+
+function bounds() {
+  const times = state.events.map(event => event.real_time).concat(state.dialogue.map(line => line.real_time));
+  let start = state.meta && state.meta.start_real_time ? state.meta.start_real_time : Math.min(...times);
+  let end = state.meta && state.meta.end_real_time ? state.meta.end_real_time : Math.max(...times, start + 60000);
+  if (!isFinite(start)) { start = Date.now(); end = start + 60000; }
+  return [start, Math.max(end, start + 1000)];
+}
+
+function renderStrip() {
+  const [start, end] = bounds();
+  const at = time => (100 * (time - start) / (end - start)).toFixed(3) + '%';
+  const nodes = [el('span', { class: 'ends', style: 'left:0' }, clock(start)), el('span', { class: 'ends', style: 'right:0' }, clock(end))];
+  for (const clip of state.clips) {
+    nodes.push(el('div', { class: 'band', title: clip.title, style: 'left:' + at(clip.start_real_time) + ';width:' + (100 * (clip.end_real_time - clip.start_real_time) / (end - start)).toFixed(3) + '%',
+      onclick: () => reveal('clips', 'clip-' + clip.id) }));
+  }
+  // With friends' sessions of the same evening, everyone's events: one row per person (PLAY-18)
+  const rows = state.rows || [];
+  $('strip').classList.toggle('people', rows.length > 1);
+  $('strip').style.height = rows.length > 1 ? (20 + rows.length * 20) + 'px' : '';
+  if (rows.length > 1) {
+    rows.forEach((row, index) => {
+      const top = 18 + index * 20;
+      const who = (row.player && row.player.name) || 'Someone';
+      nodes.push(el('div', { class: 'person' + (row.theirs ? ' theirs' : ''), style: 'top:' + top + 'px', title: row.own ? 'Your events' : who + "'s events" + (row.theirs ? ', from their shared session' : '') },
+        el('span', { class: 'name' }, who + (row.theirs ? " (theirs)" : ''))));
+      for (const event of row.events || []) {
+        if (event.real_time < start || event.real_time > end) continue;
+        const mine = row.own;
+        nodes.push(el('div', { class: 'dot' + (mine && state.byId.get(event.id) && state.byId.get(event.id).picture ? ' pictured' : ''),
+          title: who + '  ' + clock(event.real_time) + '  ' + (event.description || event.type),
+          style: 'left:' + at(event.real_time) + ';top:' + (top + 4) + 'px',
+          onclick: () => mine ? reveal('events', 'event-' + event.id) : (event.replay_uuid ? cueTheirs(row, event) : toast(who + ': ' + (event.description || event.type))) }));
+      }
+    });
+    $('strip').replaceChildren(...nodes);
+    return;
+  }
+  for (const event of state.events) {
+    const score = event.importance || 0;
+    if (score < 10) continue;
+    nodes.push(el('div', { class: 'dot' + (event.picture ? ' pictured' : ''), title: clock(event.real_time) + '  ' + (event.description || event.type), style: 'left:' + at(event.real_time) + ';height:' + (6 + score * 0.36).toFixed(0) + 'px',
+      onclick: () => reveal('events', 'event-' + event.id) }));
+  }
+  $('strip').replaceChildren(...nodes);
+}
+
+function reveal(tab, id) {
+  showTab(tab);
+  if (tab === 'events') { $('search').value = ''; $('evMin').value = 0; $('firsts').checked = false; state.types.clear(); renderTypes(); renderEvents(); }
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  node.classList.add('flash');
+  setTimeout(() => node.classList.remove('flash'), 1600);
+}
+
+function renderClips() {
+  const clips = state.clips.slice().sort((a, b) => (b.importance || 0) - (a.importance || 0));
+  $('clipInfo').textContent = clips.length ? clips.length + ' clip' + (clips.length === 1 ? '' : 's') + ', best first' : '';
+  // A clip that is no longer listed cannot stay ticked
+  for (const id of [...state.selected]) if (!clips.some(clip => clip.id === id)) state.selected.delete(id);
+  const picked = state.selected.size;
+  $('exportSelected').disabled = !picked;
+  $('exportSelected').textContent = picked ? 'Export selected (' + picked + ')' : 'Export selected';
+  if (!clips.length) {
+    $('clips').replaceChildren(el('div', { class: 'empty' }, 'No clips yet for this session. Press "Find clips" to build them from the events and voice chat.'));
+    return;
+  }
+  $('clips').replaceChildren(...clips.map(clip => {
+    const hasReplay = clip.replay_uuid != null;
+    const transcript = clip.transcript || [];
+    const events = clip.events || [];
+    const locations = clip.locations || [];
+    const gone = hasReplay && clip.cut_everywhere;
+    const exportable = hasReplay && !gone;
+    return el('div', { class: 'card', id: 'clip-' + clip.id },
+      el('div', { class: 'row' },
+        el('input', { type: 'checkbox', class: 'pick', 'aria-label': 'Choose "' + (clip.title || 'clip') + '" for Export selected',
+          title: exportable ? 'Choose this clip for Export selected' : 'No recording holds this clip, so it cannot be exported',
+          checked: state.selected.has(clip.id) ? '' : null, disabled: !exportable, onchange: event => {
+            if (event.currentTarget.checked) state.selected.add(clip.id); else state.selected.delete(clip.id);
+            const count = state.selected.size;
+            $('exportSelected').disabled = !count;
+            $('exportSelected').textContent = count ? 'Export selected (' + count + ')' : 'Export selected';
+          } }),
+        scoreBox(clip.importance),
+        clipPicture(clip),
+        el('div', { class: 'grow' },
+          el('div', { class: 'title' }, clip.title || 'Clip'),
+          el('div', { class: 'meta' },
+            el('span', {}, clock(clip.start_real_time) + ' · ' + span(clip.duration_seconds || 0)),
+            (clip.players || []).length ? el('span', {}, (clip.players || []).map(player => player.name || player).join(', ')) : null,
+            clip.summary_pending ? el('span', { class: 'pill' }, 'summary being written') : null,
+            clip.summary_source === 'ollama' ? el('span', { class: 'pill on' }, 'AI summary') : null,
+            hasReplay ? null : el('span', { class: 'pill' }, 'not recorded'),
+            gone ? el('span', { class: 'pill', title: 'No recording in the recordings folder holds this clip any more' }, 'cut from every recording') : null),
+          el('p', { class: 'summary' }, clip.summary || ''),
+          clip.suggested_camera ? el('div', { class: 'meta', title: clip.suggested_camera.reason }, el('span', { class: 'pill' }, 'camera'), el('span', {}, clip.suggested_camera.label + ': ' + clip.suggested_camera.reason)) : null,
+          events.length ? el('details', {}, el('summary', {}, events.length + ' event' + (events.length === 1 ? '' : 's')),
+            el('ul', { class: 'lines' }, events.map(event => el('li', {}, el('span', { class: 'when' }, event.real_time ? clock(event.real_time) : ''), event.description || pretty(event.type))))) : null,
+          locations.length ? el('details', { open: locations.length > 1 ? '' : null }, el('summary', {}, 'In ' + locations.length + ' recording' + (locations.length === 1 ? '' : 's')),
+            el('ul', { class: 'lines' }, locations.map(place => el('li', {},
+              el('button', { class: 'small', title: 'Open "' + place.name + '" at this clip, paused', onclick: () => cue({ clip_id: clip.id, recording_id: place.recording_id }, (clip.title || 'clip') + ' in ' + place.name) }, 'Cue'),
+              ' ', el('span', { class: 'who' }, place.name),
+              place.original ? el('span', { class: 'pill' }, 'original') : null,
+              place.open ? el('span', { class: 'pill on' }, 'open') : null,
+              place.cut ? el('span', { class: 'pill', title: 'Part of this clip was cut from this recording. What is left plays back to back' }, 'cut, ' + span(place.removed_seconds || 0) + ' removed') : null,
+              el('span', { class: 'when' }, ' ' + (place.stretches || []).map(piece => 'ticks ' + piece.tick + ' to ' + piece.end_tick).join(', ')))))) : null,
+          (clip.points_of_view || []).length ? el('details', { open: '' }, el('summary', {}, 'Seen from ' + clip.points_of_view.length + ' other point' + (clip.points_of_view.length === 1 ? '' : 's') + ' of view'),
+            el('ul', { class: 'lines' }, clip.points_of_view.map(view => el('li', {},
+              el('button', { class: 'small', title: 'Open ' + (view.recorder || view.name) + "'s recording at this clip, paused", onclick: () => cue({ clip_id: clip.id, recording_id: view.recording_id }, (clip.title || 'clip') + ' as ' + (view.recorder || view.name) + ' saw it') }, 'Cue'),
+              ' ', el('span', { class: 'who' }, view.recorder || view.name),
+              view.open ? el('span', { class: 'pill on' }, 'open') : null,
+              el('span', { class: 'when' }, ' ticks ' + view.start_tick + ' to ' + view.end_tick)))),
+            el('div', { class: 'controls' }, el('button', { class: 'small', disabled: !hasReplay || gone, title: 'Queue an export of this clip from your point of view and from every other one, as one batch', onclick: event => exportEveryView(clip, event.currentTarget) }, 'Export every point of view'))) : null,
+          transcript.length ? el('details', {}, el('summary', {}, 'What was said (' + transcript.length + ' line' + (transcript.length === 1 ? '' : 's') + ')'),
+            el('ul', { class: 'lines' }, transcript.map(line => el('li', {}, el('span', { class: 'who' }, (line.speaker && line.speaker.name || line.speaker || 'Someone') + ': '), line.text || '(not transcribed)')))) : null,
+          null),
+        el('div', { class: 'actions' },
+          el('button', { class: 'primary', disabled: !hasReplay, title: hasReplay ? 'Open the replay at the start of this clip, paused, and add the suggested smart camera there' : 'No replay was being recorded', onclick: () => cue({ clip_id: clip.id, camera: true }, clip.title || 'clip') }, 'Cue + camera'),
+          el('button', { disabled: !hasReplay, title: 'Open the replay at the start of this clip, paused, without touching the cameras', onclick: () => cue({ clip_id: clip.id }, clip.title || 'clip') }, 'Cue only'),
+          el('button', { disabled: !hasReplay || gone, title: hasReplay ? 'Make a scene of the replay for this clip: named after it, exporting exactly it, with the suggested smart camera. Opens the replay first if it is not open. One undo in the editor takes it away' : 'No replay was being recorded', onclick: event => makeScene(clip, event.currentTarget) }, 'Make scene'),
+          el('button', { disabled: !exportable, title: exportable ? 'Make a scene of this clip and put an export of it on the export queue, with the preset chosen above. The file is named from the clip\'s title and date' : 'No recording holds this clip',
+            onclick: event => exportClips([clip], event.currentTarget) }, 'Export'))));
+  }));
+}
+
+function renderTypes() {
+  const counts = new Map();
+  for (const event of state.events) counts.set(event.type, (counts.get(event.type) || 0) + 1);
+  const types = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  $('types').replaceChildren(...types.map(([type, count]) => el('span', {
+    class: 'chip' + (state.types.has(type) ? ' sel' : ''),
+    onclick: () => { state.types.has(type) ? state.types.delete(type) : state.types.add(type); renderTypes(); renderEvents(); }
+  }, pretty(type) + ' ' + count)));
+}
+
+function ignoreEntryFor(event) { return event.type === 'custom' && event.subject ? event.subject : event.type; }
+
+function renderEvents() {
+  const search = $('search').value.trim().toLowerCase();
+  const min = Number($('evMin').value) || 0;
+  const firsts = $('firsts').checked;
+  let events = state.events.filter(event => {
+    if (state.types.size && !state.types.has(event.type)) return false;
+    if ((event.importance || 0) < min) return false;
+    if (firsts && !event.first) return false;
+    return !search || JSON.stringify(event).toLowerCase().includes(search);
+  });
+  const sort = $('sort').value;
+  events.sort(sort === 'importance' ? (a, b) => (b.importance || 0) - (a.importance || 0) : sort === 'newest' ? (a, b) => b.real_time - a.real_time : (a, b) => a.real_time - b.real_time);
+  const total = events.length;
+  events = events.slice(0, 600);
+  if (!total) {
+    $('events').replaceChildren(el('div', { class: 'empty' }, state.events.length ? 'Nothing matches these filters.' : 'No events in this session yet.'));
+    return;
+  }
+  const nodes = events.map(event => {
+    const hasReplay = event.replay_uuid != null;
+    const place = event.position ? Math.round(event.position.x) + ', ' + Math.round(event.position.y) + ', ' + Math.round(event.position.z) : null;
+    const entry = ignoreEntryFor(event);
+    return el('div', { class: 'card', id: 'event-' + event.id },
+      el('div', { class: 'row' },
+        scoreBox(event.importance),
+        shot(event, event.description || pretty(event.type)),
+        el('div', { class: 'grow' },
+          el('div', { class: 'title' }, event.description || pretty(event.type)),
+          el('div', { class: 'meta' },
+            el('span', {}, clock(event.real_time)),
+            el('span', { class: 'pill' }, pretty(event.type)),
+            event.first ? el('span', { class: 'pill first' }, 'first') : null,
+            event.metadata && event.metadata.source ? el('span', { class: 'pill' }, 'from ' + event.metadata.source) : null,
+            place ? el('span', {}, place + (event.dimension ? ' · ' + pretty(event.dimension) : '')) : null,
+            event.biome ? el('span', {}, pretty(event.biome)) : null,
+            hasReplay ? el('span', {}, 'tick ' + event.replay_tick) : null),
+          el('details', {}, el('summary', {}, 'Details'), el('pre', {}, JSON.stringify(event, null, 2)))),
+        el('div', { class: 'actions' },
+          el('button', { class: 'primary', disabled: !hasReplay, title: hasReplay ? 'Open the replay five seconds before this, paused' : 'No replay was being recorded', onclick: () => cue({ event_id: event.id }, event.description || event.type) }, 'Cue'),
+          el('button', { class: 'small', title: 'Hide every "' + entry + '" event. Undo on the Ignored tab', onclick: () => changeIgnored('add', [entry]) }, 'Ignore kind'))));
+  });
+  if (total > events.length) nodes.push(el('div', { class: 'empty' }, 'Showing the first ' + events.length + ' of ' + total + '. Narrow the filters to see the rest.'));
+  $('events').replaceChildren(...nodes);
+}
+
+function renderDialogue() {
+  if (!state.dialogue.length) {
+    $('dialogue').replaceChildren(el('div', { class: 'empty' }, 'No voice chat was captured in this session. Voice comes from Simple Voice Chat.'));
+    return;
+  }
+  const lines = state.dialogue.slice().sort((a, b) => a.real_time - b.real_time);
+  $('dialogue').replaceChildren(el('div', { class: 'card plain' }, el('ul', { class: 'lines' }, lines.map(line => {
+    const said = line.status === 'done' && line.text;
+    const text = said ? line.text : line.non_speech ? '(a sound without words: laughter, a shout)' : line.status === 'empty' ? '(no speech)' : line.status === 'failed' ? '(transcription failed)' : '(not transcribed, ' + span(line.duration_seconds || 0) + ' of audio kept)';
+    return el('li', {}, el('span', { class: 'when' }, clock(line.real_time)), el('span', { class: 'who' }, (line.speaker && line.speaker.name || 'Someone') + ': '), said ? text : el('span', { class: 'quiet' }, text));
+  }))));
+}
+
+function renderIgnored() {
+  if (!state.ignored.length) {
+    $('ignored').replaceChildren(el('div', { class: 'empty' }, 'Nothing is ignored.'));
+    return;
+  }
+  $('ignored').replaceChildren(el('div', { class: 'chips' }, state.ignored.map(entry =>
+    el('span', { class: 'chip', title: 'Stop ignoring', onclick: () => changeIgnored('remove', [entry]) }, entry + '  ×'))));
+}
+
+async function changeIgnored(action, entries) {
+  try {
+    await tool('moments_ignored_events', { action, entries });
+    toast(action === 'add' ? 'Ignoring ' + entries.join(', ') : 'No longer ignoring ' + entries.join(', '));
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
+}
+
+function renderPrivacy() {
+  $('tokenBox').hidden = !token;
+  $('excluded').replaceChildren(state.excluded.length
+    ? el('div', { class: 'chips' }, state.excluded.map(entry => el('span', { class: 'chip sel', title: 'Capture this voice again', onclick: () => changeExcluded('remove', [entry]) }, entry + '  ×')))
+    : el('p', { class: 'prose' }, 'Nobody is left out: every voice that voice chat plays is logged.'));
+  // Whoever has spoken in this session is one click from being left out
+  const left = new Set(state.excluded.map(entry => entry.toLowerCase()));
+  const heard = new Map();
+  for (const line of state.dialogue) {
+    const speaker = line.speaker || {};
+    if (speaker.uuid && !left.has(String(speaker.uuid).toLowerCase()) && !left.has(String(speaker.name || '').toLowerCase())) heard.set(speaker.uuid, speaker.name || 'Unknown');
+  }
+  $('speakers').replaceChildren(...(heard.size ? [
+    el('p', { class: 'prose', style: 'margin-top:14px' }, 'Heard in this session. Click one to leave them out from now on:'),
+    // Someone whose name the game never learnt can only be told apart by uuid
+    el('div', { class: 'chips' }, [...heard.entries()].map(([uuid, name]) => el('span', { class: 'chip', title: 'Stop capturing this voice', onclick: () => changeExcluded('add', [name === 'Unknown' ? uuid : name]) }, name === 'Unknown' ? uuid : name)))
+  ] : []));
+}
+
+async function changeExcluded(action, players) {
+  try {
+    const result = await tool('moments_voice_excluded', { action, players });
+    state.excluded = result.excluded;
+    toast(action === 'add' ? 'No longer capturing ' + players.join(', ') : 'Capturing ' + players.join(', ') + ' again');
+    renderPrivacy(); renderCounts();
+  } catch (error) { toast(error.message, true); }
+}
+
+function showTab(tab) {
+  for (const button of document.querySelectorAll('.tabs button')) button.classList.toggle('active', button.dataset.tab === tab);
+  for (const name of ['clips', 'events', 'dialogue', 'ignored', 'privacy']) $('tab-' + name).hidden = name !== tab;
+}
+
+// ---- Wiring ----
+
+let refreshing = false;
+let refreshAgain = null;
+async function refresh(withSessions) {
+  // One at a time: a burst of live messages asks many times over, and the last answer has to be the newest
+  if (refreshing) { refreshAgain = { withSessions: withSessions || (refreshAgain && refreshAgain.withSessions) }; return; }
+  refreshing = true;
+  try {
+    if (withSessions) { await loadSessions(); await loadPresets(); }
+    loadQueue();
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
+  refreshing = false;
+  if (refreshAgain) { const again = refreshAgain; refreshAgain = null; refresh(again.withSessions); }
+}
+
+for (const button of document.querySelectorAll('.tabs button')) button.addEventListener('click', () => showTab(button.dataset.tab));
+$('session').addEventListener('change', () => { state.session = $('session').value; state.types.clear(); refresh(false); });
+$('refresh').addEventListener('click', () => refresh(true));
+for (const id of ['search', 'evMin', 'firsts', 'sort']) $(id).addEventListener('input', renderEvents);
+$('ignoreAdd').addEventListener('click', () => {
+  const entries = $('ignoreEntry').value.split(',').map(entry => entry.trim()).filter(Boolean);
+  if (entries.length) { $('ignoreEntry').value = ''; changeIgnored('add', entries); }
+});
+$('ignoreEntry').addEventListener('keydown', event => { if (event.key === 'Enter') $('ignoreAdd').click(); });
+$('excludeAdd').addEventListener('click', () => {
+  const players = $('excludeEntry').value.split(',').map(entry => entry.trim()).filter(Boolean);
+  if (players.length) { $('excludeEntry').value = ''; changeExcluded('add', players); }
+});
+$('excludeEntry').addEventListener('keydown', event => { if (event.key === 'Enter') $('excludeAdd').click(); });
+$('forget').addEventListener('click', () => {
+  try { localStorage.removeItem(TOKEN_KEY); } catch (error) { /* nothing was kept */ }
+  token = null;
+  location.reload();
+});
+$('viewer').addEventListener('click', () => $('viewer').hidden = true);
+document.addEventListener('keydown', event => { if (event.key === 'Escape') $('viewer').hidden = true; });
+$('generate').addEventListener('click', async () => {
+  $('generate').disabled = true;
+  try {
+    const result = await tool('moments_clips_generate', { session: state.session, min_importance: Number($('clipMin').value) || 0, max_clips: Number($('clipMax').value) || 20 });
+    toast('Found ' + result.total + ' clip' + (result.total === 1 ? '' : 's'));
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
+  $('generate').disabled = false;
+});
+$('exportSelected').addEventListener('click', event => {
+  const clips = state.clips.filter(clip => state.selected.has(clip.id)).sort((a, b) => (b.importance || 0) - (a.importance || 0));
+  exportClips(clips, event.currentTarget);
+});
+$('queueStart').addEventListener('click', startQueue);
+
+// ---- Keeping up to date ----
+//
+// The game says what changed over GET /live, the moment it changes, and the page then reads it the usual way. If
+// that feed cannot be opened, or drops, the page falls back to reading everything every ten seconds and goes on
+// trying to open the feed again by itself. Neither redraws under an open details box or a half-typed entry: the
+// change waits until the person is done.
+
+const live = { connected: false, waiting: false, withSessions: false, lastPoll: Date.now() };
+
+function busy() {
+  const typing = ['search', 'ignoreEntry', 'excludeEntry'].some(id => document.activeElement === $(id) && $(id).value);
+  return !!document.querySelector('details[open]') || typing || !$('tokenPrompt').hidden || !$('viewer').hidden;
+}
+
+function showLive() {
+  const on = $('auto').checked;
+  $('live').classList.toggle('on', on && live.connected);
+  $('live').classList.toggle('slow', on && !live.connected);
+  $('liveText').textContent = !on ? 'Paused' : live.connected ? (live.waiting && busy() ? 'Live · new' : 'Live') : 'Every 10 s';
+  $('live').title = !on ? 'Not keeping up to date. Click to carry on'
+    : live.connected ? 'Live: changes show the moment they happen. Click to pause'
+    : 'The live feed is not open, so the page reads everything every ten seconds and keeps trying to reconnect. Click to pause';
+}
+
+function changed(message) {
+  // A session this page has not heard of is a world just joined: the list of sessions is out of date too
+  const known = state.sessions.some(session => session.id === message.session);
+  if (known && message.session !== state.session) return;
+  live.waiting = true;
+  live.withSessions = live.withSessions || !known;
+}
+
+async function listen() {
+  for (;;) {
+    try {
+      const response = await api('/live', { headers: { 'Accept': 'text/event-stream' }, cache: 'no-store' });
+      if (!response.ok || !response.body) throw new Error('no feed');
+      live.connected = true;
+      // Whatever happened while the feed was down
+      live.waiting = true;
+      live.withSessions = true;
+      showLive();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        let end;
+        while ((end = text.indexOf('\n')) >= 0) {
+          const line = text.slice(0, end).replace(/\r$/, '');
+          text = text.slice(end + 1);
+          if (!line.startsWith('data:')) continue;
+          try { changed(JSON.parse(line.slice(5))); } catch (error) { /* a line this page does not understand is not worth stopping for */ }
+        }
+      }
+    } catch (error) { /* the game closed, or was never there: try again below */ }
+    live.connected = false;
+    showLive();
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+}
+
+setInterval(() => {
+  showLive();
+  if (!$('auto').checked || document.hidden || busy() || refreshing) return;
+  const now = Date.now();
+  if (live.connected) {
+    if (!live.waiting) return;
+  } else {
+    // A session that has ended cannot change, but a new one may have started
+    const every = state.meta && !state.meta.running ? 30000 : 10000;
+    if (now - live.lastPoll < every) return;
+  }
+  live.lastPoll = now;
+  const withSessions = live.withSessions || !live.connected;
+  live.waiting = false;
+  live.withSessions = false;
+  refresh(withSessions);
+}, 400);
+$('auto').addEventListener('change', showLive);
+
+refresh(true).then(listen);
+</script>
+</body>
+</html>

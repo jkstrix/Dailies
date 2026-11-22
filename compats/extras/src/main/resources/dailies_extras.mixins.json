@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "package": "comedymonkey.dailiescompat.extras.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ExplorersCompassLinesMixin",
+    "NaturesCompassLinesMixin",
+    "StatusLineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

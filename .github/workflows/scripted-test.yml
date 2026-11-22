@@ -1,0 +1,88 @@
+# The scripted run of chapter XIV on every change (specification TEST-5). It needs a real game window and a graphics
+# card, so it runs on a self-hosted Windows runner with a GPU (the owner's PC is enough), labelled "dailies-gpu".
+#
+# The runner needs Python 3 on its PATH, for tools/ci/check_spec.py, which checks the design documents first.
+#
+# Set on the runner or the repository:
+#   variable DAILIES_MODS_FOLDER   the folder the modded run copies Create, Sable, Aeronautics, Sodium, Iris and the
+#                                  rest from (read, never written). Without it the modded run is skipped.
+#   variable DAILIES_TEST_MODS     optional: the -Pdailies.testMods list, to add Distant Horizons for example
+#   variable DAILIES_TEST_EXPECT_MODS  optional: the -Pdailies.testExpectMods list of mod ids the modded run must have
+#                                  loaded (build.gradle has the default); needed only when DAILIES_TEST_MODS leaves one out
+#
+# Kept with each run: the game logs, the run's output, test-result.txt, budgets.txt, and every picture the run made.
+#
+# Never on pull_request: a pull request from a fork would run its own build.gradle on the owner's PC. A change from
+# outside is tested by hand (workflow_dispatch) once it has been read, or when it is pushed here.
+name: Scripted test
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One game at a time on the one graphics card
+concurrency:
+  group: dailies-scripted-test
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: [self-hosted, windows, dailies-gpu]
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The design documents first (plan item 4.2): requirement ids, links and well-formed HTML. Needs Python 3 on the
+      # runner's PATH; it uses nothing but the standard library
+      - name: Check the specification and the tech note
+        run: python tools/ci/check_spec.py
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build the mod and the companion, and run the unit tests
+        run: |
+          ./gradlew.bat build --no-daemon
+          ./gradlew.bat -p companion build --no-daemon
+
+      - name: Scripted run, plain game
+        run: ./tools/ci/scripted-run.ps1 -Task runTestClient -Log run-test-output.log -GameDir run-test
+
+      - name: Scripted run, modded game
+        if: vars.DAILIES_MODS_FOLDER != ''
+        env:
+          DAILIES_MODS_FOLDER: ${{ vars.DAILIES_MODS_FOLDER }}
+          DAILIES_TEST_MODS: ${{ vars.DAILIES_TEST_MODS }}
+          DAILIES_TEST_EXPECT_MODS: ${{ vars.DAILIES_TEST_EXPECT_MODS }}
+        run: ./tools/ci/scripted-run.ps1 -Task runTestModded -Log run-modded-output.log -GameDir run-modded
+
+      - name: Keep logs, pictures and measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: scripted-test-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            run-test-output.log
+            run-modded-output.log
+            run-test/logs/
+            run-modded/logs/
+            run-test/crash-reports/
+            run-modded/crash-reports/
+            run-test/dailies/test-result.txt
+            run-modded/dailies/test-result.txt
+            run-test/dailies/budgets.txt
+            run-modded/dailies/budgets.txt
+            run-test/dailies/**/*.png
+            run-modded/dailies/**/*.png
+            run-test/screenshots/
+            run-modded/screenshots/
+            build/reports/tests/

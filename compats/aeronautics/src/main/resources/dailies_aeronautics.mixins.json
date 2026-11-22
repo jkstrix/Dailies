@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "comedymonkey.dailiescompat.aeronautics.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "BezierHandlesMixin",
+    "StatusLineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

@@ -1,0 +1,20 @@
+.gradle/
+build/
+bin/
+run/
+run-test/
+run-server/
+.eclipse/
+.vscode/
+*.class
+.claude/
+run-modded/
+tools/ffmpeg/work/
+tools/ffmpeg/out/
+run-play/
+# Logs written by the game runs and the scripted tests
+*.log
+
+# Working notes, kept out of the repository
+/PLAN.md
+/docs/code-review-2026-11-18.md

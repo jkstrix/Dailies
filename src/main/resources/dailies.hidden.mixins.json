@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "package": "comedymonkey.dailies.mixin.hidden",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "LocatorBarMixin",
+    "LocatorBarXpMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

@@ -1,0 +1,450 @@
+// Dailies: a client-only replay mod for Minecraft 1.21.1 on NeoForge. Built from design/dailies-spec.html
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = project.mod_version
+group = 'comedymonkey.dailies'
+
+base {
+    archivesName = 'dailies-1.21.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+sourceSets {
+    main {
+        // The owner's features (specification chapters VIII to XII) are compiled from reference/
+        java.srcDir 'reference/src/main/java'
+        resources.srcDir 'reference/src/main/resources'
+    }
+    // The scripted runs of specification chapter XIV, kept out of the jar players get: they run level-4 commands, delete
+    // folders and close the game. A mod of their own, dailies_selftest, built into a jar of its own; the dev runs that
+    // drive the game load it beside Dailies, and installTestMods puts its jar beside the built Dailies jar in run-modded
+    selftest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+    // The unit tests of the self test's own rules (FixtureRulesTest), which need no game
+    test {
+        compileClasspath += sourceSets.selftest.output
+        runtimeClasspath += sourceSets.selftest.output
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        dailies {
+            sourceSet sourceSets.main
+        }
+        // In the dev runs the self test is the mod of the same name, with its own neoforge.mods.toml, exactly as its jar
+        // is in run-modded: the same mod either way, so both kinds of run find and start it the same way
+        dailies_selftest {
+            sourceSet sourceSets.selftest
+        }
+    }
+
+    runs {
+        // The plain game to try things in, without the self test
+        client {
+            client()
+            gameDirectory = file('run')
+            loadedMods = [neoForge.mods.dailies]
+        }
+        // The scripted run of specification chapter XIV. It drives itself and exits with PASSED or FAILED in the log
+        testClient {
+            client()
+            gameDirectory = file('run-test')
+            // The self test's classpath, which has the main classes on it too; both mods are loaded
+            sourceSet = sourceSets.selftest
+            systemProperty 'dailies.test.script', 'auto'
+            systemProperty 'dailies.test.segmentTicks', '40'
+            // Switches for trying things out, as for the modded run: gradlew runTestClient -PdailiesFlags=dailies.encoder.softwareOnly
+            if (project.hasProperty('dailiesFlags')) {
+                project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
+            }
+            // Only some groups of steps, with the groups they need: -PdailiesOnly=trains,library, or -PdailiesOnly=failed for
+            // the groups that failed in the last run in this game folder (the groups are listed in the README)
+            if (project.hasProperty('dailiesOnly')) {
+                systemProperty 'dailies.test.only', project.property('dailiesOnly').toString()
+            }
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+        // For judging by eye (TEST-3): the test world, sixty seconds at the controls while recording, then the recording open in playback
+        handsOn {
+            client()
+            gameDirectory = file('run-test')
+            // The self test's classpath, which has the main classes on it too; both mods are loaded
+            sourceSet = sourceSets.selftest
+            systemProperty 'dailies.test.script', 'hands-on'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+        // Takes the pictures for the manual from the modded game, into run-modded/dailies/manual. Like testModded it
+        // loads Dailies and the self test from their jars in run-modded/mods, put there by installTestMods
+        manualShots {
+            client()
+            gameDirectory = file('run-modded')
+            loadedMods = []
+            systemProperty 'dailies.test.script', 'manual'
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+        // Pictures of every Dailies screen from the plain game, at several window sizes and interface scales, into
+        // run-test/dailies/kit: quicker than manualShots, for judging the look of the interface
+        kitShots {
+            client()
+            gameDirectory = file('run-test')
+            // The self test's classpath, which has the main classes on it too; both mods are loaded
+            sourceSet = sourceSets.selftest
+            systemProperty 'dailies.test.script', 'kit'
+            // dailies.kit.scales: only the editor, the recordings list and the playback bar, at 1920 by 1080 and every scale
+            if (project.hasProperty('dailiesFlags')) {
+                project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
+            }
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+        // The same scripted run with the built jars (not the dev classes) beside the other mods it has to work with:
+        // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1). The self test
+        // jar sits beside the Dailies jar in run-modded/mods
+        testModded {
+            client()
+            gameDirectory = file('run-modded')
+            loadedMods = []
+            systemProperty 'dailies.test.script', 'auto'
+            systemProperty 'dailies.test.segmentTicks', '40'
+            // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
+            // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
+            systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
+                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,supplementaries,amendments,moonlight,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_supplementaries,create_submarine,create_connected,createcasing,tracks,railways,create_jetpack,create_hypertube,dailies_createextras,explorerscompass,naturescompass,sophisticatedbackpacks,sophisticatedcore,curios,corpse,vanillabackport,platform,dailies_extras,dailies_selftest')
+            // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
+            if (project.hasProperty('dailiesFlags')) {
+                project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
+            }
+            // Only some groups of steps, with the groups they need: -PdailiesOnly=trains,library, or -PdailiesOnly=failed for
+            // the groups that failed in the last run in this game folder (the groups are listed in the README)
+            if (project.hasProperty('dailiesOnly')) {
+                systemProperty 'dailies.test.only', project.property('dailiesOnly').toString()
+            }
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+        // A game to play in, with the built jar and the same mods as the modded test, and no script: gradlew runPlayModded.
+        // Its own folder, so test runs never touch what is recorded here
+        playModded {
+            client()
+            gameDirectory = file('run-play')
+            loadedMods = []
+            programArguments.addAll '--width', '1920', '--height', '1080'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    // Simple Voice Chat's public API (specification REC-18), as that mod's documentation gives it
+    maven {
+        name = 'henkelmax.public'
+        url = 'https://maven.maxhenkel.de/repository/public'
+        content {
+            includeGroup 'de.maxhenkel.voicechat'
+        }
+    }
+}
+
+configurations {
+    // The video encoder packed into the mod's jar (specification EXP-8). Not a Java library on the classpath: the jar
+    // is carried as a file, and its contents are unpacked and run beside the game when a video is exported
+    encoder {
+        transitive = false
+    }
+}
+
+// Which encoder is packed in (EXP-8). "bytedeco", the default until the owner switches: the JavaCPP Presets' LGPL
+// build, Windows only. "dailies": our own LGPL build from tools/ffmpeg/build.sh, one jar per platform, taken from
+// -Pdailies.encoderDir (default tools/ffmpeg/out/jars, where "build.sh pack" or the FFmpeg workflow's artifact puts
+// them), for the platforms in -Pdailies.encoderPlatforms (comma-separated, default all that are there)
+def encoderSource = providers.gradleProperty('dailies.encoderSource').getOrElse('bytedeco')
+def encoderDir = file(providers.gradleProperty('dailies.encoderDir').getOrElse('tools/ffmpeg/out/jars'))
+def encoderPlatforms = providers.gradleProperty('dailies.encoderPlatforms').getOrElse('windows-x86_64,linux-x86_64,linux-arm64,macosx-arm64,macosx-x86_64').split(',').collect { it.trim() }
+if (!(encoderSource in ['bytedeco', 'dailies'])) {
+    throw new GradleException("dailies.encoderSource is '${encoderSource}': it must be bytedeco or dailies")
+}
+def encoderJars = encoderSource == 'bytedeco' ? configurations.encoder : fileTree(encoderDir) {
+    include encoderPlatforms.collect { "dailies-ffmpeg-*-${it}.jar".toString() }
+}
+if (encoderSource == 'dailies' && encoderJars.isEmpty()) {
+    throw new GradleException("dailies.encoderSource is dailies, and there are no dailies-ffmpeg-*-<platform>.jar files in ${encoderDir}: run tools/ffmpeg/build.sh pack, or point dailies.encoderDir at the FFmpeg workflow's jars")
+}
+
+// Minecraft, NeoForge and their libraries for the self test, as the main classes have them
+neoForge.addModdingDependenciesTo(sourceSets.selftest)
+
+dependencies {
+    // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
+    if (encoderSource == 'bytedeco') {
+        encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
+    }
+
+    // Zstandard (zstd-jni, BSD 2-Clause, with the native zstd for every platform Dailies ships for), which every block of a
+    // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
+    // The runs that load Dailies from its classes need it on the classpath that is not loaded as boot modules, as MDG asks
+    // of libraries for 1.21.1. Only those: the runs that load the built jar (testModded, playModded, manualShots) get it
+    // from inside the jar, and a second copy on their classpath stopped the game ("reads more than one module named
+    // com.github.luben.zstd_jni")
+    jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
+    for (run in ['client', 'testClient', 'handsOn', 'kitShots']) {
+        add("${run}AdditionalRuntimeClasspath", 'com.github.luben:zstd-jni:1.5.7-25')
+    }
+
+    // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
+    compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
+    selftestCompileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
+
+    // Unit tests cover the parts that need no running game: the file format, curves, timing, the undo stack
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // The game brings its own copy when it runs; unit tests run without the game
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    // The log filters (SnapshotLogFilterTest), the version the game brings
+    testImplementation 'org.apache.logging.log4j:log4j-core:2.22.1'
+    // Only for the compression benchmark (ZstdBenchmarkTest), which also weighs aircompressor (Apache 2.0), a pure-Java
+    // zstd, against the zstd-jni recordings are packed with. Never packed into the mod
+    testImplementation 'io.airlift:aircompressor:2.0.3'
+}
+
+test {
+    useJUnitPlatform {
+        // Timings that say as much about the machine as the code, and the training of the dictionaries, which writes
+        // into the sources; each run by itself with a task below
+        excludeTags 'benchmark', 'dictionaries'
+    }
+}
+
+tasks.register('trainDictionaries', Test) {
+    description = 'Trains the Zstandard dictionaries recordings are packed with on real recordings, into src/main/resources/assets/dailies/zstd'
+    group = 'build'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'dictionaries'
+    }
+    maxHeapSize = '6g'
+    // The recordings to train on, as for the benchmark: -Pdailies.bench.recordings=a.dailies,b.dailies
+    providers.gradlePropertiesPrefixedBy('dailies.bench.').get().each { key, value -> systemProperty key, value }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('benchmarks', Test) {
+    description = 'Runs the unit tests tagged as benchmarks (timings), which the test task leaves out'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'benchmark'
+    }
+    // The compression benchmark holds two long recordings' data unpacked
+    maxHeapSize = '6g'
+    // Settings for the benchmarks passed on from the command line, such as -Pdailies.bench.recordings=a.dailies,b.dailies
+    providers.gradlePropertiesPrefixedBy('dailies.bench.').get().each { key, value -> systemProperty key, value }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
+}
+
+processResources {
+    if (encoderSource == 'bytedeco') {
+        // The JavaCPP Presets' build carries libraries of its own (OpenH264, freetype, lame and others), whose licence texts
+        // go in only with it; our own build brings its own texts (licenses/ffmpeg-build, below)
+        from('src/encoder-licenses/bytedeco') { into 'licenses' }
+    }
+    from(encoderJars) {
+        into 'encoder'
+        // Either kind becomes encoder/ffmpeg-<platform>.jar, which is where Encoder looks
+        rename { String name ->
+            name.replaceFirst(/^ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar')
+                .replaceFirst(/^dailies-ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar')
+        }
+    }
+    if (encoderSource == 'dailies') {
+        // Our own build's licence texts and notices, one folder per library, beside the others (EXP-8)
+        from(new File(encoderDir, 'licenses')) { into 'licenses/ffmpeg-build' }
+        from(new File(encoderDir, 'notices')) { into 'licenses/ffmpeg-build/notices' }
+    }
+    inputs.property 'encoderSource', encoderSource
+    // The notices and Dailies' own licence travel in the jar, beside the licence texts in the licenses folder (EXP-8)
+    from(rootProject.file('THIRD-PARTY-NOTICES.md'))
+    from(rootProject.file('LICENSE'))
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+processSelftestResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+// The self test's own jar, dailies-selftest-1.21.1-<version>.jar: never published, only put into run-modded/mods
+tasks.register('selftestJar', Jar) {
+    description = 'Builds the jar of the Dailies self test (the scripted runs), for run-modded'
+    group = 'build'
+    archiveBaseName = 'dailies-selftest-1.21.1'
+    from sourceSets.selftest.output
+}
+
+// The API jar, dailies-api-<version>.jar (specification CPT-4): only the classes of comedymonkey.dailies.api and the compat
+// API under it, for other mods to compile against as compileOnly, so a mod that implements a compat builds on any machine
+// without Dailies' own workings. Copied into such a mod's own repository (libs/dailies-api-<version>.jar)
+def apiJar = tasks.register('apiJar', Jar) {
+    description = 'Builds the jar of the compat API (comedymonkey.dailies.api), for other mods to compile against'
+    group = 'build'
+    archiveBaseName = 'dailies-api'
+    from(sourceSets.main.output) {
+        include 'comedymonkey/dailies/api/**'
+    }
+    from(rootProject.file('LICENSE'))
+}
+
+// Every Dailies jar a modpack takes, in one folder (build/modpack): Dailies, the compats for other people's mods (each
+// does nothing unless its mod is installed, so all of them can go in) and the companion, which a server takes and the
+// game takes for singleplayer. The template compat is only a starting point and is left out; the owner's own mods carry
+// their hooks themselves. gradlew modpackJars -Pdailies.encoderDir=... as for any build of the Dailies jar
+def modpackCompats = ['create', 'jade', 'aeronautics', 'supplementaries', 'createextras', 'extras']
+tasks.register('modpackJars', Sync) {
+    description = 'Puts every Dailies jar a modpack takes into build/modpack: Dailies, the compats and the companion'
+    group = 'build'
+    dependsOn tasks.named('jar'), 'buildCompanion'
+    modpackCompats.each { dependsOn ":compats:${it}:jar" }
+    from(tasks.named('jar'))
+    modpackCompats.each { name -> from({ project(":compats:${name}").tasks.named('jar').get().archiveFile }) }
+    from(file('companion/build/libs')) {
+        include 'dailies-companion-*.jar'
+        exclude '*-sources.jar', '*-javadoc.jar'
+    }
+    into(layout.buildDirectory.dir('modpack'))
+}
+
+// The compats in compats/ compile against the API jar, as a compat in another repository does
+configurations {
+    dailiesApi {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+}
+artifacts {
+    dailiesApi apiJar
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// --- The modded test game ---
+// Where the other mods are copied from (never written to): a folder of jars, set as dailies.modsFolder in your own
+// ~/.gradle/gradle.properties, or with -Pdailies.modsFolder=... Only the modded runs need it, and they say so without it
+def modsFolderSetting = providers.gradleProperty('dailies.modsFolder').orNull
+def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
+// Matched as the jars are named, capitals, spaces and all: Jade's jar is Jade-1.21.1-NeoForge-<version>.jar, and Gyroscope
+// Stabilizers' is "Create Aeronautics Gyroscope Stabilizers.jar", with no version in its name. Create Encased's is
+// "Create Encased-<version>.jar", and Create Jetpack needs Kotlin for Forge (kotlinforforge-<version>-all.jar).
+// Supplementaries needs Moonlight, VanillaBackport needs Platform, and Sophisticated Backpacks needs Sophisticated Core
+def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
+    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*,supplementaries-1.21.1-*,amendments-1.21-*,moonlight-1.21.1-*,create_submarine-*,create_connected-*,Create Encased-*,tracks-neoforge-*,create-steam-n-rails-*,create_jetpack-forge-*,kotlinforforge-*,create_hypertube-*,ExplorersCompass-*,NaturesCompass-*,sophisticatedbackpacks-*,sophisticatedcore-*,curios-neoforge-*,corpse-neoforge-*,VanillaBackport-neoforge-*,Platform-neoforge-*').split(',')
+
+// The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
+tasks.register('buildCompanion', GradleBuild) {
+    description = 'Builds the Dailies Companion in companion/'
+    dir = file('companion')
+    tasks = ['build']
+}
+
+// Jars that take the place of the same mod from the mods folder, e.g. a fix not yet in the owner's profile:
+// dailies.modJars=../McpCraft/build/libs/mcpcraft-1.21.1-0.2.0.jar (comma-separated; in ~/.gradle/gradle.properties or with
+// -P). Matched by the mod's name,
+// the part before the first "-<digit>", so another version of it in the folder is left out too
+def overrideJars = providers.gradleProperty('dailies.modJars').getOrElse('').split(',').findAll { !it.trim().isEmpty() }.collect { file(it.trim()) }
+def overriddenMods = overrideJars.collect { it.name.replaceFirst(/-\d.*$/, '') + '-*.jar' }
+
+// The modded runs stop at once without their mods, rather than run a game missing them: the folder must be set and
+// there, and every jar named to replace one in it must exist (a missing one would quietly leave that mod out)
+def checkModsFolder = {
+    if (modsFolderSetting == null || !modsSource.isDirectory()) {
+        throw new GradleException("The modded runs copy Create, Sable and the other test mods from a folder of jars: set " +
+            "dailies.modsFolder=<folder> in ~/.gradle/gradle.properties, or pass -Pdailies.modsFolder=<folder>" +
+            (modsFolderSetting == null ? '' : " (${modsSource} is not a folder)"))
+    }
+    def missing = overrideJars.findAll { !it.isFile() }
+    if (!missing.isEmpty()) {
+        throw new GradleException("dailies.modJars names jars that are not there: ${missing.join(', ')}")
+    }
+}
+
+tasks.register('installTestMods', Sync) {
+    description = 'Puts the built Dailies jar, the self test jar, the compats and the other test mods into run-modded/mods'
+    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar',
+        ':compats:createextras:jar', ':compats:extras:jar'
+    doFirst { checkModsFolder() }
+    from(tasks.named('jar'))
+    from(tasks.named('selftestJar'))
+    // The Create compat (CPT-6), a mod of its own built here, which the create group tries beside Create. Looked up when
+    // the task runs: the subproject is set up after this file
+    from({ project(':compats:create').tasks.named('jar').get().archiveFile })
+    // The Jade compat (CPT-8), the same way, which the jade group tries beside Jade
+    from({ project(':compats:jade').tasks.named('jar').get().archiveFile })
+    // The Create Aeronautics compat (CPT-9), the same way, which the aeronautics group tries beside Aeronautics and its add-ons
+    from({ project(':compats:aeronautics').tasks.named('jar').get().archiveFile })
+    // The Supplementaries compat (CPT-10), the same way, which the supplementaries group tries beside Supplementaries and Amendments
+    dependsOn ':compats:supplementaries:jar'
+    from({ project(':compats:supplementaries').tasks.named('jar').get().archiveFile })
+    // The compat for Create's other add-ons (CPT-11), the same way, which the createextras group tries beside them
+    from({ project(':compats:createextras').tasks.named('jar').get().archiveFile })
+    // The extras compat (CPT-12), the same way, which the extras group tries beside the rest of the pack
+    from({ project(':compats:extras').tasks.named('jar').get().archiveFile })
+    from(modsSource) {
+        include moddedTestMods.collect { it.trim() + '.jar' }
+        exclude overriddenMods
+    }
+    from(overrideJars)
+    from(file('companion/build/libs')) {
+        include 'dailies-companion-*.jar'
+    }
+    into file('run-modded/mods')
+}
+
+// Mods only the owner's free play has, from the same folder: Distant Horizons, which the scripted run does not need
+def playOnlyMods = providers.gradleProperty('dailies.playMods').getOrElse('DistantHorizons-*').split(',')
+
+tasks.register('installPlayMods', Sync) {
+    description = 'Puts the same mods as the modded test, and the play-only ones, into run-play/mods'
+    dependsOn 'installTestMods'
+    doFirst { checkModsFolder() }
+    from(file('run-modded/mods')) {
+        // A game to play in never carries the scripted runs
+        exclude 'dailies-selftest-*.jar'
+    }
+    from(modsSource) {
+        include playOnlyMods.collect { it.trim() + '.jar' }
+    }
+    into file('run-play/mods')
+}
+
+afterEvaluate {
+    tasks.named('runPlayModded') {
+        dependsOn 'installPlayMods'
+    }
+    tasks.named('runTestModded') {
+        dependsOn 'installTestMods'
+    }
+    tasks.named('runManualShots') {
+        dependsOn 'installTestMods'
+    }
+}

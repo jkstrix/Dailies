@@ -1,0 +1,42 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies_template"
+version = "${version}"
+displayName = "Dailies Compat Template"
+authors = "James Knight"
+description = '''
+The template for a Dailies compat: an example screen and an example overlay recorded and drawn again by Dailies, and a
+fact only the server knows sent through the Dailies Companion. Copied to start a compat for another mod.
+'''
+
+[[dependencies.dailies_template]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.dailies_template]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+# Both soft: the compat stands down without them
+[[dependencies.dailies_template]]
+modId = "dailies"
+type = "optional"
+versionRange = "[1.1.0,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.dailies_template]]
+modId = "dailies_companion"
+type = "optional"
+versionRange = "[1.0.0,)"
+ordering = "NONE"
+side = "BOTH"

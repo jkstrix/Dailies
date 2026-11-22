@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "comedymonkey.dailies.mixin.sound",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "LibraryMixin",
+    "SoundEngineDeviceMixin",
+    "SoundEngineAccess",
+    "SoundManagerAccess",
+    "SoundBufferLibraryMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "package": "comedymonkey.dailiescompat.supplementaries.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "StatusLineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

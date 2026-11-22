@@ -1,0 +1,7 @@
+FFmpeg
+
+Licence: GNU Lesser General Public License, version 2.1 or later. This build is configured without --enable-gpl, --enable-nonfree and --enable-version3.
+Source: https://ffmpeg.org/ (the exact version and its sha256 are in sources.lock)
+Used for: The ffmpeg and ffprobe programs that encode exported video and sound and read the result back. Dailies runs them as separate programs beside the game and does not link against them, so any FFmpeg build can be put in their place: replace the files Dailies unpacks into <game>/dailies/encoder/<platform>/. To rebuild these ones, run tools/ffmpeg/build.sh from the Dailies source.
+
+The licence text, as the project publishes it in its own source, is in licenses/ffmpeg/.

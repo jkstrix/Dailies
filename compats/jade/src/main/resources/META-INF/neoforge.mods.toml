@@ -1,0 +1,47 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "dailies_jade"
+version = "${version}"
+displayName = "Dailies Jade Compat"
+logoFile = "dailies_jade.png"
+logoBlur = false
+authors = "James Knight"
+description = '''
+Jade's box in Dailies recordings: what the player looks at, as Jade drew it (the lines, item icons, progress bars, fluid
+and energy gauges, health and armour, the mod name, the block's icon, the box's place, theme and fade), recorded and drawn
+again in playback with Jade's own elements. Does nothing unless both Dailies and Jade are installed.
+'''
+# Only the player's game has anything to do: a server never needs it, and a game with it joins a server without it
+displayTest = "IGNORE_ALL_VERSION"
+
+[[dependencies.dailies_jade]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.dailies_jade]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+# Both soft: the compat stands down without either
+[[dependencies.dailies_jade]]
+modId = "dailies"
+type = "optional"
+versionRange = "[1.1.0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.dailies_jade]]
+modId = "jade"
+type = "optional"
+versionRange = "[15.10.6,)"
+ordering = "AFTER"
+side = "BOTH"

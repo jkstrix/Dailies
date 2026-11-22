@@ -1,0 +1,7 @@
+AMD Advanced Media Framework headers
+
+Licence: MIT licence.
+Source: https://github.com/GPUOpen-LibrariesAndSDKs/AMF (the exact version and its sha256 are in sources.lock)
+Used for: Headers only: lets ffmpeg use AMD's hardware encoder, which the AMD driver supplies at run time. No AMD code is in the build.
+
+The licence text, as the project publishes it in its own source, is in licenses/amf/.
