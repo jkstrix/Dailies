@@ -1,6 +1,6 @@
 # Dailies Companion
 
-A small server-side mod for NeoForge 1.21.1. It tells a player's game that something worth remembering has just
+A small server-side mod for NeoForge 26.3 (Minecraft 26.3). It tells a player's game that something worth remembering has just
 happened to them, so that Dailies, running in that player's game, can write it into its moments log with the time and
 the place.
 
@@ -16,7 +16,7 @@ Mod id `dailies_companion`. Licence MIT.
 
 ## Install
 
-Put `dailies-companion-1.21.1-<version>.jar` in the server's `mods` folder. Players need nothing extra beside Dailies.
+Put `dailies-companion-26.3-<version>.jar` in the server's `mods` folder. Players need nothing extra beside Dailies.
 In singleplayer there is nothing to install: Dailies has the companion inside. A copy of the companion left in a
 player's own `mods` folder does no harm; NeoForge loads the newer of the two.
 
@@ -65,32 +65,17 @@ The reply says how many of the players were listening.
 | `treasure_fished` | A player fishes up treasure. | That player. |
 | `night_skipped` | The night is slept through. | Everyone in that world. |
 | `first_join` | A player joins the server for the first time. | Everyone online. |
-| `craft_assembled` | Sable makes a new physics craft: assembled at an assembler block, with `/sable assemble`, or by another mod. Craft that load with the world never count. | The player who assembled it, and players within `nearbyRadius` of the craft. |
-| `craft_lost` | A craft is destroyed, splits in two, or loses over half its mass. Taking one apart at an assembler on purpose does not count, and nor does a craft unloading with its chunk. | Players within `nearbyRadius` of the craft. |
-| `train_departed` | A Create train leaves a station with the player aboard, seated or standing, the first time for that train and player since the server started. | That player. |
-| `train_arrived` | That train reaches its next station. | That player. |
 
 ### Craft and trains
 
-The last four need Sable (for craft) or Create (for trains) on the server. The companion is built against Sable 2.0.6
-and Create 6.0.10 and calls them directly, from classes that load only when the mod is installed, so it loads and works
-as before without them. If something goes wrong in either part, it switches that part off with one line in the log
-naming the cause, and says when the cause is a different version of the mod.
-
-What each carries in its JSON:
-
-| Type | Data |
-|---|---|
-| `craft_assembled` | `craft_id` (Sable's id for the craft, the same one the player's game sees), `craft_name` when it has one, `assembled_by` when known, `speed`, `x`, `y`, `z` |
-| `craft_lost` | the same, and `cause`: `destroyed`, `explosion` (an explosion went off at it in the last three seconds), `split` or `lost_blocks`, with `mass_before` and `mass_after` for the last |
-| `train_departed`, `train_arrived` | `train_id`, `train_name`, `station` |
-
-Dailies logs these as moments of their own type, not as `custom` ones. Its own game watches for craft being assembled
-and lost too; when both report the same thing within five seconds, they become one event that lists both sources.
+The craft and train events (`craft_assembled`, `craft_lost`, `train_departed`, `train_arrived`) are not available on
+Minecraft 26.3. They come from Sable's physics craft and Create's trains, and neither mod has a release for 26.3 yet, so
+this build of the companion leaves them out. They come back once Sable and Create release for 26.3. The 1.21.1 build of
+the companion still raises them.
 
 ## Settings
 
-`config/dailies_companion-common.toml`:
+`config/dailies_companion-local.toml`:
 
 | Setting | Default | Meaning |
 |---|---|---|

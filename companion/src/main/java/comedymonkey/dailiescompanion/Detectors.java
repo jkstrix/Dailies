@@ -65,7 +65,7 @@ public final class Detectors {
 	private Detectors() {}
 
 	static final List<String> EVENTS = List.of("boss_fight", "close_call", "totem_saved", "big_fall", "explosion", "lightning_strike", "animal_tamed",
-		"animal_bred", "treasure_fished", "night_skipped", "first_join", "craft_assembled", "craft_lost", "train_departed", "train_arrived");
+		"animal_bred", "treasure_fished", "night_skipped", "first_join");
 
 	// ------------------------------------------------------------------ boss fights
 	private static final class Fight {
@@ -78,7 +78,7 @@ public final class Detectors {
 	private static final long FIGHT_FORGET_MILLIS = 30 * 60_000;
 
 	private static boolean boss(LivingEntity e) {
-		return !(e instanceof ServerPlayer) && (e.getType().is(Tags.EntityTypes.BOSSES) || e.getMaxHealth() >= CompanionConfig.bossHealth());
+		return !(e instanceof ServerPlayer) && (e.is(Tags.EntityTypes.BOSSES) || e.getMaxHealth() >= CompanionConfig.bossHealth());
 	}
 
 	private static void bossHurt(LivingEntity boss, DamageSource source, float amount) {
@@ -133,7 +133,7 @@ public final class Detectors {
 	}
 
 	// ------------------------------------------------------------------ damage, death, falls
-	private static final Map<UUID, Float> FALLS = new HashMap<>();
+	private static final Map<UUID, Double> FALLS = new HashMap<>();
 
 	@SubscribeEvent
 	public static void onFall(LivingFallEvent e) {
@@ -150,22 +150,22 @@ public final class Detectors {
 		LivingEntity hurt = e.getEntity();
 		DamageSource source = e.getSource();
 		if (hurt instanceof ServerPlayer p) {
-			if (!real(p) || e.getNewDamage() <= 0)
+			if (!real(p) || e.getHealthDamage() <= 0)
 				return;
-			Float fell = source.is(DamageTypeTags.IS_FALL) ? FALLS.remove(p.getUUID()) : null;
+			Double fell = source.is(DamageTypeTags.IS_FALL) ? FALLS.remove(p.getUUID()) : null;
 			if (!p.isAlive() || p.getHealth() <= 0)
 				return;
 			if (fell != null && CompanionConfig.enabled("big_fall")) {
 				JsonObject data = new JsonObject();
 				data.addProperty("blocks", Math.round(fell));
-				data.addProperty("damage", round(e.getNewDamage()));
+				data.addProperty("damage", round(e.getHealthDamage()));
 				data.addProperty("health_left", round(p.getHealth()));
 				DailiesCompanion.send(p, "big_fall", name(p) + " survived a " + Math.round(fell) + " block fall", data);
 			}
 			if (p.getHealth() <= CompanionConfig.closeCallHealth() && CompanionConfig.enabled("close_call") && cooled(p, "close_call", 30_000)) {
 				JsonObject data = new JsonObject();
 				data.addProperty("health_left", round(p.getHealth()));
-				data.addProperty("damage", round(e.getNewDamage()));
+				data.addProperty("damage", round(e.getHealthDamage()));
 				data.addProperty("cause", source.getMsgId());
 				String by = "";
 				if (source.getEntity() != null) {
@@ -178,7 +178,7 @@ public final class Detectors {
 			return;
 		}
 		if (boss(hurt)) {
-			bossHurt(hurt, source, e.getNewDamage());
+			bossHurt(hurt, source, e.getHealthDamage());
 			// the dragon never "dies" as other mobs do: its last hit starts the death animation
 			if (hurt instanceof EnderDragon dragon && dragon.getPhaseManager().getCurrentPhase().getPhase() == EnderDragonPhase.DYING && FIGHTS.containsKey(dragon.getUUID()))
 				bossDied(dragon, source);
@@ -207,7 +207,7 @@ public final class Detectors {
 			data.addProperty("attacker", id(e.getSource().getEntity()));
 			by = " from " + e.getSource().getEntity().getName().getString();
 		}
-		for (ServerPlayer to : near(p.serverLevel(), p, CompanionConfig.nearbyRadius()))
+		for (ServerPlayer to : near(p.level(), p, CompanionConfig.nearbyRadius()))
 			DailiesCompanion.send(to, "totem_saved", "A totem of undying saved " + name(p) + by, data);
 	}
 
@@ -242,7 +242,7 @@ public final class Detectors {
 			return;
 		JsonObject data = new JsonObject();
 		data.addProperty("player", name(p));
-		for (ServerPlayer to : near(p.serverLevel(), p, CompanionConfig.nearbyRadius()))
+		for (ServerPlayer to : near(p.level(), p, CompanionConfig.nearbyRadius()))
 			DailiesCompanion.send(to, "lightning_strike", name(p) + " was struck by lightning", data);
 	}
 
@@ -315,7 +315,7 @@ public final class Detectors {
 			return;
 		JsonObject data = new JsonObject();
 		data.addProperty("player", name(p));
-		DailiesCompanion.sendAll(p.server, "first_join", name(p) + " joined for the first time", data);
+		DailiesCompanion.sendAll(p.level().getServer(), "first_join", name(p) + " joined for the first time", data);
 	}
 
 	@SubscribeEvent
@@ -361,7 +361,7 @@ public final class Detectors {
 	}
 
 	private static String name(ServerPlayer p) {
-		return p.getGameProfile().getName();
+		return p.getGameProfile().name();
 	}
 
 	private static String id(Entity e) {

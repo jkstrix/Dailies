@@ -31,7 +31,7 @@ final class MomentCommand {
 	private MomentCommand() {}
 
 	static void register(CommandDispatcher<CommandSourceStack> d) {
-		d.register(Commands.literal("moment").requires(s -> s.hasPermission(2))
+		d.register(Commands.literal("moment").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 			.then(Commands.literal("send").then(Commands.argument("players", EntityArgument.players()).then(Commands.argument("type", StringArgumentType.word())
 				.then(Commands.argument("label", StringArgumentType.greedyString()).executes(c -> run(c, null))))))
 			.then(Commands.literal("data").then(Commands.argument("players", EntityArgument.players()).then(Commands.argument("type", StringArgumentType.word())
