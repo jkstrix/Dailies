@@ -440,6 +440,8 @@ final class WatchingSteps {
         editor(test);
         lookFrom(test, spot.add(-5.0, 2.0, -5.0), spot);
 
+        // The rings are noted as they are drawn, once a frame: wait for a frame drawn since the camera turned
+        test.waitFor(() -> !MarkerRings.drawn().isEmpty(), 5, "the marker rings to be drawn");
         List<MarkerRings.Ring> rings = MarkerRings.drawn();
         check(rings.size() == 1, rings.size() + " marker rings are drawn, not one for the one marker that stored a position");
         MarkerRings.Ring ring = rings.get(0);
