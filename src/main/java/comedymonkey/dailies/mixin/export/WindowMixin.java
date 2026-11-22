@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class WindowMixin {
 
     @Inject(method = "onFramebufferResize", at = @At("HEAD"), cancellable = true)
-    private void dailies$keepExportSize(long window, int width, int height, CallbackInfo ci) {
+    private void dailies$keepExportSize(int width, int height, CallbackInfo ci) {
         if (Export.holdsWindow()) {
             Export.windowResized(width, height);
             ci.cancel();

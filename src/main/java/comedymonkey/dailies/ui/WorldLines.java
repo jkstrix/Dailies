@@ -1,27 +1,35 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
-import org.joml.Vector3f;
+import org.joml.Matrix4fc;
+import org.joml.Vector3fc;
 
+import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalDouble;
 
 /**
  * Draws what the editor shows in the world itself and not over it: the camera's path (specification EDIT-8) and the
@@ -45,19 +53,17 @@ final class WorldLines {
     private static final float SOFT_PIXELS = 1.0F;
 
     private static boolean failureLogged = false;
+    /** The frame's corners on their way to the card, and the buffer on the card they go into; both kept and grown */
+    private static @Nullable ByteBufferBuilder corners = null;
+    private static @Nullable GpuBuffer vertexBuffer = null;
 
     private WorldLines() {
     }
 
     static void init() {
-        NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent event) -> {
-            // After everything of the world, where the picture and its depths are whole. With the game's "fabulous"
-            // graphics that is only so at the very end
-            boolean fabulous = Minecraft.useShaderTransparency();
-            if (event.getStage() == (fabulous ? RenderLevelStageEvent.Stage.AFTER_LEVEL : RenderLevelStageEvent.Stage.AFTER_WEATHER)) {
-                draw(event.getCamera(), event.getModelViewMatrix());
-            }
-        });
+        // After everything of the world, where the picture and its depths are whole, whatever the graphics settings
+        NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent.AfterLevel event) ->
+            draw(Minecraft.getInstance().gameRenderer.mainCamera(), event.getModelViewMatrix()));
     }
 
     /** Whether anything of Dailies may be drawn into the world just now */
@@ -66,7 +72,7 @@ final class WorldLines {
         return Playback.loaded() && !Export.active() && !Notices.hidden() && !comedymonkey.dailies.ui.HudHidden.get() && minecraft.level != null;
     }
 
-    private static void draw(Camera camera, Matrix4f modelView) {
+    private static void draw(Camera camera, Matrix4fc modelView) {
         if (!allowed()) {
             MarkerRings.nothingDrawn();
             PathPreview.nothingDrawn();
@@ -113,9 +119,9 @@ final class WorldLines {
             return null;
         }
         Vec3 from = point.subtract(camera.position());
-        Vector3f look = camera.forwardVector();
-        Vector3f above = camera.upVector();
-        Vector3f left = camera.leftVector();
+        Vector3fc look = camera.forwardVector();
+        Vector3fc above = camera.upVector();
+        Vector3fc left = camera.leftVector();
         double ahead = from.x * look.x() + from.y * look.y() + from.z * look.z();
         if (ahead < NEAR) {
             return null;
@@ -153,7 +159,7 @@ final class WorldLines {
 
         Batch(Camera camera) {
             this.eye = camera.position();
-            Vector3f look = camera.forwardVector();
+            Vector3fc look = camera.forwardVector();
             this.lookX = look.x();
             this.lookY = look.y();
             this.lookZ = look.z();
@@ -278,15 +284,15 @@ final class WorldLines {
                 return;
             }
             Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
-            Vector3f up = camera.upVector();
-            Vector3f left = camera.leftVector();
+            Vector3fc up = camera.upVector();
+            Vector3fc left = camera.leftVector();
             double unit = this.perPixel * ahead * this.scale;
             float strength = fade(ahead) * alpha;
             this.facing(this.borders, x, y, z, up, left, unit * (pixels + BORDER_PIXELS * 1.5F), BORDER, strength * 0.85F);
             this.facing(this.middles, x, y, z, up, left, unit * pixels, colour, strength);
         }
 
-        private void facing(FloatList into, double x, double y, double z, Vector3f up, Vector3f left, double reach, int colour, float alpha) {
+        private void facing(FloatList into, double x, double y, double z, Vector3fc up, Vector3fc left, double reach, int colour, float alpha) {
             into.vertex(x + up.x() * reach, y + up.y() * reach, z + up.z() * reach, colour, alpha);
             into.vertex(x + left.x() * reach, y + left.y() * reach, z + left.z() * reach, colour, alpha);
             into.vertex(x - up.x() * reach, y - up.y() * reach, z - up.z() * reach, colour, alpha);
@@ -300,33 +306,60 @@ final class WorldLines {
             return (float) Math.max(FAINTEST, 1.0 - (ahead - FADE_FROM) / (FADE_TO - FADE_FROM) * (1.0 - FAINTEST));
         }
 
-        void finish(Matrix4f modelView) {
-            if (this.borders.size == 0 && this.middles.size == 0) {
+        void finish(Matrix4fc modelView) {
+            int count = this.borders.size + this.middles.size;
+            if (count == 0) {
                 return;
             }
-            Matrix4fStack stack = RenderSystem.getModelViewStack();
-            stack.pushMatrix();
-            stack.identity();
-            stack.mul(modelView);
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.enableBlend();
-            RenderSystem.defaultBlendFunc();
-            RenderSystem.disableCull();
-            RenderSystem.enableDepthTest();
-            // Hidden by the world, and hiding nothing: what is drawn after must not be cut by a line's soft edge
-            RenderSystem.depthMask(false);
-            RenderSystem.setShader(GameRenderer::getPositionColorShader);
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            try {
-                this.borders.draw();
-                this.middles.draw();
-            } finally {
-                RenderSystem.depthMask(true);
-                RenderSystem.enableCull();
-                RenderSystem.disableBlend();
-                stack.popMatrix();
-                RenderSystem.applyModelViewMatrix();
+            if (corners == null) {
+                corners = new ByteBufferBuilder(DefaultVertexFormat.POSITION_COLOR.getVertexSize() * Math.max(4096, count));
             }
+            BufferBuilder builder = new BufferBuilder(corners, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
+            // Every border before every middle, in one draw: the card draws them in the order given
+            this.borders.addTo(builder);
+            this.middles.addTo(builder);
+            try (MeshData mesh = builder.build()) {
+                if (mesh != null) {
+                    drawMesh(mesh, modelView);
+                }
+            }
+        }
+    }
+
+    /**
+     * Draws the frame's lines over the finished world: blended, both faces, hidden by the world and hiding nothing,
+     * so that what is drawn after is not cut by a line's soft edge (the game's own see-through quads)
+     */
+    private static void drawMesh(MeshData mesh, Matrix4fc modelView) {
+        RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+        if (main.getColorTextureView() == null || main.getDepthTextureView() == null) {
+            return;
+        }
+        ByteBuffer vertices = mesh.vertexBuffer();
+        int size = vertices.remaining();
+        GpuDevice device = RenderSystem.getDevice();
+        if (vertexBuffer == null || vertexBuffer.size() < size) {
+            if (vertexBuffer != null) {
+                vertexBuffer.close();
+            }
+            long room = Long.highestOneBit(Math.max(65536L, size) - 1L) << 1;
+            vertexBuffer = device.createBuffer(() -> "Dailies world lines", GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST, room);
+        }
+        CommandEncoder encoder = device.createCommandEncoder();
+        GpuBufferSlice slice = vertexBuffer.slice(0L, size);
+        encoder.writeToBuffer(slice, vertices);
+        int indexCount = mesh.drawState().indexCount();
+        RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
+        GpuBuffer indexBuffer = indices.getBuffer(indexCount);
+        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(modelView));
+        try (RenderPass pass = encoder.createRenderPass(() -> "Dailies world lines", main.getColorTextureView(), Optional.empty(),
+            main.getDepthTextureView(), OptionalDouble.empty())) {
+            pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.DEBUG_QUADS));
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("DynamicTransforms", transforms);
+            pass.setVertexBuffer(0, slice);
+            pass.setIndexBuffer(indexBuffer, indices.type());
+            pass.drawIndexed(indexCount, 1, 0, 0, 0);
         }
     }
 
@@ -349,17 +382,9 @@ final class WorldLines {
             this.size++;
         }
 
-        void draw() {
-            if (this.size == 0) {
-                return;
-            }
-            BufferBuilder builder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        void addTo(BufferBuilder builder) {
             for (int i = 0; i < this.size; i++) {
                 builder.addVertex(this.values[i * 3], this.values[i * 3 + 1], this.values[i * 3 + 2]).setColor(this.colours[i]);
-            }
-            MeshData mesh = builder.build();
-            if (mesh != null) {
-                BufferUploader.drawWithShader(mesh);
             }
         }
     }

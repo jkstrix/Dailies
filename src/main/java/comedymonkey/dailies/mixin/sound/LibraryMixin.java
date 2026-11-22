@@ -24,24 +24,16 @@ public abstract class LibraryMixin {
     @Shadow
     private long currentDevice;
 
-    @WrapOperation(method = "init", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/audio/Library;openDeviceOrFallback(Ljava/lang/String;)J"))
-    private long dailies$openLoopback(String deviceName, Operation<Long> original) {
+    @WrapOperation(method = "init", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/audio/Library;openDeviceOrFallback(Ljava/lang/String;Ljava/lang/String;)J"))
+    private long dailies$openLoopback(String deviceName, String systemDefault, Operation<Long> original) {
         long device = ExportSound.openLoopback();
-        return device != 0L ? device : original.call(deviceName);
+        return device != 0L ? device : original.call(deviceName, systemDefault);
     }
 
     @WrapOperation(method = "init", at = @At(value = "INVOKE", target = "Lorg/lwjgl/openal/ALC10;alcCreateContext(JLjava/nio/IntBuffer;)J", remap = false))
     private long dailies$loopbackFormat(long device, IntBuffer attributes, Operation<Long> original) {
         // A loopback device has to be told the format its samples will be asked for in
         return original.call(device, ExportSound.isLoopback(device) ? ExportSound.contextAttributes() : attributes);
-    }
-
-    @Inject(method = "setHrtf", at = @At("HEAD"), cancellable = true)
-    private void dailies$leaveLoopbackAlone(boolean enabled, CallbackInfo ci) {
-        // Resetting a loopback device without its format fails; an export is plain stereo
-        if (ExportSound.isLoopback(this.currentDevice)) {
-            ci.cancel();
-        }
     }
 
     @Inject(method = "cleanup", at = @At("HEAD"))

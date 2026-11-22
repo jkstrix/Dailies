@@ -1,8 +1,6 @@
 package comedymonkey.dailies.export;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import comedymonkey.dailies.Dailies;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.command.MarkWords;
@@ -16,6 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
@@ -24,9 +23,6 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
-import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,32 +113,18 @@ public final class CaptionBurner {
      */
     static void drawIntoFrame(Minecraft minecraft, RenderTarget target, String text, @Nullable Captions.Style style) {
         Look look = Look.fromSettings(style);
-        target.bindWrite(true);
-        RenderSystem.backupProjectionMatrix();
-        Matrix4fStack modelView = RenderSystem.getModelViewStack();
-        modelView.pushMatrix();
-        try {
-            // Pixels of the picture, whatever the interface scale
-            RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0.0F, target.width, target.height, 0.0F, 1000.0F, 21000.0F), VertexSorting.ORTHOGRAPHIC_Z);
-            modelView.identity();
-            modelView.translate(0.0F, 0.0F, -11000.0F);
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-            GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, minecraft.renderBuffers().bufferSource());
-            draw(graphics, minecraft.font, 0, 0, target.width, target.height, text, look);
-            graphics.flush();
-        } finally {
-            modelView.popMatrix();
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.restoreProjectionMatrix();
+        if (target != minecraft.gameRenderer.mainRenderTarget()) {
+            throw new IllegalStateException("Captions are only drawn into the game's own picture");
         }
+        // Pixels of the picture, whatever the interface scale, on top of everything the frame drew
+        PictureGui.draw(graphics -> draw(graphics, minecraft.font, 0, 0, target.width, target.height, text, look));
     }
 
     /** Draws the text in the box, rows centred, as the look says */
     static void draw(GuiGraphicsExtractor graphics, Font font, int left, int top, int width, int height, String text, Look look) {
         float scale = (float) Math.max(0.25, height * look.size() / 100.0 / font.lineHeight);
         int room = Math.max(10, (int) (width * 0.9 / scale));
-        Style style = Style.EMPTY.withFont(look.font());
+        Style style = Style.EMPTY.withFont(new FontDescription.Resource(look.font()));
         List<FormattedCharSequence> rows = new ArrayList<>();
         for (String line : text.split("\n")) {
             rows.addAll(font.split(Component.literal(line).withStyle(style), room));
@@ -162,19 +144,35 @@ public final class CaptionBurner {
         int colour = 0xFF000000 | look.colour();
         int outline = 0xFF000000 | look.outline();
         graphics.pose().pushMatrix();
-        graphics.pose().translate(left, top, 0.0F);
-        graphics.pose().scale(scale, scale, 1.0F);
+        graphics.pose().translate(left, top);
+        graphics.pose().scale(scale, scale);
         float boxWidth = width / scale;
         for (int i = 0; i < rows.size(); i++) {
             FormattedCharSequence row = rows.get(i);
             float x = (boxWidth - font.width(row)) / 2.0F;
             float y = firstY + i * rowHeight;
             if (look.outlined()) {
-                font.drawInBatch8xOutline(row, x, y, colour, outline, graphics.pose().last().pose(), graphics.bufferSource(), 0xF000F0);
+                // The outline as the game draws one: the text in the outline colour a unit off all round, the text on top
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        if (dx != 0 || dy != 0) {
+                            textAt(graphics, font, row, x + dx, y + dy, outline);
+                        }
+                    }
+                }
+                textAt(graphics, font, row, x, y, colour);
             } else {
                 graphics.text(font, row, (int) x, (int) y, colour, true);
             }
         }
+        graphics.pose().popMatrix();
+    }
+
+    /** Text at a place between whole units, without a shadow */
+    private static void textAt(GuiGraphicsExtractor graphics, Font font, FormattedCharSequence row, float x, float y, int colour) {
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(x, y);
+        graphics.text(font, row, 0, 0, colour, false);
         graphics.pose().popMatrix();
     }
 

@@ -144,7 +144,9 @@ final class BlockChanges {
         if (shown.recordedData() != null) {
             BlockEntity blockEntity = world.getBlockEntity(pos);
             if (blockEntity != null) {
-                blockEntity.loadWithComponents(shown.recordedData(), world.registryAccess());
+                try (net.minecraft.util.ProblemReporter.ScopedCollector reporter = new net.minecraft.util.ProblemReporter.ScopedCollector(blockEntity.problemPath(), comedymonkey.dailies.Host.LOGGER)) {
+                    blockEntity.loadWithComponents(net.minecraft.world.level.storage.TagValueInput.create(reporter, world.registryAccess(), shown.recordedData()));
+                }
                 world.sendBlockUpdated(pos, shown.recorded(), shown.recorded(), QUIETLY);
             }
         }

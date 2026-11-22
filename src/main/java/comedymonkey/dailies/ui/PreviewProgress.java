@@ -8,6 +8,8 @@ import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -105,12 +107,12 @@ public final class PreviewProgress extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == InputConstants.KEY_ESCAPE) {
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
             cancel();
         }
         // Every other key is kept from the game, whose keys would otherwise reach the paused recording behind
@@ -118,8 +120,8 @@ public final class PreviewProgress extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && this.overCancel(mouseX, mouseY)) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && this.overCancel(event.x(), event.y())) {
             Kit.click();
             cancel();
         }
@@ -145,7 +147,7 @@ public final class PreviewProgress extends Screen {
     // ------------------------------------------------------------------ Drawing
 
     @Override
-    public void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         try {
             graphics.fill(0, 0, this.width, this.height, BACKGROUND);
             StretchRun run = StretchPreview.current();
