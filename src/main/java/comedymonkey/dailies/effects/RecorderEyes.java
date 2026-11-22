@@ -161,6 +161,7 @@ public final class RecorderEyes {
     // ------------------------------------------------------------------ Kept a tick at a time
 
     private static void tick() {
+        stopMusic();
         if (!Playback.loaded()) {
             keptFor = -1;
             return;
@@ -208,6 +209,20 @@ public final class RecorderEyes {
             waterVisionTime = Mth.clamp(waterVisionTime + (living.isSpectator() ? 10 : 1), 0, 600);
         } else if (waterVisionTime > 0) {
             waterVisionTime = Mth.clamp(waterVisionTime - 10, 0, 600);
+        }
+    }
+
+    /**
+     * No background music over a recording being watched or exported. Every client tick, which runs even while the game
+     * is paused and its music manager is not ticked: what is playing as a recording opens is stopped at once
+     */
+    private static void stopMusic() {
+        if (!Playback.active() && !comedymonkey.dailies.export.Export.active()) {
+            return;
+        }
+        var music = Minecraft.getInstance().getMusicManager();
+        if (((comedymonkey.dailies.mixin.effects.MusicManagerAccess) music).dailies$currentMusic() != null) {
+            music.stopPlaying();
         }
     }
 
@@ -300,10 +315,16 @@ public final class RecorderEyes {
         }
         LivingEntity subject = subject();
         float nausea = subject != null && subject.hasEffect(MobEffects.CONFUSION) ? portal(partialTicks) : 0.0F;
+        // The screen effects the frame before drew (none, where the game did not draw them), published whole: the self test
+        // reads from another thread and must never catch a frame half drawn
         Shown was = shown;
-        shown = new Shown(was.through(), was.frost(), was.portal(), nausea, was.spyglass(), was.wornOverlays(), false, false, false, was.sleep(),
-            was.darkness(), was.nightVision());
+        shown = new Shown(was.through(), was.frost(), was.portal(), nausea, was.spyglass(), was.wornOverlays(), pendingFire, pendingWater, pendingBlock,
+            was.sleep(), was.darkness(), was.nightVision());
+        pendingFire = pendingWater = pendingBlock = false;
     }
+
+    // What the screen effects drew in the frame being drawn, published as the next begins. Render thread
+    private static boolean pendingFire, pendingWater, pendingBlock;
 
     /** The block in front of the eyes that the game would draw over the picture, and where, as it works it out for its own player */
     public static @Nullable BlockPos viewBlocking(LivingEntity living) {
@@ -342,9 +363,9 @@ public final class RecorderEyes {
     }
 
     public static void shownScreen(boolean onFire, boolean eyesInWater, boolean blockInFace) {
-        Shown was = shown;
-        shown = new Shown(was.through(), was.frost(), was.portal(), was.nausea(), was.spyglass(), was.wornOverlays(), onFire, eyesInWater, blockInFace,
-            was.sleep(), was.darkness(), was.nightVision());
+        pendingFire = onFire;
+        pendingWater = eyesInWater;
+        pendingBlock = blockInFace;
     }
 
     public static void shownSleep(int sleep) {

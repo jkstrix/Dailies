@@ -24,6 +24,14 @@ public abstract class MusicMixin {
     @Shadow
     public abstract void stopPlaying();
 
+    // Nothing starts while a recording is open or exporting, whoever asks
+    @Inject(method = "startPlaying", at = @At("HEAD"), cancellable = true)
+    private void dailies$noNewMusicInPlayback(net.minecraft.sounds.Music music, CallbackInfo ci) {
+        if (Playback.active() || Export.active()) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void dailies$noMusicInPlayback(CallbackInfo ci) {
         if (Playback.active() || Export.active()) {

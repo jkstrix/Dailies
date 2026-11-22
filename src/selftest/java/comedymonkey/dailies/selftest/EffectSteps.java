@@ -321,11 +321,11 @@ final class EffectSteps {
     // ------------------------------------------------------------------ Playback
 
     private static void watch(SelfTest test, Minecraft minecraft, Path recording) throws Exception {
+        // Music playing in the world as the recording is opened: it stops, and none plays over the recording
+        test.onClientRun(() -> minecraft.getMusicManager().startPlaying(Musics.MENU));
+        check(test.onClient(() -> minecraft.getMusicManager().isPlayingMusic(Musics.MENU)), "the music to stop did not start before the recording was opened");
         test.tool("replay_open", args("path", recording.toString()));
         test.waitFor(() -> Playback.loaded() && !Playback.jumping(), 120, "the effects recording to open");
-
-        // No background music over a recording
-        test.onClientRun(() -> minecraft.getMusicManager().startPlaying(Musics.MENU));
         test.waitTicks(40);
         check(test.onClient(() -> !minecraft.getMusicManager().isPlayingMusic(Musics.MENU) && !minecraft.getMusicManager().isPlayingMusic(Musics.GAME)
                 && !minecraft.getMusicManager().isPlayingMusic(Musics.CREATIVE)),
