@@ -36,7 +36,7 @@ import java.util.function.Consumer;
  * know whether its server half is there and which version it is.
  * <p>
  * As with the companion's moments, players need no copy of the companion: without it in this game, Dailies registers
- * the channel itself (same id, same format). With it installed here as well (singleplayer), the companion owns the
+ * the channel itself (same id, same format). With it here as well (the Dailies jar carries it, jar-in-jar, for singleplayer), the companion owns the
  * channel and re-posts what arrives as a NeoForge event, which is listened to by reflection.
  */
 public final class CompanionCompat {

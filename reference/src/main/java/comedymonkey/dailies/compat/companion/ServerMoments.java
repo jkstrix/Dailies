@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * recorded as moments of type "custom".
  *
  * The companion is a server mod and players don't need a copy: without it in this game, Dailies registers the
- * companion's channel itself (same id, same three strings). With it installed here as well (singleplayer), the
+ * companion's channel itself (same id, same three strings). With it here as well (the Dailies jar carries it, jar-in-jar, for singleplayer), the
  * companion owns the channel and re-posts what arrives as a NeoForge event, which is listened to by reflection.
  */
 public final class ServerMoments {
