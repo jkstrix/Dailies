@@ -16,12 +16,11 @@ rootProject.name = 'dailies'
 includeBuild('companion')
 
 // Compats for other people's mods, each a mod of its own built with Dailies (specification CPT-5): the template that
-// each is started from, Create's, Jade's, Create Aeronautics' and the rest of the pack's
+// each is started from, Jade's and the rest of the pack's (compats:extras)
 include 'compats:template'
-include 'compats:create'
 include 'compats:jade'
-include 'compats:aeronautics'
-// Supplementaries' and Amendments' (CPT-10)
-include 'compats:supplementaries'
-include 'compats:createextras'
 include 'compats:extras'
+// Left out on Minecraft 26.3: Create, Sable, Create Aeronautics and its add-ons, Create's other add-ons and Supplementaries
+// have no release for it yet (checked on Modrinth, CurseForge and Create's maven, 22 Nov 2026). Their compats stay in
+// compats/ as they were for 1.21.1 (built on the mc/1.21.1 branch), to be ported when their mods are:
+// compats:create, compats:aeronautics, compats:createextras, compats:supplementaries

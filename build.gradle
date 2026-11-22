@@ -1,4 +1,4 @@
-// Dailies: a client-only replay mod for Minecraft 1.21.1 on NeoForge. Built from design/dailies-spec.html
+// Dailies: a client-only replay mod for Minecraft 26.3 on NeoForge. Built from design/dailies-spec.html
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.148'
@@ -8,10 +8,11 @@ version = project.mod_version
 group = 'comedymonkey.dailies'
 
 base {
-    archivesName = 'dailies-1.21.1'
+    archivesName = "dailies-${minecraft_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// Minecraft 26.x runs on Java 25
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 sourceSets {
     main {
@@ -193,10 +194,7 @@ dependencies {
 
     // Zstandard (zstd-jni, BSD 2-Clause, with the native zstd for every platform Dailies ships for), which every block of a
     // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
-    // The runs that load Dailies from its classes need it on the classpath that is not loaded as boot modules, as MDG asks
-    // of libraries for 1.21.1. Only those: the runs that load the built jar (testModded, playModded, manualShots) get it
-    // from inside the jar, and a second copy on their classpath stopped the game ("reads more than one module named
-    // com.github.luben.zstd_jni")
+    // The runs that load Dailies from its classes take it from implementation (MDG has no separate run classpath for 26.x)
     jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
 
     // The Dailies Companion, the included build in companion/, packed into the mod's jar with jar-in-jar, so singleplayer
@@ -204,9 +202,6 @@ dependencies {
     // packed, never compiled against: Dailies reaches it by reflection, as it does a companion installed on its own. A
     // dedicated server still takes the companion's own jar; on one, NeoForge keeps the newer of the two copies
     jarJar("comedymonkey.dailiescompanion:dailies-companion:${companionVersion}")
-    for (run in ['client', 'testClient', 'handsOn', 'kitShots']) {
-        add("${run}AdditionalRuntimeClasspath", 'com.github.luben:zstd-jni:1.5.7-25')
-    }
 
     // Only compiled against, never packed in: the voice chat mod brings its own API when it is installed
     compileOnly 'de.maxhenkel.voicechat:voicechat-api:2.6.0'
@@ -304,11 +299,11 @@ processSelftestResources {
     }
 }
 
-// The self test's own jar, dailies-selftest-1.21.1-<version>.jar: never published, only put into run-modded/mods
+// The self test's own jar, dailies-selftest-<minecraft version>-<version>.jar: never published, only put into run-modded/mods
 tasks.register('selftestJar', Jar) {
     description = 'Builds the jar of the Dailies self test (the scripted runs), for run-modded'
     group = 'build'
-    archiveBaseName = 'dailies-selftest-1.21.1'
+    archiveBaseName = "dailies-selftest-${minecraft_version}"
     from sourceSets.selftest.output
 }
 

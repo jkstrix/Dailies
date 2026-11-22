@@ -20,14 +20,14 @@ displayTest = "IGNORE_ALL_VERSION"
 [[dependencies.dailies_jade]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1,)"
+versionRange = "[26.3,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.dailies_jade]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.1]"
+versionRange = "[26.3]"
 ordering = "NONE"
 side = "BOTH"
 

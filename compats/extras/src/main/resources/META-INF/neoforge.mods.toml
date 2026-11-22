@@ -24,14 +24,14 @@ config = "dailies_extras.mixins.json"
 [[dependencies.dailies_extras]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1,)"
+versionRange = "[26.3,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.dailies_extras]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.1]"
+versionRange = "[26.3]"
 ordering = "NONE"
 side = "BOTH"
 

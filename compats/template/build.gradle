@@ -17,10 +17,10 @@ version = '1.0.0'
 group = 'comedymonkey.dailiescompat'
 
 base {
-    archivesName = 'dailies-compat-template-1.21.1'
+    archivesName = "dailies-compat-template-${minecraft_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 neoForge {
     version = project.neo_version

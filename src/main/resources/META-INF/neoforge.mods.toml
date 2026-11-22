@@ -38,13 +38,13 @@ config = "dailies.hidden.mixins.json"
 [[dependencies.dailies]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1,)"
+versionRange = "[26.3,)"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.dailies]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.1]"
+versionRange = "[26.3]"
 ordering = "NONE"
 side = "CLIENT"

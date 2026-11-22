@@ -15,10 +15,10 @@ version = '1.0.0'
 group = 'comedymonkey.dailiescompat'
 
 base {
-    archivesName = 'dailies-compat-extras-1.21.1'
+    archivesName = "dailies-compat-extras-${minecraft_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 repositories {
     mavenCentral()
@@ -45,10 +45,10 @@ neoForge {
 
 // The versions in the owner's pack and the modded test. VanillaBackport publishes the same version number for several
 // loaders on Modrinth, so it is named by the NeoForge file's version id
-def backpacksVersion = '1.21.1-3.26.21.2249'
-def sophisticatedCoreVersion = '1.21.1-1.5.35.2473'
-def curiosVersion = '9.5.1+1.21.1'
-def corpseVersion = 'neoforge-1.21.1-1.1.22'
+def backpacksVersion = '26.3-3.26.22.2260'
+def sophisticatedCoreVersion = '26.3-1.5.40.2492'
+def curiosVersion = '17.0.1+26.3'
+def corpseVersion = 'neoforge-1.1.22+26.3'
 def vanillaBackportVersion = 'mGS7BxD4'
 
 dependencies {
