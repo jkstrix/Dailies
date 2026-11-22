@@ -196,6 +196,9 @@ dependencies {
     // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
     // The runs that load Dailies from its classes take it from implementation (MDG has no separate run classpath for 26.x)
     jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
+    // The runs that load the self test (testClient, handsOn, kitShots) use its classpath, which has the main classes but not
+    // their libraries
+    selftestRuntimeOnly 'com.github.luben:zstd-jni:1.5.7-25'
 
     // The Dailies Companion, the included build in companion/, packed into the mod's jar with jar-in-jar, so singleplayer
     // (and a world opened to LAN) has the companion's server side in its own game without a second jar to install. Only

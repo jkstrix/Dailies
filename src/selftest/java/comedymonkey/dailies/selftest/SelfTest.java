@@ -463,7 +463,8 @@ public final class SelfTest {
                 focusSet = true;
             }
             this.port = McpHttpServer.getListeningPort();
-            if (focusSet && this.port > 0 && minecraft.gui.overlay() == null && minecraft.isGameLoadFinished()) {
+            // The game's Gui is made partway through loading, after the options
+            if (focusSet && this.port > 0 && minecraft.gui != null && minecraft.gui.overlay() == null && minecraft.isGameLoadFinished()) {
                 return;
             }
             Thread.sleep(250);
