@@ -1,6 +1,6 @@
 package comedymonkey.dailies.api;
 
-import comedymonkey.dailies.playback.Playback;
+import comedymonkey.dailies.api.internal.Backend;
 
 /**
  * What other mods may rely on. This class and its methods keep their names and meaning from version to version.
@@ -27,7 +27,7 @@ public final class DailiesApi {
      * True from before the playback world is created until after it has been left. Safe from any thread.
      */
     public static boolean isPlayback() {
-        return Playback.active();
+        return Backend.get().isPlayback();
     }
 
 }

@@ -1,6 +1,6 @@
 package comedymonkey.dailies.api.compat;
 
-import comedymonkey.dailies.windows.Compats;
+import comedymonkey.dailies.api.internal.Backend;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
@@ -20,7 +20,7 @@ public final class DailiesCompats {
      *                                  version is below 1, or a claim's name is not one a record can carry
      */
     public static void register(DailiesCompat compat) {
-        Compats.register(compat);
+        Backend.get().register(compat);
     }
 
     /**
@@ -28,7 +28,7 @@ public final class DailiesCompats {
      * holds them. Null outside playback, or while the recorder is not in the world. Client thread
      */
     public static @Nullable Player recorder() {
-        return Compats.recorder();
+        return Backend.get().recorder();
     }
 
     /**
@@ -40,7 +40,7 @@ public final class DailiesCompats {
      * {@code LinkageError} a Dailies without it throws.
      */
     public static boolean overlaysShown() {
-        return Compats.overlaysShown();
+        return Backend.get().overlaysShown();
     }
 
     /**
@@ -58,7 +58,7 @@ public final class DailiesCompats {
      * @throws IllegalArgumentException when the bytes are more than 16 MiB
      */
     public static String storeOnce(byte[] data) {
-        return Compats.storeOnce(data);
+        return Backend.get().storeOnce(data);
     }
 
     /**
@@ -66,7 +66,7 @@ public final class DailiesCompats {
      * recording open holds no such bytes of a compat's. Client thread. Added with {@link #storeOnce}.
      */
     public static byte @Nullable [] stored(String handle) {
-        return Compats.stored(handle);
+        return Backend.get().stored(handle);
     }
 
     /**
@@ -78,17 +78,17 @@ public final class DailiesCompats {
      * @return whether the question was sent
      */
     public static boolean askServer(String pluginId, int version) {
-        return Compats.askServer(pluginId, version);
+        return Backend.get().askServer(pluginId, version);
     }
 
     /** The version of a plugin on the server the game is joined to; 0 when it has none, or has not said yet */
     public static int serverVersion(String pluginId) {
-        return Compats.serverVersion(pluginId);
+        return Backend.get().serverVersion(pluginId);
     }
 
     /** In playback, the version of a plugin on the server the recording was made on; 0 when it had none */
     public static int recordedVersion(String pluginId) {
-        return Compats.recordedVersion(pluginId);
+        return Backend.get().recordedVersion(pluginId);
     }
 
 }
