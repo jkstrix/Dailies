@@ -97,7 +97,9 @@ public final class CompanionCompat {
         if (Host.get().isModLoaded(COMPANION)) {
             return; // the companion registers it, see init()
         }
+        // Server side, then client side: Dailies only ever sends asks, which a server without the companion never sees
         registrar.playBidirectional(Payload.TYPE, Payload.CODEC, (payload, context) -> {
+        }, (payload, context) -> {
             if (payload.kind() == DATA) {
                 context.enqueueWork(() -> received(new CompatRoutes.Arrival(payload.id(), payload.version(), payload.data())));
             }

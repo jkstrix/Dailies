@@ -40,14 +40,14 @@ public record CompatPayload(int kind, String id, int version, byte[] data) imple
 
 	static void register(RegisterPayloadHandlersEvent e) {
 		// optional: players without a recorder join as usual
+		// The server's handler, then the client's (NeoForge 26.3 takes them apart)
 		e.registrar("1").optional().playBidirectional(TYPE, CODEC, (p, ctx) -> {
-			if (ctx.flow().isServerbound()) {
-				if (p.kind() == ASK && ctx.player() instanceof ServerPlayer player)
-					ctx.enqueueWork(() -> CompanionPlugins.asked(player, p.id(), p.version()));
-			} else if (p.kind() == DATA) {
+			if (p.kind() == ASK && ctx.player() instanceof ServerPlayer player)
+				ctx.enqueueWork(() -> CompanionPlugins.asked(player, p.id(), p.version()));
+		}, (p, ctx) -> {
+			if (p.kind() == DATA)
 				// when this mod is in the player's game too (singleplayer, say): hand it on as a NeoForge event, on the client thread
 				ctx.enqueueWork(() -> NeoForge.EVENT_BUS.post(new CompatClientEvent(p.id(), p.version(), p.data())));
-			}
 		});
 	}
 }
