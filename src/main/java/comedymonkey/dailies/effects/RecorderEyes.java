@@ -161,6 +161,7 @@ public final class RecorderEyes {
     // ------------------------------------------------------------------ Kept a tick at a time
 
     private static void tick() {
+        stopMusic();
         if (!Playback.loaded()) {
             keptFor = -1;
             return;
@@ -202,6 +203,20 @@ public final class RecorderEyes {
             waterVisionTime = Mth.clamp(waterVisionTime + (living.isSpectator() ? 10 : 1), 0, 600);
         } else if (waterVisionTime > 0) {
             waterVisionTime = Mth.clamp(waterVisionTime - 10, 0, 600);
+        }
+    }
+
+    /**
+     * No background music over a recording being watched or exported. Every client tick, which runs even while the game
+     * is paused and its music manager is not ticked: what is playing as a recording opens is stopped at once
+     */
+    private static void stopMusic() {
+        if (!Playback.active() && !comedymonkey.dailies.export.Export.active()) {
+            return;
+        }
+        var music = Minecraft.getInstance().getMusicManager();
+        if (((comedymonkey.dailies.mixin.effects.MusicManagerAccess) music).dailies$currentMusic() != null) {
+            music.stopPlaying();
         }
     }
 

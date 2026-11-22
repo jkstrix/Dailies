@@ -63,6 +63,7 @@
     "effects.EffectFogMixin",
     "effects.TotemMixin",
     "effects.MusicMixin",
+    "effects.MusicManagerAccess",
     "effects.InvisibleMixin",
     "effects.ParticleWatchMixin",
     "effects.SkyBlockMixin",
