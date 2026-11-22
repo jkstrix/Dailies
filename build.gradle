@@ -107,7 +107,7 @@ neoForge {
             programArguments.addAll '--width', '1920', '--height', '1080'
         }
         // The same scripted run with the built jars (not the dev classes) beside the other mods it has to work with:
-        // Create, Sable, Create Aeronautics, McpCraft, Simple Voice Chat, Sodium, Iris and the rest (TEST-1). The self test
+        // Simple Voice Chat, Sodium, Iris, Jade, Post Rider and the rest that have a 26.3 release (TEST-1). The self test
         // jar sits beside the Dailies jar in run-modded/mods
         testModded {
             client()
@@ -118,7 +118,7 @@ neoForge {
             // The mods this run must have loaded, by mod id: one missing fails the run at once, where its steps would only
             // skip and a broken mods folder pass. -Pdailies.testExpectMods=... when dailies.testMods is changed to leave one out
             systemProperty 'dailies.test.expectMods', providers.gradleProperty('dailies.testExpectMods').getOrElse(
-                'create,sable,aeronautics,gyro,createpropulsion,simulatedcoasters,mcpcraft,voicechat,sodium,iris,irisflw,reeses_sodium_options,colorful_lighting,comedymonkeysaddons,postrider,jade,supplementaries,amendments,moonlight,dailies_companion,dailies_create,dailies_jade,dailies_aeronautics,dailies_supplementaries,create_submarine,create_connected,createcasing,tracks,railways,create_jetpack,create_hypertube,dailies_createextras,explorerscompass,naturescompass,sophisticatedbackpacks,sophisticatedcore,curios,corpse,vanillabackport,platform,dailies_extras,dailies_selftest')
+                'voicechat,sodium,iris,reeses_sodium_options,postrider,jade,dailies_companion,dailies_jade,explorerscompass,naturescompass,sophisticatedbackpacks,sophisticatedcore,curios,corpse,dailies_extras,dailies_selftest')
             // Switches for trying things out: gradlew runTestModded -PdailiesFlags=dailies.playback.keepModdedWorld
             if (project.hasProperty('dailiesFlags')) {
                 project.property('dailiesFlags').toString().split(',').each { flag -> systemProperty flag, 'true' }
@@ -324,7 +324,8 @@ def apiJar = tasks.register('apiJar', Jar) {
 // does nothing unless its mod is installed, so all of them can go in) and the companion, which only a dedicated server
 // takes (Dailies carries its own copy for singleplayer). The template compat is only a starting point and is left out; the owner's own mods carry
 // their hooks themselves. gradlew modpackJars -Pdailies.encoderDir=... as for any build of the Dailies jar
-def modpackCompats = ['create', 'jade', 'aeronautics', 'supplementaries', 'createextras', 'extras']
+// On 26.3 only Jade's and the extras compat: the others' mods have no 26.3 release (see settings.gradle)
+def modpackCompats = ['jade', 'extras']
 tasks.register('modpackJars', Sync) {
     description = 'Puts every Dailies jar a modpack takes into build/modpack: Dailies, the compats and the companion'
     group = 'build'
@@ -359,12 +360,11 @@ tasks.withType(JavaCompile).configureEach {
 // ~/.gradle/gradle.properties, or with -Pdailies.modsFolder=... Only the modded runs need it, and they say so without it
 def modsFolderSetting = providers.gradleProperty('dailies.modsFolder').orNull
 def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
-// Matched as the jars are named, capitals, spaces and all: Jade's jar is Jade-1.21.1-NeoForge-<version>.jar, and Gyroscope
-// Stabilizers' is "Create Aeronautics Gyroscope Stabilizers.jar", with no version in its name. Create Encased's is
-// "Create Encased-<version>.jar", and Create Jetpack needs Kotlin for Forge (kotlinforforge-<version>-all.jar).
-// Supplementaries needs Moonlight, VanillaBackport needs Platform, and Sophisticated Backpacks needs Sophisticated Core
+// Matched as the jars are named, capitals and all. On 26.3 the folder must hold 26.3 jars: the mods of the 1.21.1 pack
+// that have a 26.3 release (Create, Sable, Aeronautics, Supplementaries, McpCraft and Create Addons do not yet).
+// Sophisticated Backpacks needs Sophisticated Core
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
-    'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*,supplementaries-1.21.1-*,amendments-1.21-*,moonlight-1.21.1-*,create_submarine-*,create_connected-*,Create Encased-*,tracks-neoforge-*,create-steam-n-rails-*,create_jetpack-forge-*,kotlinforforge-*,create_hypertube-*,ExplorersCompass-*,NaturesCompass-*,sophisticatedbackpacks-*,sophisticatedcore-*,curios-neoforge-*,corpse-neoforge-*,VanillaBackport-neoforge-*,Platform-neoforge-*').split(',')
+    'voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,reeses-sodium-options-*,postrider-*,Jade-*,ExplorersCompass-*,NaturesCompass-*,sophisticatedbackpacks-*,sophisticatedcore-*,curios-neoforge-*,corpse-neoforge-*').split(',')
 
 // The companion is a build of its own (included, see settings.gradle); the modded runs always take a fresh one, so a test
 // never meets an old companion
@@ -396,23 +396,13 @@ def checkModsFolder = {
 
 tasks.register('installTestMods', Sync) {
     description = 'Puts the built Dailies jar, the self test jar, the compats and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar'), 'selftestJar', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar',
-        ':compats:createextras:jar', ':compats:extras:jar'
+    dependsOn tasks.named('jar'), 'selftestJar', ':compats:jade:jar', ':compats:extras:jar'
     doFirst { checkModsFolder() }
     from(tasks.named('jar'))
     from(tasks.named('selftestJar'))
-    // The Create compat (CPT-6), a mod of its own built here, which the create group tries beside Create. Looked up when
-    // the task runs: the subproject is set up after this file
-    from({ project(':compats:create').tasks.named('jar').get().archiveFile })
-    // The Jade compat (CPT-8), the same way, which the jade group tries beside Jade
+    // The Jade compat (CPT-8), a mod of its own built here, which the jade group tries beside Jade. Looked up when the
+    // task runs: the subproject is set up after this file
     from({ project(':compats:jade').tasks.named('jar').get().archiveFile })
-    // The Create Aeronautics compat (CPT-9), the same way, which the aeronautics group tries beside Aeronautics and its add-ons
-    from({ project(':compats:aeronautics').tasks.named('jar').get().archiveFile })
-    // The Supplementaries compat (CPT-10), the same way, which the supplementaries group tries beside Supplementaries and Amendments
-    dependsOn ':compats:supplementaries:jar'
-    from({ project(':compats:supplementaries').tasks.named('jar').get().archiveFile })
-    // The compat for Create's other add-ons (CPT-11), the same way, which the createextras group tries beside them
-    from({ project(':compats:createextras').tasks.named('jar').get().archiveFile })
     // The extras compat (CPT-12), the same way, which the extras group tries beside the rest of the pack
     from({ project(':compats:extras').tasks.named('jar').get().archiveFile })
     from(modsSource) {
