@@ -1,6 +1,7 @@
 package comedymonkey.dailies.capture;
 
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.common.ClientboundClearDialogPacket;
 import net.minecraft.network.protocol.common.ClientboundCustomReportDetailsPacket;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
@@ -8,6 +9,7 @@ import net.minecraft.network.protocol.common.ClientboundPingPacket;
 import net.minecraft.network.protocol.common.ClientboundResourcePackPopPacket;
 import net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket;
 import net.minecraft.network.protocol.common.ClientboundServerLinksPacket;
+import net.minecraft.network.protocol.common.ClientboundShowDialogPacket;
 import net.minecraft.network.protocol.common.ClientboundStoreCookiePacket;
 import net.minecraft.network.protocol.common.ClientboundTransferPacket;
 import net.minecraft.network.protocol.cookie.ClientboundCookieRequestPacket;
@@ -30,20 +32,22 @@ final class PacketRules {
         ClientboundStoreCookiePacket.class, ClientboundTransferPacket.class, ClientboundCustomReportDetailsPacket.class,
         ClientboundServerLinksPacket.class, ClientboundServerDataPacket.class, ClientboundChunkBatchStartPacket.class,
         ClientboundChunkBatchFinishedPacket.class, ClientboundBlockChangedAckPacket.class, ClientboundDebugSamplePacket.class,
-        ClientboundTickingStatePacket.class, ClientboundTickingStepPacket.class,
+        ClientboundTickingStatePacket.class, ClientboundTickingStepPacket.class, ClientboundLowDiskSpaceWarningPacket.class,
         // Chat signing
         ClientboundDeleteChatPacket.class, ClientboundCustomChatCompletionsPacket.class,
         // The recorder's own screens and windows
         ClientboundOpenScreenPacket.class, ClientboundContainerClosePacket.class, ClientboundContainerSetContentPacket.class,
-        ClientboundContainerSetDataPacket.class, ClientboundContainerSetSlotPacket.class, ClientboundHorseScreenOpenPacket.class,
+        ClientboundContainerSetDataPacket.class, ClientboundContainerSetSlotPacket.class, ClientboundMountScreenOpenPacket.class,
         ClientboundMerchantOffersPacket.class, ClientboundOpenBookPacket.class, ClientboundOpenSignEditorPacket.class,
-        ClientboundPlaceGhostRecipePacket.class, ClientboundRecipePacket.class, ClientboundUpdateRecipesPacket.class,
+        ClientboundPlaceGhostRecipePacket.class, ClientboundRecipeBookAddPacket.class, ClientboundRecipeBookRemovePacket.class,
+        ClientboundRecipeBookSettingsPacket.class, ClientboundUpdateRecipesPacket.class, ClientboundShowDialogPacket.class, ClientboundClearDialogPacket.class,
+        ClientboundGameRuleValuesPacket.class, ClientboundTestInstanceBlockStatus.class,
         ClientboundUpdateAdvancementsPacket.class, ClientboundSelectAdvancementsTabPacket.class, ClientboundAwardStatsPacket.class,
         ClientboundCommandSuggestionsPacket.class, ClientboundCommandsPacket.class, ClientboundTagQueryPacket.class,
-        ClientboundCooldownPacket.class,
+        ClientboundCooldownPacket.class, ClientboundSetCursorItemPacket.class, ClientboundSetPlayerInventoryPacket.class,
         // Things done to the recorder's own body or view. Where they went and what they held is recorded from the player itself
         ClientboundPlayerPositionPacket.class, ClientboundPlayerAbilitiesPacket.class, ClientboundPlayerLookAtPacket.class,
-        ClientboundSetCameraPacket.class, ClientboundSetCarriedItemPacket.class, ClientboundSetHealthPacket.class,
+        ClientboundSetCameraPacket.class, ClientboundSetHeldSlotPacket.class, ClientboundPlayerRotationPacket.class, ClientboundSetHealthPacket.class,
         ClientboundSetExperiencePacket.class, ClientboundMoveVehiclePacket.class, ClientboundPlayerCombatEndPacket.class,
         ClientboundPlayerCombatEnterPacket.class, ClientboundPlayerCombatKillPacket.class
     );
@@ -59,7 +63,7 @@ final class PacketRules {
     static boolean privateEvent(ClientboundGameEventPacket packet) {
         ClientboundGameEventPacket.Type event = packet.getEvent();
         return event == ClientboundGameEventPacket.CHANGE_GAME_MODE || event == ClientboundGameEventPacket.WIN_GAME
-            || event == ClientboundGameEventPacket.DEMO_EVENT || event == ClientboundGameEventPacket.ARROW_HIT_PLAYER
+            || event == ClientboundGameEventPacket.DEMO_EVENT || event == ClientboundGameEventPacket.PLAY_ARROW_HIT_SOUND
             || event == ClientboundGameEventPacket.PUFFER_FISH_STING || event == ClientboundGameEventPacket.GUARDIAN_ELDER_EFFECT
             || event == ClientboundGameEventPacket.IMMEDIATE_RESPAWN || event == ClientboundGameEventPacket.LIMITED_CRAFTING;
     }

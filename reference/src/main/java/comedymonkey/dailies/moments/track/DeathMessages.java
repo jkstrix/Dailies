@@ -9,7 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.contents.TranslatableContents;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
@@ -104,10 +104,8 @@ public final class DeathMessages {
             weaponName = argText(args[2]);
             if (args[2] instanceof Component component) {
                 HoverEvent hover = findHover(component, 0);
-                HoverEvent.ItemStackInfo item = hover == null ? null : hover.getValue(HoverEvent.Action.SHOW_ITEM);
-                if (item != null) {
-                    ItemStack stack = item.getItemStack();
-                    weapon = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                if (hover instanceof HoverEvent.ShowItem(net.minecraft.world.item.ItemStackTemplate item)) {
+                    weapon = BuiltInRegistries.ITEM.getKey(item.item().value()).toString();
                 }
             }
         }
@@ -166,11 +164,10 @@ public final class DeathMessages {
 
         if (arg instanceof Component component) {
             HoverEvent hover = findHover(component, 0);
-            HoverEvent.EntityTooltipInfo entity = hover == null ? null : hover.getValue(HoverEvent.Action.SHOW_ENTITY);
-            if (entity != null) {
-                uuid = entity.id;
+            if (hover instanceof HoverEvent.ShowEntity(HoverEvent.EntityTooltipInfo entity)) {
+                uuid = entity.uuid;
                 type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.type).toString();
-                isPlayer = entity.type == EntityType.PLAYER;
+                isPlayer = entity.type == EntityTypes.PLAYER;
             }
         }
 

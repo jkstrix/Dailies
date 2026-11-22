@@ -33,8 +33,8 @@ public class MixinClientPacketListenerMoments {
         }
     }
 
-    @Inject(method = "sendUnsignedCommand", at = @At("HEAD"))
-    public void dailies$momentsUnsignedCommand(String command, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "sendUnattendedCommand", at = @At("HEAD"))
+    public void dailies$momentsUnattendedCommand(String command, net.minecraft.client.gui.screens.Screen screenAfterCommand, CallbackInfo ci) {
         if (Minecraft.getInstance().isSameThread()) {
             Moments.onCommandSent(command);
         }

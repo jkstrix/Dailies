@@ -20,8 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(RemotePlayer.class)
 public abstract class RemotePlayerMixin {
 
-    @Inject(method = "hurt", at = @At("HEAD"), cancellable = true)
-    private void dailies$recorderWaitsToBeTold(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "hurtClient(Lnet/minecraft/world/damagesource/DamageSource;)Z", at = @At("HEAD"), cancellable = true)
+    private void dailies$recorderWaitsToBeTold(DamageSource source, CallbackInfoReturnable<Boolean> cir) {
         RecordingManifest manifest = Playback.manifest();
         if (Playback.active() && manifest != null && ((Entity) (Object) this).getUUID().toString().equals(manifest.recorderId)) {
             cir.setReturnValue(false);
@@ -52,18 +52,20 @@ public abstract class RemotePlayerMixin {
         }
         boolean wanted = !comedymonkey.dailies.editor.EditorSession.open() || comedymonkey.dailies.editor.EditorSession.scene().looks().headBob;
         double moved = Math.min(1.0, Math.hypot(self.getX() - self.xo, self.getZ() - self.zo));
-        self.walkDistO = self.walkDist;
-        self.oBob = this.dailies$bob;
+        // The walked distance of the tick before was carried over when the tick began (ClientAvatarState.tick)
+        net.minecraft.client.entity.ClientAvatarState state = self.avatarState();
+        comedymonkey.dailies.mixin.access.ClientAvatarStateAccess bobs = (comedymonkey.dailies.mixin.access.ClientAvatarStateAccess) state;
+        bobs.dailies$setBobO(this.dailies$bob);
         if (!wanted) {
             this.dailies$bob = 0.0F;
         } else {
-            self.walkDist += (float) moved * 0.6F;
+            state.addWalkDistance((float) moved * 0.6F);
             float step = self.onGround() && !self.isDeadOrDying() ? (float) Math.min(0.1, moved) : 0.0F;
             this.dailies$bob += (step - this.dailies$bob) * 0.4F;
         }
-        self.bob = this.dailies$bob;
+        bobs.dailies$setBob(this.dailies$bob);
         if (!wanted) {
-            self.oBob = 0.0F;
+            bobs.dailies$setBobO(0.0F);
         }
     }
 

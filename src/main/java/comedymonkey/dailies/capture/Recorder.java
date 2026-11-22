@@ -203,8 +203,8 @@ public final class Recorder {
         manifest.id = UUID.randomUUID().toString();
         manifest.name = LocalDateTime.now().format(NAME_FORMAT);
         manifest.created = System.currentTimeMillis();
-        manifest.gameVersion = SharedConstants.getCurrentVersion().getName();
-        manifest.dataVersion = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+        manifest.gameVersion = SharedConstants.getCurrentVersion().name();
+        manifest.dataVersion = SharedConstants.getCurrentVersion().dataVersion().version();
         manifest.protocolVersion = SharedConstants.getProtocolVersion();
         manifest.modVersion = Host.get().modVersion();
         manifest.recorderName = minecraft.player.getGameProfile().name();
@@ -252,7 +252,7 @@ public final class Recorder {
         // are waiting in the game's queue; the first snapshot is taken once the queue has got as far as this, so that
         // every one of them is in it
         this.settling = true;
-        minecraft.tell(() -> this.settling = false);
+        minecraft.schedule(() -> this.settling = false);
         this.state = State.RECORDING;
         Host.LOGGER.info("Dailies: recording {} started", manifest.id);
         Notices.show(Component.translatable("dailies.notice.started"));
@@ -968,9 +968,9 @@ public final class Recorder {
         }
     }
 
-    void onOwnSwing(LocalPlayer player, InteractionHand hand) {
+    void onOwnSwing(LocalPlayer player, InteractionHand hand, net.minecraft.world.item.component.SwingAnimation animation) {
         if (this.capturing() && player == Minecraft.getInstance().player) {
-            this.write(OwnPlayer.swing(player, hand));
+            this.write(OwnPlayer.swing(player, hand, animation));
         }
     }
 
@@ -1090,7 +1090,7 @@ public final class Recorder {
             this.part.named(Records.PAYLOAD, payload.payload().type().id().toString(), frame, 0, frame.length);
         } else if (packet instanceof ClientboundPlayerChatPacket chat) {
             // The words are kept; the signature and the session that go with them are not (REC-11)
-            Component content = chat.unsignedContent() != null ? chat.unsignedContent() : Component.literal(chat.body().content());
+            Component content = chat.unsignedContent().orElseGet(() -> Component.literal(chat.body().content()));
             this.write(new ClientboundDisguisedChatPacket(content, chat.chatType()));
         } else if (packet instanceof ClientboundPlayerInfoUpdatePacket info && info.actions().contains(ClientboundPlayerInfoUpdatePacket.Action.INITIALIZE_CHAT)) {
             EnumSet<ClientboundPlayerInfoUpdatePacket.Action> actions = EnumSet.copyOf(info.actions());
@@ -1105,7 +1105,7 @@ public final class Recorder {
             // changes it. Before, a chunk met while travelling was stored here and then again, described afresh, by the next
             // snapshot. It is stored by section, so a snapshot that does describe it afresh names the sections stored here again
             Snapshots.arrived(chunk.x(), chunk.z(), this.live.sharedPacket(frame, ChunkPieces.Shape.CHUNK));
-        } else if (packet instanceof ClientboundSetEntityMotionPacket motion && minecraft.player != null && motion.id() == minecraft.player.id()) {
+        } else if (packet instanceof ClientboundSetEntityMotionPacket motion && minecraft.player != null && motion.id() == minecraft.player.getId()) {
             // A push on the recorder's own body. Where they actually went is recorded from the player itself
             return;
         } else {

@@ -8,6 +8,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
@@ -134,8 +135,8 @@ public final class RegistryNumbering {
     public static RegistrySnapshot snapshot(SortedMap<Integer, Identifier> numbers, Map<Identifier, Identifier> aliases) {
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
-            buffer.writeMap(numbers, FriendlyByteBuf::writeVarInt, FriendlyByteBuf::writeIdentifier);
-            buffer.writeMap(aliases, FriendlyByteBuf::writeIdentifier, FriendlyByteBuf::writeIdentifier);
+            ByteBufCodecs.<FriendlyByteBuf, Integer, Identifier, Map<Integer, Identifier>>map(HashMap::new, ByteBufCodecs.VAR_INT, Identifier.STREAM_CODEC).encode(buffer, numbers);
+            ByteBufCodecs.<FriendlyByteBuf, Identifier, Identifier, Map<Identifier, Identifier>>map(HashMap::new, Identifier.STREAM_CODEC, Identifier.STREAM_CODEC).encode(buffer, aliases);
             return RegistrySnapshot.STREAM_CODEC.decode(buffer);
         } finally {
             buffer.release();
@@ -145,9 +146,9 @@ public final class RegistryNumbering {
     /** The entry that stands for nothing in a registry, for a number whose own entry this game lacks: a silent sound, air */
     private static @Nullable Identifier filler(Identifier registry) {
         if (registry.equals(Registries.SOUND_EVENT.identifier())) {
-            return SoundEvents.EMPTY.getLocation();
+            return SoundEvents.EMPTY.location();
         }
-        Registry<?> found = BuiltInRegistries.REGISTRY.get(registry);
+        Registry<?> found = BuiltInRegistries.REGISTRY.getValue(registry);
         return found instanceof DefaultedRegistry<?> defaulted ? defaulted.getDefaultKey() : null;
     }
 

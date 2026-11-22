@@ -14,9 +14,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ChatComponent.class)
 public abstract class ChatMixin {
 
-    @Inject(method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+    @Inject(method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
         at = @At("HEAD"), cancellable = true, require = 0)
-    private void dailies$onlyWhatWasRecorded(Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
+    private void dailies$onlyWhatWasRecorded(Component message, MessageSignature signature, net.minecraft.client.multiplayer.chat.GuiMessageSource source, GuiMessageTag tag,
+                                             CallbackInfo ci) {
         if (!PlaybackChat.allowed(message)) {
             ci.cancel();
         }

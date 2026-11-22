@@ -16,7 +16,7 @@ import net.neoforged.bus.api.Event;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.lang.reflect.Method;
@@ -199,7 +199,7 @@ public final class CompanionCompat {
             } else {
                 question = new Payload(ASK, id, version, new byte[0]);
             }
-            PacketDistributor.sendToServer(question);
+            ClientPacketDistributor.sendToServer(question);
             return true;
         } catch (Throwable t) {
             if (!warned) {

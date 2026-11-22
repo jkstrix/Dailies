@@ -17,9 +17,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SoundEngineMixin {
 
     @Inject(method = "play", at = @At("HEAD"), cancellable = true)
-    private void dailies$silentWhileJumping(SoundInstance sound, CallbackInfo ci) {
+    private void dailies$silentWhileJumping(SoundInstance sound, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
         if (Playback.skipping() || StretchPreview.running()) {
-            ci.cancel();
+            cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
         }
     }
 

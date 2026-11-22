@@ -1,10 +1,8 @@
 package comedymonkey.dailies.mixin.playback;
 
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
+import net.minecraft.world.level.storage.ValueInput;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -24,10 +22,10 @@ public abstract class BeaconLevelsMixin {
     @Shadow
     int levels;
 
-    @Inject(method = "loadAdditional", at = @At("TAIL"))
-    private void dailies$levelsFromSnapshot(CompoundTag tag, HolderLookup.Provider registries, CallbackInfo ci) {
-        if (Playback.readingSnapshot() && tag.contains("Levels", Tag.TAG_INT)) {
-            this.levels = tag.getInt("Levels");
+    @Inject(method = "loadAdditional(Lnet/minecraft/world/level/storage/ValueInput;)V", at = @At("TAIL"))
+    private void dailies$levelsFromSnapshot(ValueInput input, CallbackInfo ci) {
+        if (Playback.readingSnapshot()) {
+            input.getInt("Levels").ifPresent(levels -> this.levels = levels);
         }
     }
 }
