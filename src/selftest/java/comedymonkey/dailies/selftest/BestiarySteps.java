@@ -231,7 +231,7 @@ final class BestiarySteps {
                     return false;
                 }
             };
-            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSource(sink), command);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSource(sink), command);
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
         if (!said.isEmpty()) {
             problems.add("command refused: " + command + " -> " + said);
@@ -251,7 +251,7 @@ final class BestiarySteps {
         server.submit(() -> {
             try {
                 ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-                work.run(player.serverLevel(), player);
+                work.run(player.level(), player);
             } catch (Throwable t) {
                 failed[0] = t;
             }
@@ -306,7 +306,7 @@ final class BestiarySteps {
     }
 
     static String named(String name) {
-        return "CustomName:'\"" + name + "\"'";
+        return "CustomName:\"" + name + "\"";
     }
 
     // --- What the live game showed, for proving a thing was staged ---

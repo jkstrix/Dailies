@@ -57,7 +57,7 @@ final class KitShots {
             minecraft.options.guiScale().set(scale);
         });
         test.waitTicks(8);
-        test.onClientRun(minecraft::resizeDisplay);
+        test.onClientRun(minecraft::resizeGui);
         test.waitTicks(8);
     }
 
@@ -208,7 +208,7 @@ final class KitShots {
         attempt("the recordings list", () -> {
             test.onClientRun(() -> minecraft.gui.setScreen(new RecordingsScreen(null)));
             test.waitTicks(40);
-            test.onClientRun(() -> minecraft.gui.screen().mouseClicked(minecraft.gui.screen().width / 2.0, 70.0, 0));
+            test.onClientRun(() -> minecraft.gui.screen().mouseClicked(Inputs.leftClick(minecraft.gui.screen().width / 2.0, 70.0), false));
             test.waitTicks(4);
             ManualShots.shot(test, "33-recordings");
             if (focused) {
@@ -381,7 +381,7 @@ final class KitShots {
             }
             screen.reveal("autoStart");
             for (int press = 0; press < 7; press++) {
-                screen.keyPressed(InputConstants.KEY_TAB, 0, 0);
+                screen.keyPressed(Inputs.key(InputConstants.KEY_TAB));
             }
         });
         test.waitTicks(6);

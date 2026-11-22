@@ -177,7 +177,7 @@ final class CompatDisplaySteps {
         WorldSteps.createWorld(test, world);
         test.onClientRun(() -> minecraft.options.setCameraType(CameraType.FIRST_PERSON));
         DisplayTest.Stage stage = stage(test);
-        test.command("gamerule sendCommandFeedback false");
+        test.command("gamerule send_command_feedback false");
         test.command("gamemode survival");
         test.command("effect give @s minecraft:resistance 600 4 true");
         test.command("item replace entity @s weapon.mainhand with minecraft:air");

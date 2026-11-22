@@ -294,7 +294,7 @@ final class PlaybackSteps {
         text.append("blocks ").append(blocks).append('\n');
         // The day-time counter is noted but not compared: with the daylight cycle off it has been seen to read 0 by one
         // route and 1 by another, which changes nothing that is drawn. An open question, logged so it is not forgotten
-        lastDayTime = minecraft.level.getDayTime();
+        lastDayTime = minecraft.level.getOverworldClockTime();
         return text.toString();
     }
 

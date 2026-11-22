@@ -77,20 +77,20 @@ final class SettingsSteps {
         List<String> narrowed = test.onClient(() -> Previews.menuFind("le"));
         check(narrowed.size() == 1 && narrowed.get(0).toLowerCase().startsWith("le"), "typing 'le' in the dropdown left " + narrowed);
         // The keys: Escape closes the list and leaves the screen up; a letter narrows it; an arrow and Enter choose
-        test.onClientRun(() -> screen.keyPressed(InputConstants.KEY_ESCAPE, 0, 0));
+        test.onClientRun(() -> screen.keyPressed(Inputs.key(InputConstants.KEY_ESCAPE)));
         check(!test.onClient(Previews::menuOpen) && minecraft.gui.screen() == screen, "Escape did not close the dropdown and only the dropdown");
         test.onClientRun(() -> {
             screen.choose("controlsLocation", null);
-            screen.charTyped('l', 0);
+            screen.charTyped(Inputs.character('l'));
         });
         check(test.onClient(Previews::menuShown).size() == 1, "typing a letter did not narrow the dropdown: " + test.onClient(Previews::menuShown));
-        test.onClientRun(() -> screen.keyPressed(InputConstants.KEY_RETURN, 0, 0));
+        test.onClientRun(() -> screen.keyPressed(Inputs.key(InputConstants.KEY_RETURN)));
         saved(test, screen);
         check("LEFT".equals(Host.get().setting("controlsLocation", "RIGHT")), "typing 'l' and Enter in the dropdown did not choose Left");
         test.onClientRun(() -> {
             screen.choose("controlsLocation", null);
-            screen.keyPressed(InputConstants.KEY_DOWN, 0, 0);
-            screen.keyPressed(InputConstants.KEY_RETURN, 0, 0);
+            screen.keyPressed(Inputs.key(InputConstants.KEY_DOWN));
+            screen.keyPressed(Inputs.key(InputConstants.KEY_RETURN));
         });
         saved(test, screen);
         check("RIGHT".equals(Host.get().setting("controlsLocation", "LEFT")), "the down arrow and Enter in the dropdown did not choose Right");
@@ -100,7 +100,7 @@ final class SettingsSteps {
             screen.reveal("showNotices");
             screen.choose("controlsLocation", null);
             int[] place = screen.where("showNotices");
-            screen.mouseClicked(place[0] + screen.width * 0.25, place[1] + 5.0, 0);
+            screen.mouseClicked(Inputs.leftClick(place[0] + screen.width * 0.25, place[1] + 5.0), false);
         });
         test.waitTicks(4);
         check(!test.onClient(Previews::menuOpen), "a click outside the dropdown did not close it");
@@ -201,7 +201,7 @@ final class SettingsSteps {
         check(test.onClient(() -> Previews.editorDropdown(0)), "the first dropdown of the export tab did not open");
         List<String> lines = test.onClient(Previews::menuLines);
         check(lines.size() >= 3 && lines.contains(before), "the open dropdown does not list its choices with the one in force: " + lines);
-        test.onClientRun(() -> editor.keyPressed(InputConstants.KEY_ESCAPE, 0, 0));
+        test.onClientRun(() -> editor.keyPressed(Inputs.key(InputConstants.KEY_ESCAPE)));
         check(!test.onClient(Previews::menuOpen) && minecraft.gui.screen() == editor, "Escape did not close the editor's dropdown and only the dropdown");
         // Another choice by typing its first letters and pressing Enter, then the first one back the same way
         String other = lines.get(0).equals(before) ? lines.get(1) : lines.get(0);
@@ -209,12 +209,12 @@ final class SettingsSteps {
             test.onClientRun(() -> {
                 Previews.editorDropdown(0);
                 for (char letter : wanted.toCharArray()) {
-                    editor.charTyped(letter, 0);
+                    editor.charTyped(Inputs.character(letter));
                 }
             });
             List<String> narrowed = test.onClient(Previews::menuShown);
             check(!narrowed.isEmpty() && narrowed.get(0).equals(wanted), "typing '" + wanted + "' in the editor's dropdown left " + narrowed);
-            test.onClientRun(() -> editor.keyPressed(InputConstants.KEY_RETURN, 0, 0));
+            test.onClientRun(() -> editor.keyPressed(Inputs.key(InputConstants.KEY_RETURN)));
             test.waitTicks(3);
             String now = test.onClient(() -> Previews.editorDropdownShows(0));
             check(now.equals(wanted) && !test.onClient(Previews::menuOpen), "choosing '" + wanted + "' with the keys left the dropdown showing '" + now + "'");

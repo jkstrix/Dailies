@@ -9,7 +9,6 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.ui.Controls;
 import comedymonkey.dailies.ui.RecordingsScreen;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -41,14 +40,14 @@ final class ManualShots {
         // A GUI scale at which a 1920x1080 window has room for the editor's panels
         test.onClientRun(() -> {
             minecraft.options.guiScale().set(2);
-            minecraft.resizeDisplay();
+            minecraft.resizeGui();
         });
         test.waitTicks(40);
         shot(test, "01-title-screen");
 
         WorldSteps.createWorld(test);
         test.command("time set 1000");
-        test.command("summon minecraft:pig 3 -60 6 {CustomName:'\"Hamlet\"',NoAI:1b}");
+        test.command("summon minecraft:pig 3 -60 6 {CustomName:\"Hamlet\",NoAI:1b}");
         test.command("fill -3 -61 8 9 -61 14 minecraft:smooth_stone");
         test.command("setblock 6 -60 10 minecraft:campfire");
         attempt(test, "building the machines", () -> CraftSteps.build(test));
@@ -277,7 +276,7 @@ final class ManualShots {
             event.addProperty("first", turn % 5 == 0);
             JsonObject player = new JsonObject();
             player.addProperty("uuid", Minecraft.getInstance().player.getUUID().toString());
-            player.addProperty("name", Minecraft.getInstance().player.getGameProfile().getName());
+            player.addProperty("name", Minecraft.getInstance().player.getGameProfile().name());
             event.add("player", player);
             event.addProperty("real_time", now);
             event.addProperty("replay_uuid", recording);
@@ -361,13 +360,9 @@ final class ManualShots {
     /** Saves what is on screen now, as the full picture and as a smaller one for the manual */
     static void shot(SelfTest test, String name) throws Exception {
         Path full = folder.resolve(name + ".png");
-        test.onClientRun(() -> {
-            try (NativeImage image = Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
-                image.writeToFile(full);
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-        });
+        try (NativeImage image = SelfTestSupport.screenshot(test)) {
+            image.writeToFile(full);
+        }
         small(full, folder.resolve(name + ".jpg"));
         test.log("manual: saved " + name);
     }

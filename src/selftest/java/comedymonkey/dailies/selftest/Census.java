@@ -28,7 +28,7 @@ import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.monster.warden.Warden;
-import net.minecraft.world.entity.npc.VillagerData;
+import net.minecraft.world.entity.npc.villager.VillagerData;
 import net.minecraft.world.entity.projectile.EvokerFangs;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
@@ -197,7 +197,7 @@ final class Census {
         Census waiting = awaitingDraw;
         awaitingDraw = null;
         Minecraft minecraft = Minecraft.getInstance();
-        if (waiting != null && mode == Mode.LIVE && minecraft.level != null && waiting.dimension.equals(minecraft.level.dimension().location().toString())) {
+        if (waiting != null && mode == Mode.LIVE && minecraft.level != null && waiting.dimension.equals(minecraft.level.dimension().identifier().toString())) {
             byte[] drawn = scanLight(minecraft.level, boxesAt(waiting.dimension, waiting.tick));
             waiting.lightDrawn = drawn.length == waiting.light.length ? drawn : null;
         }
@@ -205,8 +205,16 @@ final class Census {
             int[] left = (int[]) grab[1];
             if (left[0]-- <= 0) {
                 GRABS.remove(grab);
-                try (com.mojang.blaze3d.platform.NativeImage image = net.minecraft.client.Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
-                    image.writeToFile((java.nio.file.Path) grab[0]);
+                // The picture comes back from the graphics card a little later, and is written down then
+                java.nio.file.Path file = (java.nio.file.Path) grab[0];
+                try {
+                    net.minecraft.client.Screenshot.takeScreenshot(Minecraft.getInstance().gameRenderer.mainRenderTarget(), image -> {
+                        try (image) {
+                            image.writeToFile(file);
+                        } catch (Throwable t) {
+                            comedymonkey.dailies.Host.LOGGER.warn("Dailies self test: a picture of the screen could not be kept", t);
+                        }
+                    });
                 } catch (Throwable t) {
                     comedymonkey.dailies.Host.LOGGER.warn("Dailies self test: a picture of the screen could not be kept", t);
                 }
@@ -218,7 +226,7 @@ final class Census {
         if (event.getOriginalSound() == null) {
             return;
         }
-        String name = event.getOriginalSound().getLocation().toString();
+        String name = event.getOriginalSound().getIdentifier().toString();
         if (mode == Mode.LIVE && Recorder.get().state() == Recorder.State.RECORDING) {
             liveSounds.add(Recorder.get().recordingTick() + " " + name);
         } else if (Playback.loaded()) {
@@ -314,7 +322,7 @@ final class Census {
     private static Census take(Minecraft minecraft, int tick, boolean isLive, Census before, Tracker tracker, boolean keepBlocks) {
         ClientLevel level = minecraft.level;
         Census census = new Census(tick);
-        census.dimension = level.dimension().location().toString();
+        census.dimension = level.dimension().identifier().toString();
         UUID recorder = isLive ? minecraft.player.getUUID() : UUID.fromString(Playback.manifest().recorderId);
         for (Entity entity : level.entitiesForRendering()) {
             if (entity.getId() == Snapshots.VIEWER_ENTITY_ID || (!isLive && entity == minecraft.player)) {
@@ -364,14 +372,14 @@ final class Census {
         // The rest of what is on screen
         StringBuilder bars = new StringBuilder();
         TreeMap<String, String> sorted = new TreeMap<>();
-        for (Map.Entry<UUID, LerpingBossEvent> bar : minecraft.gui.getBossOverlay().events.entrySet()) {
+        for (Map.Entry<UUID, LerpingBossEvent> bar : minecraft.gui.hud.getBossOverlay().events.entrySet()) {
             LerpingBossEvent event = bar.getValue();
             sorted.put(bar.getKey().toString(), event.getName().getString() + "|" + String.format("%.3f", target(event)) + "|" + event.getColor() + "|" + event.getOverlay()
                 + "|darken=" + event.shouldDarkenScreen() + "|music=" + event.shouldPlayBossMusic() + "|fog=" + event.shouldCreateWorldFog());
         }
         sorted.values().forEach(line -> bars.append(line).append('\n'));
         census.bars = bars.toString();
-        census.dayTime = level.getDayTime();
+        census.dayTime = level.getOverworldClockTime();
         census.rain = level.getRainLevel(1.0F);
         census.thunder = level.getThunderLevel(1.0F);
         try {
@@ -487,12 +495,12 @@ final class Census {
         } else if (entity instanceof Guardian guardian && guardian.hasActiveAttackTarget()) {
             clocks.append("beam=").append(String.format("%.2f", guardian.getAttackAnimationScale(1.0F))).append(';');
         } else if (entity instanceof Warden warden && warden.emergeAnimationState.isStarted()) {
-            clocks.append("emerge=").append(warden.emergeAnimationState.getAccumulatedTime()).append(';');
+            clocks.append("emerge=").append(warden.emergeAnimationState.getTimeInMillis(warden.tickCount)).append(';');
         } else if (entity instanceof Display display && display.renderState() != null) {
             float progress = display.calculateInterpolationProgress(1.0F);
             com.mojang.math.Transformation shown = display.renderState().transformation().get(progress);
-            clocks.append("shownX=").append(String.format("%.2f", shown.getTranslation().x())).append(";shownY=").append(String.format("%.2f", shown.getTranslation().y()))
-                .append(";shownZ=").append(String.format("%.2f", shown.getTranslation().z())).append(";shownScale=").append(String.format("%.2f", shown.getScale().x())).append(';');
+            clocks.append("shownX=").append(String.format("%.2f", shown.translation().x())).append(";shownY=").append(String.format("%.2f", shown.translation().y()))
+                .append(";shownZ=").append(String.format("%.2f", shown.translation().z())).append(";shownScale=").append(String.format("%.2f", shown.scale().x())).append(';');
         }
         if (entity instanceof net.minecraft.world.entity.decoration.ItemFrame frame) {
             MapId map = frame.getItem().get(net.minecraft.core.component.DataComponents.MAP_ID);
@@ -543,13 +551,13 @@ final class Census {
             return item(stack);
         }
         if (value instanceof Rotations rotations) {
-            return rotations.getX() + "," + rotations.getY() + "," + rotations.getZ();
+            return rotations.x() + "," + rotations.y() + "," + rotations.z();
         }
         if (value instanceof VillagerData data) {
-            return BuiltInRegistries.VILLAGER_TYPE.getKey(data.getType()) + "/" + BuiltInRegistries.VILLAGER_PROFESSION.getKey(data.getProfession()) + "/" + data.getLevel();
+            return data.type().getRegisteredName() + "/" + data.profession().getRegisteredName() + "/" + data.level();
         }
         if (value instanceof Holder<?> holder) {
-            return holder.unwrapKey().map(key -> key.location().toString()).orElse("direct");
+            return holder.unwrapKey().<String>map(key -> key.identifier().toString()).orElse("direct");
         }
         if (value instanceof ParticleOptions particle) {
             return String.valueOf(BuiltInRegistries.PARTICLE_TYPE.getKey(particle.getType()));
@@ -632,7 +640,7 @@ final class Census {
 
     /** The light of the watched boxes as playback has it this instant */
     static byte[] lightNow(Minecraft minecraft, int tick) {
-        List<int[]> boxes = boxesAt(minecraft.level.dimension().location().toString(), tick);
+        List<int[]> boxes = boxesAt(minecraft.level.dimension().identifier().toString(), tick);
         byte[] light = scanLight(minecraft.level, boxes);
         // Which of the chunks looked at playback did not hold: light there is only what the game kept beside the chunks it holds
         java.util.Set<String> unheld = new java.util.HashSet<>();
@@ -797,7 +805,7 @@ final class Census {
         String known = DEFAULT_ATTACHMENTS.computeIfAbsent(name, missing -> {
             try {
                 net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.tryParse(missing);
-                net.neoforged.neoforge.attachment.AttachmentType<?> type = id == null ? null : net.neoforged.neoforge.registries.NeoForgeRegistries.ATTACHMENT_TYPES.get(id);
+                net.neoforged.neoforge.attachment.AttachmentType<?> type = id == null ? null : net.neoforged.neoforge.registries.NeoForgeRegistries.ATTACHMENT_TYPES.getValue(id);
                 ClientLevel level = Minecraft.getInstance().level;
                 if (type == null || level == null) {
                     return "";
@@ -809,8 +817,10 @@ final class Census {
                     }
                 };
                 fresh.getData(type);
-                net.minecraft.nbt.CompoundTag saved = fresh.serializeAttachments(level.registryAccess());
-                if (saved == null || !saved.contains(missing)) {
+                net.minecraft.world.level.storage.TagValueOutput output = net.minecraft.world.level.storage.TagValueOutput.createWithContext(net.minecraft.util.ProblemReporter.DISCARDING, level.registryAccess());
+                fresh.serializeAttachments(output);
+                net.minecraft.nbt.CompoundTag saved = output.buildResult();
+                if (!saved.contains(missing)) {
                     return "";
                 }
                 net.minecraft.nbt.CompoundTag alone = new net.minecraft.nbt.CompoundTag();

@@ -107,4 +107,14 @@ final class SelfTestSupport {
         }
         return (System.nanoTime() - started) / 1_000_000;
     }
+
+    /**
+     * The screen as last drawn. The game reads the picture back from the graphics card and hands it over once it is
+     * there, a frame or so later, so this asks on the client thread and waits on the test's own; the caller closes it
+     */
+    static com.mojang.blaze3d.platform.NativeImage screenshot(SelfTest test) throws Exception {
+        java.util.concurrent.CompletableFuture<com.mojang.blaze3d.platform.NativeImage> taken = new java.util.concurrent.CompletableFuture<>();
+        test.onClientRun(() -> net.minecraft.client.Screenshot.takeScreenshot(net.minecraft.client.Minecraft.getInstance().gameRenderer.mainRenderTarget(), taken::complete));
+        return taken.get(30, java.util.concurrent.TimeUnit.SECONDS);
+    }
 }

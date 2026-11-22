@@ -12,7 +12,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.enderdragon.phases.EnderDragonPhase;
@@ -24,11 +24,11 @@ import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.entity.projectile.EyeOfEnder;
 import net.minecraft.world.entity.projectile.FishingHook;
-import net.minecraft.world.entity.projectile.LargeFireball;
+import net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball;
 import net.minecraft.world.entity.projectile.ShulkerBullet;
-import net.minecraft.world.entity.projectile.SmallFireball;
-import net.minecraft.world.entity.projectile.ThrownTrident;
-import net.minecraft.world.entity.projectile.WitherSkull;
+import net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball;
+import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
+import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
@@ -36,8 +36,8 @@ import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.JukeboxBlockEntity;
 import net.minecraft.world.level.block.entity.SculkShriekerBlockEntity;
-import net.minecraft.world.level.dimension.end.EndDragonFight;
-import net.minecraft.world.level.levelgen.feature.SpikeFeature;
+import net.minecraft.world.level.dimension.end.EnderDragonFight;
+import net.minecraft.world.level.levelgen.feature.EndSpikeFeature;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.phys.Vec3;
 
@@ -62,8 +62,8 @@ final class BestiaryStages {
     }
 
     static void prepare() throws Exception {
-        c("gamerule commandModificationBlockLimit 4000000");
-        c("gamerule sendCommandFeedback false");
+        c("gamerule max_block_modifications 4000000");
+        c("gamerule send_command_feedback false");
         c("time set 6000");
         home();
     }
@@ -96,9 +96,9 @@ final class BestiaryStages {
         // Whatever a stage left behind, the next starts from the same place
         try {
             minecraft.execute(() -> minecraft.options.keyUse.setDown(false));
-            if (minecraft.level != null && !minecraft.level.dimension().location().toString().equals(OVERWORLD)) {
+            if (minecraft.level != null && !minecraft.level.dimension().identifier().toString().equals(OVERWORLD)) {
                 c("execute in minecraft:overworld run tp @s 0.5 -57 -6.5 0 20");
-                test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().location().toString().equals(OVERWORLD), 60, "the way back to the overworld");
+                test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().identifier().toString().equals(OVERWORLD), 60, "the way back to the overworld");
                 waitTicks(20);
             }
             c("gamemode creative");
@@ -195,7 +195,7 @@ final class BestiaryStages {
 
         c("fill -3 -60 21 3 -56 27 minecraft:stone_bricks hollow");
         c("fill -8 -60 34 8 -55 34 minecraft:oak_planks");
-        c("summon minecraft:pig -5.5 -60 31.5 {NoAI:1b,Health:300f,attributes:[{id:\"minecraft:generic.max_health\",base:300.0}]," + named("skull target") + "}");
+        c("summon minecraft:pig -5.5 -60 31.5 {NoAI:1b,Health:300f,attributes:[{id:\"minecraft:max_health\",base:300.0}]," + named("skull target") + "}");
         waitTicks(8);
         mark("before the wither");
         waitTicks(4);
@@ -345,8 +345,8 @@ final class BestiaryStages {
         waitTicks(4);
         mark("fireball before the hit");
         // What a player's punch does to a fireball: it is turned along the way they are looking
-        server("deflecting the fireball", (level, player) -> ((net.minecraft.world.entity.projectile.Projectile) find(level, entity -> entity.getType() == EntityType.FIREBALL))
-            .deflect(net.minecraft.world.entity.projectile.ProjectileDeflection.AIM_DEFLECT, player, player, true));
+        server("deflecting the fireball", (level, player) -> ((net.minecraft.world.entity.projectile.Projectile) find(level, entity -> entity.getType() == net.minecraft.world.entity.EntityTypes.FIREBALL))
+            .deflect(net.minecraft.world.entity.projectile.ProjectileDeflection.AIM_DEFLECT, player, net.minecraft.world.entity.EntityReference.of(player), true, 1.0));
         waitTicks(5);
         mark("fireball deflected");
         waitTicks(30);
@@ -542,19 +542,19 @@ final class BestiaryStages {
     /** Into The End, to the dragon there from the start; finds the exit portal and the pillar to take down, and watches both */
     private static void arriveInTheEnd(EndTrip end) throws Exception {
         c("execute in minecraft:the_end run tp @s 0.5 90 18.5 180 30");
-        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().location().toString().equals(END), 120, "the recorder to arrive in The End");
+        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().identifier().toString().equals(END), 120, "the recorder to arrive in The End");
         fly();
         check(waitForLive(entity -> entity instanceof EnderDragon, 1200, "the ender dragon"), "there is no dragon in The End");
         int[] spike = new int[5];
         server("finding the exit portal and a pillar", (level, player) -> {
-            EndDragonFight fight = level.getDragonFight();
-            BlockPos portal = (BlockPos) secret(fight, EndDragonFight.class, "portalLocation");
+            EnderDragonFight fight = level.getDragonFight();
+            BlockPos portal = (BlockPos) secret(fight, EnderDragonFight.class, "exitPortalLocation");
             if (portal == null) {
-                portal = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, net.minecraft.world.level.levelgen.feature.EndPodiumFeature.getLocation(BlockPos.ZERO)).below(4);
+                portal = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, EnderDragonFight.getPodiumLocation(BlockPos.ZERO)).below(4);
             }
             podium = portal.getY();
             // The second pillar the respawn rebuilds, so the wait for it is short
-            SpikeFeature.EndSpike chosen = SpikeFeature.getSpikesForLevel(level).get(1);
+            EndSpikeFeature.EndSpike chosen = EndSpikeFeature.getSpikesForLevel(level).get(1);
             spike[0] = chosen.getCenterX();
             spike[1] = chosen.getCenterZ();
             spike[2] = chosen.getHeight();
@@ -607,14 +607,14 @@ final class BestiaryStages {
             dragon.getPhaseManager().setPhase(EnderDragonPhase.STRAFE_PLAYER);
             dragon.getPhaseManager().getPhase(EnderDragonPhase.STRAFE_PLAYER).setTarget(player);
         });
-        if (!waitForLive(entity -> entity.getType() == EntityType.DRAGON_FIREBALL, 300, "a dragon fireball shot in flight")) {
+        if (!waitForLive(entity -> entity.getType() == net.minecraft.world.entity.EntityTypes.DRAGON_FIREBALL, 300, "a dragon fireball shot in flight")) {
             c("summon minecraft:dragon_fireball 6.5 " + (y + 20) + " 12.5 {Motion:[0.0,-0.4,0.0]}");
         }
         waitTicks(2);
         still("dragon-fireball", mark("dragon fireball in flight"), 0.5, y + 16, 24.5, 0.5, y + 16, 10.5, false);
         waitTicks(4);
         mark("dragon fireball in flight");
-        waitForLive(entity -> entity.getType() == EntityType.AREA_EFFECT_CLOUD, 200, "the cloud a dragon fireball leaves");
+        waitForLive(entity -> entity.getType() == net.minecraft.world.entity.EntityTypes.AREA_EFFECT_CLOUD, 200, "the cloud a dragon fireball leaves");
         waitTicks(10);
         still("dragon-fireball-cloud", mark("dragon fireball's cloud"), 0.5, y + 18, 28.5, 0.5, y + 14, 18.5, true);
         // And one that lands on the ground, whatever the dragon did
@@ -657,7 +657,7 @@ final class BestiaryStages {
             still("dragon-breath-cloud", mark("perched breath's cloud"), cloud[0] + 4.5, cloud[1] + 6, cloud[2] + 9.5, cloud[0], cloud[1], cloud[2], true);
             // The recorder, mortal for a moment, stands in it
             c("gamemode survival");
-            c("attribute @s minecraft:generic.max_health base set 100");
+            c("attribute @s minecraft:max_health base set 100");
             c("effect give @s minecraft:instant_health 1 20 true");
             waitTicks(4);
             c(String.format(java.util.Locale.ROOT, "tp @s %.2f %.2f %.2f 180 30", cloud[0] + 1.0, cloud[1], cloud[2] + 1.0));
@@ -677,7 +677,8 @@ final class BestiaryStages {
                 }
                 player.connection.teleport(breath.getX(), breath.getY(), breath.getZ(), player.getYRot(), player.getXRot());
                 ItemStack bottle = player.getMainHandItem();
-                player.setItemInHand(InteractionHand.MAIN_HAND, bottle.use(level, player, InteractionHand.MAIN_HAND).getObject());
+                player.setItemInHand(InteractionHand.MAIN_HAND, bottle.use(level, player, InteractionHand.MAIN_HAND) instanceof net.minecraft.world.InteractionResult.Success used
+                    && used.heldItemTransformedTo() != null ? used.heldItemTransformedTo() : bottle);
                 if (!player.getMainHandItem().is(Items.DRAGON_BREATH)) {
                     throw new IllegalStateException("the bottle did not fill: the hand holds " + player.getMainHandItem() + ", the breath's radius is " + breath.getRadius()
                         + ", the recorder " + (player.hasInfiniteMaterials() ? "has" : "has not") + " infinite materials");
@@ -686,7 +687,7 @@ final class BestiaryStages {
             waitTicks(6);
             mark("breath bottled");
             c("gamemode creative");
-            c("attribute @s minecraft:generic.max_health base set 20");
+            c("attribute @s minecraft:max_health base set 20");
         }
         c("tp @s 0.5 " + (y + 14) + " 18.5 180 30");
         fly();
@@ -753,8 +754,8 @@ final class BestiaryStages {
         int half = end.half;
         double cx = end.cx, cz = end.cz;
         boolean started = server("starting the respawn", (level, player) -> {
-            EndDragonFight fight = level.getDragonFight();
-            BlockPos portal = (BlockPos) secret(fight, EndDragonFight.class, "portalLocation");
+            EnderDragonFight fight = level.getDragonFight();
+            BlockPos portal = (BlockPos) secret(fight, EnderDragonFight.class, "exitPortalLocation");
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 BlockPos place = portal.above(1).relative(direction, 2);
                 EndCrystal crystal = new EndCrystal(level, place.getX() + 0.5, place.getY(), place.getZ() + 0.5);
@@ -762,8 +763,8 @@ final class BestiaryStages {
                 level.addFreshEntity(crystal);
             }
             fight.tryRespawn();
-            if (secret(fight, EndDragonFight.class, "respawnStage") == null) {
-                throw new IllegalStateException("the fight did not start the respawn (dragonKilled " + secret(fight, EndDragonFight.class, "dragonKilled") + ", portal " + portal + ")");
+            if (secret(fight, EnderDragonFight.class, "respawnStage") == null) {
+                throw new IllegalStateException("the fight did not start the respawn (dragonKilled " + secret(fight, EnderDragonFight.class, "dragonKilled") + ", portal " + portal + ")");
             }
         });
         check(started, "the respawn would not start");
@@ -806,7 +807,7 @@ final class BestiaryStages {
     /** Back to the overworld, as the end of the trip there and back */
     private static void backToTheOverworld() throws Exception {
         c("execute in minecraft:overworld run tp @s 0.5 -57 -6.5 0 20");
-        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().location().toString().equals(OVERWORLD), 120, "the recorder to come back to the overworld");
+        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension().identifier().toString().equals(OVERWORLD), 120, "the recorder to come back to the overworld");
         fly();
         waitTicks(30);
         mark("back in the overworld");
@@ -859,8 +860,8 @@ final class BestiaryStages {
 
         c("setblock -4 -60 8 minecraft:target");
         c("setblock -4 -59 8 minecraft:target");
-        c("summon minecraft:pig 4.5 -60 8.5 {NoAI:1b,Health:100f,attributes:[{id:\"minecraft:generic.max_health\",base:100.0}]," + named("arrow target") + "}");
-        c("summon minecraft:pig 4.5 -60 20.5 {attributes:[{id:\"minecraft:generic.movement_speed\",base:0.0}]," + named("bullet target") + "}");
+        c("summon minecraft:pig 4.5 -60 8.5 {NoAI:1b,Health:100f,attributes:[{id:\"minecraft:max_health\",base:100.0}]," + named("arrow target") + "}");
+        c("summon minecraft:pig 4.5 -60 20.5 {attributes:[{id:\"minecraft:movement_speed\",base:0.0}]," + named("bullet target") + "}");
         c("summon minecraft:shulker 4.5 -60 12.5 {NoAI:1b," + named("bullet shulker") + "}");
         c("summon minecraft:guardian -12.5 -60 20.5 {NoAI:1b," + named("guardian") + "}");
         c("summon minecraft:pig -12.5 -60 26.5 {NoAI:1b," + named("beam target") + "}");
@@ -891,7 +892,7 @@ final class BestiaryStages {
         server("an eye of ender", (level, player) -> {
             EyeOfEnder eye = new EyeOfEnder(level, 20.5, -58.0, 12.5);
             eye.setItem(new ItemStack(Items.ENDER_EYE));
-            eye.signalTo(new BlockPos(20, -40, 60));
+            eye.signalTo(new Vec3(20.0, -40.0, 60.0));
             level.addFreshEntity(eye);
         });
         server("a trident thrown, and one with Loyalty", (level, player) -> {
@@ -935,7 +936,7 @@ final class BestiaryStages {
         item("Leash knot with a leashed animal").owns("minecraft:leash_knot", "leashed cow").need(present("minecraft:leash_knot", 1)).need(state("leashed cow", "leash="));
         item("Armour stand with a pose and equipment").owns("stand posed").need(state("stand posed", "wears.head=1 minecraft:carved_pumpkin")).need(state("stand posed", "d16="));
         item("Minecart with a passenger, and a chest minecart").owns("minecraft:minecart", "minecraft:chest_minecart", "cart rider").need(state("minecraft:minecart", "riders=")).need(present("minecraft:chest_minecart", 1));
-        item("Boat with two riders").owns("minecraft:boat", "boat rider one", "boat rider two").need(state("boat rider one", "vehicle=")).need(state("boat rider two", "vehicle="));
+        item("Boat with two riders").owns("minecraft:spruce_boat", "boat rider one", "boat rider two").need(state("boat rider one", "vehicle=")).need(state("boat rider two", "vehicle="));
         item("Fishing bobber with a catch").owns("minecraft:fishing_bobber", "hooked pig").need(present("minecraft:fishing_bobber", 1))
             .need(where("minecraft:fishing_bobber", "hooked into something", thing -> thing.state().contains("d8=") && !thing.state().contains("d8=0;")));
         item("Block display, transformation interpolating").owns("minecraft:block_display").need(state("minecraft:block_display", "shownY=1.5"));
@@ -956,17 +957,17 @@ final class BestiaryStages {
         c("summon minecraft:painting -11 -58 28 {facing:2b,variant:\"minecraft:kebab\"}");
         c("summon minecraft:cow -3.5 -60 22.5 {NoAI:1b," + named("leashed cow") + "}");
         c("summon minecraft:armor_stand 4.5 -60 24.5 {ShowArms:1b,Rotation:[180f,0f],Pose:{RightArm:[-90f,20f,0f],LeftArm:[30f,0f,-40f],Head:[20f,30f,0f]},"
-            + "ArmorItems:[{id:\"minecraft:iron_boots\",count:1},{id:\"minecraft:iron_leggings\",count:1},{id:\"minecraft:diamond_chestplate\",count:1},{id:\"minecraft:carved_pumpkin\",count:1}],"
-            + "HandItems:[{id:\"minecraft:diamond_sword\",count:1},{id:\"minecraft:shield\",count:1}]," + named("stand posed") + "}");
+            + "equipment:{feet:{id:\"minecraft:iron_boots\",count:1},legs:{id:\"minecraft:iron_leggings\",count:1},chest:{id:\"minecraft:diamond_chestplate\",count:1},head:{id:\"minecraft:carved_pumpkin\",count:1},"
+            + "mainhand:{id:\"minecraft:diamond_sword\",count:1},offhand:{id:\"minecraft:shield\",count:1}}," + named("stand posed") + "}");
         c("summon minecraft:minecart 12.5 -60 24.5 {Passengers:[{id:\"minecraft:villager\",NoAI:1b," + named("cart rider") + "}]}");
         c("summon minecraft:chest_minecart 14.5 -60 24.5");
-        c("summon minecraft:boat 20.5 -60 22.5 {Type:\"spruce\",Passengers:[{id:\"minecraft:pig\",NoAI:1b," + named("boat rider one") + "},{id:\"minecraft:chicken\",NoAI:1b," + named("boat rider two") + "}]}");
-        c("summon minecraft:pig -19.5 -60 12.5 {NoAI:1b,Health:100f,attributes:[{id:\"minecraft:generic.max_health\",base:100.0}]," + named("hooked pig") + "}");
+        c("summon minecraft:spruce_boat 20.5 -60 22.5 {Passengers:[{id:\"minecraft:pig\",NoAI:1b," + named("boat rider one") + "},{id:\"minecraft:chicken\",NoAI:1b," + named("boat rider two") + "}]}");
+        c("summon minecraft:pig -19.5 -60 12.5 {NoAI:1b,Health:100f,attributes:[{id:\"minecraft:max_health\",base:100.0}]," + named("hooked pig") + "}");
         c("summon minecraft:interaction -11.5 -60 14.5 {width:2f,height:3f,response:1b}");
         c("summon minecraft:marker -9.5 -60 14.5");
-        c("summon minecraft:horse -3.5 -60 14.5 {Tame:1b,NoAI:1b,SaddleItem:{id:\"minecraft:saddle\",count:1},body_armor_item:{id:\"minecraft:diamond_horse_armor\",count:1},"
+        c("summon minecraft:horse -3.5 -60 14.5 {Tame:1b,NoAI:1b,equipment:{saddle:{id:\"minecraft:saddle\",count:1},body:{id:\"minecraft:diamond_horse_armor\",count:1}},"
             + "Passengers:[{id:\"minecraft:villager\",NoAI:1b," + named("horse rider") + "}]," + named("armoured horse") + "}");
-        c("summon minecraft:allay 4.5 -59 14.5 {NoAI:1b,NoGravity:1b,HandItems:[{id:\"minecraft:amethyst_shard\",count:1},{}]," + named("allay") + "}");
+        c("summon minecraft:allay 4.5 -59 14.5 {NoAI:1b,NoGravity:1b,equipment:{mainhand:{id:\"minecraft:amethyst_shard\",count:1}}," + named("allay") + "}");
         c("summon minecraft:block_display 11.5 -59 12.5 {block_state:{Name:\"minecraft:diamond_block\"},Tags:[\"shown\"]}");
         c("summon minecraft:item_display 15.5 -59 12.5 {item:{id:\"minecraft:netherite_sword\",count:1},item_display:\"fixed\",Tags:[\"shown\"]}");
         c("summon minecraft:text_display 19.5 -59 12.5 {text:'{\"text\":\"Dailies bestiary\"}',billboard:\"center\",Tags:[\"shown\"]}");
@@ -987,7 +988,7 @@ final class BestiaryStages {
         });
         server("a bobber hooked into a pig", (level, player) -> {
             FishingHook hook = new FishingHook(player, level, 0, 0);
-            hook.moveTo(-19.5, -58.0, 12.5, 0.0F, 0.0F);
+            hook.snapTo(-19.5, -58.0, 12.5, 0.0F, 0.0F);
             hook.setDeltaMovement(0.0, -0.2, 0.0);
             level.addFreshEntity(hook);
         });
@@ -1030,9 +1031,9 @@ final class BestiaryStages {
         mark("mobs placed");
         ticksBeforeStoredWorld(30);
         server("a warden rising", (level, player) -> {
-            Warden warden = EntityType.WARDEN.create(level);
-            warden.moveTo(12.5, -60.0, 20.5, 180.0F, 0.0F);
-            warden.finalizeSpawn(level, level.getCurrentDifficultyAt(warden.blockPosition()), MobSpawnType.TRIGGERED, null);
+            Warden warden = net.minecraft.world.entity.EntityTypes.WARDEN.create(level, EntitySpawnReason.TRIGGERED);
+            warden.snapTo(12.5, -60.0, 20.5, 180.0F, 0.0F);
+            warden.finalizeSpawn(level, level.getCurrentDifficultyAt(warden.blockPosition()), EntitySpawnReason.TRIGGERED, null);
             level.addFreshEntity(warden);
         });
         waitTicks(10);
@@ -1072,13 +1073,18 @@ final class BestiaryStages {
         c("time set 18000");
         c("setblock 2 -60 -9 minecraft:red_bed[part=foot,facing=south]");
         c("setblock 2 -60 -8 minecraft:red_bed[part=head,facing=south]");
-        c("summon minecraft:pig 5.5 -60 -8.5 {Saddle:1b,NoAI:1b," + named("steed") + "}");
+        c("summon minecraft:pig 5.5 -60 -8.5 {equipment:{saddle:{id:\"minecraft:saddle\",count:1}},NoAI:1b," + named("steed") + "}");
         c("tp @s 1.5 -60 -6.5 0 20");
         waitTicks(8);
         mark("before bed");
-        server("going to bed", (level, player) -> player.startSleepInBed(new BlockPos(2, -60, -8)).ifLeft(problem -> {
-            throw new IllegalStateException("the bed refused: " + problem);
-        }));
+        server("going to bed", (level, player) -> {
+            BlockPos head = new BlockPos(2, -60, -8);
+            net.minecraft.world.level.block.state.BlockState bed = level.getBlockState(head);
+            net.minecraft.world.level.block.AbstractBedBlock block = (net.minecraft.world.level.block.AbstractBedBlock) bed.getBlock();
+            player.startSleepInBed(block, bed, block.getBedRule(level, head), head).ifLeft(problem -> {
+                throw new IllegalStateException("the bed refused: " + problem);
+            });
+        });
         waitTicks(30);
         still("asleep", mark("asleep"), 6.5, -57, -12.5, 2.5, -59.5, -8.5, false);
         waitTicks(50);
@@ -1094,7 +1100,7 @@ final class BestiaryStages {
         mark("out of bed");
 
         // In the saddle
-        server("mounting the pig", (level, player) -> player.startRiding(called(level, "steed"), true));
+        server("mounting the pig", (level, player) -> player.startRiding(called(level, "steed"), true, true));
         waitTicks(25);
         still("riding", mark("riding the pig"), 8.5, -58, -4.5, 5.5, -59.5, -8.5, false);
         waitTicks(25);
@@ -1154,7 +1160,7 @@ final class BestiaryStages {
             player.startAutoSpinAttack(20, 8.0F, player.getMainHandItem());
             Vec3 look = player.getLookAngle();
             player.push(look.x * 1.5, 0.6, look.z * 1.5);
-            player.hurtMarked = true;
+            player.needsSync = true;
         });
         waitTicks(8);
         still("riptide", mark("riptide spin"), 4.5, -56, -6.5, 0.5, -56.5, -2.5, false);
@@ -1330,7 +1336,7 @@ final class BestiaryStages {
         item("Weather change with thunder").owns("weather", "minecraft:lightning_bolt").need(seen("full rain", census -> census.rain > 0.9F)).need(seen("thunder", census -> census.thunder > 0.5F))
             .need(present("minecraft:lightning_bolt", 1)).need(heard("minecraft:entity.lightning_bolt.thunder")).need(seen("clear again", census -> census.rain < 0.3F && census.tick > 0));
 
-        c("gamerule doDaylightCycle true");
+        c("gamerule advance_time true");
         c("time set 11000");
         waitTicks(20);
         mark("clear sky, sun moving");
@@ -1348,7 +1354,7 @@ final class BestiaryStages {
         mark("clearing");
         waitTicks(60);
         mark("clear again");
-        c("gamerule doDaylightCycle false");
+        c("gamerule advance_time false");
         waitTicks(6);
     }
 

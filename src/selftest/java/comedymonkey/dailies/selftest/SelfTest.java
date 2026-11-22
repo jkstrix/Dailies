@@ -463,7 +463,7 @@ public final class SelfTest {
                 focusSet = true;
             }
             this.port = McpHttpServer.getListeningPort();
-            if (focusSet && this.port > 0 && minecraft.getOverlay() == null && minecraft.isGameLoadFinished()) {
+            if (focusSet && this.port > 0 && minecraft.gui.overlay() == null && minecraft.isGameLoadFinished()) {
                 return;
             }
             Thread.sleep(250);
@@ -726,7 +726,7 @@ public final class SelfTest {
         check(server != null, "there is no built-in server to run '" + command + "' on");
         server.submit(() -> {
             net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput(), command);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput(), command);
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
     }
 
@@ -740,7 +740,7 @@ public final class SelfTest {
         java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean(false);
         server.submit(() -> {
             net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput()
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput()
                 .withCallback((success, result) -> {
                     if (success) {
                         ran.set(true);
