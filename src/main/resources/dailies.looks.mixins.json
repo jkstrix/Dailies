@@ -15,7 +15,8 @@
     "BlockEntityMixin",
     "BeamMixin",
     "ProjectionMixin",
-    "CameraHudFovMixin"
+    "CameraHudFovMixin",
+    "WorldEntitiesMixin"
   ],
   "injectors": {
     "defaultRequire": 1

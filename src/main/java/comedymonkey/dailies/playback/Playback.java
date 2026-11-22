@@ -262,6 +262,8 @@ public final class Playback {
     public static void open(Path recording) {
         active = true;
         loaded = false;
+        // What waited for the recording that was opening is not for this one
+        WHEN_LOADED.clear();
         lastError = null;
         pendingOpen = recording;
         pendingClose = false;
@@ -282,6 +284,7 @@ public final class Playback {
      */
     public static void switchTo(Path recording, int tick, boolean playOn) {
         active = true;
+        WHEN_LOADED.clear();
         lastError = null;
         pendingOpen = recording;
         pendingClose = false;

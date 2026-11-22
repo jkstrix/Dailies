@@ -122,6 +122,12 @@ public final class Host {
         int openRecordingTicks();
         /** Jump to a tick of the open recording; the jump may finish later. Client thread */
         void seek(int tick, boolean pause);
+
+        /**
+         * Runs this on the client thread once the recording now opening is up (at once when one is up and nothing is
+         * opening). Opening another recording first drops it, so it never runs on a recording it was not meant for
+         */
+        void whenLoaded(Runnable action);
         /**
          * Every recording that holds a moment, best first: the recording that is open, then the original, then the
          * others from the newest. Empty when the moment was cut from all of them, or its recording is gone.

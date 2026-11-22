@@ -128,6 +128,11 @@ public final class CoreHost implements Host.Mod {
     }
 
     @Override
+    public void whenLoaded(Runnable action) {
+        Playback.whenLoaded(action);
+    }
+
+    @Override
     public void seek(int tick, boolean pause) {
         if (Playback.loaded()) {
             Playback.jumpTo(tick, pause);
