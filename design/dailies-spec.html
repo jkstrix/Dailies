@@ -1066,7 +1066,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 2px solid var(--rule)
 		<p class="lede">Some things a player's own game cannot know. Two server mods can tell it: the Dailies Companion, which exists for this, and McpCraft, the owner's town mod. Both are optional, and a player never needs either installed to connect.</p>
 
 		<h3>Dailies Companion</h3>
-		<p>A small separate server mod, the owner's own code, MIT licensed. Its complete source is in <code>companion/</code> beside this document (package <code>comedymonkey.dailiescompanion</code>) and builds with its own Gradle wrapper: <code>gradlew build</code> in that folder. Dailies' side of it, and of McpCraft below, is provided in <code>reference/</code> under <code>compat</code>.</p>
+		<p>A small separate server mod, the owner's own code, MIT licensed. Its complete source is in <code>companion/</code> beside this document (package <code>comedymonkey.dailiescompanion</code>) and builds with its own Gradle wrapper: <code>gradlew build</code> in that folder. Dailies' build includes it and packs its jar into the Dailies jar (jar-in-jar), so a singleplayer game, and a world opened to LAN, always has the companion; only a dedicated server takes the companion's own jar. Dailies' side of it, and of McpCraft below, is provided in <code>reference/</code> under <code>compat</code>.</p>
 		<div class="tablebox"><table class="req">
 			<thead><tr><th>Id</th><th>Requirement</th><th>Notes</th></tr></thead>
 			<tbody>

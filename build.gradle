@@ -180,6 +180,11 @@ if (encoderSource == 'dailies' && encoderJars.isEmpty()) {
 // Minecraft, NeoForge and their libraries for the self test, as the main classes have them
 neoForge.addModdingDependenciesTo(sourceSets.selftest)
 
+// The companion's version, from its own build, so the copy packed into Dailies is the one it builds
+def companionProperties = new Properties()
+file('companion/gradle.properties').withInputStream { companionProperties.load(it) }
+def companionVersion = companionProperties.mod_version
+
 dependencies {
     // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
     if (encoderSource == 'bytedeco') {
@@ -193,6 +198,12 @@ dependencies {
     // from inside the jar, and a second copy on their classpath stopped the game ("reads more than one module named
     // com.github.luben.zstd_jni")
     jarJar(implementation('com.github.luben:zstd-jni:1.5.7-25'))
+
+    // The Dailies Companion, the included build in companion/, packed into the mod's jar with jar-in-jar, so singleplayer
+    // (and a world opened to LAN) has the companion's server side in its own game without a second jar to install. Only
+    // packed, never compiled against: Dailies reaches it by reflection, as it does a companion installed on its own. A
+    // dedicated server still takes the companion's own jar; on one, NeoForge keeps the newer of the two copies
+    jarJar("comedymonkey.dailiescompanion:dailies-companion:${companionVersion}")
     for (run in ['client', 'testClient', 'handsOn', 'kitShots']) {
         add("${run}AdditionalRuntimeClasspath", 'com.github.luben:zstd-jni:1.5.7-25')
     }
@@ -315,8 +326,8 @@ def apiJar = tasks.register('apiJar', Jar) {
 }
 
 // Every Dailies jar a modpack takes, in one folder (build/modpack): Dailies, the compats for other people's mods (each
-// does nothing unless its mod is installed, so all of them can go in) and the companion, which a server takes and the
-// game takes for singleplayer. The template compat is only a starting point and is left out; the owner's own mods carry
+// does nothing unless its mod is installed, so all of them can go in) and the companion, which only a dedicated server
+// takes (Dailies carries its own copy for singleplayer). The template compat is only a starting point and is left out; the owner's own mods carry
 // their hooks themselves. gradlew modpackJars -Pdailies.encoderDir=... as for any build of the Dailies jar
 def modpackCompats = ['create', 'jade', 'aeronautics', 'supplementaries', 'createextras', 'extras']
 tasks.register('modpackJars', Sync) {
@@ -360,11 +371,11 @@ def modsSource = file(modsFolderSetting ?: 'build/no-mods-folder')
 def moddedTestMods = providers.gradleProperty('dailies.testMods').getOrElse(
     'create-1.21.1-*,sable-neoforge-*,create-aeronautics-bundled-*,Create Aeronautics Gyroscope Stabilizers,createpropulsion-*,simulatedcoasters-*,mcpcraft-*,voicechat-neoforge-*,sodium-neoforge-*,iris-neoforge-*,iris-flywheel-compat-*,reeses-sodium-options-*,colorful_lighting-*,comedymonkeysaddons-*,postrider-*,Jade-1.21.1-NeoForge-*,supplementaries-1.21.1-*,amendments-1.21-*,moonlight-1.21.1-*,create_submarine-*,create_connected-*,Create Encased-*,tracks-neoforge-*,create-steam-n-rails-*,create_jetpack-forge-*,kotlinforforge-*,create_hypertube-*,ExplorersCompass-*,NaturesCompass-*,sophisticatedbackpacks-*,sophisticatedcore-*,curios-neoforge-*,corpse-neoforge-*,VanillaBackport-neoforge-*,Platform-neoforge-*').split(',')
 
-// The companion is a build of its own; the modded runs always take a fresh one, so a test never meets an old companion
-tasks.register('buildCompanion', GradleBuild) {
+// The companion is a build of its own (included, see settings.gradle); the modded runs always take a fresh one, so a test
+// never meets an old companion
+tasks.register('buildCompanion') {
     description = 'Builds the Dailies Companion in companion/'
-    dir = file('companion')
-    tasks = ['build']
+    dependsOn gradle.includedBuild('companion').task(':build')
 }
 
 // Jars that take the place of the same mod from the mods folder, e.g. a fix not yet in the owner's profile:
@@ -390,7 +401,7 @@ def checkModsFolder = {
 
 tasks.register('installTestMods', Sync) {
     description = 'Puts the built Dailies jar, the self test jar, the compats and the other test mods into run-modded/mods'
-    dependsOn tasks.named('jar'), 'selftestJar', 'buildCompanion', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar',
+    dependsOn tasks.named('jar'), 'selftestJar', ':compats:create:jar', ':compats:jade:jar', ':compats:aeronautics:jar',
         ':compats:createextras:jar', ':compats:extras:jar'
     doFirst { checkModsFolder() }
     from(tasks.named('jar'))
@@ -414,9 +425,7 @@ tasks.register('installTestMods', Sync) {
         exclude overriddenMods
     }
     from(overrideJars)
-    from(file('companion/build/libs')) {
-        include 'dailies-companion-*.jar'
-    }
+    // No companion jar: the Dailies jar carries the companion (jar-in-jar), as a player's singleplayer game has it
     into file('run-modded/mods')
 }
 

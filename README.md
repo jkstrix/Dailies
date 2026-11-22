@@ -26,7 +26,7 @@ with Simple Voice Chat.
 | `design/` | The specification and the Create and Aeronautics note. The specification is the authority on behaviour. |
 | `src/` | The core of the mod: recording, the file format, playback, the editor, export, the interface, compatibility; and in `src/selftest/` the scripted test, a mod of its own (`dailies_selftest`) that never goes into the Dailies jar. Implements the specification in `design/`. |
 | `reference/` | The owner's own code, compiled into the same mod: Moments, the Smart Camera, the MCP server and its tools, the moments page. It meets the core through one interface, `comedymonkey.dailies.Host`. |
-| `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README. |
+| `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README, included in this one so the Dailies jar carries the companion (jar-in-jar) for singleplayer. |
 | `docs/manual/` | The user manual and its pictures. |
 | `docs/` | Also the brief for an outside reviewer (`reviewer-brief.md`). |
 | `tools/` | `tools/ffmpeg/`: our own encoder build, the one the jar packs. `tools/ci/`: the scripted run for CI, and `check_spec.py`, which checks the design documents. |
@@ -89,8 +89,7 @@ jar in `run-modded/mods` from `installTestMods`. `runClient` and `runPlayModded`
 `runTestModded` copies the other mods from a folder of jars that you name, in your own `~/.gradle/gradle.properties`:
 `dailies.modsFolder=<folder>` (or pass `-Pdailies.modsFolder=<folder>`). Jars that should replace one of those, such as
 a newer build of a mod, go in `dailies.modJars=<jar>,<jar>`. The modded runs stop with a message when the folder is not
-set. The companion jar is taken from `companion/build/libs`, so build the
-companion first.
+set. The companion is not copied there on its own: the Dailies jar carries it, as in a player's singleplayer game.
 
 Video is encoded by a bundled FFmpeg, our own LGPL build (`tools/ffmpeg/build.sh`), for Windows, Linux and macOS,
 with every vendor's hardware encoders and without x264, x265 or OpenH264. Its jars are not kept in git: build them with
