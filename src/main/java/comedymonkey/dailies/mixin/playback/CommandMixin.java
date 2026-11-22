@@ -22,10 +22,10 @@ public abstract class CommandMixin {
         }
     }
 
-    @Inject(method = "sendUnsignedCommand", at = @At("HEAD"), cancellable = true)
-    private void dailies$ownUnsignedCommandsOnly(String command, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "sendUnattendedCommand", at = @At("HEAD"), cancellable = true)
+    private void dailies$ownUnattendedCommandsOnly(String command, net.minecraft.client.gui.screens.Screen screenAfterCommand, CallbackInfo ci) {
         if (DailiesCommand.turnedAway(command)) {
-            cir.setReturnValue(true);
+            ci.cancel();
         }
     }
 

@@ -42,7 +42,7 @@ public final class Windows {
      * (REC-36). Client thread
      */
     public static boolean recordsScreen(Minecraft minecraft) {
-        Screen screen = minecraft.screen;
+        Screen screen = minecraft.gui.screen();
         if (screen == null || minecraft.player == null) {
             return false;
         }

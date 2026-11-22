@@ -203,11 +203,11 @@ public final class Recorder {
         manifest.id = UUID.randomUUID().toString();
         manifest.name = LocalDateTime.now().format(NAME_FORMAT);
         manifest.created = System.currentTimeMillis();
-        manifest.gameVersion = SharedConstants.getCurrentVersion().getName();
-        manifest.dataVersion = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+        manifest.gameVersion = SharedConstants.getCurrentVersion().name();
+        manifest.dataVersion = SharedConstants.getCurrentVersion().dataVersion().version();
         manifest.protocolVersion = SharedConstants.getProtocolVersion();
         manifest.modVersion = Host.get().modVersion();
-        manifest.recorderName = minecraft.player.getGameProfile().getName();
+        manifest.recorderName = minecraft.player.getGameProfile().name();
         manifest.recorderId = minecraft.player.getUUID().toString();
         manifest.singleplayer = minecraft.hasSingleplayerServer();
         if (minecraft.getSingleplayerServer() != null) {
@@ -252,7 +252,7 @@ public final class Recorder {
         // are waiting in the game's queue; the first snapshot is taken once the queue has got as far as this, so that
         // every one of them is in it
         this.settling = true;
-        minecraft.tell(() -> this.settling = false);
+        minecraft.schedule(() -> this.settling = false);
         this.state = State.RECORDING;
         Host.LOGGER.info("Dailies: recording {} started", manifest.id);
         Notices.show(Component.translatable("dailies.notice.started"));
@@ -475,7 +475,7 @@ public final class Recorder {
         LocalPlayer player = Minecraft.getInstance().player;
         if (savePosition && player != null) {
             marker.position = new double[]{player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot()};
-            marker.dimension = player.level().dimension().location().toString();
+            marker.dimension = player.level().dimension().identifier().toString();
         }
         // The manifest belongs to the writer thread once recording has started
         this.spool.add(writer -> {
@@ -597,7 +597,7 @@ public final class Recorder {
             });
         }
         for (net.minecraft.client.multiplayer.PlayerInfo info : listener.getOnlinePlayers()) {
-            this.players.add(info.getProfile().getName());
+            this.players.add(info.getProfile().name());
         }
         // What a server sends once the first chunks are on their way: it lets the game stop showing its loading screen
         this.write(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(net.minecraft.network.protocol.game.ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
@@ -968,9 +968,9 @@ public final class Recorder {
         }
     }
 
-    void onOwnSwing(LocalPlayer player, InteractionHand hand) {
+    void onOwnSwing(LocalPlayer player, InteractionHand hand, net.minecraft.world.item.component.SwingAnimation animation) {
         if (this.capturing() && player == Minecraft.getInstance().player) {
-            this.write(OwnPlayer.swing(player, hand));
+            this.write(OwnPlayer.swing(player, hand, animation));
         }
     }
 
@@ -1058,7 +1058,7 @@ public final class Recorder {
             // After a respawn or a change of dimension a whole new world of chunks arrives before the snapshot of it is taken.
             // Each is kept exactly as it came, so the snapshot names it; describing all of them afresh in that one tick held
             // the game for forty milliseconds. Not while paused: a long pause can pass any number of chunks that are never wanted
-            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.storedPacket(frame, ChunkPieces.Shape.CHUNK));
+            Snapshots.arrived(chunk.x(), chunk.z(), this.live.storedPacket(frame, ChunkPieces.Shape.CHUNK));
         }
     }
 
@@ -1071,7 +1071,7 @@ public final class Recorder {
             if (packet instanceof ClientboundRespawnPacket respawn && Host.get().setting("markDimensionChanges", true)) {
                 Minecraft minecraft = Minecraft.getInstance();
                 if (minecraft.level != null && respawn.commonPlayerSpawnInfo().dimension() != minecraft.level.dimension()) {
-                    this.addMarker(0xAA55FF, respawn.commonPlayerSpawnInfo().dimension().location().toString(), false);
+                    this.addMarker(0xAA55FF, respawn.commonPlayerSpawnInfo().dimension().identifier().toString(), false);
                 }
             }
             return;
@@ -1090,7 +1090,7 @@ public final class Recorder {
             this.part.named(Records.PAYLOAD, payload.payload().type().id().toString(), frame, 0, frame.length);
         } else if (packet instanceof ClientboundPlayerChatPacket chat) {
             // The words are kept; the signature and the session that go with them are not (REC-11)
-            Component content = chat.unsignedContent() != null ? chat.unsignedContent() : Component.literal(chat.body().content());
+            Component content = chat.unsignedContent().orElseGet(() -> Component.literal(chat.body().content()));
             this.write(new ClientboundDisguisedChatPacket(content, chat.chatType()));
         } else if (packet instanceof ClientboundPlayerInfoUpdatePacket info && info.actions().contains(ClientboundPlayerInfoUpdatePacket.Action.INITIALIZE_CHAT)) {
             EnumSet<ClientboundPlayerInfoUpdatePacket.Action> actions = EnumSet.copyOf(info.actions());
@@ -1104,8 +1104,8 @@ public final class Recorder {
             // A chunk is stored once however often it is sent, and the snapshots that follow name it for as long as nothing
             // changes it. Before, a chunk met while travelling was stored here and then again, described afresh, by the next
             // snapshot. It is stored by section, so a snapshot that does describe it afresh names the sections stored here again
-            Snapshots.arrived(chunk.getX(), chunk.getZ(), this.live.sharedPacket(frame, ChunkPieces.Shape.CHUNK));
-        } else if (packet instanceof ClientboundSetEntityMotionPacket motion && minecraft.player != null && motion.getId() == minecraft.player.getId()) {
+            Snapshots.arrived(chunk.x(), chunk.z(), this.live.sharedPacket(frame, ChunkPieces.Shape.CHUNK));
+        } else if (packet instanceof ClientboundSetEntityMotionPacket motion && minecraft.player != null && motion.id() == minecraft.player.getId()) {
             // A push on the recorder's own body. Where they actually went is recorded from the player itself
             return;
         } else {

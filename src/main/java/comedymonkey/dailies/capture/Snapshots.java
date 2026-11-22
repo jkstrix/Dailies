@@ -4,6 +4,7 @@ import com.mojang.datafixers.util.Pair;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.file.Records;
 import comedymonkey.dailies.mixin.access.BiomeManagerAccess;
+import comedymonkey.dailies.mixin.access.ClientClockManagerAccess;
 import comedymonkey.dailies.mixin.access.ClientPacketListenerAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -30,7 +31,6 @@ import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -253,7 +253,7 @@ public final class Snapshots {
      * hundreds of new chunks between two snapshots, and describing each afresh held the game for a tenth of a second.
      */
     static void arrived(int x, int z, byte[] name) {
-        CHUNKS.put(ChunkPos.asLong(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
+        CHUNKS.put(ChunkPos.pack(x, z), new Stored(new java.util.concurrent.atomic.AtomicReference<>(name), false, 0));
     }
 
     /** Why each chunk has to be described afresh at the next snapshot, the first reason seen: for the log of what storing costs */
@@ -262,7 +262,7 @@ public final class Snapshots {
     public static final Map<String, Integer> REASONS = new java.util.TreeMap<>();
 
     private static void because(net.minecraft.core.BlockPos pos, String reason) {
-        WHY.putIfAbsent(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), reason);
+        WHY.putIfAbsent(ChunkPos.pack(pos.getX() >> 4, pos.getZ() >> 4), reason);
     }
 
     /** A packet is about to be applied. Any chunk it changes has to be described afresh in the next snapshot */
@@ -293,16 +293,15 @@ public final class Snapshots {
             // New light and nothing else: the chunk's blocks are as stored, so it keeps its stored form and the next snapshot
             // adds its light as it is then, as for a chunk whose neighbour changed. Forgetting it had the chunks the server
             // sends light for, the ones round any change, described whole again
-            CHUNKS.computeIfPresent(ChunkPos.asLong(light.getX(), light.getZ()), (key, stored) -> stored.withLightChanged());
+            CHUNKS.computeIfPresent(ChunkPos.pack(light.x(), light.z()), (key, stored) -> stored.withLightChanged());
         } else if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
-            CHUNKS.remove(ChunkPos.asLong(chunk.getX(), chunk.getZ()));
+            CHUNKS.remove(ChunkPos.pack(chunk.x(), chunk.z()));
         } else if (packet instanceof ClientboundForgetLevelChunkPacket forgotten) {
-            CHUNKS.remove(forgotten.pos().toLong());
+            CHUNKS.remove(forgotten.pos().pack());
         } else if (packet instanceof ClientboundChunksBiomesPacket biomes) {
-            biomes.chunkBiomeData().forEach(data -> CHUNKS.remove(data.pos().toLong()));
-        } else if (packet instanceof ClientboundExplodePacket explosion) {
-            explosion.getToBlow().forEach(pos -> changed(pos, null));
+            biomes.chunkBiomeData().forEach(data -> CHUNKS.remove(data.pos().pack()));
         }
+        // An explosion's packet no longer lists the blocks it destroys: the server sends each as a block update, seen above
     }
 
     /**
@@ -312,7 +311,7 @@ public final class Snapshots {
      */
     private static void dirty(BlockPos pos) {
         int x = pos.getX() >> 4, z = pos.getZ() >> 4;
-        CHUNKS.remove(ChunkPos.asLong(x, z));
+        CHUNKS.remove(ChunkPos.pack(x, z));
         lightNextDoor(x, z);
     }
 
@@ -326,7 +325,7 @@ public final class Snapshots {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 if (dx != 0 || dz != 0) {
-                    CHUNKS.computeIfPresent(ChunkPos.asLong(x + dx, z + dz), (key, stored) -> stored.withLightChanged());
+                    CHUNKS.computeIfPresent(ChunkPos.pack(x + dx, z + dz), (key, stored) -> stored.withLightChanged());
                 }
             }
         }
@@ -344,7 +343,7 @@ public final class Snapshots {
     private static void changed(BlockPos pos, @org.jetbrains.annotations.Nullable net.minecraft.world.level.block.state.BlockState to) {
         int x = pos.getX() >> 4;
         int z = pos.getZ() >> 4;
-        CHUNKS.remove(ChunkPos.asLong(x, z));
+        CHUNKS.remove(ChunkPos.pack(x, z));
         ClientLevel level = Minecraft.getInstance().level;
         if (to != null && level != null && !lightMayChange(level, pos, level.getBlockState(pos), to)) {
             return;
@@ -357,10 +356,10 @@ public final class Snapshots {
         if (from == to) {
             return false;
         }
-        if (from.getLightBlock(level, pos) != to.getLightBlock(level, pos) || from.getLightEmission(level, pos) != to.getLightEmission(level, pos)) {
+        if (from.getLightDampening() != to.getLightDampening() || from.getLightEmission(level, pos) != to.getLightEmission(level, pos)) {
             return true;
         }
-        return (from.useShapeForLightOcclusion() || to.useShapeForLightOcclusion()) && from.getOcclusionShape(level, pos) != to.getOcclusionShape(level, pos);
+        return (from.useShapeForLightOcclusion() || to.useShapeForLightOcclusion()) && from.getOcclusionShape() != to.getOcclusionShape();
     }
 
     /**
@@ -503,38 +502,47 @@ public final class Snapshots {
         }
 
         ClientPacketListenerAccess distances = (ClientPacketListenerAccess) listener;
-        boolean flat = level.getLevelData().getHorizonHeight(level) == level.getMinBuildHeight();
+        boolean flat = level.getLevelData().getHorizonHeight(level) == level.getMinY();
         out.packet(new ClientboundLoginPacket(VIEWER_ENTITY_ID, level.getLevelData().isHardcore(), listener.levels(), 20, distances.dailies$serverChunkRadius(),
             distances.dailies$serverSimulationDistance(), false, false, false,
             new CommonPlayerSpawnInfo(level.dimensionTypeRegistration(), level.dimension(), ((BiomeManagerAccess) level.getBiomeManager()).dailies$biomeZoomSeed(),
-                GameType.SPECTATOR, null, level.isDebug(), flat, Optional.empty(), 0), false));
+                GameType.SPECTATOR, Optional.empty(), level.isDebug(), flat, Optional.empty(), 0, level.getSeaLevel()), false, false));
 
         // Where the game's chunks are centred, which is where the server last said, not always the chunk the player stands
         // in: the server says so a moment after the player crosses into a chunk. Playback has to take and let go of chunks
         // from the same place the game did, or it keeps some the game let go of
         ChunkPos centre = playback != null ? playback.centre() : chunkCentre(level);
-        out.packet(new ClientboundSetChunkCacheCenterPacket(centre.x, centre.z));
+        out.packet(new ClientboundSetChunkCacheCenterPacket(centre.x(), centre.z()));
         out.packet(new ClientboundSetChunkCacheRadiusPacket(distances.dailies$serverChunkRadius()));
         out.packet(new ClientboundSetSimulationDistancePacket(distances.dailies$serverSimulationDistance()));
         out.packet(new ClientboundChangeDifficultyPacket(level.getDifficulty(), level.getLevelData().isDifficultyLocked()));
-        out.packet(new ClientboundSetDefaultSpawnPositionPacket(level.getSharedSpawnPos(), level.getSharedSpawnAngle()));
-        out.packet(new ClientboundSetTimePacket(level.getGameTime(), level.getDayTime(), level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)));
+        if (level.getRespawnData() != null) {
+            out.packet(new ClientboundSetDefaultSpawnPositionPacket(level.getRespawnData()));
+        }
+        // The time of day is a world clock (or several), each with its own count and rate: a rate of nought is time stopped,
+        // which was the daylight game rule
+        Map<net.minecraft.core.Holder<net.minecraft.world.clock.WorldClock>, net.minecraft.world.clock.ClockNetworkState> clocks = new HashMap<>();
+        ((ClientClockManagerAccess) listener.clockManager()).dailies$clocks().forEach((clock, instance) ->
+            clocks.put(clock, new net.minecraft.world.clock.ClockNetworkState(instance.totalTicks(), instance.partialTick(), instance.rate())));
+        out.packet(new ClientboundSetTimePacket(level.getGameTime(), clocks));
         out.packet(new ClientboundInitializeBorderPacket(level.getWorldBorder()));
         if (level.getRainLevel(1.0F) > 0.0F) {
             out.packet(new ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 0.0F));
         }
         out.packet(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, level.getRainLevel(1.0F)));
         out.packet(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, level.getThunderLevel(1.0F)));
+        // What a server sends next to a joining player, which lets a game's loading screen wait for the player's chunk and go
+        out.packet(new ClientboundGameEventPacket(ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
 
         // Everyone in the tab list, with the skins and names this game knew them by (REC-14)
         List<ClientboundPlayerInfoUpdatePacket.Entry> players = new ArrayList<>();
         Set<PlayerInfo> listed = new HashSet<>(listener.getListedOnlinePlayers());
         for (PlayerInfo info : listener.getOnlinePlayers()) {
-            if (playback != null && info.getProfile().getId().equals(playback.viewerProfile())) {
+            if (playback != null && info.getProfile().id().equals(playback.viewerProfile())) {
                 continue;
             }
-            players.add(new ClientboundPlayerInfoUpdatePacket.Entry(info.getProfile().getId(), info.getProfile(), listed.contains(info), info.getLatency(),
-                info.getGameMode(), info.getTabListDisplayName(), null));
+            players.add(new ClientboundPlayerInfoUpdatePacket.Entry(info.getProfile().id(), info.getProfile(), listed.contains(info), info.getLatency(),
+                info.getGameMode(), info.getTabListDisplayName(), info.showHat(), info.getTabListOrder(), null));
         }
         if (!players.isEmpty()) {
             out.packet(PlayerInfoPackets.build(new GameCodec(listener.registryAccess(), listener.getConnectionType()), PlayerInfoPackets.allButChat(), players));
@@ -557,7 +565,7 @@ public final class Snapshots {
         for (PlayerTeam team : scoreboard.getPlayerTeams()) {
             out.packet(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
         }
-        minecraft.gui.getBossOverlay().events.values().forEach(bar -> out.packet(addBar(bar)));
+        minecraft.gui.hud.getBossOverlay().events.values().forEach(bar -> out.packet(addBar(bar)));
     }
 
     /**
@@ -613,13 +621,13 @@ public final class Snapshots {
         // Every chunk the snapshot names, by the names it has or will have: the listing the recording keeps for the snapshot
         List<Recorder.Out.NamedChunk> named = new ArrayList<>();
         int count = 0;
-        for (int x = centre.x - radius; x <= centre.x + radius; x++) {
-            for (int z = centre.z - radius; z <= centre.z + radius; z++) {
+        for (int x = centre.x() - radius; x <= centre.x() + radius; x++) {
+            for (int z = centre.z() - radius; z <= centre.z() + radius; z++) {
                 LevelChunk chunk = level.getChunkSource().getChunk(x, z, ChunkStatus.FULL, false);
                 if (chunk == null) {
                     continue;
                 }
-                long key = ChunkPos.asLong(x, z);
+                long key = ChunkPos.pack(x, z);
                 present.add(key);
                 count++;
                 openLids(chunk, lids);
@@ -652,8 +660,8 @@ public final class Snapshots {
                         // may have had some there, from a light that has gone, and that stayed (a dried-out laboratory left
                         // block light 2 in playback where the live game had none). Said outright to be dark, it is cleared.
                         // Sky light is left as it is: a section without it is lit from above, not dark
-                        java.util.BitSet blocks = lightPacket.getLightData().getBlockYMask();
-                        java.util.BitSet dark = lightPacket.getLightData().getEmptyBlockYMask();
+                        java.util.BitSet blocks = lightPacket.lightData().blockYMask();
+                        java.util.BitSet dark = lightPacket.lightData().emptyBlockYMask();
                         for (int section = 0; section < level.getLightEngine().getLightSectionCount(); section++) {
                             if (!blocks.get(section)) {
                                 dark.set(section);
@@ -700,13 +708,7 @@ public final class Snapshots {
      * falling in the wrong columns in playback). About forty numbers each
      */
     private static ClientboundLevelChunkWithLightPacket ownHeightmaps(ClientboundLevelChunkWithLightPacket packet) {
-        net.minecraft.nbt.CompoundTag heightmaps = packet.getChunkData().getHeightmaps();
-        for (String key : new ArrayList<>(heightmaps.getAllKeys())) {
-            net.minecraft.nbt.Tag tag = heightmaps.get(key);
-            if (tag != null) {
-                heightmaps.put(key, tag.copy());
-            }
-        }
+        // Since 26.1 the packet's chunk data copies them itself as it is made, so there is nothing left to do here
         return packet;
     }
 
@@ -838,8 +840,9 @@ public final class Snapshots {
     }
 
     private static void writeEntity(Recorder.Out out, Entity entity, GameCodec codec, @org.jetbrains.annotations.Nullable PlaybackWorld playback) {
-        boolean eased = entity.lerpTargetX() != entity.getX() || entity.lerpTargetY() != entity.getY() || entity.lerpTargetZ() != entity.getZ()
-            || entity.lerpTargetYRot() != entity.getYRot() || entity.lerpTargetXRot() != entity.getXRot();
+        net.minecraft.core.PositionAndRotation target = entity.getInterpolation().target();
+        boolean eased = target != null && (target.position().x != entity.getX() || target.position().y != entity.getY() || target.position().z != entity.getZ()
+            || target.yRot() != entity.getYRot() || target.xRot() != entity.getXRot());
         // A server says where most things are as steps from where it last said they were, and between its reports the game
         // moves a fireball, an arrow, an orb or a dropped item along by itself. Such a thing is spawned where the server last
         // put it, so that the steps that follow still add up, and then set down where the game had really got it to
@@ -885,21 +888,10 @@ public final class Snapshots {
         }
         if (entity != net.minecraft.client.Minecraft.getInstance().player && eased) {
             // Caught part way through easing towards where it was last told it is: it is placed where it is drawn, then told again
-            RegistryFriendlyByteBuf buffer = codec.buffer();
-            try {
-                buffer.writeVarInt(entity.getId());
-                buffer.writeDouble(entity.lerpTargetX());
-                buffer.writeDouble(entity.lerpTargetY());
-                buffer.writeDouble(entity.lerpTargetZ());
-                buffer.writeByte((byte) net.minecraft.util.Mth.floor(entity.lerpTargetYRot() * 256.0F / 360.0F));
-                buffer.writeByte((byte) net.minecraft.util.Mth.floor(entity.lerpTargetXRot() * 256.0F / 360.0F));
-                buffer.writeBoolean(entity.onGround());
-                // Other mods add fields of their own to this packet (Sable adds a flag). Zeroes stand for "nothing special"
-                buffer.writeZero(16);
-                out.packet(ClientboundTeleportEntityPacket.STREAM_CODEC.decode(buffer));
-            } finally {
-                buffer.release();
-            }
+            // Its motion is left as it is: a delta of nought, relative to what it has
+            out.packet(new ClientboundTeleportEntityPacket(entity.getId(),
+                new net.minecraft.world.entity.PositionMoveRotation(target.position(), net.minecraft.world.phys.Vec3.ZERO, target.yRot(), target.xRot()),
+                net.minecraft.world.entity.Relative.DELTA, entity.onGround()));
         }
         if (entity instanceof ExperienceOrb) {
             // The game gives a new orb a random push of its own; say how it is really moving
@@ -935,19 +927,7 @@ public final class Snapshots {
      */
     private static Packet<? super ClientGamePacketListener> spawnPacket(Entity entity, GameCodec codec, @org.jetbrains.annotations.Nullable net.minecraft.world.phys.Vec3 told) {
         double x = told != null ? told.x : entity.getX(), y = told != null ? told.y : entity.getY(), z = told != null ? told.z : entity.getZ();
-        if (entity instanceof ExperienceOrb orb) {
-            RegistryFriendlyByteBuf buffer = codec.buffer();
-            try {
-                buffer.writeVarInt(orb.getId());
-                buffer.writeDouble(x);
-                buffer.writeDouble(y);
-                buffer.writeDouble(z);
-                buffer.writeShort(orb.getValue());
-                return ClientboundAddExperienceOrbPacket.STREAM_CODEC.decode(buffer);
-            } finally {
-                buffer.release();
-            }
-        }
+        // An orb is added as any other entity is; its value travels with its entity data
         if (entity instanceof HangingEntity hanging) {
             return new ClientboundAddEntityPacket(entity, hanging.getDirection().get3DDataValue(), hanging.getPos());
         }

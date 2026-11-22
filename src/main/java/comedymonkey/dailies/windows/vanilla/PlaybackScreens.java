@@ -1,21 +1,40 @@
 package comedymonkey.dailies.windows.vanilla;
 
+import comedymonkey.dailies.mixin.access.AbstractWidgetAccess;
+import comedymonkey.dailies.mixin.access.BookEditScreenAccess;
+import comedymonkey.dailies.mixin.access.BookSignScreenAccess;
+import comedymonkey.dailies.mixin.access.MultiLineEditBoxAccess;
 import comedymonkey.dailies.mixin.access.SignEditScreenAccess;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.client.gui.components.MultilineTextField;
+import net.minecraft.client.gui.components.Whence;
+import net.minecraft.client.gui.screens.inventory.AbstractSignEditScreen;
 import net.minecraft.client.gui.screens.inventory.BookEditScreen;
+import net.minecraft.client.gui.screens.inventory.BookSignScreen;
 import net.minecraft.client.gui.screens.inventory.BookViewScreen;
 import net.minecraft.client.gui.screens.inventory.HangingSignEditScreen;
 import net.minecraft.client.gui.screens.inventory.LecternScreen;
 import net.minecraft.client.gui.screens.inventory.SignEditScreen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.LecternMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignTextSlot;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * The game's own book, lectern and sign screens as playback builds them from a state: each the game's screen, so it is
@@ -46,13 +65,13 @@ final class PlaybackScreens {
         }
 
         @Override
-        public boolean handleComponentClicked(Style style) {
+        protected boolean handleClickEvent(@Nullable ClickEvent event) {
             // A page can run a command or open a link when clicked
             return false;
         }
 
         @Override
-        protected void closeScreen() {
+        protected void closeContainerOnServer() {
         }
 
         @Override
@@ -87,14 +106,16 @@ final class PlaybackScreens {
         @Override
         protected void createMenuControls() {
             // As LecternScreen and BookViewScreen lay them out, doing nothing when pressed
+            int buttonY = this.menuControlsTop();
             if (this.mayBuild) {
+                int middle = this.width / 2;
                 this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> {
-                }).bounds(this.width / 2 - 100, 196, 98, 20).build());
+                }).pos(middle - 98 - 2, buttonY).width(98).build());
                 this.addRenderableWidget(Button.builder(Component.translatable("lectern.take_book"), button -> {
-                }).bounds(this.width / 2 + 2, 196, 98, 20).build());
+                }).pos(middle + 2, buttonY).width(98).build());
             } else {
                 this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> {
-                }).bounds(this.width / 2 - 100, 196, 200, 20).build());
+                }).pos((this.width - 200) / 2, buttonY).width(200).build());
             }
         }
 
@@ -113,12 +134,12 @@ final class PlaybackScreens {
         }
 
         @Override
-        public boolean handleComponentClicked(Style style) {
+        protected boolean handleClickEvent(@Nullable ClickEvent event) {
             return false;
         }
 
         @Override
-        protected void closeScreen() {
+        protected void closeContainerOnServer() {
         }
 
         @Override
@@ -132,34 +153,112 @@ final class PlaybackScreens {
      * so it takes no input at all.
      */
     static final class BookEdit extends BookEditScreen {
+        private int cursor = -1;
+        private int selection = -1;
 
         BookEdit(Player owner, ItemStack book) {
-            super(owner, book, InteractionHand.MAIN_HAND);
+            super(owner, book, InteractionHand.MAIN_HAND, book.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY));
+        }
+
+        /** Where the cursor and the selection's other end go once the page's box is made */
+        void cursorAfterLayout(int cursor, int selection) {
+            this.cursor = cursor;
+            this.selection = selection;
         }
 
         @Override
-        public boolean mouseClicked(double x, double y, int button) {
+        protected void init() {
+            super.init();
+            MultiLineEditBox page = ((BookEditScreenAccess) (Object) this).dailies$page();
+            if (page == null || this.cursor < 0) {
+                return;
+            }
+            MultilineTextField field = ((MultiLineEditBoxAccess) page).dailies$textField();
+            field.seekCursor(Whence.ABSOLUTE, this.selection);
+            field.setSelecting(true);
+            field.seekCursor(Whence.ABSOLUTE, this.cursor);
+            field.setSelecting(false);
+            // Shown with the keys, so its cursor is drawn, without turning the game's text input on
+            ((AbstractWidgetAccess) page).dailies$setFocusedQuietly(true);
+        }
+
+        @Override
+        public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
             return false;
         }
 
         @Override
-        public boolean mouseDragged(double x, double y, int button, double dragX, double dragY) {
+        public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
             return false;
         }
 
         @Override
-        public boolean keyPressed(int key, int scan, int modifiers) {
+        public boolean keyPressed(KeyEvent event) {
             return false;
         }
 
         @Override
-        public boolean charTyped(char typed, int modifiers) {
+        public boolean charTyped(CharacterEvent event) {
             return false;
         }
 
         @Override
         public void onClose() {
         }
+    }
+
+    /**
+     * A book and quill being signed: the title typed so far, put on before it is laid out. Its buttons would sign the book
+     * or go back to writing, so it takes no input at all.
+     */
+    static final class BookSign extends BookSignScreen {
+
+        BookSign(BookEditScreen book, Player owner, List<String> pages) {
+            super(book, owner, InteractionHand.MAIN_HAND, pages);
+        }
+
+        @Override
+        protected void init() {
+            super.init();
+            EditBox title = ((BookSignScreenAccess) (Object) this).dailies$titleBox();
+            if (title != null) {
+                // Shown with the keys, so its cursor is drawn, without turning the game's text input on
+                ((AbstractWidgetAccess) title).dailies$setFocusedQuietly(true);
+            }
+        }
+
+        @Override
+        public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+            return false;
+        }
+
+        @Override
+        public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+            return false;
+        }
+
+        @Override
+        public boolean keyPressed(KeyEvent event) {
+            return false;
+        }
+
+        @Override
+        public boolean charTyped(CharacterEvent event) {
+            return false;
+        }
+
+        @Override
+        public void onClose() {
+        }
+    }
+
+    /**
+     * The Done button a sign's screen has, laid out as the game's does and doing nothing. The game's own layout also turns
+     * the game's text input on, which a screen playback draws must not do
+     */
+    private static void signDone(AbstractSignEditScreen screen, java.util.function.Consumer<Button> add) {
+        add.accept(Button.builder(CommonComponents.GUI_DONE, button -> {
+        }).bounds(screen.width / 2 - 100, screen.height / 4 + 144, 200, 20).build());
     }
 
     /**
@@ -180,14 +279,14 @@ final class PlaybackScreens {
         private final int selection;
 
         Sign(SignBlockEntity sign, boolean front, int cursor, int selection) {
-            super(sign, front, false);
+            super(sign, front ? SignTextSlot.FRONT : SignTextSlot.BACK, false);
             this.cursor = cursor;
             this.selection = selection;
         }
 
         @Override
         protected void init() {
-            super.init();
+            signDone(this, this::addRenderableWidget);
             cursor(this, this.cursor, this.selection);
         }
 
@@ -196,12 +295,12 @@ final class PlaybackScreens {
         }
 
         @Override
-        public boolean keyPressed(int key, int scan, int modifiers) {
+        public boolean keyPressed(KeyEvent event) {
             return false;
         }
 
         @Override
-        public boolean charTyped(char typed, int modifiers) {
+        public boolean charTyped(CharacterEvent event) {
             return false;
         }
 
@@ -220,14 +319,14 @@ final class PlaybackScreens {
         private final int selection;
 
         HangingSign(SignBlockEntity sign, boolean front, int cursor, int selection) {
-            super(sign, front, false);
+            super(sign, front ? SignTextSlot.FRONT : SignTextSlot.BACK, false);
             this.cursor = cursor;
             this.selection = selection;
         }
 
         @Override
         protected void init() {
-            super.init();
+            signDone(this, this::addRenderableWidget);
             cursor(this, this.cursor, this.selection);
         }
 
@@ -236,12 +335,12 @@ final class PlaybackScreens {
         }
 
         @Override
-        public boolean keyPressed(int key, int scan, int modifiers) {
+        public boolean keyPressed(KeyEvent event) {
             return false;
         }
 
         @Override
-        public boolean charTyped(char typed, int modifiers) {
+        public boolean charTyped(CharacterEvent event) {
             return false;
         }
 

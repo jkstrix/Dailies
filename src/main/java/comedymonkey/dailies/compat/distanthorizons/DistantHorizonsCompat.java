@@ -110,12 +110,12 @@ public final class DistantHorizonsCompat {
         });
         NeoForge.EVENT_BUS.addListener((ChunkEvent.Load event) -> {
             if (working && event.getLevel() instanceof ClientLevel && Playback.active()) {
-                waiting.put(event.getChunk().getPos().toLong(), 0);
+                waiting.put(event.getChunk().getPos().pack(), 0);
             }
         });
         NeoForge.EVENT_BUS.addListener((ChunkEvent.Unload event) -> {
             if (event.getLevel() instanceof ClientLevel) {
-                long pos = event.getChunk().getPos().toLong();
+                long pos = event.getChunk().getPos().pack();
                 waiting.remove(pos);
                 unconfirmed.remove(pos);
             }
@@ -272,7 +272,7 @@ public final class DistantHorizonsCompat {
             if (manifest == null || manifest.distantHorizonsFolders == null || !(wrapped instanceof net.minecraft.world.level.Level mc)) {
                 return null;
             }
-            String dimension = mc.dimension().location().toString();
+            String dimension = mc.dimension().identifier().toString();
             // Only a recording made here is believed, and only for a folder inside the game's folder: the name comes from
             // the recording's file, and a shared one could otherwise have this game copy and open a store from anywhere
             comedymonkey.dailies.file.RecordingFile open = Playback.file();
@@ -369,7 +369,7 @@ public final class DistantHorizonsCompat {
                 // A folder outside the game's folder is not written down: playback believes only one inside it
                 String relative = FarTerrainFolders.toRecord(game, path);
                 if (relative != null) {
-                    folders.put(level.dimension().location().toString(), relative);
+                    folders.put(level.dimension().identifier().toString(), relative);
                 }
             }
         } catch (Throwable t) {

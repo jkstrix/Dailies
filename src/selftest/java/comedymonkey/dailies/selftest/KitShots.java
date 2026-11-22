@@ -1,5 +1,6 @@
 package comedymonkey.dailies.selftest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.google.gson.JsonObject;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.config.DailiesConfig;
@@ -15,7 +16,6 @@ import comedymonkey.dailies.ui.SettingsScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,11 +53,11 @@ final class KitShots {
     private static void size(SelfTest test, int width, int height, int scale) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
-            GLFW.glfwSetWindowSize(minecraft.getWindow().getWindow(), width, height);
+            org.lwjgl.sdl.SDLVideo.SDL_SetWindowSize(minecraft.getWindow().handle(), width, height);
             minecraft.options.guiScale().set(scale);
         });
         test.waitTicks(8);
-        test.onClientRun(minecraft::resizeDisplay);
+        test.onClientRun(minecraft::resizeGui);
         test.waitTicks(8);
     }
 
@@ -72,9 +72,9 @@ final class KitShots {
     private static SettingsScreen openSettings(SelfTest test, boolean firstUnfolded) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
-            Screen behind = minecraft.screen instanceof SettingsScreen ? null : minecraft.screen;
+            Screen behind = minecraft.gui.screen() instanceof SettingsScreen ? null : minecraft.gui.screen();
             SettingsScreen.open(behind);
-            SettingsScreen screen = (SettingsScreen) minecraft.screen;
+            SettingsScreen screen = (SettingsScreen) minecraft.gui.screen();
             boolean first = firstUnfolded;
             for (String group : groups()) {
                 screen.fold(group, !first);
@@ -83,7 +83,7 @@ final class KitShots {
             screen.search("");
         });
         test.waitTicks(12);
-        return (SettingsScreen) minecraft.screen;
+        return (SettingsScreen) minecraft.gui.screen();
     }
 
     /**
@@ -94,7 +94,7 @@ final class KitShots {
      */
     static void settings(SelfTest test, String prefix) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
-        Screen behind = minecraft.screen;
+        Screen behind = minecraft.gui.screen();
         SettingsScreen screen = openSettings(test, false);
         ManualShots.shot(test, prefix + "-settings");
         test.onClientRun(() -> screen.search("marker colour"));
@@ -115,7 +115,7 @@ final class KitShots {
         ManualShots.shot(test, prefix + "c-settings-dropdown");
         test.onClientRun(() -> {
             Previews.closeMenu();
-            minecraft.setScreen(behind);
+            minecraft.gui.setScreen(behind);
         });
         test.waitTicks(4);
     }
@@ -144,7 +144,7 @@ final class KitShots {
                     ManualShots.shot(test, "20-settings-" + size[0] + "x" + size[1] + "-scale" + scale);
                     test.onClientRun(() -> {
                         Previews.closeMenu();
-                        minecraft.setScreen(null);
+                        minecraft.gui.setScreen(null);
                     });
                 }
             }
@@ -152,10 +152,10 @@ final class KitShots {
         });
         size(test, 1920, 1080, 2);
         attempt("the recovery offer", () -> {
-            test.onClientRun(() -> minecraft.setScreen(Previews.recovery(minecraft.screen)));
+            test.onClientRun(() -> minecraft.gui.setScreen(Previews.recovery(minecraft.gui.screen())));
             test.waitTicks(8);
             ManualShots.shot(test, "30-recovery");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
         }
 
@@ -185,16 +185,16 @@ final class KitShots {
             test.onClientRun(() -> minecraft.pauseGame(false));
             test.waitTicks(10);
             ManualShots.shot(test, "31b-pause-menu");
-            test.onClientRun(() -> minecraft.setScreen(Previews.ask()));
+            test.onClientRun(() -> minecraft.gui.setScreen(Previews.ask()));
             test.waitTicks(8);
             ManualShots.shot(test, "31c-ask");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
         attempt("the name prompt", () -> {
-            test.onClientRun(() -> minecraft.setScreen(Previews.name()));
+            test.onClientRun(() -> minecraft.gui.setScreen(Previews.name()));
             test.waitTicks(10);
             ManualShots.shot(test, "32-name");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
         JsonObject saved = test.tool("recording_finish", args("name", "A walk round the fire"));
         test.waitTicks(10);
@@ -206,9 +206,9 @@ final class KitShots {
             test.waitTicks(10);
         }
         attempt("the recordings list", () -> {
-            test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
+            test.onClientRun(() -> minecraft.gui.setScreen(new RecordingsScreen(null)));
             test.waitTicks(40);
-            test.onClientRun(() -> minecraft.screen.mouseClicked(minecraft.screen.width / 2.0, 70.0, 0));
+            test.onClientRun(() -> minecraft.gui.screen().mouseClicked(Inputs.leftClick(minecraft.gui.screen().width / 2.0, 70.0), false));
             test.waitTicks(4);
             ManualShots.shot(test, "33-recordings");
             if (focused) {
@@ -224,7 +224,7 @@ final class KitShots {
                 }
             }
             size(test, 1920, 1080, 2);
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
 
         test.tool("replay_open", args("path", saved.get("path").getAsString()));
@@ -235,8 +235,8 @@ final class KitShots {
         test.tool("camera_set", args("x", 6.5, "y", -57.0, "z", 2.0, "yaw", 0.0, "pitch", -30.0));
         attempt("the playback bar", () -> {
             test.onClientRun(() -> {
-                if (minecraft.screen != null) {
-                    minecraft.setScreen(null);
+                if (minecraft.gui.screen() != null) {
+                    minecraft.gui.setScreen(null);
                 }
                 Notices.show(Component.literal("Camera: free"));
             });
@@ -265,14 +265,14 @@ final class KitShots {
                 try {
                     var maker = Class.forName("comedymonkey.dailies.extras.ModDifferencesScreen").getDeclaredConstructor(ModDifferences.Differences.class);
                     maker.setAccessible(true);
-                    minecraft.setScreen((Screen) maker.newInstance(differences));
+                    minecraft.gui.setScreen((Screen) maker.newInstance(differences));
                 } catch (ReflectiveOperationException e) {
                     throw new IllegalStateException(e);
                 }
             });
             test.waitTicks(8);
             ManualShots.shot(test, "41-mod-differences");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
         attempt("the editor", () -> editorShots(test, total));
         attempt("the export progress", () -> {
@@ -286,8 +286,8 @@ final class KitShots {
             test.waitFor(() -> !Export.active(), 120, "the export to stop");
         });
         test.onClientRun(() -> {
-            if (minecraft.screen != null) {
-                minecraft.setScreen(null);
+            if (minecraft.gui.screen() != null) {
+                minecraft.gui.setScreen(null);
             }
         });
         PlaybackSteps.close(test);
@@ -313,7 +313,7 @@ final class KitShots {
         boolean first = true;
         for (int scale : SCALES_1080) {
             for (int tab = 0; tab < 3; tab++) {
-                test.onClientRun(() -> minecraft.setScreen(null));
+                test.onClientRun(() -> minecraft.gui.setScreen(null));
                 size(test, 1920, 1080, scale);
                 editor(test, tab);
                 if (tab == 2 && first) {
@@ -335,7 +335,7 @@ final class KitShots {
             ManualShots.shot(test, "s-editor-export-more-1080-" + scaleName(scale));
             test.onClientRun(() -> Previews.exportMore(false));
         }
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         size(test, 1920, 1080, 2);
     }
 
@@ -381,14 +381,14 @@ final class KitShots {
             }
             screen.reveal("autoStart");
             for (int press = 0; press < 7; press++) {
-                screen.keyPressed(GLFW.GLFW_KEY_TAB, 0, 0);
+                screen.keyPressed(Inputs.key(InputConstants.KEY_TAB));
             }
         });
         test.waitTicks(6);
         ManualShots.shot(test, "10i-settings-focus");
         test.onClientRun(() -> {
             screen.abandon();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
     }
 
@@ -422,7 +422,7 @@ final class KitShots {
         test.onClientRun(() -> Previews.exportMore(false));
         for (int[] size : SIZES) {
             for (int scale = 1; scale <= 3; scale++) {
-                test.onClientRun(() -> minecraft.setScreen(null));
+                test.onClientRun(() -> minecraft.gui.setScreen(null));
                 size(test, size[0], size[1], scale);
                 editor(test, 2);
                 test.onClientRun(() -> Previews.editorDropdown(0));
@@ -431,15 +431,15 @@ final class KitShots {
                 test.onClientRun(Previews::closeMenu);
             }
         }
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         size(test, 1920, 1080, 2);
     }
 
     private static void editor(SelfTest test, int tab) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
-            if (minecraft.screen != null) {
-                minecraft.setScreen(null);
+            if (minecraft.gui.screen() != null) {
+                minecraft.gui.setScreen(null);
             }
             Previews.editorTab(tab);
             Controls.openTimeline();

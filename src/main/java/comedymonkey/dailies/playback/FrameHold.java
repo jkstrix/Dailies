@@ -2,10 +2,9 @@ package comedymonkey.dailies.playback;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.renderpearl.api.textures.GpuTexture;
 import comedymonkey.dailies.Host;
 import net.minecraft.client.Minecraft;
-import org.lwjgl.opengl.GL30;
 
 /**
  * Keeps the world still on screen while a jump is under way, as a video player holds its last frame while it seeks
@@ -38,7 +37,7 @@ public final class FrameHold {
         }
         try {
             Minecraft minecraft = Minecraft.getInstance();
-            RenderTarget main = minecraft.getMainRenderTarget();
+            RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
             if (!Playback.loaded() || comedymonkey.dailies.export.Export.active()) {
                 whole = false;
                 return;
@@ -49,10 +48,15 @@ public final class FrameHold {
                 }
                 return;
             }
+            GpuTexture colour = main.getColorTexture();
+            if (colour == null) {
+                return;
+            }
             if (held == null) {
-                held = new TextureTarget(main.width, main.height, false, Minecraft.ON_OSX);
+                // The same kind of picture as the window's, so one can be copied straight into the other
+                held = new TextureTarget("Dailies held frame", main.width, main.height, colour.getFormat(), null);
             } else if (held.width != main.width || held.height != main.height) {
-                held.resize(main.width, main.height, Minecraft.ON_OSX);
+                held.resize(main.width, main.height);
             }
             copy(main, held);
             whole = true;
@@ -72,13 +76,9 @@ public final class FrameHold {
         }
     }
 
+    /** The colour of one picture into the other, on the graphics card, in order with the drawing around it */
     private static void copy(RenderTarget from, RenderTarget to) {
-        GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, from.frameBufferId);
-        GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, to.frameBufferId);
-        GL30.glBlitFramebuffer(0, 0, from.width, from.height, 0, 0, to.width, to.height, GL30.GL_COLOR_BUFFER_BIT, GL30.GL_NEAREST);
-        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
-        // The game draws the panels and the HUD into the window's picture next, and expects it to be the one bound
-        Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        to.copyColorFrom(from);
     }
 
 }

@@ -3,17 +3,21 @@ package comedymonkey.dailies.moments;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.GpuTexture;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.moments.analysis.MomentAnalysis;
 import comedymonkey.dailies.moments.storage.MomentsSession;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
 import org.lwjgl.stb.STBIWriteCallback;
 import org.lwjgl.stb.STBImageWrite;
 import org.lwjgl.system.MemoryUtil;
@@ -22,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -110,7 +115,7 @@ public final class EventPictures {
         if (Host.get().inPlayback() || Host.get().exportRunning() || minecraft.level == null) {
             return;
         }
-        RenderTarget main = minecraft.getMainRenderTarget();
+        RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
         if (main.width < 16 || main.height < 16) {
             return;
         }
@@ -127,34 +132,54 @@ public final class EventPictures {
         small = sized(small, width, height);
         shrink(source, small);
 
-        ByteBuffer pixels = MemoryUtil.memAlloc(width * height * 4);
-        try {
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, small.frameBufferId);
-            RenderSystem.pixelStore(GL11.GL_PACK_ALIGNMENT, 1);
-            GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
-        } catch (Throwable t) {
-            MemoryUtil.memFree(pixels);
-            throw t;
-        } finally {
-            main.bindWrite(true);
+        // Read back once the graphics card has drawn it, a frame or two on, without the game waiting for it
+        GpuTexture picture = small.getColorTexture();
+        if (picture == null) {
+            return;
         }
-        WRITER.execute(() -> write(pixels, width, height, wanted));
+        GpuBuffer readBack = RenderSystem.getDevice().createBuffer(() -> "Moments event picture", GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_COPY_DST,
+            (long) width * height * 4);
+        RenderSystem.getDevice().createCommandEncoder().copyTextureToBuffer(picture, readBack, 0L, () -> {
+            ByteBuffer pixels = null;
+            try (GpuBufferSlice.MappedView view = readBack.map(true, false)) {
+                pixels = MemoryUtil.memAlloc(width * height * 4);
+                MemoryUtil.memCopy(view.data(), pixels);
+                ByteBuffer taken = pixels;
+                pixels = null;
+                WRITER.execute(() -> write(taken, width, height, wanted));
+            } catch (Throwable t) {
+                Host.LOGGER.warn("Moments: an event picture could not be read back", t);
+            } finally {
+                if (pixels != null) {
+                    MemoryUtil.memFree(pixels);
+                }
+                readBack.close();
+            }
+        }, 0);
     }
 
     private static RenderTarget sized(@Nullable RenderTarget target, int width, int height) {
         if (target == null) {
-            return new TextureTarget(width, height, false, Minecraft.ON_OSX);
+            return new TextureTarget("Moments event picture", width, height, GpuFormat.RGBA8_UNORM, null);
         }
         if (target.width != width || target.height != height) {
-            target.resize(width, height, Minecraft.ON_OSX);
+            target.resize(width, height);
         }
         return target;
     }
 
+    /** One picture drawn into another of a different size, smoothed as it is shrunk */
     private static void shrink(RenderTarget from, RenderTarget to) {
-        GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, from.frameBufferId);
-        GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, to.frameBufferId);
-        GlStateManager._glBlitFrameBuffer(0, 0, from.width, from.height, 0, 0, to.width, to.height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_LINEAR);
+        if (from.getColorTextureView() == null || to.getColorTextureView() == null) {
+            throw new IllegalStateException("A picture to shrink is not there");
+        }
+        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
+            .createRenderPass(() -> "Moments event picture", to.getColorTextureView(), Optional.empty())) {
+            pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("InSampler", from.getColorTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+            pass.draw(3, 1, 0, 0);
+        }
     }
 
     /** Off the client thread: the picture as a JPEG, once for each event that asked for this frame */

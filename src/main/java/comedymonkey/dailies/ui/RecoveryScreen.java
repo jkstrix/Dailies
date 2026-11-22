@@ -3,7 +3,7 @@ package comedymonkey.dailies.ui;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -53,7 +53,7 @@ final class RecoveryScreen extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         this.heading(graphics, font, this.words);
     }
 
@@ -61,7 +61,7 @@ final class RecoveryScreen extends KitScreen {
         List<Path> files = this.unfinished;
         AtomicInteger recovered = new AtomicInteger();
         Notices.show(Component.translatable("dailies.ui.recovery.working"));
-        this.minecraft.setScreen(this.parent);
+        this.minecraft.gui.setScreen(this.parent);
         Controls.offThread(() -> {
             for (Path file : files) {
                 try {
@@ -83,12 +83,12 @@ final class RecoveryScreen extends KitScreen {
     }
 
     private void askToDiscard() {
-        this.minecraft.setScreen(new AskScreen(
+        this.minecraft.gui.setScreen(new AskScreen(
                 yes -> {
                     if (yes) {
                         this.discard();
                     } else {
-                        this.minecraft.setScreen(this);
+                        this.minecraft.gui.setScreen(this);
                     }
                 },
                 Component.translatable("dailies.ui.recovery.discard_title"),
@@ -99,7 +99,7 @@ final class RecoveryScreen extends KitScreen {
 
     private void discard() {
         List<Path> files = this.unfinished;
-        this.minecraft.setScreen(this.parent);
+        this.minecraft.gui.setScreen(this.parent);
         AtomicInteger discarded = new AtomicInteger();
         Controls.offThread(() -> {
             for (Path file : files) {

@@ -7,7 +7,7 @@
 // change the mod id (dailies_template), the package and the compat id, and in a repository of its own compile against
 // copies of the two jars instead of the projects here:
 //     compileOnly files('libs/dailies-api-<version>.jar')             (gradlew apiJar in Dailies' repository)
-//     compileOnly files('libs/dailies-companion-1.21.1-<version>.jar') (gradlew build in companion/)
+//     compileOnly files('libs/dailies-companion-26.3-<version>.jar')   (gradlew build in companion/)
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev'
@@ -17,10 +17,10 @@ version = '1.0.0'
 group = 'comedymonkey.dailiescompat'
 
 base {
-    archivesName = 'dailies-compat-template-1.21.1'
+    archivesName = "dailies-compat-template-${minecraft_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 neoForge {
     version = project.neo_version
@@ -41,7 +41,7 @@ dependencies {
     // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
     compileOnly project(path: ':', configuration: 'dailiesApi')
     // The Dailies Companion's plugin API, for the server half: the same, so a server without the companion runs it too
-    compileOnly files(rootProject.file("companion/build/libs/dailies-companion-1.21.1-${companionProperties.mod_version}.jar")).builtBy(':buildCompanion')
+    compileOnly files(rootProject.file("companion/build/libs/dailies-companion-26.3-${companionProperties.mod_version}.jar")).builtBy(':buildCompanion')
 }
 
 processResources {

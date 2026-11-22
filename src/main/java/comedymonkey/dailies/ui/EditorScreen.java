@@ -14,8 +14,11 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import com.google.gson.JsonObject;
 import comedymonkey.dailies.compat.iris.IrisShaders;
@@ -26,7 +29,6 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -134,7 +136,6 @@ public final class EditorScreen extends Screen {
     /** Once, when the game starts: the hooks the editor and what belongs to it need */
     static void hook() {
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> watch());
-        ViewPick.init();
         ExportProgress.hook();
         // The editor is the way a recording is watched and worked on, so it is there as soon as one opens. The scripted
         // test runs drive the game through its tools and put the editor up themselves when they want it
@@ -168,7 +169,7 @@ public final class EditorScreen extends Screen {
     /** Puts the editor on screen */
     static void open() {
         if (Playback.loaded()) {
-            Minecraft.getInstance().setScreen(opening());
+            Minecraft.getInstance().gui.setScreen(opening());
         }
     }
 
@@ -202,7 +203,7 @@ public final class EditorScreen extends Screen {
             if (!Playback.loaded()) {
                 return;
             }
-            Screen screen = minecraft.screen;
+            Screen screen = minecraft.gui.screen();
             if (Export.active()) {
                 exportSeen = true;
                 if (Export.holdsClock() && (screen == null || screen instanceof EditorScreen)) {
@@ -221,10 +222,10 @@ public final class EditorScreen extends Screen {
             }
             if ((screen == null || screen instanceof ExportProgress || screen instanceof PreviewProgress) && !Playback.jumping()) {
                 show(minecraft, new EditorScreen());
-                screen = minecraft.screen;
+                screen = minecraft.gui.screen();
                 if (pointerKept) {
                     pointerKept = false;
-                    InputConstants.grabOrReleaseMouse(minecraft.getWindow().getWindow(), GLFW.GLFW_CURSOR_NORMAL, pointerX, pointerY);
+                    InputConstants.releaseMouse(minecraft.getWindow(), pointerX, pointerY);
                     // The game hears of the move a moment later; until then the playhead must not follow a stale pointer
                     EditorState.pointerSettling = 3;
                 }
@@ -244,7 +245,7 @@ public final class EditorScreen extends Screen {
     private static void show(Minecraft minecraft, Screen screen) {
         swapping = true;
         try {
-            minecraft.setScreen(screen);
+            minecraft.gui.setScreen(screen);
         } finally {
             swapping = false;
         }
@@ -359,7 +360,7 @@ public final class EditorScreen extends Screen {
             EditorState.history().setExportRange(scene.hasExportRange() ? Math.min(end, scene.exportStart()) : 0, end);
         }).tip(Kit.t("range.end_here.tip")));
         // Trimming starts from the export range: what is kept is what would be exported (FILE-10)
-        range.add(new Gadget.Push(Kit.t("range.trim"), () -> Minecraft.getInstance().setScreen(TrimScreen.fromEditor(this)))
+        range.add(new Gadget.Push(Kit.t("range.trim"), () -> Minecraft.getInstance().gui.setScreen(TrimScreen.fromEditor(this)))
                 .tip(Kit.t("range.trim.tip")));
         this.group(this.topLeft, range.toArray(new Gadget[0]));
 
@@ -449,7 +450,7 @@ public final class EditorScreen extends Screen {
     private void renameScene() {
         EditHistory history = EditorState.history();
         int index = history.state().currentSceneIndex();
-        Minecraft.getInstance().setScreen(new NameScreen(
+        Minecraft.getInstance().gui.setScreen(new NameScreen(
                 Kit.t("scene.rename.title"),
                 Kit.t("scene.rename.explanation"),
                 history.scene().name(),
@@ -523,7 +524,7 @@ public final class EditorScreen extends Screen {
 
     /** No blur and no dimming: only the panels */
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
@@ -542,6 +543,9 @@ public final class EditorScreen extends Screen {
     public void removed() {
         this.input.end();
         this.stopFlying();
+        if (this.minecraft != null) {
+            this.minecraft.textInputManager().stopTextInput(this);
+        }
         if (this.minecraft != null) {
             // Whatever comes next is drawn at the game's own size
             int usual = usualScale(this.minecraft);
@@ -566,13 +570,13 @@ public final class EditorScreen extends Screen {
     @Override
     public void tick() {
         // The recording was closed, or failed, behind the screen
-        if (!Playback.loaded() && !Playback.jumping() && this.minecraft != null && this.minecraft.screen == this) {
+        if (!Playback.loaded() && !Playback.jumping() && this.minecraft != null && this.minecraft.gui.screen() == this) {
             this.onClose();
         }
     }
 
     private boolean hidden() {
-        return this.minecraft.options.hideGui || Notices.hidden();
+        return comedymonkey.dailies.ui.HudHidden.get() || Notices.hidden();
     }
 
     private boolean usable() {
@@ -582,7 +586,9 @@ public final class EditorScreen extends Screen {
     // ------------------------------------------------------------------ Drawing
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        // Letters only for an open menu, which narrows as they are typed: otherwise the movement keys must stay keys
+        InputRouter.textInput(this, Menu.open != null);
         // Nothing of the editor may be in an exported picture
         if (!this.usable()) {
             return;
@@ -612,7 +618,7 @@ public final class EditorScreen extends Screen {
             EditorLayout.Rect clear = this.layout.frameClear();
             comedymonkey.dailies.looks.LooksRenderer.clearOfPanels((double) clear.left() / this.width, (double) clear.top() / this.height,
                     (double) clear.right() / this.width, (double) clear.bottom() / this.height);
-            this.timeline.frame(mouseX, GLFW.glfwGetMouseButton(this.minecraft.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS);
+            this.timeline.frame(mouseX, (this.minecraft.mouseHandler.isLeftPressed() ? InputConstants.PRESS : InputConstants.RELEASE) == InputConstants.PRESS);
 
             boolean busy = Menu.open != null || this.flying;
             int pointerX = busy ? Integer.MIN_VALUE / 2 : mouseX;
@@ -623,10 +629,8 @@ public final class EditorScreen extends Screen {
             if (menu != null) {
                 menu.draw(graphics, this.font, mouseX, mouseY, this.width, this.height);
             } else if (!this.flying && this.input.held() == null && !this.timeline.dragging()) {
-                Component words = this.tipAt(mouseX, mouseY);
-                if (words != null) {
-                    this.setTooltipForNextRenderPass(words);
-                }
+                // In the house colours, as every other Dailies screen draws them; drawn last, so over everything
+                Kit.tooltip(graphics, this.font, this.tipAt(mouseX, mouseY), mouseX, mouseY, this.width, this.height);
             }
         } catch (RuntimeException | LinkageError e) {
             if (!failureLogged) {
@@ -681,7 +685,7 @@ public final class EditorScreen extends Screen {
     private String pickShape() {
         EditorState.Pick pick = EditorState.pick;
         int which = System.identityHashCode(pick);
-        long now = net.minecraft.Util.getMillis();
+        long now = net.minecraft.util.Util.getMillis();
         if (which != this.pickNearFor || now - this.pickNearAt >= 800 || this.pickShape.isEmpty()) {
             this.pickNearFor = which;
             this.pickNearAt = now;
@@ -861,7 +865,7 @@ public final class EditorScreen extends Screen {
         return !EditorState.sideFolded || EditorState.pick != null;
     }
 
-    private void drawPanels(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawPanels(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         Font font = this.font;
         EditorLayout.Layout at = this.layout;
         EditorLayout.Rect bar = at.bar();
@@ -898,7 +902,7 @@ public final class EditorScreen extends Screen {
         this.timeline.draw(graphics, font, mouseX, mouseY);
     }
 
-    private void drawCard(GuiGraphics graphics, Font font, EditorLayout.Rect card, Component title, Gadget.Push fold, Form form, boolean folded,
+    private void drawCard(GuiGraphicsExtractor graphics, Font font, EditorLayout.Rect card, Component title, Gadget.Push fold, Form form, boolean folded,
                           int mouseX, int mouseY) {
         if (card.empty()) {
             return;
@@ -916,7 +920,7 @@ public final class EditorScreen extends Screen {
      * What a click in the view is wanted for, or the latest notice: in the middle of the bar when it fits there, so
      * that it covers none of the view, else on a strip of its own just under the bar.
      */
-    private void drawNotice(GuiGraphics graphics) {
+    private void drawNotice(GuiGraphicsExtractor graphics) {
         EditorState.Pick pick = EditorState.pick;
         Component words = pick != null ? Kit.t("pick.banner", pick.prompt()) : EditorState.notice();
         if (words == null) {
@@ -1016,10 +1020,13 @@ public final class EditorScreen extends Screen {
     // ------------------------------------------------------------------ The mouse
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (!this.usable()) {
             return true;
         }
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         EditorState.guard(() -> this.pressed(mouseX, mouseY, button));
         return true;
     }
@@ -1030,7 +1037,7 @@ public final class EditorScreen extends Screen {
             return;
         }
         if (this.hidden()) {
-            if (button == 1) {
+            if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
                 this.startFlying();
             }
             return;
@@ -1042,11 +1049,11 @@ public final class EditorScreen extends Screen {
             this.input.hold(this.pressPanels(mouseX, mouseY, button));
             return;
         }
-        if (button == 1) {
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
             this.startFlying();
-        } else if (button == 0 && EditorState.pick != null) {
+        } else if (button == InputConstants.MOUSE_BUTTON_LEFT && EditorState.pick != null) {
             this.pickAt(mouseX, mouseY);
-        } else if (button == 0) {
+        } else if (button == InputConstants.MOUSE_BUTTON_LEFT) {
             this.clickWorld(mouseX, mouseY);
         }
     }
@@ -1056,7 +1063,7 @@ public final class EditorScreen extends Screen {
         ViewPick.Ray ray = ViewPick.through(mouseX, mouseY, this.width, this.height);
         PathPreview.Mark mark = PathPreview.at(ray);
         if (mark != null) {
-            if (Screen.hasShiftDown() || Screen.hasControlDown()) {
+            if (Minecraft.getInstance().hasShiftDown() || Minecraft.getInstance().hasControlDown()) {
                 EditorState.selection.add(new KeyframeRef(mark.track(), mark.tick()));
             } else {
                 EditorState.select(mark.track(), mark.tick());
@@ -1126,8 +1133,11 @@ public final class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 1) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
             this.stopFlying();
         }
         Gadget was = this.input.letGo();
@@ -1136,7 +1146,7 @@ public final class EditorScreen extends Screen {
                 if (was != null) {
                     was.release(mouseX, mouseY);
                 }
-                if (button == 0) {
+                if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                     this.timeline.release(mouseX, mouseY);
                 }
             });
@@ -1145,11 +1155,14 @@ public final class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (this.flying) {
             return true;
         }
-        if (button == 0 && this.usable() && !this.hidden()) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && this.usable() && !this.hidden()) {
             EditorState.guard(() -> {
                 this.input.drag(mouseX, mouseY);
                 this.timeline.dragTo(mouseX, mouseY);
@@ -1201,9 +1214,12 @@ public final class EditorScreen extends Screen {
     // ------------------------------------------------------------------ The keys
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        int scanCode = event.keycode();
+        int modifiers = event.modifiers();
         if (!this.usable()) {
-            return keyCode != GLFW.GLFW_KEY_ESCAPE || this.escape();
+            return keyCode != InputConstants.KEY_ESCAPE || this.escape();
         }
         EditorState.guard(() -> this.key(keyCode, scanCode, modifiers));
         return true;
@@ -1231,55 +1247,55 @@ public final class EditorScreen extends Screen {
             if (!this.order().contains(Gadget.focus)) {
                 // Its panel was folded or built afresh
                 Gadget.focus = null;
-            } else if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            } else if (keyCode == InputConstants.KEY_ESCAPE) {
                 // The ring goes first; the next Escape means what it always meant
                 Gadget.focus = null;
                 return;
-            } else if (keyCode != GLFW.GLFW_KEY_TAB && Gadget.focus.key(keyCode, modifiers)) {
+            } else if (keyCode != InputConstants.KEY_TAB && Gadget.focus.key(keyCode, modifiers)) {
                 return;
             }
         }
-        if (keyCode == GLFW.GLFW_KEY_TAB && !this.flying && !this.hidden() && Menu.open == null && !Screen.hasControlDown()) {
+        if (keyCode == InputConstants.KEY_TAB && !this.flying && !this.hidden() && Menu.open == null && !Minecraft.getInstance().hasControlDown()) {
             this.moveFocus(Gadget.focus, back);
             return;
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             if (Menu.open != null) {
                 Menu.close();
             } else if (EditorState.pick != null) {
                 EditorState.pick = null;
             } else if (this.hidden()) {
-                this.minecraft.options.hideGui = false;
+                comedymonkey.dailies.ui.HudHidden.set(false);
                 Notices.setHidden(false);
             } else {
                 // Dailies' own menu, as Escape gives anywhere a recording is watched; it brings the editor back
-                this.minecraft.setScreen(new PlaybackMenu(true));
+                this.minecraft.gui.setScreen(new PlaybackMenu(true));
             }
             return;
         }
-        if (keyCode == GLFW.GLFW_KEY_F1) {
+        if (keyCode == InputConstants.KEY_F1) {
             // The game's own key for hiding its interface hides the editor with it
-            this.minecraft.options.hideGui = !this.minecraft.options.hideGui;
+            comedymonkey.dailies.ui.HudHidden.set(!comedymonkey.dailies.ui.HudHidden.get());
             Menu.close();
             return;
         }
         if (this.flying || this.hidden()) {
             return;
         }
-        boolean control = Screen.hasControlDown();
-        if (control && keyCode == GLFW.GLFW_KEY_Z) {
-            if (Screen.hasShiftDown()) {
+        boolean control = Minecraft.getInstance().hasControlDown();
+        if (control && keyCode == InputConstants.KEY_Z) {
+            if (Minecraft.getInstance().hasShiftDown()) {
                 EditorState.redo();
             } else {
                 EditorState.undo();
             }
-        } else if (control && keyCode == GLFW.GLFW_KEY_Y) {
+        } else if (control && keyCode == InputConstants.KEY_Y) {
             EditorState.redo();
-        } else if (control && keyCode == GLFW.GLFW_KEY_C) {
+        } else if (control && keyCode == InputConstants.KEY_C) {
             EditorState.copySelected();
-        } else if (control && keyCode == GLFW.GLFW_KEY_V) {
+        } else if (control && keyCode == InputConstants.KEY_V) {
             EditorState.pasteAtPlayhead();
-        } else if (control && keyCode == GLFW.GLFW_KEY_A) {
+        } else if (control && keyCode == InputConstants.KEY_A) {
             EditorState.selection.clear();
             Scene scene = EditorState.scene();
             for (int index = 0; index < scene.tracks().size(); index++) {
@@ -1287,11 +1303,11 @@ public final class EditorScreen extends Screen {
                     EditorState.selection.add(new KeyframeRef(index, keyframe.tick()));
                 }
             }
-        } else if (keyCode == GLFW.GLFW_KEY_DELETE || keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+        } else if (keyCode == InputConstants.KEY_DELETE || keyCode == InputConstants.KEY_BACKSPACE) {
             EditorState.removeSelected();
-        } else if (keyCode == GLFW.GLFW_KEY_HOME) {
+        } else if (keyCode == InputConstants.KEY_HOME) {
             Controls.jumpTo(0);
-        } else if (keyCode == GLFW.GLFW_KEY_END) {
+        } else if (keyCode == InputConstants.KEY_END) {
             Controls.jumpTo(Playback.total());
         } else if (control) {
             // Not ours, and not to be taken for a playback key
@@ -1346,10 +1362,10 @@ public final class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean charTyped(char character, int modifiers) {
+    public boolean charTyped(CharacterEvent event) {
         Entry typing = Entry.focused;
         if (typing != null && this.usable()) {
-            EditorState.guard(() -> typing.typed(character, modifiers));
+            EditorState.guard(() -> typing.typed(event.codepoint()));
         }
         return true;
     }
@@ -1373,7 +1389,7 @@ public final class EditorScreen extends Screen {
         this.cursorX = this.minecraft.mouseHandler.xpos();
         this.cursorY = this.minecraft.mouseHandler.ypos();
         // The pointer is hidden and held while the button is down, as it is in play, and put back where it was after
-        InputConstants.grabOrReleaseMouse(this.minecraft.getWindow().getWindow(), GLFW.GLFW_CURSOR_DISABLED, this.cursorX, this.cursorY);
+        InputConstants.grabMouse(this.minecraft.getWindow(), this.cursorX, this.cursorY);
     }
 
     private void stopFlying() {
@@ -1383,13 +1399,13 @@ public final class EditorScreen extends Screen {
         this.flying = false;
         this.velocity = Vec3.ZERO;
         Minecraft game = Minecraft.getInstance();
-        InputConstants.grabOrReleaseMouse(game.getWindow().getWindow(), GLFW.GLFW_CURSOR_NORMAL, this.cursorX, this.cursorY);
+        InputConstants.releaseMouse(game.getWindow(), this.cursorX, this.cursorY);
     }
 
     private boolean down(KeyMapping key) {
         InputConstants.Key bound = key.getKey();
-        return bound.getType() == InputConstants.Type.KEYSYM && bound.getValue() > 0
-                && InputConstants.isKeyDown(this.minecraft.getWindow().getWindow(), bound.getValue());
+        return bound.getType() == InputConstants.Type.KEYBOARD && bound.getValue() > 0
+                && InputConstants.isKeyDown(bound.getValue());
     }
 
     /**
@@ -1397,12 +1413,11 @@ public final class EditorScreen extends Screen {
      * view also turns it by what the mouse moves.
      */
     private void fly() {
-        long window = this.minecraft.getWindow().getWindow();
-        if (this.flying && (GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_RIGHT) != GLFW.GLFW_PRESS || !this.minecraft.isWindowActive() || Viewer.riding() != null)) {
+        if (this.flying && (!this.minecraft.mouseHandler.isRightPressed() || !this.minecraft.isWindowActive() || Viewer.riding() != null)) {
             this.stopFlying();
         }
         // While the keys act on a control (after Tab) the space bar presses it, and must not also lift the camera
-        boolean keys = this.flying || (Entry.focused == null && Menu.open == null && Gadget.focus == null && !Screen.hasControlDown() && !Screen.hasAltDown()
+        boolean keys = this.flying || (Entry.focused == null && Menu.open == null && Gadget.focus == null && !Minecraft.getInstance().hasControlDown() && !Minecraft.getInstance().hasAltDown()
             && Viewer.riding() == null && this.minecraft.isWindowActive());
         if (!keys) {
             this.velocity = Vec3.ZERO;
@@ -1417,7 +1432,7 @@ public final class EditorScreen extends Screen {
         double forward = (this.down(options.keyUp) ? 1 : 0) - (this.down(options.keyDown) ? 1 : 0);
         double strafe = (this.down(options.keyLeft) ? 1 : 0) - (this.down(options.keyRight) ? 1 : 0);
         // Shift is also held to choose several things with the mouse, which must not sink the camera
-        boolean choosing = !this.flying && GLFW.glfwGetMouseButton(window, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+        boolean choosing = !this.flying && this.minecraft.mouseHandler.isLeftPressed();
         double lift = (this.down(options.keyJump) ? 1 : 0) - (this.down(options.keyShift) && !choosing ? 1 : 0);
         boolean moving = forward != 0.0 || strafe != 0.0 || lift != 0.0;
         // How far the hidden pointer has moved since the last frame, in the mouse's own measure
@@ -1450,7 +1465,7 @@ public final class EditorScreen extends Screen {
         double sensitivity = options.sensitivity().get() * 0.6 + 0.2;
         double perPixel = sensitivity * sensitivity * sensitivity * 8.0 * 0.15;
         float yaw = Viewer.yaw() + (float) (turnX * perPixel);
-        float pitch = Mth.clamp(Viewer.pitch() + (float) (turnY * perPixel * (options.invertYMouse().get() ? -1.0 : 1.0)), -90.0F, 90.0F);
+        float pitch = Mth.clamp(Viewer.pitch() + (float) (turnY * perPixel * (options.invertMouseY().get() ? -1.0 : 1.0)), -90.0F, 90.0F);
 
         boolean lookRelative = EditorState.setting("flightLookRelative", false);
         Vec3 ahead = Vec3.directionFromRotation(lookRelative ? pitch : 0.0F, yaw);
@@ -1509,24 +1524,24 @@ public final class EditorScreen extends Screen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean hovered = this.over(mouseX, mouseY);
             Kit.face(graphics, this.x, this.y, this.width, this.height, hovered, this.lit.getAsBoolean(), true, hovered && Kit.mouseDown(), focus == this);
             // Turned a quarter of the way round, so the name reads from the top down
-            graphics.pose().pushPose();
+            graphics.pose().pushMatrix();
             try {
-                graphics.pose().translate(this.x + this.width / 2.0F + 4.0F, this.y + this.height / 2.0F, 0.0F);
-                graphics.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90.0F));
+                graphics.pose().translate(this.x + this.width / 2.0F + 4.0F, this.y + this.height / 2.0F);
+                graphics.pose().rotate((float) Math.toRadians(90.0));
                 String words = this.label.getString();
-                graphics.drawString(font, words, -font.width(words) / 2, 0, Controls.PARCHMENT, false);
+                graphics.text(font, words, -font.width(words) / 2, 0, Controls.PARCHMENT, false);
             } finally {
-                graphics.pose().popPose();
+                graphics.pose().popMatrix();
             }
         }
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             Kit.click();

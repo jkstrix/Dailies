@@ -79,7 +79,7 @@ public final class VoidSpill {
                 continue;
             }
             Entity entity = level == null ? null : level.getEntity(id);
-            if (entity != null && entity.getY() < level.getMinBuildHeight() - 64 && keeps(entity)) {
+            if (entity != null && entity.getY() < level.getMinY() - 64 && keeps(entity)) {
                 continue;
             }
             left.add(id);

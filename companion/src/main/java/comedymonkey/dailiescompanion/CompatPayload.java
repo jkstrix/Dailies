@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -23,7 +23,7 @@ public record CompatPayload(int kind, String id, int version, byte[] data) imple
 	public static final int ASK = 1;
 	public static final int MAX_ID = 128, MAX_DATA = 262144;
 
-	public static final Type<CompatPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(DailiesCompanion.MODID, "compat"));
+	public static final Type<CompatPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(DailiesCompanion.MODID, "compat"));
 	public static final StreamCodec<ByteBuf, CompatPayload> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, CompatPayload::kind,
 		ByteBufCodecs.stringUtf8(MAX_ID), CompatPayload::id, ByteBufCodecs.VAR_INT, CompatPayload::version,
 		ByteBufCodecs.byteArray(MAX_DATA), CompatPayload::data, CompatPayload::new);
@@ -40,14 +40,14 @@ public record CompatPayload(int kind, String id, int version, byte[] data) imple
 
 	static void register(RegisterPayloadHandlersEvent e) {
 		// optional: players without a recorder join as usual
+		// The server's handler, then the client's (NeoForge 26.3 takes them apart)
 		e.registrar("1").optional().playBidirectional(TYPE, CODEC, (p, ctx) -> {
-			if (ctx.flow().isServerbound()) {
-				if (p.kind() == ASK && ctx.player() instanceof ServerPlayer player)
-					ctx.enqueueWork(() -> CompanionPlugins.asked(player, p.id(), p.version()));
-			} else if (p.kind() == DATA) {
+			if (p.kind() == ASK && ctx.player() instanceof ServerPlayer player)
+				ctx.enqueueWork(() -> CompanionPlugins.asked(player, p.id(), p.version()));
+		}, (p, ctx) -> {
+			if (p.kind() == DATA)
 				// when this mod is in the player's game too (singleplayer, say): hand it on as a NeoForge event, on the client thread
 				ctx.enqueueWork(() -> NeoForge.EVENT_BUS.post(new CompatClientEvent(p.id(), p.version(), p.data())));
-			}
 		});
 	}
 }

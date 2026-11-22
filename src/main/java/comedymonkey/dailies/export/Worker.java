@@ -4,7 +4,7 @@ import comedymonkey.dailies.Host;
 import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
+import org.lwjgl.sdl.SDLVideo;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -60,7 +60,7 @@ public final class Worker {
         if (setUp) {
             return true;
         }
-        if (minecraft.getOverlay() != null || !minecraft.isGameLoadFinished()) {
+        if (minecraft.gui.overlay() != null || !minecraft.isGameLoadFinished()) {
             return false;
         }
         setUp = true;
@@ -69,11 +69,11 @@ public final class Worker {
             ownVolume = minecraft.options.getSoundSourceVolume(SoundSource.MASTER);
             mute(minecraft, true);
             String window = System.getProperty(WorkerLaunch.PROPERTY + ".window", "hidden").toLowerCase(Locale.ROOT);
-            long handle = minecraft.getWindow().getWindow();
+            long handle = minecraft.getWindow().handle();
             if (window.equals("minimised") || window.equals("minimized")) {
-                GLFW.glfwIconifyWindow(handle);
+                SDLVideo.SDL_MinimizeWindow(handle);
             } else if (!window.equals("shown")) {
-                GLFW.glfwHideWindow(handle);
+                SDLVideo.SDL_HideWindow(handle);
             }
             minecraft.getWindow().setTitle("Dailies: background export");
         } catch (Throwable t) {

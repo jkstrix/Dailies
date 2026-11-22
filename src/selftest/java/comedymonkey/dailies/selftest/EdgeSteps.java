@@ -120,9 +120,9 @@ final class EdgeSteps {
     private static void record(SelfTest test, Minecraft minecraft, Path recording) throws Exception {
         WorldSteps.createWorld(test, WORLD);
         Census.watch(OVERWORLD, 0, -12, -64, -12, 46, -55, 30);
-        c("gamerule sendCommandFeedback false");
-        c("gamerule doMobSpawning false");
-        c("gamerule doImmediateRespawn false");
+        c("gamerule send_command_feedback false");
+        c("gamerule spawn_mobs false");
+        c("gamerule immediate_respawn false");
         c("time set 1000");
         // Respawning at a known place, well away from where the recorder dies: respawned on the spot, they picked up all
         // they had dropped at once (the owner, watching, 18 November: "you keep dying on the spawn block")
@@ -215,9 +215,9 @@ final class EdgeSteps {
             .need(where("Target", "hit by a snowball", thing -> thing.clocks().contains("hurtTime=")))
             .need(where("Walker", "pelted by the snow golem", thing -> thing.clocks().contains("hurtTime=")))
             .note("snowballs fly as entities the server sends; a blaze is hurt by them, a zombie only knocked back, which shows as hurt");
-        c("summon minecraft:blaze 4.5 " + Y + " 12.5 {CustomName:'\"Target\"',NoAI:1b,PersistenceRequired:1b,Silent:1b}");
-        c("summon minecraft:snow_golem 18.5 " + Y + " 0.5 {CustomName:'\"Snowman\"',PersistenceRequired:1b}");
-        c("summon minecraft:zombie 18.5 " + Y + " 8.5 {CustomName:'\"Walker\"',NoAI:1b,PersistenceRequired:1b,Silent:1b}");
+        c("summon minecraft:blaze 4.5 " + Y + " 12.5 {CustomName:\"Target\",NoAI:1b,PersistenceRequired:1b,Silent:1b}");
+        c("summon minecraft:snow_golem 18.5 " + Y + " 0.5 {CustomName:\"Snowman\",PersistenceRequired:1b}");
+        c("summon minecraft:zombie 18.5 " + Y + " 8.5 {CustomName:\"Walker\",NoAI:1b,PersistenceRequired:1b,Silent:1b}");
         c("item replace entity @s weapon.mainhand with minecraft:snowball 16");
         // Looking at the blaze from six blocks, a little above it: snowballs drop as they fly
         c("tp @s 4.5 " + Y + " 6.5 0 -6");
@@ -247,7 +247,7 @@ final class EdgeSteps {
                 + " after dying, as other players see it; the respawn is shown a tick after the live game rebuilt its world");
         c("effect clear @s");
         c("gamemode survival");
-        c("gamerule keepInventory false");
+        c("gamerule keep_inventory false");
         fillInventory();
         waitTicks(5);
         sayRules(test, "the void");
@@ -255,7 +255,7 @@ final class EdgeSteps {
         int at = mark("the recorder falls out of the world");
         still("edges-void-falling", at + 10, 46.5, -80.0, 8.5, 40.5, -100.0, 2.5, false);
         try {
-            test.waitFor(() -> minecraft.screen instanceof DeathScreen, 30, "the recorder to die in the void");
+            test.waitFor(() -> minecraft.gui.screen() instanceof DeathScreen, 30, "the recorder to die in the void");
         } catch (Throwable never) {
             problems.add("the recorder did not die in the void within thirty seconds");
             c("gamemode creative");
@@ -265,9 +265,9 @@ final class EdgeSteps {
         waitTicks(30);
         test.onClientRun(() -> {
             minecraft.player.respawn();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
-        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn");
+        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.gui.screen() == null, 30, "the respawn");
         waitTicks(10);
         checkEmptied(test, minecraft, "dying in the void");
         at = mark("the recorder respawned");
@@ -303,7 +303,7 @@ final class EdgeSteps {
     /** What the server holds of the rule and the game mode that decide whether a death spills what is carried, for the log */
     private static void sayRules(SelfTest test, String before) throws Exception {
         BestiarySteps.server("the rules before " + before, (level, player) -> test.log("edges: before " + before + " keepInventory is "
-            + level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY) + ", the recorder is in "
+            + level.getGameRules().get(net.minecraft.world.level.gamerules.GameRules.KEEP_INVENTORY) + ", the recorder is in "
             + ((net.minecraft.server.level.ServerPlayer) player).gameMode.getGameModeForPlayer() + " carrying " + (36 - countEmpty(((net.minecraft.server.level.ServerPlayer) player).getInventory())) + " stacks"));
     }
 
@@ -356,7 +356,7 @@ final class EdgeSteps {
         c(String.format(java.util.Locale.ROOT, "tp @s %.1f %d %.1f 0 60", landX, Y + 60, landZ));
         int at = mark("the recorder falls sixty blocks");
         try {
-            test.waitFor(() -> minecraft.screen instanceof DeathScreen, 20, "the recorder to die from the fall");
+            test.waitFor(() -> minecraft.gui.screen() instanceof DeathScreen, 20, "the recorder to die from the fall");
         } catch (Throwable never) {
             problems.add("the recorder did not die from a sixty block fall");
             c("gamemode creative");
@@ -367,9 +367,9 @@ final class EdgeSteps {
         waitTicks(40);
         test.onClientRun(() -> {
             minecraft.player.respawn();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
-        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.screen == null, 30, "the respawn after the fall");
+        test.waitFor(() -> minecraft.player != null && minecraft.player.isAlive() && minecraft.gui.screen() == null, 30, "the respawn after the fall");
         waitTicks(10);
         checkEmptied(test, minecraft, "the sixty block fall");
         waitTicks(30);

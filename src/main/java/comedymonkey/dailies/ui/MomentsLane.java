@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.mcp.tools.MomentsTools;
 import comedymonkey.dailies.moments.Moments;
@@ -13,7 +14,7 @@ import comedymonkey.dailies.moments.MomentsTimeline.Timeline;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -268,7 +269,7 @@ public final class MomentsLane {
     }
 
     /** Draws the rows; the caller has already clipped drawing to the lanes */
-    static void draw(GuiGraphics graphics, Font font, Place place, int laneRight, int mouseX, int mouseY) {
+    static void draw(GuiGraphicsExtractor graphics, Font font, Place place, int laneRight, int mouseX, int mouseY) {
         Timeline now = timeline();
         int height = height();
         if (height <= 0) {
@@ -336,14 +337,14 @@ public final class MomentsLane {
                 int half = clusterHalfWidth(font, cluster);
                 // A dark plate with the number in the colour of its best mark: a number on a bright plate does not read
                 graphics.fill(x - half, place.top(), x + half + 1, place.top() + MARKS, Controls.FIELD);
-                graphics.renderOutline(x - half, place.top(), half * 2 + 1, MARKS, lit ? Controls.PARCHMENT : colour);
+                graphics.outline(x - half, place.top(), half * 2 + 1, MARKS, lit ? Controls.PARCHMENT : colour);
                 Kit.text(graphics, font, count, x - half + 4, place.top() + 2, colour);
             }
         }
     }
 
     /** The names of the rows, in the column the track names stand in */
-    static void drawColumn(GuiGraphics graphics, Font font, Place place, int columnRight, int mouseX, int mouseY) {
+    static void drawColumn(GuiGraphicsExtractor graphics, Font font, Place place, int columnRight, int mouseX, int mouseY) {
         Timeline now = timeline();
         int height = height();
         if (height <= 0) {
@@ -390,7 +391,7 @@ public final class MomentsLane {
     static void press(Font font, Place place, double mouseX, double mouseY, int button) {
         Timeline now = timeline();
         if (mouseX < place.laneLeft()) {
-            if (button == 0 && overFold(place, mouseX, mouseY)) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT && overFold(place, mouseX, mouseY)) {
                 Kit.click();
                 folded = !folded;
             }
@@ -398,7 +399,7 @@ public final class MomentsLane {
         }
         Cluster cluster = clusterAt(font, now, place, mouseX, mouseY);
         if (cluster != null) {
-            if (button == 0) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                 Kit.click();
                 Controls.jumpTo(cluster.marks().get(0).tick());
             }
@@ -406,10 +407,10 @@ public final class MomentsLane {
         }
         Band band = bandAt(now, place, mouseX, mouseY);
         if (band != null) {
-            if (button == 0) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                 Kit.click();
                 chooseBand(band);
-            } else if (button == 1) {
+            } else if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
                 List<Menu.Item> items = new ArrayList<>();
                 items.add(new Menu.Item(Kit.t("moments.band.scene"), () -> makeScene(band)));
                 items.add(new Menu.Item(Kit.t("moments.band.range"), () -> chooseBand(band)));
@@ -419,7 +420,7 @@ public final class MomentsLane {
             return;
         }
         Said said = talkAt(now, place, mouseX, mouseY);
-        if (said != null && button == 0) {
+        if (said != null && button == InputConstants.MOUSE_BUTTON_LEFT) {
             Kit.click();
             Controls.jumpTo(said.talk().start());
         }

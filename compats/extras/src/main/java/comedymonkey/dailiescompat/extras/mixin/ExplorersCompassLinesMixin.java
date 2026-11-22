@@ -2,7 +2,7 @@ package comedymonkey.dailiescompat.extras.mixin;
 
 import comedymonkey.dailiescompat.extras.client.ExtrasMarks;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,12 +19,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ExplorersCompassLinesMixin {
 
     @Inject(method = "drawStringLeft", at = @At("HEAD"), remap = false, require = 0)
-    private static void dailiesExtras$noteLeft(GuiGraphics graphics, String text, Font font, int x, int y, int colour, CallbackInfo ci) {
+    private static void dailiesExtras$noteLeft(GuiGraphicsExtractor graphics, String text, Font font, int x, int y, int colour, CallbackInfo ci) {
         ExtrasMarks.compassLine(ExtrasMarks.EXPLORERS, text, x, y, colour, false);
     }
 
     @Inject(method = "drawStringRight", at = @At("HEAD"), remap = false, require = 0)
-    private static void dailiesExtras$noteRight(GuiGraphics graphics, String text, Font font, int x, int y, int colour, CallbackInfo ci) {
+    private static void dailiesExtras$noteRight(GuiGraphicsExtractor graphics, String text, Font font, int x, int y, int colour, CallbackInfo ci) {
         ExtrasMarks.compassLine(ExtrasMarks.EXPLORERS, text, x, y, colour, true);
     }
 

@@ -61,16 +61,6 @@ class ExtrasStatesTest {
     }
 
     @Test
-    void aNautilusKeepsWhichOneItsSizeAndItsItems() {
-        ExtrasStates.Nautilus nautilus = new ExtrasStates.Nautilus(4711, 1, new ExtrasStates.Items(new byte[]{10, 0, 0, 0}));
-        ExtrasStates.Nautilus read = ExtrasStates.readNautilus(ExtrasStates.nautilus(nautilus));
-        assertEquals(nautilus, read);
-        assertEquals(4711, read.entity());
-        assertEquals(1, read.size());
-        assertArrayEquals(ExtrasStates.nautilus(nautilus), ExtrasStates.nautilus(read));
-    }
-
-    @Test
     void theWindowsExtrasComeBackAsTheyWere() {
         ExtrasStates.Curios curios = new ExtrasStates.Curios(2, true);
         assertEquals(curios, ExtrasStates.readCurios(ExtrasStates.curios(curios)));

@@ -23,7 +23,7 @@ public final class Previews {
         Minecraft minecraft = Minecraft.getInstance();
         return new NameScreen(Component.translatable("dailies.ui.finish.title"), Component.translatable("dailies.ui.finish.explanation"),
                 "2026-11-17 05.53.38", Component.translatable("dailies.ui.finish.save"), Component.translatable("dailies.ui.finish.keep_recording"),
-                name -> minecraft.setScreen(null), () -> minecraft.setScreen(null));
+                name -> minecraft.gui.setScreen(null), () -> minecraft.gui.setScreen(null));
     }
 
     /** The offer to recover unfinished recordings, as it looks for two of them. Its buttons are not to be pressed */
@@ -34,7 +34,7 @@ public final class Previews {
     /** The question asked before a recording is deleted, with nothing behind its buttons */
     public static Screen ask() {
         Minecraft minecraft = Minecraft.getInstance();
-        return new AskScreen(yes -> minecraft.setScreen(null), Component.translatable("dailies.ui.delete.title"),
+        return new AskScreen(yes -> minecraft.gui.setScreen(null), Component.translatable("dailies.ui.delete.title"),
                 Component.translatable("dailies.ui.delete.question", "A walk round the fire"), Component.translatable("dailies.ui.delete.yes"),
                 Component.translatable("dailies.ui.delete.no"));
     }
@@ -42,12 +42,12 @@ public final class Previews {
     /** Has a Dailies screen draw as though the mouse were at this place, explanation included; -1 gives the mouse back */
     /** Whether the question with two answers is what is on screen */
     public static boolean asking() {
-        return Minecraft.getInstance().screen instanceof AskScreen;
+        return Minecraft.getInstance().gui.screen() instanceof AskScreen;
     }
 
     /** Answers the question on screen, as pressing one of its two buttons would */
     public static void answerAsk(boolean yes) {
-        if (Minecraft.getInstance().screen instanceof AskScreen ask) {
+        if (Minecraft.getInstance().gui.screen() instanceof AskScreen ask) {
             ask.answer(yes);
         } else {
             throw new IllegalStateException("no question is on screen");
@@ -76,17 +76,17 @@ public final class Previews {
 
     /** Opens the editor's "..." menu as a click on it would; whether it opened */
     public static boolean editorMore() {
-        return Minecraft.getInstance().screen instanceof EditorScreen editor && editor.openMore();
+        return Minecraft.getInstance().gui.screen() instanceof EditorScreen editor && editor.openMore();
     }
 
     /** What is wrong with the editor's layout as it stands, in words: overlaps, parts off the screen, controls with no room */
     public static List<String> editorLayoutProblems() {
-        return Minecraft.getInstance().screen instanceof EditorScreen editor ? editor.layoutProblems() : List.of("the editor is not on screen");
+        return Minecraft.getInstance().gui.screen() instanceof EditorScreen editor ? editor.layoutProblems() : List.of("the editor is not on screen");
     }
 
     /** The share of the window the editor's view has, or -1 when the editor is not on screen */
     public static double editorViewShare() {
-        return Minecraft.getInstance().screen instanceof EditorScreen editor ? editor.viewShare() : -1.0;
+        return Minecraft.getInstance().gui.screen() instanceof EditorScreen editor ? editor.viewShare() : -1.0;
     }
 
     /** The kind of control the keys act on in a Dailies screen, or "" when none has the ring */
@@ -110,7 +110,7 @@ public final class Previews {
      * @return whether there was one to open
      */
     public static boolean editorDropdown(int which) {
-        Screen screen = Minecraft.getInstance().screen;
+        Screen screen = Minecraft.getInstance().gui.screen();
         if (!(screen instanceof EditorScreen)) {
             return false;
         }
@@ -136,7 +136,7 @@ public final class Previews {
 
     /** What a dropdown of the editor's side panel shows while closed: the choice in force. Empty when there is no such dropdown */
     public static String editorDropdownShows(int which) {
-        Screen screen = Minecraft.getInstance().screen;
+        Screen screen = Minecraft.getInstance().gui.screen();
         if (!(screen instanceof EditorScreen)) {
             return "";
         }

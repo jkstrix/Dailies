@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.editor.EditorSession;
@@ -14,10 +15,10 @@ import comedymonkey.dailies.export.ExportPresets;
 import comedymonkey.dailies.export.NamePattern;
 import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -708,7 +709,7 @@ final class ExportForms {
         }
         Controls.offThread(() -> {
             Files.createDirectories(target);
-            Util.getPlatform().openPath(target);
+            Blaze3D.openPath(target);
         }, Kit.t("export.folder_failed"), () -> {
         });
     }
@@ -1102,7 +1103,7 @@ final class ExportForms {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             this.row.draw(graphics, font, mouseX, mouseY);
         }
 

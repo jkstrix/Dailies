@@ -86,9 +86,15 @@ final class Session {
         // Every mod message this game can read is accepted, as if a server with the same mods had agreed to it
         NetworkRegistry.configureMockConnection(connection);
 
-        ClientPacketListener listener = new ClientPacketListener(minecraft, connection, new CommonListenerCookie(VIEWER,
-            minecraft.getTelemetryManager().createWorldSessionManager(false, null, null), registries, FeatureFlags.REGISTRY.fromNames(data.features),
-            "dailies", null, null, Map.of(), null, false, Map.of(), ServerLinks.EMPTY, data.connectionType));
+        ClientPacketListener listener;
+        Playback.creatingSession = true;
+        try {
+            listener = new ClientPacketListener(minecraft, connection, new CommonListenerCookie(new net.minecraft.client.multiplayer.LevelLoadTracker(), VIEWER,
+            minecraft.getTelemetryManager().createWorldSessionManager(false, null, null, java.util.UUID.randomUUID()), registries, FeatureFlags.REGISTRY.fromNames(data.features),
+            "dailies", null, null, Map.of(), null, Map.of(), ServerLinks.EMPTY, Map.of(), false, data.connectionType));
+        } finally {
+            Playback.creatingSession = false;
+        }
         ((ConnectionAccess) connection).dailies$setPacketListener(listener);
         return new Session(connection, listener, new GameCodec(registries, data.connectionType), worldName, channel);
     }
@@ -98,13 +104,7 @@ final class Session {
         data.registries.forEach((location, entries) -> collector.appendContents(WorldData.registryKey(location), entries));
         Map<ResourceKey<? extends Registry<?>>, TagNetworkSerialization.NetworkPayload> tags = new HashMap<>();
         data.tags.forEach((location, members) -> {
-            FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
-            try {
-                buffer.writeMap(members, FriendlyByteBuf::writeResourceLocation, FriendlyByteBuf::writeIntIdList);
-                tags.put(WorldData.registryKey(location), TagNetworkSerialization.NetworkPayload.read(buffer));
-            } finally {
-                buffer.release();
-            }
+            tags.put(WorldData.registryKey(location), new TagNetworkSerialization.NetworkPayload(new HashMap<>(members)));
         });
         collector.appendTags(tags);
         return collector.collectGameRegistries(location -> Optional.empty(), RegistryAccess.EMPTY, false);

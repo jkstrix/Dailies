@@ -3,7 +3,7 @@ package comedymonkey.dailiescompat.extras.client;
 import comedymonkey.dailies.api.compat.OverlayPart;
 import comedymonkey.dailies.api.compat.ScreenPart;
 import comedymonkey.dailies.api.compat.WindowExtras;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import org.jetbrains.annotations.Nullable;
@@ -24,7 +24,7 @@ final class Parts {
     }
 
     static ScreenPart screen(Function<Screen, byte @Nullable []> capture, Function<byte[], @Nullable Screen> build, int ticks) {
-        return screen(capture, build, ticks, screen -> screen instanceof AbstractContainerScreen<?> container ? new int[]{container.getGuiLeft(), container.getGuiTop()} : null);
+        return screen(capture, build, ticks, screen -> screen instanceof AbstractContainerScreen<?> container ? new int[]{container.getLeftPos(), container.getTopPos()} : null);
     }
 
     static ScreenPart screen(Function<Screen, byte @Nullable []> capture, Function<byte[], @Nullable Screen> build, int ticks, Corner corner) {
@@ -53,7 +53,7 @@ final class Parts {
 
     /** An overlay drawn with the moment between ticks */
     interface Draw {
-        void draw(GuiGraphics graphics, byte[] state, float partialTick);
+        void draw(GuiGraphicsExtractor graphics, byte[] state, float partialTick);
     }
 
     static OverlayPart overlay(Supplier<byte @Nullable []> capture, Draw draw, int ticks) {
@@ -64,7 +64,7 @@ final class Parts {
             }
 
             @Override
-            public void draw(GuiGraphics graphics, byte[] state, int version, float partialTick) {
+            public void draw(GuiGraphicsExtractor graphics, byte[] state, int version, float partialTick) {
                 draw.draw(graphics, state, partialTick);
             }
 

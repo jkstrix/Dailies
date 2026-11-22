@@ -23,7 +23,7 @@ public abstract class ServerPackManagerMixin {
 
     @Shadow
     @Final
-    List<ServerPackManager.ServerPackData> packs;
+    private List<ServerPackManager.ServerPackData> packs;
 
     @Shadow
     private ServerPackManager.PackPromptStatus packPromptStatus;

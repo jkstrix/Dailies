@@ -5,7 +5,7 @@ import comedymonkey.dailies.compat.sable.SableCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
@@ -80,7 +80,7 @@ final class CraftSteps {
     static void build(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         // Mobs that stay where they are put but still fall and can be carried: no walking speed, gravity left on
-        String still = "attributes:[{id:\"minecraft:generic.movement_speed\",base:0.0}],PersistenceRequired:1b,Silent:1b";
+        String still = "attributes:[{id:\"minecraft:movement_speed\",base:0.0}],PersistenceRequired:1b,Silent:1b";
         if (Host.get().isModLoaded("create")) {
             // An arm of planks with a seat on it, a mob sitting in the seat and another standing on the arm, then a motor
             // and a bearing under it. The bearing assembles by itself once it turns; it is placed last so everything is aboard
@@ -90,8 +90,8 @@ final class CraftSteps {
             test.command("setblock 17 -58 -6 minecraft:oak_planks");
             test.command("setblock 16 -57 -6 create:white_seat");
             test.command("setblock 15 -57 -6 create:red_seat");
-            test.command("summon minecraft:pig 16.5 -56.2 -5.5 {CustomName:'\"Rider\"'," + still + "}");
-            test.command("summon minecraft:pig 17.5 -57 -5.5 {CustomName:'\"Stander\"'," + still + "}");
+            test.command("summon minecraft:pig 16.5 -56.2 -5.5 {CustomName:\"Rider\"," + still + "}");
+            test.command("summon minecraft:pig 17.5 -57 -5.5 {CustomName:\"Stander\"," + still + "}");
             // Blocks only travel with a bearing when they are glued to what it carries
             test.command("create glue 14 -58 -6 17 -57 -6");
             test.waitTicks(25);
@@ -156,9 +156,9 @@ final class CraftSteps {
             // A slab of stone in the air, made into a physics object. It falls, which is the motion to record. Aboard: the
             // recorder standing loose (MOD-4), a mob standing loose, and a mob sitting in a boat
             test.command("fill 20 -50 -8 23 -50 -5 minecraft:stone");
-            test.command("summon minecraft:pig 20.5 -49 -5.5 {CustomName:'\"Deckhand\"'," + still + "}");
+            test.command("summon minecraft:pig 20.5 -49 -5.5 {CustomName:\"Deckhand\"," + still + "}");
             test.command("setblock 22 -49 -8 create:white_seat");
-            test.command("summon minecraft:pig 22.5 -48.2 -7.5 {CustomName:'\"Sailor\"'," + still + "}");
+            test.command("summon minecraft:pig 22.5 -48.2 -7.5 {CustomName:\"Sailor\"," + still + "}");
             test.command("create glue 20 -50 -8 23 -49 -5");
             test.command("tp @s 21.5 -49 -6.5");
             test.waitTicks(25);
@@ -253,10 +253,10 @@ final class CraftSteps {
      *                    want and the camera route, which films the flight as it is, does not
      */
     private static void buildBalloon(SelfTest test, Minecraft minecraft, BlockPos origin, boolean goBack, boolean speedRecord) throws Exception {
-        ResourceLocation name = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope");
+        Identifier name = Identifier.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope");
         ServerLevel level = minecraft.getSingleplayerServer().overworld();
         // The structure is one of the mod's own demonstration scenes, which live with its client resources
-        ResourceLocation file = ResourceLocation.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope.nbt");
+        Identifier file = Identifier.fromNamespaceAndPath("aeronautics", "ponder/hot_air/envelope.nbt");
         Optional<net.minecraft.server.packs.resources.Resource> resource = minecraft.getResourceManager().getResource(file);
         if (resource.isEmpty()) {
             test.skip("the balloon structure " + file + " is not in this version of Aeronautics: no balloon was built");
@@ -269,8 +269,8 @@ final class CraftSteps {
         StructureTemplate template = new StructureTemplate();
         BlockPos size = minecraft.getSingleplayerServer().submit(() -> {
             template.load(level.holderLookup(net.minecraft.core.registries.Registries.BLOCK), tag);
-            template.placeInWorld(level, origin, origin, new net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings(), level.random, 2);
-            return new BlockPos(template.getSize());
+            template.placeInWorld(level, origin, origin, new net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings(), level.getRandom(), 2);
+            return new BlockPos(template.getSize().getX(), template.getSize().getY(), template.getSize().getZ());
         }).get();
         test.waitTicks(10);
         BlockPos burner = minecraft.getSingleplayerServer().submit(() -> {
@@ -298,10 +298,10 @@ final class CraftSteps {
         BlockPos power = burner.below();
         test.command("setblock " + power.getX() + " " + power.getY() + " " + power.getZ() + " minecraft:redstone_block");
         // Aboard: a mob sitting in the basket's seat and one standing on its floor
-        String still = "attributes:[{id:\"minecraft:generic.movement_speed\",base:0.0}],PersistenceRequired:1b,Silent:1b";
+        String still = "attributes:[{id:\"minecraft:movement_speed\",base:0.0}],PersistenceRequired:1b,Silent:1b";
         BlockPos seat = origin.offset(2, 2, 4);
-        test.command("summon minecraft:pig " + (seat.getX() + 0.5) + " " + (seat.getY() + 0.8) + " " + (seat.getZ() + 0.5) + " {CustomName:'\"Aeronaut\"'," + still + "}");
-        test.command("summon minecraft:pig " + (origin.getX() + 5.5) + " " + (origin.getY() + 2) + " " + (origin.getZ() + 5.5) + " {CustomName:'\"Ballast\"'," + still + "}");
+        test.command("summon minecraft:pig " + (seat.getX() + 0.5) + " " + (seat.getY() + 0.8) + " " + (seat.getZ() + 0.5) + " {CustomName:\"Aeronaut\"," + still + "}");
+        test.command("summon minecraft:pig " + (origin.getX() + 5.5) + " " + (origin.getY() + 2) + " " + (origin.getZ() + 5.5) + " {CustomName:\"Ballast\"," + still + "}");
         test.waitTicks(25);
         boolean aeronautSeated = seated(test, minecraft, "Aeronaut");
         if (!aeronautSeated) {
@@ -776,7 +776,7 @@ final class CraftSteps {
     }
 
     private static boolean isContraption(Entity entity) {
-        ResourceLocation type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        Identifier type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return type.getNamespace().equals("create") && type.getPath().contains("contraption");
     }
 

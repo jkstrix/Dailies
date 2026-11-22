@@ -1,8 +1,10 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.TextInputManager;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -110,9 +112,27 @@ final class InputRouter {
 
     // ------------------------------------------------------------------ The keys
 
+    /**
+     * Letters only reach a screen while the game's text input is on, which the game turns on for a box of its own that
+     * has the keys. A Dailies screen also takes letters with no box being typed into (a menu narrows its list as letters
+     * are typed, a list starts a search), so the screen asks for text input itself while it wants letters. A box being
+     * typed into turns it on and off by itself. Once a frame
+     */
+    static void textInput(Object screen, boolean wanted) {
+        if (Entry.typing()) {
+            return;
+        }
+        TextInputManager input = Minecraft.getInstance().textInputManager();
+        if (wanted) {
+            input.startTextInput(screen);
+        } else {
+            input.stopTextInput(screen);
+        }
+    }
+
     /** Whether Shift was held, which sends Tab the other way */
     static boolean back(int modifiers) {
-        return (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        return (modifiers & InputConstants.MOD_SHIFT) != 0;
     }
 
     /**
@@ -122,7 +142,7 @@ final class InputRouter {
      */
     static boolean typeKey(Entry box, int keyCode, int scanCode, int modifiers) {
         box.key(keyCode, scanCode, modifiers);
-        return keyCode == GLFW.GLFW_KEY_TAB && Entry.focused == null;
+        return keyCode == InputConstants.KEY_TAB && Entry.focused == null;
     }
 
     /**

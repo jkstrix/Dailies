@@ -1,5 +1,7 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.library.Bin;
@@ -8,14 +10,13 @@ import comedymonkey.dailies.library.Library;
 import comedymonkey.dailies.library.LibraryIndex;
 import comedymonkey.dailies.library.LibraryQuery;
 import comedymonkey.dailies.library.StorageReport;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -280,7 +281,7 @@ public final class RecordingsScreen extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         LibraryView now = this.current();
         this.heading(graphics, font, now.count());
         // A thin line between the list and the pane beside it
@@ -400,7 +401,7 @@ public final class RecordingsScreen extends KitScreen {
         Controls.offThread(() -> {
             Path where = this.current().folder();
             Files.createDirectories(where);
-            Util.getPlatform().openPath(where);
+            Blaze3D.openPath(where);
         }, t("folder_failed"), () -> {
         });
     }
@@ -424,8 +425,8 @@ public final class RecordingsScreen extends KitScreen {
     }
 
     @Override
-    void typedElsewhere(char character, int modifiers) {
-        this.current().typed(character, modifiers);
+    void typedElsewhere(int codepoint) {
+        this.current().typed(codepoint);
     }
 
     static String nameOf(LibraryIndex.Entry entry) {
@@ -511,7 +512,7 @@ public final class RecordingsScreen extends KitScreen {
         if (!button.usable.getAsBoolean()) {
             return false;
         }
-        button.key(GLFW.GLFW_KEY_ENTER, 0);
+        button.key(InputConstants.KEY_RETURN, 0);
         return true;
     }
 

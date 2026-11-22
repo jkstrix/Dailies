@@ -130,28 +130,6 @@ public final class ExtrasStates {
         return read(data, in -> new Backpack(in.text(), new Items(in.bytes()), in.in.readInt(), in.in.readFloat(), in.text()));
     }
 
-    // --- VanillaBackport's nautilus ---
-
-    /** A nautilus' inventory: the nautilus by its id in the world, how many slots its own container has, and the window's items as saved */
-    public record Nautilus(int entity, int size, Items items) {
-
-        public Nautilus {
-            Objects.requireNonNull(items);
-        }
-    }
-
-    public static byte[] nautilus(Nautilus state) {
-        return write(out -> {
-            out.out.writeInt(state.entity());
-            out.out.writeInt(state.size());
-            out.bytes(state.items().saved());
-        });
-    }
-
-    public static Nautilus readNautilus(byte[] data) {
-        return read(data, in -> new Nautilus(in.in.readInt(), in.in.readInt(), new Items(in.bytes())));
-    }
-
     // --- Extras for windows Dailies draws itself ---
 
     /** The Curios window: the page of slots shown, and whether its cosmetic slots are shown in place of the others */

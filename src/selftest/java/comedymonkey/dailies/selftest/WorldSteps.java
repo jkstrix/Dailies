@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -22,7 +22,28 @@ final class WorldSteps {
 
     static final String WORLD = "Dailies Test";
 
+    /**
+     * The rules the next world made here starts with, or null for the game's defaults. A new world no longer takes its
+     * rules with its settings, so they are set as its server is about to start, before any of it has ticked
+     */
+    private static volatile java.util.function.Consumer<GameRules> startingRules;
+    private static boolean listening;
+
     private WorldSteps() {
+    }
+
+    private static void startWith(java.util.function.Consumer<GameRules> rules) {
+        startingRules = rules;
+        if (!listening) {
+            listening = true;
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerAboutToStartEvent event) -> {
+                java.util.function.Consumer<GameRules> set = startingRules;
+                startingRules = null;
+                if (set != null) {
+                    set.accept(event.getServer().getGameRules());
+                }
+            });
+        }
     }
 
     static void createWorld(SelfTest test) throws Exception {
@@ -38,15 +59,16 @@ final class WorldSteps {
         deleteTree(saved);
 
         test.onClientRun(() -> {
-            GameRules rules = new GameRules();
-            rules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, null);
-            rules.getRule(GameRules.RULE_DAYLIGHT).set(false, null);
-            rules.getRule(GameRules.RULE_WEATHER_CYCLE).set(false, null);
-            LevelSettings settings = new LevelSettings(name, GameType.CREATIVE, false, Difficulty.NORMAL, true, rules, WorldDataConfiguration.DEFAULT);
+            startWith(rules -> {
+                rules.set(GameRules.SPAWN_MOBS, false, null);
+                rules.set(GameRules.ADVANCE_TIME, false, null);
+                rules.set(GameRules.ADVANCE_WEATHER, false, null);
+            });
+            LevelSettings settings = new LevelSettings(name, GameType.CREATIVE, new LevelSettings.DifficultySettings(Difficulty.NORMAL, false, false), true, WorldDataConfiguration.DEFAULT);
             minecraft.createWorldOpenFlows().createFreshLevel(name, settings, new WorldOptions(20261117L, false, false),
-                registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).createWorldDimensions(), new TitleScreen());
+                registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.FLAT).value().createWorldDimensions(), new TitleScreen());
         });
-        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
+        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.gui.screen() == null,
             120, "the test world to open");
         // Let the first chunks arrive and the player settle on the ground
         test.waitTicks(60);
@@ -65,11 +87,12 @@ final class WorldSteps {
         Minecraft minecraft = Minecraft.getInstance();
         deleteTree(minecraft.gameDirectory.toPath().resolve("saves").resolve(name));
         test.onClientRun(() -> {
-            LevelSettings settings = new LevelSettings(name, GameType.CREATIVE, false, Difficulty.NORMAL, true, new GameRules(), WorldDataConfiguration.DEFAULT);
+            startWith(null);
+            LevelSettings settings = new LevelSettings(name, GameType.CREATIVE, new LevelSettings.DifficultySettings(Difficulty.NORMAL, false, false), true, WorldDataConfiguration.DEFAULT);
             minecraft.createWorldOpenFlows().createFreshLevel(name, settings, new WorldOptions(seed, true, false),
-                registries -> registries.registryOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.NORMAL).createWorldDimensions(), new TitleScreen());
+                registries -> registries.lookupOrThrow(Registries.WORLD_PRESET).getOrThrow(WorldPresets.NORMAL).value().createWorldDimensions(), new TitleScreen());
         });
-        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.screen == null,
+        test.waitFor(() -> minecraft.level != null && minecraft.player != null && minecraft.getSingleplayerServer() != null && minecraft.gui.screen() == null,
             300, "the generated test world to open");
         test.waitTicks(60);
         test.log("generated test world ready");
@@ -79,9 +102,9 @@ final class WorldSteps {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
             if (minecraft.level != null) {
-                minecraft.level.disconnect();
-                minecraft.disconnect();
-                minecraft.setScreen(new TitleScreen());
+                minecraft.level.disconnect(net.minecraft.client.multiplayer.ClientLevel.DEFAULT_QUIT_MESSAGE);
+                minecraft.disconnectWithProgressScreen();
+                minecraft.gui.setScreen(new TitleScreen());
             }
         });
         test.waitFor(() -> minecraft.level == null && !minecraft.isLocalServer(), 60, "the world to close");

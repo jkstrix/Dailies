@@ -6,9 +6,9 @@ import comedymonkey.dailies.capture.Recorder;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 
 /**
@@ -43,7 +43,7 @@ public final class Notices {
     }
 
     public static void register(RegisterGuiLayersEvent event) {
-        event.registerAboveAll(ResourceLocation.fromNamespaceAndPath(Dailies.ID, "notices"), Notices::draw);
+        event.registerAboveAll(Identifier.fromNamespaceAndPath(Dailies.ID, "notices"), Notices::draw);
     }
 
     /** Whether the person has asked for everything of Dailies to be kept off the screen ("/dailies hide") */
@@ -62,9 +62,9 @@ public final class Notices {
         since = System.currentTimeMillis();
     }
 
-    private static void draw(GuiGraphics graphics, DeltaTracker delta) {
+    private static void draw(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (hidden || minecraft.options.hideGui || comedymonkey.dailies.export.Export.active()) {
+        if (hidden || comedymonkey.dailies.ui.HudHidden.get() || comedymonkey.dailies.export.Export.active()) {
             // Nothing of Dailies' own may end up in an exported picture
             return;
         }
@@ -83,33 +83,32 @@ public final class Notices {
             int y = at[1];
             Kit.shadow(graphics, x, y, x + width, y + PLATE_HEIGHT, 3);
             graphics.fill(x, y, x + width, y + PLATE_HEIGHT, Controls.PLATE);
-            graphics.renderOutline(x, y, width, PLATE_HEIGHT, Controls.BRASS);
+            graphics.outline(x, y, width, PLATE_HEIGHT, Controls.BRASS);
             boolean lit = state == Recorder.State.RECORDING && (System.currentTimeMillis() / 600) % 2 == 0;
             int lamp = state == Recorder.State.PAUSED ? 0xFF8A7A5A : lit ? 0xFFE0483A : 0xFF7A2A22;
             graphics.fill(x + 5, y + 4, x + 9, y + 10, lamp);
             graphics.fill(x + 4, y + 5, x + 10, y + 9, lamp);
             if (!lampOnly) {
-                graphics.drawString(font, time, x + 14, y + 3, Controls.PARCHMENT, false);
+                graphics.text(font, time, x + 14, y + 3, Controls.PARCHMENT, false);
             }
         }
-        if (!(minecraft.screen instanceof KitScreen)) {
+        if (!(minecraft.gui.screen() instanceof KitScreen)) {
             // A Dailies screen draws the notice itself, over its plate and sharp, where this one would be blurred behind it
             drawNotice(graphics, font);
         }
     }
 
     /** The notice, drawn over a screen: the layer it usually lives on is under every screen and is not drawn at all without a world */
-    static void drawOver(GuiGraphics graphics, Font font) {
-        graphics.pose().pushPose();
-        graphics.pose().translate(0.0F, 0.0F, 350.0F);
+    static void drawOver(GuiGraphicsExtractor graphics, Font font) {
+        graphics.pose().pushMatrix();
         try {
             drawNotice(graphics, font);
         } finally {
-            graphics.pose().popPose();
+            graphics.pose().popMatrix();
         }
     }
 
-    private static void drawNotice(GuiGraphics graphics, Font font) {
+    private static void drawNotice(GuiGraphicsExtractor graphics, Font font) {
         Component notice = text;
         if (notice == null || !Host.get().setting("showNotices", true)) {
             return;
@@ -130,9 +129,9 @@ public final class Notices {
             Kit.shadow(graphics, left, top, left + width, top + 18, 3);
         }
         graphics.fill(left, top, left + width, top + 18, ((int) (alpha * 0xF0) << 24) | 0x261A0C);
-        graphics.renderOutline(left, top, width, 18, (a << 24) | (Controls.BRASS & 0xFFFFFF));
+        graphics.outline(left, top, width, 18, (a << 24) | (Controls.BRASS & 0xFFFFFF));
         graphics.fill(left + 1, top + 1, left + 3, top + 17, (a << 24) | (Controls.BRASS_BRIGHT & 0xFFFFFF));
-        graphics.drawString(font, words, left + 10, top + 5, (a << 24) | (Controls.PARCHMENT & 0xFFFFFF), false);
+        graphics.text(font, words, left + 10, top + 5, (a << 24) | (Controls.PARCHMENT & 0xFFFFFF), false);
     }
 
 }

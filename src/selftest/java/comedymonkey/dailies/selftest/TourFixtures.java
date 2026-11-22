@@ -74,8 +74,22 @@ final class TourFixtures {
         Map<String, byte[]> classes = new HashMap<>();
         Path root = null;
         try {
-            root = net.neoforged.fml.ModList.get().getModFileById(Dailies.ID).getFile().findResource("comedymonkey", "dailies");
+            // The mod loader reads the mod's contents itself, whether a jar or folders; paths come from the mod's root
+            net.neoforged.fml.ModList.get().getModFileById(Dailies.ID).getFile().getContents().visitContent("comedymonkey/dailies", (path, resource) -> {
+                String full = path.startsWith("comedymonkey/dailies/") ? path : "comedymonkey/dailies/" + path;
+                if (FixtureRules.writesRecordings(full)) {
+                    try {
+                        classes.put(full, resource.readAllBytes());
+                    } catch (IOException e) {
+                        throw new java.io.UncheckedIOException(e);
+                    }
+                }
+            });
+            if (!classes.isEmpty()) {
+                return classes;
+            }
         } catch (Throwable t) {
+            classes.clear();
             Host.LOGGER.debug("Dailies self test: the mod file could not be asked for its classes", t);
         }
         if (root == null || !Files.isDirectory(root)) {

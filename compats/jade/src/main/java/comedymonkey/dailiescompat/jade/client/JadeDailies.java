@@ -6,7 +6,7 @@ import comedymonkey.dailies.api.compat.DailiesCompats;
 import comedymonkey.dailies.api.compat.DisplayTest;
 import comedymonkey.dailies.api.compat.OverlayPart;
 import comedymonkey.dailiescompat.jade.JadeCompat;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -22,8 +22,12 @@ import org.jetbrains.annotations.Nullable;
 public final class JadeDailies implements DailiesCompat {
 
     public static final String ID = JadeCompat.ID + ":jade";
-    /** Raise when the state in JadeStates changes shape; the part must still read every version before it */
-    static final int VERSION = 1;
+    /**
+     * Raise when the state in JadeStates changes shape; the part must still read every version before it. 2: Jade 26's
+     * elements, on Minecraft 26.3. Version 1 held Jade 15's (Minecraft 1.21.1), which this Jade has no elements for: a box
+     * in such a recording is left out
+     */
+    static final int VERSION = 2;
     /** The box changes as a furnace burns or a block is broken: at most ten times a second */
     private static final int BOX_TICKS = 2;
 
@@ -62,8 +66,10 @@ public final class JadeDailies implements DailiesCompat {
             }
 
             @Override
-            public void draw(GuiGraphics graphics, byte[] state, int version, float partialTick) {
-                TooltipBox.draw(graphics, state);
+            public void draw(GuiGraphicsExtractor graphics, byte[] state, int version, float partialTick) {
+                if (version >= 2) {
+                    TooltipBox.draw(graphics, state, partialTick);
+                }
             }
 
             @Override

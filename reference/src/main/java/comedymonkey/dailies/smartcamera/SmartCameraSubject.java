@@ -3,7 +3,7 @@ package comedymonkey.dailies.smartcamera;
 import comedymonkey.dailies.Host;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -169,7 +169,7 @@ public record SmartCameraSubject(Vec3 position, AABB bounds, String framed, @Nul
 
     /** Create's moving contraptions, found by name so that Create stays optional */
     private static boolean isContraption(Entity entity) {
-        ResourceLocation type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        Identifier type = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return type.getNamespace().equals("create") && type.getPath().contains("contraption");
     }
 

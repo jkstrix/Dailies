@@ -4,6 +4,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
 
@@ -31,11 +32,14 @@ final class Stacks {
     }
 
     static Tag save(ItemStack stack) {
-        return stack.isEmpty() ? new CompoundTag() : stack.save(Texts.registries());
+        return stack.isEmpty() ? new CompoundTag()
+            : ItemStack.CODEC.encodeStart(Texts.registries().createSerializationContext(NbtOps.INSTANCE), stack).result().orElseGet(CompoundTag::new);
     }
 
     static ItemStack load(Tag tag) {
-        return tag instanceof CompoundTag compound ? ItemStack.parseOptional(Texts.registries(), compound) : ItemStack.EMPTY;
+        return tag instanceof CompoundTag compound
+            ? ItemStack.OPTIONAL_CODEC.parse(Texts.registries().createSerializationContext(NbtOps.INSTANCE), compound).result().orElse(ItemStack.EMPTY)
+            : ItemStack.EMPTY;
     }
 
     static ListTag saveAll(List<ItemStack> stacks) {
@@ -47,7 +51,7 @@ final class Stacks {
     }
 
     static List<ItemStack> loadAll(CompoundTag from, String key) {
-        ListTag list = from.getList(key, Tag.TAG_COMPOUND);
+        ListTag list = from.getListOrEmpty(key);
         List<ItemStack> stacks = new ArrayList<>(list.size());
         for (int i = 0; i < list.size(); i++) {
             stacks.add(load(list.get(i)));

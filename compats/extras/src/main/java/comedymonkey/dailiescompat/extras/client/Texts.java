@@ -1,13 +1,18 @@
 package comedymonkey.dailiescompat.extras.client;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,8 +30,12 @@ final class Texts {
         return minecraft.level != null ? minecraft.level.registryAccess() : RegistryAccess.EMPTY;
     }
 
+    private static RegistryOps<JsonElement> ops() {
+        return registries().createSerializationContext(JsonOps.INSTANCE);
+    }
+
     static String json(Component text) {
-        return Component.Serializer.toJson(text, registries());
+        return ComponentSerialization.CODEC.encodeStart(ops(), text).result().map(JsonElement::toString).orElse("");
     }
 
     static MutableComponent read(String json) {
@@ -34,8 +43,8 @@ final class Texts {
             return Component.empty();
         }
         try {
-            MutableComponent read = Component.Serializer.fromJson(json, registries());
-            return read == null ? Component.empty() : read;
+            Component read = ComponentSerialization.CODEC.parse(ops(), JsonParser.parseString(json)).result().orElse(null);
+            return read == null ? Component.literal(json) : read.copy();
         } catch (RuntimeException unreadable) {
             return Component.literal(json);
         }
@@ -48,7 +57,7 @@ final class Texts {
     /** The block state a command would make of this, or null when this game has no such block */
     static @Nullable BlockState block(String written) {
         try {
-            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK.asLookup(), written, false).blockState();
+            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, written, false).blockState();
         } catch (CommandSyntaxException | RuntimeException unknown) {
             return null;
         }

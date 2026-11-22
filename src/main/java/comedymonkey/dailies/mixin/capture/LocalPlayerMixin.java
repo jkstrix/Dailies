@@ -24,11 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @Mixin(LocalPlayer.class)
 public abstract class LocalPlayerMixin {
 
-    @Inject(method = "swing", at = @At("HEAD"))
-    private void dailies$swing(InteractionHand hand, CallbackInfo ci) {
-        Capture.ownSwing((LocalPlayer) (Object) this, hand);
-    }
-
+    // Arm swings are seen in OwnSwingMixin: since 26.1 a local player swings through LivingEntity's own method
 
     @WrapOperation(method = "playSound(Lnet/minecraft/sounds/SoundEvent;FF)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;playLocalSound(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V"))

@@ -1,5 +1,6 @@
 package comedymonkey.dailies.selftest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.config.DailiesConfig;
 import comedymonkey.dailies.config.Setting;
@@ -8,7 +9,6 @@ import comedymonkey.dailies.ui.SettingsScreen;
 import net.minecraft.client.Minecraft;
 import net.neoforged.fml.loading.FMLPaths;
 
-import org.lwjgl.glfw.GLFW;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -35,9 +35,9 @@ final class SettingsSteps {
         Path file = FMLPaths.CONFIGDIR.get().resolve("dailies-client.toml");
         check(Files.exists(file), "the settings file is not at " + file);
 
-        test.onClientRun(() -> SettingsScreen.open(minecraft.screen));
-        test.waitFor(() -> minecraft.screen instanceof SettingsScreen, 10, "the settings screen to open");
-        SettingsScreen screen = (SettingsScreen) minecraft.screen;
+        test.onClientRun(() -> SettingsScreen.open(minecraft.gui.screen()));
+        test.waitFor(() -> minecraft.gui.screen() instanceof SettingsScreen, 10, "the settings screen to open");
+        SettingsScreen screen = (SettingsScreen) minecraft.gui.screen();
         test.waitTicks(5);
 
         // Every declared setting is shown, in the order it is declared, with nothing made up
@@ -77,20 +77,20 @@ final class SettingsSteps {
         List<String> narrowed = test.onClient(() -> Previews.menuFind("le"));
         check(narrowed.size() == 1 && narrowed.get(0).toLowerCase().startsWith("le"), "typing 'le' in the dropdown left " + narrowed);
         // The keys: Escape closes the list and leaves the screen up; a letter narrows it; an arrow and Enter choose
-        test.onClientRun(() -> screen.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
-        check(!test.onClient(Previews::menuOpen) && minecraft.screen == screen, "Escape did not close the dropdown and only the dropdown");
+        test.onClientRun(() -> screen.keyPressed(Inputs.key(InputConstants.KEY_ESCAPE)));
+        check(!test.onClient(Previews::menuOpen) && minecraft.gui.screen() == screen, "Escape did not close the dropdown and only the dropdown");
         test.onClientRun(() -> {
             screen.choose("controlsLocation", null);
-            screen.charTyped('l', 0);
+            screen.charTyped(Inputs.character('l'));
         });
         check(test.onClient(Previews::menuShown).size() == 1, "typing a letter did not narrow the dropdown: " + test.onClient(Previews::menuShown));
-        test.onClientRun(() -> screen.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0));
+        test.onClientRun(() -> screen.keyPressed(Inputs.key(InputConstants.KEY_RETURN)));
         saved(test, screen);
         check("LEFT".equals(Host.get().setting("controlsLocation", "RIGHT")), "typing 'l' and Enter in the dropdown did not choose Left");
         test.onClientRun(() -> {
             screen.choose("controlsLocation", null);
-            screen.keyPressed(GLFW.GLFW_KEY_DOWN, 0, 0);
-            screen.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0);
+            screen.keyPressed(Inputs.key(InputConstants.KEY_DOWN));
+            screen.keyPressed(Inputs.key(InputConstants.KEY_RETURN));
         });
         saved(test, screen);
         check("RIGHT".equals(Host.get().setting("controlsLocation", "LEFT")), "the down arrow and Enter in the dropdown did not choose Right");
@@ -100,7 +100,7 @@ final class SettingsSteps {
             screen.reveal("showNotices");
             screen.choose("controlsLocation", null);
             int[] place = screen.where("showNotices");
-            screen.mouseClicked(place[0] + screen.width * 0.25, place[1] + 5.0, 0);
+            screen.mouseClicked(Inputs.leftClick(place[0] + screen.width * 0.25, place[1] + 5.0), false);
         });
         test.waitTicks(4);
         check(!test.onClient(Previews::menuOpen), "a click outside the dropdown did not close it");
@@ -172,7 +172,7 @@ final class SettingsSteps {
         // Closing the screen hands over a box that is being typed into, so the address tried is taken out of it first
         test.onClientRun(() -> {
             screen.abandon();
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
         test.waitTicks(10);
         check(whisper.equals(Host.get().setting("momentsWhisperUrl", "")), "testing an address changed the setting");
@@ -187,40 +187,40 @@ final class SettingsSteps {
     static void editorDropdown(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
-            if (minecraft.screen != null) {
-                minecraft.setScreen(null);
+            if (minecraft.gui.screen() != null) {
+                minecraft.gui.setScreen(null);
             }
             Previews.editorTab(2);
             comedymonkey.dailies.ui.Controls.openTimeline();
         });
-        test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor to open");
+        test.waitFor(() -> minecraft.gui.screen() instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor to open");
         test.waitTicks(10);
-        net.minecraft.client.gui.screens.Screen editor = minecraft.screen;
+        net.minecraft.client.gui.screens.Screen editor = minecraft.gui.screen();
         String before = test.onClient(() -> Previews.editorDropdownShows(0));
         check(!before.isEmpty(), "the export tab has no dropdown showing a choice");
         check(test.onClient(() -> Previews.editorDropdown(0)), "the first dropdown of the export tab did not open");
         List<String> lines = test.onClient(Previews::menuLines);
         check(lines.size() >= 3 && lines.contains(before), "the open dropdown does not list its choices with the one in force: " + lines);
-        test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ESCAPE, 0, 0));
-        check(!test.onClient(Previews::menuOpen) && minecraft.screen == editor, "Escape did not close the editor's dropdown and only the dropdown");
+        test.onClientRun(() -> editor.keyPressed(Inputs.key(InputConstants.KEY_ESCAPE)));
+        check(!test.onClient(Previews::menuOpen) && minecraft.gui.screen() == editor, "Escape did not close the editor's dropdown and only the dropdown");
         // Another choice by typing its first letters and pressing Enter, then the first one back the same way
         String other = lines.get(0).equals(before) ? lines.get(1) : lines.get(0);
         for (String wanted : List.of(other, before)) {
             test.onClientRun(() -> {
                 Previews.editorDropdown(0);
                 for (char letter : wanted.toCharArray()) {
-                    editor.charTyped(letter, 0);
+                    editor.charTyped(Inputs.character(letter));
                 }
             });
             List<String> narrowed = test.onClient(Previews::menuShown);
             check(!narrowed.isEmpty() && narrowed.get(0).equals(wanted), "typing '" + wanted + "' in the editor's dropdown left " + narrowed);
-            test.onClientRun(() -> editor.keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0));
+            test.onClientRun(() -> editor.keyPressed(Inputs.key(InputConstants.KEY_RETURN)));
             test.waitTicks(3);
             String now = test.onClient(() -> Previews.editorDropdownShows(0));
             check(now.equals(wanted) && !test.onClient(Previews::menuOpen), "choosing '" + wanted + "' with the keys left the dropdown showing '" + now + "'");
         }
-        check(minecraft.screen == editor, "the editor closed while its dropdown was used");
-        test.onClientRun(() -> minecraft.setScreen(null));
+        check(minecraft.gui.screen() == editor, "the editor closed while its dropdown was used");
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         test.waitTicks(5);
         test.log("editor dropdown: opened, narrowed by typing, chosen with Enter, closed with Escape");
     }

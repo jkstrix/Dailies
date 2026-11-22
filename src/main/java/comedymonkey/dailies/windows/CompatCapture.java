@@ -83,7 +83,7 @@ final class CompatCapture {
     /** Every claim showing on the recorder's screen now, by compat id */
     private static Map<String, List<CompatWrites.Showing>> showing(Minecraft minecraft) {
         Map<String, List<CompatWrites.Showing>> now = new LinkedHashMap<>();
-        Screen screen = minecraft.screen;
+        Screen screen = minecraft.gui.screen();
         CompatClaims.Claim screenClaim = screen == null ? null : Compats.screenClaim(screen);
         if (screen != null) {
             remember(screen, false);

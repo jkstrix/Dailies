@@ -7,10 +7,10 @@ import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.library.Library;
 import comedymonkey.dailies.library.LibraryIndex;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -88,7 +88,7 @@ final class RecordingEditScreen extends KitScreen {
         this.picturePick.when(() -> this.loaded).tip(t("picture.tip"));
         this.box = new Gadget() {
             @Override
-            void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
                 LibraryBits.Picture shown = RecordingEditScreen.this.texture(RecordingEditScreen.this.picture);
                 if (shown != null) {
                     shown.draw(graphics, this.x, this.y, this.width, this.height);
@@ -214,7 +214,7 @@ final class RecordingEditScreen extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         this.heading(graphics, font, Component.literal(this.file.getFileName().toString()));
         Kit.text(graphics, font, t("name").getString(), this.left + 9, this.nameBox.y + 3, Controls.PARCHMENT);
         Kit.text(graphics, font, t("picture").getString(), this.left + 9, this.picturePick.y + 3, Controls.PARCHMENT);
@@ -260,7 +260,7 @@ final class RecordingEditScreen extends KitScreen {
             if (STILL.equals(chosen)) {
                 takeStill(this.file, back, this.after);
             } else {
-                game.setScreen(back);
+                game.gui.setScreen(back);
                 this.after.run();
             }
         }));
@@ -291,11 +291,11 @@ final class RecordingEditScreen extends KitScreen {
         settings.height = STILL_HEIGHT;
         settings.still = true;
         settings.hideGui = true;
-        game.setScreen(null);
+        game.gui.setScreen(null);
         try {
             Export.start(settings);
         } catch (Exception e) {
-            game.setScreen(back);
+            game.gui.setScreen(back);
             Notices.show(t("still.failed", String.valueOf(e.getMessage())));
             return;
         }
@@ -324,7 +324,7 @@ final class RecordingEditScreen extends KitScreen {
             }
             Component said = trouble;
             game.execute(() -> {
-                game.setScreen(back);
+                game.gui.setScreen(back);
                 Notices.show(said == null ? t("still.done") : t("still.failed", said));
                 after.run();
             });
@@ -342,7 +342,7 @@ final class RecordingEditScreen extends KitScreen {
 
     @Override
     public void onClose() {
-        Objects.requireNonNull(this.minecraft).setScreen(this.parent);
+        Objects.requireNonNull(this.minecraft).gui.setScreen(this.parent);
     }
 
 }

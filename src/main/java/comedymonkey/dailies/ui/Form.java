@@ -1,7 +1,8 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +36,7 @@ final class Form {
     private int barGrab = 0;
     private final Gadget bar = new Gadget() {
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         }
 
         @Override
@@ -189,7 +190,7 @@ final class Form {
         return this.scrolls() && this.over(mouseX, mouseY) && mouseX >= this.x + this.width - BAR;
     }
 
-    void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         if (this.width <= 0 || this.height <= 0) {
             return;
         }
@@ -223,7 +224,7 @@ final class Form {
         if (!this.over(mouseX, mouseY)) {
             return null;
         }
-        if (this.overBar(mouseX, mouseY) && button == 0) {
+        if (this.overBar(mouseX, mouseY) && button == InputConstants.MOUSE_BUTTON_LEFT) {
             // Taking hold of the thumb drags it from where it was taken; a click beside it brings its middle there
             int[] thumb = Kit.thumb(this.y, this.height, this.content, this.scroll);
             boolean onThumb = mouseY >= thumb[0] && mouseY < thumb[0] + thumb[1];

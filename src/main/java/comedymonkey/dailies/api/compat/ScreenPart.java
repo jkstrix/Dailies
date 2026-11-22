@@ -34,7 +34,7 @@ public interface ScreenPart {
      * while recording and of the built screen in playback. Null keeps the pointer as a share of the screen instead.
      */
     default @Nullable int[] corner(Screen screen) {
-        return screen instanceof AbstractContainerScreen<?> container ? new int[]{container.getGuiLeft(), container.getGuiTop()} : null;
+        return screen instanceof AbstractContainerScreen<?> container ? new int[]{container.getLeftPos(), container.getTopPos()} : null;
     }
 
     /**

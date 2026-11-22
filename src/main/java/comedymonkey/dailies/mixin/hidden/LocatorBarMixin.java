@@ -1,7 +1,7 @@
 package comedymonkey.dailies.mixin.hidden;
 
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,8 +19,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "pl.fuzjajadrowa.locatorbar.client.LocatorBarHudRenderer", remap = false)
 public abstract class LocatorBarMixin {
 
-    @Inject(method = "render(Lnet/minecraft/client/gui/GuiGraphics;)V", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private static void dailies$neverInPlayback(GuiGraphics graphics, CallbackInfo info) {
+    @Inject(method = "render(Lnet/minecraft/client/gui/GuiGraphicsExtractor;)V", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
+    private static void dailies$neverInPlayback(GuiGraphicsExtractor graphics, CallbackInfo info) {
         if (Playback.active()) {
             info.cancel();
         }

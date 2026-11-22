@@ -9,7 +9,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.Event;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
@@ -36,7 +36,7 @@ public final class ServerMoments {
 
     /** The companion's wire format, see its MomentPayload */
     public record Payload(String momentType, String label, String json) implements CustomPacketPayload {
-        public static final Type<Payload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(COMPANION, "event"));
+        public static final Type<Payload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(COMPANION, "event"));
         public static final StreamCodec<ByteBuf, Payload> CODEC = StreamCodec.composite(ByteBufCodecs.stringUtf8(64), Payload::momentType,
             ByteBufCodecs.stringUtf8(256), Payload::label, ByteBufCodecs.stringUtf8(32767), Payload::json, Payload::new);
 

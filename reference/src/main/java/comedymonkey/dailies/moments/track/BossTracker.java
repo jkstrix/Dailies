@@ -52,7 +52,7 @@ class BossTracker {
         if (entity instanceof Player) {
             return false;
         }
-        return entity.getType().is(Tags.EntityTypes.BOSSES)
+        return entity.typeHolder().is(Tags.EntityTypes.BOSSES)
             || MomentsConfig.notableEntities().contains(GameplayTracker.id(entity.getType()))
             || entity.getMaxHealth() >= MomentsConfig.bossHealthThreshold();
     }
@@ -66,7 +66,7 @@ class BossTracker {
         JsonArray array = new JsonArray();
         for (AbstractClientPlayer player : level.players()) {
             if (player.position().distanceToSqr(around) <= PARTICIPANT_RANGE * PARTICIPANT_RANGE) {
-                array.add(MJson.player(player.getUUID().toString(), player.getGameProfile().getName()));
+                array.add(MJson.player(player.getUUID().toString(), player.getGameProfile().name()));
             }
         }
         return array;
@@ -138,7 +138,7 @@ class BossTracker {
             this.tracker.store(event);
         }
 
-        Map<UUID, LerpingBossEvent> shown = minecraft.gui.getBossOverlay().events;
+        Map<UUID, LerpingBossEvent> shown = minecraft.gui.hud.getBossOverlay().events;
         for (Map.Entry<UUID, LerpingBossEvent> entry : shown.entrySet()) {
             Bar bar = this.bars.get(entry.getKey());
             String name = entry.getValue().getName().getString();

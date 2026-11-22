@@ -149,7 +149,7 @@ public final class DailiesCommand {
         if (name == null || name.isBlank()) {
             // Asks for a name unless the setting says not to. The chat closes itself after a command, so the
             // question is put up once it has
-            Minecraft.getInstance().tell(() -> Controls.finishRecording(null));
+            Minecraft.getInstance().schedule(() -> Controls.finishRecording(null));
             return say(source, "finishing");
         }
         String wanted = name.trim();
@@ -199,7 +199,7 @@ public final class DailiesCommand {
             return fail(source, "nothing_recording");
         }
         // A recording is only ever thrown away after a yes (REC-1)
-        Minecraft.getInstance().tell(() -> Controls.cancelRecording(null));
+        Minecraft.getInstance().schedule(() -> Controls.cancelRecording(null));
         return say(source, "cancel_asking");
     }
 
@@ -247,7 +247,7 @@ public final class DailiesCommand {
     private static int config(CommandSourceStack source) {
         Minecraft minecraft = Minecraft.getInstance();
         // Once the chat has closed itself, or it would take the settings with it
-        minecraft.tell(() -> Screens.openSettings(minecraft.screen));
+        minecraft.schedule(() -> Screens.openSettings(minecraft.gui.screen()));
         return say(source, "config");
     }
 
@@ -279,7 +279,7 @@ public final class DailiesCommand {
             return false;
         }
         lastAnswer = "only_own";
-        Minecraft.getInstance().gui.getChat().addMessage(Component.translatable(KEYS + "only_own").withStyle(ChatFormatting.RED));
+        Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(Component.translatable(KEYS + "only_own").withStyle(ChatFormatting.RED));
         return true;
     }
 

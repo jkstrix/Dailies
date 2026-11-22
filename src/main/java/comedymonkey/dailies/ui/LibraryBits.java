@@ -5,10 +5,11 @@ import comedymonkey.dailies.Dailies;
 import comedymonkey.dailies.library.LibraryJob;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Instant;
@@ -42,12 +43,12 @@ final class LibraryBits {
 
     /** A preview picture made into a texture. Client thread; closed when the screen that made it goes */
     static final class Picture {
-        private final ResourceLocation location;
+        private final Identifier location;
         final int width;
         final int height;
         private boolean closed = false;
 
-        private Picture(ResourceLocation location, int width, int height) {
+        private Picture(Identifier location, int width, int height) {
             this.location = location;
             this.width = width;
             this.height = height;
@@ -60,8 +61,8 @@ final class LibraryBits {
             }
             try {
                 NativeImage image = NativeImage.read(png);
-                ResourceLocation location = ResourceLocation.fromNamespaceAndPath(Dailies.ID, "library_preview/" + pictures++);
-                Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(image));
+                Identifier location = Identifier.fromNamespaceAndPath(Dailies.ID, "library_preview/" + pictures++);
+                Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(location::toString, image));
                 return new Picture(location, image.getWidth(), image.getHeight());
             } catch (Exception | LinkageError unreadable) {
                 return null;
@@ -69,7 +70,7 @@ final class LibraryBits {
         }
 
         /** Draws it as large as fits in the box without stretching it, in the middle, with a brass edge round the box */
-        void draw(GuiGraphics graphics, int x, int y, int boxWidth, int boxHeight) {
+        void draw(GuiGraphicsExtractor graphics, int x, int y, int boxWidth, int boxHeight) {
             graphics.fill(x, y, x + boxWidth, y + boxHeight, Controls.FIELD);
             if (!this.closed && this.width > 0 && this.height > 0) {
                 double scale = Math.min((boxWidth - 2) / (double) this.width, (boxHeight - 2) / (double) this.height);
@@ -77,9 +78,9 @@ final class LibraryBits {
                 int drawnHeight = Math.max(1, (int) Math.round(this.height * scale));
                 int left = x + (boxWidth - drawnWidth) / 2;
                 int top = y + (boxHeight - drawnHeight) / 2;
-                graphics.blit(this.location, left, top, drawnWidth, drawnHeight, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+                graphics.blit(RenderPipelines.GUI_TEXTURED, this.location, left, top, 0.0F, 0.0F, drawnWidth, drawnHeight, this.width, this.height, this.width, this.height);
             }
-            graphics.renderOutline(x, y, boxWidth, boxHeight, Controls.BRASS_DIM);
+            graphics.outline(x, y, boxWidth, boxHeight, Controls.BRASS_DIM);
         }
 
         void close() {
@@ -91,7 +92,7 @@ final class LibraryBits {
     }
 
     /** The box a recording without a preview gets instead: dark, with a reel in the middle */
-    static void noPicture(GuiGraphics graphics, Font font, int x, int y, int width, int height, @Nullable Component words) {
+    static void noPicture(GuiGraphicsExtractor graphics, Font font, int x, int y, int width, int height, @Nullable Component words) {
         Kit.field(graphics, x, y, width, height, Controls.BRASS_DIM);
         int middleX = x + width / 2;
         int middleY = y + height / 2 - (words == null ? 0 : 5);
@@ -102,9 +103,9 @@ final class LibraryBits {
     }
 
     /** A reel of film: what a recording looks like before a word of it is read */
-    static void reel(GuiGraphics graphics, int centreX, int centreY, int edge, int play) {
+    static void reel(GuiGraphicsExtractor graphics, int centreX, int centreY, int edge, int play) {
         graphics.fill(centreX - 6, centreY - 5, centreX + 6, centreY + 5, Controls.FIELD);
-        graphics.renderOutline(centreX - 6, centreY - 5, 12, 10, edge);
+        graphics.outline(centreX - 6, centreY - 5, 12, 10, edge);
         Kit.icon(graphics, Kit.Icon.PLAY, centreX, centreY, play);
     }
 
@@ -146,28 +147,28 @@ final class LibraryBits {
         "..####..",
         "...##..."};
 
-    static void star(GuiGraphics graphics, int centreX, int centreY, int colour) {
+    static void star(GuiGraphicsExtractor graphics, int centreX, int centreY, int colour) {
         dots(graphics, STAR, centreX, centreY, colour);
     }
 
-    static void folder(GuiGraphics graphics, int centreX, int centreY, int colour) {
+    static void folder(GuiGraphicsExtractor graphics, int centreX, int centreY, int colour) {
         dots(graphics, FOLDER, centreX, centreY, colour);
     }
 
-    static void bin(GuiGraphics graphics, int centreX, int centreY, int colour) {
+    static void bin(GuiGraphicsExtractor graphics, int centreX, int centreY, int colour) {
         dots(graphics, BIN, centreX, centreY, colour);
     }
 
-    static void scene(GuiGraphics graphics, int centreX, int centreY, int colour) {
+    static void scene(GuiGraphicsExtractor graphics, int centreX, int centreY, int colour) {
         dots(graphics, SCENE, centreX, centreY, colour);
     }
 
-    static void voice(GuiGraphics graphics, int centreX, int centreY, int colour) {
+    static void voice(GuiGraphicsExtractor graphics, int centreX, int centreY, int colour) {
         dots(graphics, VOICE, centreX, centreY, colour);
     }
 
     /** A picture given as rows of dots, drawn about its middle, as the kit draws its own */
-    private static void dots(GuiGraphics graphics, String[] rows, int centreX, int centreY, int colour) {
+    private static void dots(GuiGraphicsExtractor graphics, String[] rows, int centreX, int centreY, int colour) {
         int left = centreX - rows[0].length() / 2;
         int top = centreY - rows.length / 2;
         for (int row = 0; row < rows.length; row++) {
@@ -186,7 +187,7 @@ final class LibraryBits {
     }
 
     /** A bar filled from the left to a share, with words on it: how a job or a share of the disk stands */
-    static void bar(GuiGraphics graphics, Font font, int x, int y, int width, int height, double share, int fill, @Nullable String words) {
+    static void bar(GuiGraphicsExtractor graphics, Font font, int x, int y, int width, int height, double share, int fill, @Nullable String words) {
         Kit.field(graphics, x, y, width, height, Controls.BRASS_DIM);
         int to = x + 1 + (int) Math.round(Math.max(0.0, Math.min(1.0, share)) * Math.max(0, width - 2));
         if (to > x + 1) {
@@ -195,7 +196,7 @@ final class LibraryBits {
         }
         if (words != null && height >= 10) {
             String shown = Kit.clip(font, words, width - 6);
-            graphics.drawString(font, shown, x + (width - font.width(shown)) / 2, y + (height - 8) / 2, Controls.PARCHMENT, true);
+            graphics.text(font, shown, x + (width - font.width(shown)) / 2, y + (height - 8) / 2, Controls.PARCHMENT, true);
         }
     }
 
@@ -222,7 +223,7 @@ final class LibraryBits {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             LibraryJob now = this.job.get();
             if (now == null || this.height <= 0) {
                 return;
@@ -274,7 +275,7 @@ final class LibraryBits {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             int labelWidth = this.labelWidth();
             Kit.text(graphics, font, Kit.clip(font, this.label.getString(), labelWidth - 4), this.x + 1, this.y + 2, Controls.PARCHMENT_DIM);
             int room = this.width - labelWidth - 2;

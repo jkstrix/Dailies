@@ -20,7 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundResourcePackPopPacket;
 import net.minecraft.network.protocol.common.ClientboundResourcePackPushPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -60,9 +60,9 @@ import static comedymonkey.dailies.selftest.SelfTestSupport.emptyFolder;
 final class ResourcePackSteps {
 
     /** A file only the test pack has */
-    private static final ResourceLocation MARKER = ResourceLocation.fromNamespaceAndPath("minecraft", "dailies_selftest/marker.txt");
+    private static final Identifier MARKER = Identifier.fromNamespaceAndPath("minecraft", "dailies_selftest/marker.txt");
     /** A file only the pack that is declined has */
-    private static final ResourceLocation DECLINED_MARKER = ResourceLocation.fromNamespaceAndPath("minecraft", "dailies_selftest/declined.txt");
+    private static final Identifier DECLINED_MARKER = Identifier.fromNamespaceAndPath("minecraft", "dailies_selftest/declined.txt");
     private static final String LANG_KEY = "dailies.selftest.server_pack";
 
     private static Path recording;
@@ -427,23 +427,46 @@ final class ResourcePackSteps {
         thread.join(5000);
     }
 
-    /** The font the game draws with is the one its last reload made, and characters not drawn since then can be drawn */
+    /**
+     * The font the game draws with is the one its last reload made, and characters not drawn since then can be drawn.
+     * The game remembers the glyphs it last looked up for a font, not the font set itself, and keeps that to itself: it
+     * is read from its fields, and must be the glyphs of one of the font sets the last reload made
+     */
     private static void fontIsLive(SelfTest test, Minecraft minecraft, String when) throws Exception {
         test.onClientRun(() -> {
-            comedymonkey.dailies.mixin.access.FontManagerAccess fonts =
-                (comedymonkey.dailies.mixin.access.FontManagerAccess) ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$fontManager();
+            net.minecraft.client.gui.font.FontManager manager = ((comedymonkey.dailies.mixin.access.MinecraftAccess) minecraft).dailies$fontManager();
+            comedymonkey.dailies.mixin.access.FontManagerAccess fonts = (comedymonkey.dailies.mixin.access.FontManagerAccess) manager;
             minecraft.font.width("Dailies");
-            net.minecraft.client.gui.font.FontSet used = fonts.dailies$lastFontSet();
-            check(used != null && fonts.dailies$fontSets().get(used.name()) == used,
+            Object used = lastGlyphs(manager);
+            // Nothing held is safe too: the next lookup takes the live fonts
+            check(used == null || fonts.dailies$fontSets().values().stream().anyMatch(set -> set.source(false) == used),
                 when + ", the game draws text with a font that a resource reload has closed: the next new character would crash it");
             StringBuilder fresh = new StringBuilder();
             for (int i = 0; i < 6; i++) {
                 fresh.append((char) (0x00C0 + (freshText++ % 0x180)));
             }
-            net.minecraft.client.gui.GuiGraphics graphics = new net.minecraft.client.gui.GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
-            graphics.drawString(minecraft.font, fresh.toString(), 2, 2, 0xFFFFFFFF, false);
-            graphics.flush();
+            comedymonkey.dailies.export.PictureGui.draw(graphics -> graphics.text(minecraft.font, fresh.toString(), 2, 2, 0xFFFFFFFF, false));
         });
+    }
+
+    /** The glyphs the game's own font last looked up, held by the font manager for the next lookup; null when it holds none */
+    private static Object lastGlyphs(net.minecraft.client.gui.font.FontManager manager) {
+        try {
+            java.lang.reflect.Field provider = net.minecraft.client.gui.font.FontManager.class.getDeclaredField("anyGlyphs");
+            provider.setAccessible(true);
+            Object glyphs = provider.get(manager);
+            java.lang.reflect.Field last = glyphs.getClass().getDeclaredField("lastEntry");
+            last.setAccessible(true);
+            Object entry = last.get(glyphs);
+            if (entry == null) {
+                return null;
+            }
+            java.lang.reflect.Field source = entry.getClass().getDeclaredField("source");
+            source.setAccessible(true);
+            return source.get(entry);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("the font's last glyphs could not be read", e);
+        }
     }
 
     private static void settle(SelfTest test) throws Exception {
@@ -462,29 +485,29 @@ final class ResourcePackSteps {
 
     // ------------------------------------------------------------------ Helpers
 
-    private static boolean on(Minecraft minecraft, ResourceLocation marker) {
+    private static boolean on(Minecraft minecraft, Identifier marker) {
         return minecraft.getResourceManager().getResource(marker).isPresent();
     }
 
     /** Waits for the game's question about the pack and presses yes or no */
     private static void answer(SelfTest test, Minecraft minecraft, boolean yes) throws Exception {
-        test.waitFor(() -> minecraft.screen instanceof ConfirmScreen && minecraft.screen.getClass().getName().contains("PackConfirmScreen"), 30,
+        test.waitFor(() -> minecraft.gui.screen() instanceof ConfirmScreen && minecraft.gui.screen().getClass().getName().contains("PackConfirmScreen"), 30,
             "the game to ask about the server's resource pack");
         test.onClientRun(() -> {
             List<Button> buttons = new ArrayList<>();
-            for (GuiEventListener child : minecraft.screen.children()) {
+            for (GuiEventListener child : minecraft.gui.screen().children()) {
                 if (child instanceof Button button) {
                     buttons.add(button);
                 }
             }
             check(buttons.size() == 2, "the resource pack question has " + buttons.size() + " buttons");
-            buttons.get(yes ? 0 : 1).onPress();
+            buttons.get(yes ? 0 : 1).onPress(Inputs.key(com.mojang.blaze3d.platform.InputConstants.KEY_RETURN));
         });
-        test.waitFor(() -> !(minecraft.screen instanceof ConfirmScreen), 30, "the resource pack question to close");
+        test.waitFor(() -> !(minecraft.gui.screen() instanceof ConfirmScreen), 30, "the resource pack question to close");
     }
 
     static void waitForReload(SelfTest test, Minecraft minecraft) throws Exception {
-        test.waitFor(() -> minecraft.getOverlay() == null, 120, "the game to finish reloading its resources");
+        test.waitFor(() -> minecraft.gui.overlay() == null, 120, "the game to finish reloading its resources");
         test.waitTicks(5);
     }
 
@@ -499,8 +522,10 @@ final class ResourcePackSteps {
     private static byte[] buildPack(String marker, boolean visible) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
-            int format = net.minecraft.SharedConstants.getCurrentVersion().getPackVersion(net.minecraft.server.packs.PackType.CLIENT_RESOURCES);
-            entry(zip, "pack.mcmeta", ("{\"pack\":{\"pack_format\":" + format + ",\"description\":\"Dailies self test\"}}").getBytes(StandardCharsets.UTF_8));
+            int format = net.minecraft.SharedConstants.getCurrentVersion().packVersion(net.minecraft.server.packs.PackType.CLIENT_RESOURCES).major();
+            // A pack for this version names the formats it takes as a range; pack_format alone is only read for old ones
+            entry(zip, "pack.mcmeta", ("{\"pack\":{\"pack_format\":" + format + ",\"min_format\":" + format + ",\"max_format\":" + format
+                + ",\"description\":\"Dailies self test\"}}").getBytes(StandardCharsets.UTF_8));
             entry(zip, "assets/minecraft/dailies_selftest/" + marker, "here".getBytes(StandardCharsets.UTF_8));
             if (visible) {
                 entry(zip, "assets/minecraft/lang/en_us.json", ("{\"" + LANG_KEY + "\":\"on\"}").getBytes(StandardCharsets.UTF_8));

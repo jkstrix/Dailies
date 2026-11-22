@@ -366,8 +366,8 @@ public final class SelfTest {
             try {
                 this.onClientRun(() -> {
                     Minecraft minecraft = Minecraft.getInstance();
-                    if (minecraft.screen != null && minecraft.level != null) {
-                        minecraft.setScreen(null);
+                    if (minecraft.gui.screen() != null && minecraft.level != null) {
+                        minecraft.gui.setScreen(null);
                     }
                 });
             } catch (Throwable ignored) {
@@ -460,10 +460,14 @@ public final class SelfTest {
             if (minecraft != null && minecraft.options != null && !focusSet) {
                 // The owner watches runs and types elsewhere, so losing focus must not pause the game
                 minecraft.options.pauseOnLostFocus = false;
+                // Nor must the game drop to 30 frames a second after a minute without input: the run never touches the
+                // keys, and the frame times it measures would be the throttle's
+                minecraft.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
                 focusSet = true;
             }
             this.port = McpHttpServer.getListeningPort();
-            if (focusSet && this.port > 0 && minecraft.getOverlay() == null && minecraft.isGameLoadFinished()) {
+            // The game's Gui is made partway through loading, after the options
+            if (focusSet && this.port > 0 && minecraft.gui != null && minecraft.gui.overlay() == null && minecraft.isGameLoadFinished()) {
                 return;
             }
             Thread.sleep(250);
@@ -726,7 +730,7 @@ public final class SelfTest {
         check(server != null, "there is no built-in server to run '" + command + "' on");
         server.submit(() -> {
             net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput(), command);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput(), command);
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
     }
 
@@ -740,7 +744,7 @@ public final class SelfTest {
         java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean(false);
         server.submit(() -> {
             net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4).withSuppressedOutput()
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput()
                 .withCallback((success, result) -> {
                     if (success) {
                         ran.set(true);

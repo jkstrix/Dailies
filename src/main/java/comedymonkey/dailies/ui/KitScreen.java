@@ -1,12 +1,15 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +52,7 @@ public abstract class KitScreen extends Screen {
     abstract void arrange(Font font);
 
     /** Draws what is on the plate besides the controls: its title, its words */
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
     }
 
     /** Whether the world behind is blurred and dimmed. A screen a recording keeps playing behind leaves it alone */
@@ -68,7 +71,7 @@ public abstract class KitScreen extends Screen {
     }
 
     /** A letter typed while no box is being typed into */
-    void typedElsewhere(char character, int modifiers) {
+    void typedElsewhere(int codepoint) {
     }
 
     /** The plate set in the middle of the window, as large as asked where there is room */
@@ -82,13 +85,13 @@ public abstract class KitScreen extends Screen {
     }
 
     /** The title at the top of the plate with a rule under it. Returns where what follows may start */
-    int heading(GuiGraphics graphics, Font font, @Nullable Component under) {
+    int heading(GuiGraphicsExtractor graphics, Font font, @Nullable Component under) {
         int line = this.top + 8;
         Kit.text(graphics, font, Kit.clip(font, this.title.getString(), this.right - this.left - 16), this.left + 8, line, Controls.BRASS_BRIGHT);
         line += 12;
         if (under != null) {
             for (net.minecraft.util.FormattedCharSequence part : font.split(under, Math.max(40, this.right - this.left - 16))) {
-                graphics.drawString(font, part, this.left + 8, line, Controls.PARCHMENT_DIM, false);
+                graphics.text(font, part, this.left + 8, line, Controls.PARCHMENT_DIM, false);
                 line += 10;
             }
             line += 2;
@@ -145,25 +148,28 @@ public abstract class KitScreen extends Screen {
     @Override
     public void removed() {
         this.input.end();
+        this.minecraft.textInputManager().stopTextInput(this);
     }
 
     @Override
     public void onClose() {
-        this.minecraft.setScreen(this.parent);
+        this.minecraft.gui.setScreen(this.parent);
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         if (this.dimsWorld()) {
-            super.renderBackground(graphics, mouseX, mouseY, partialTick);
+            super.extractBackground(graphics, mouseX, mouseY, partialTick);
         }
     }
 
+    /** The background is drawn before this, by the screen itself */
     @Override
-    public void render(GuiGraphics graphics, int realMouseX, int realMouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int realMouseX, int realMouseY, float partialTick) {
         int mouseX = this.pointX >= 0 ? this.pointX : realMouseX;
         int mouseY = this.pointX >= 0 ? this.pointY : realMouseY;
-        this.renderBackground(graphics, mouseX, mouseY, partialTick);
+        // Letters are taken everywhere on the plate
+        InputRouter.textInput(this, true);
         try {
             Font font = this.font;
             this.arrange(font);
@@ -211,7 +217,10 @@ public abstract class KitScreen extends Screen {
     // ------------------------------------------------------------------ The mouse
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         EditorState.guard(() -> this.pressed(mouseX, mouseY, button));
         return true;
     }
@@ -242,7 +251,9 @@ public abstract class KitScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        double mouseX = event.x();
+        double mouseY = event.y();
         Gadget was = this.input.letGo();
         if (was != null) {
             EditorState.guard(() -> was.release(mouseX, mouseY));
@@ -251,8 +262,10 @@ public abstract class KitScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (button == 0 && this.input.held() != null) {
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && this.input.held() != null) {
             EditorState.guard(() -> this.input.drag(mouseX, mouseY));
         }
         return true;
@@ -276,8 +289,8 @@ public abstract class KitScreen extends Screen {
     // ------------------------------------------------------------------ The keys
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        EditorState.guard(() -> this.key(keyCode, scanCode, modifiers));
+    public boolean keyPressed(KeyEvent event) {
+        EditorState.guard(() -> this.key(event.key(), event.keycode(), event.modifiers()));
         return true;
     }
 
@@ -290,7 +303,7 @@ public abstract class KitScreen extends Screen {
         boolean back = InputRouter.back(modifiers);
         if (Entry.typing()) {
             Entry box = Entry.focused;
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE && !box.dirty()) {
+            if (keyCode == InputConstants.KEY_ESCAPE && !box.dirty()) {
                 // Nothing typed would be lost, so Escape means what it means everywhere else
                 Entry.drop();
                 this.onClose();
@@ -299,9 +312,9 @@ public abstract class KitScreen extends Screen {
             }
             return;
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             this.onClose();
-        } else if (keyCode == GLFW.GLFW_KEY_TAB) {
+        } else if (keyCode == InputConstants.KEY_TAB) {
             this.moveFocus(Gadget.focus, back);
         } else if (Gadget.focus != null && Gadget.focus.key(keyCode, modifiers)) {
             return;
@@ -311,12 +324,13 @@ public abstract class KitScreen extends Screen {
     }
 
     @Override
-    public boolean charTyped(char character, int modifiers) {
+    public boolean charTyped(CharacterEvent event) {
+        int codepoint = event.codepoint();
         Entry typing = Entry.focused;
         if (typing != null) {
-            EditorState.guard(() -> typing.typed(character, modifiers));
-        } else if (Gadget.focus == null || character != ' ') {
-            EditorState.guard(() -> this.typedElsewhere(character, modifiers));
+            EditorState.guard(() -> typing.typed(codepoint));
+        } else if (Gadget.focus == null || codepoint != ' ') {
+            EditorState.guard(() -> this.typedElsewhere(codepoint));
         }
         return true;
     }

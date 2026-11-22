@@ -136,7 +136,7 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
 
     /** How loud a piece is from the camera being watched or exported from, by {@link VoiceLevels} */
     private static float cameraGain(VoiceFormat.Frame frame) {
-        net.minecraft.world.phys.Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+        net.minecraft.world.phys.Vec3 camera = Minecraft.getInstance().gameRenderer.mainCamera().position();
         return (float) VoiceLevels.gain(frame, camera.x, camera.y, camera.z);
     }
 
@@ -147,13 +147,13 @@ public final class VoicePlayback implements PlaybackExtensions.Extension {
             if (minecraft.level != null) {
                 net.minecraft.world.entity.player.Player player = minecraft.level.getPlayerByUUID(speaker);
                 if (player != null) {
-                    return player.getGameProfile().getName();
+                    return player.getGameProfile().name();
                 }
             }
             if (minecraft.getConnection() != null) {
                 net.minecraft.client.multiplayer.PlayerInfo info = minecraft.getConnection().getPlayerInfo(speaker);
                 if (info != null) {
-                    return info.getProfile().getName();
+                    return info.getProfile().name();
                 }
             }
         } catch (RuntimeException e) {

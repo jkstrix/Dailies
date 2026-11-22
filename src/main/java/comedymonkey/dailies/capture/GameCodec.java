@@ -56,7 +56,7 @@ public final class GameCodec {
      * A mod message as a whole packet, written from the message's own codec. For messages a mod keeps off the normal
      * connection, which the game's packet codec may not know how to write.
      */
-    public byte[] payloadFrame(net.minecraft.resources.ResourceLocation id, java.util.function.Consumer<RegistryFriendlyByteBuf> body) {
+    public byte[] payloadFrame(net.minecraft.resources.Identifier id, java.util.function.Consumer<RegistryFriendlyByteBuf> body) {
         if (this.payloadPrefix == null) {
             // Every custom payload packet starts with the same packet number; take it from one the game can always write
             byte[] sample = this.encode(new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new net.minecraft.network.protocol.common.custom.BrandPayload("")));
@@ -69,7 +69,7 @@ public final class GameCodec {
         RegistryFriendlyByteBuf buffer = this.buffer();
         try {
             buffer.writeBytes(this.payloadPrefix);
-            buffer.writeResourceLocation(id);
+            buffer.writeIdentifier(id);
             body.accept(buffer);
             byte[] bytes = new byte[buffer.readableBytes()];
             buffer.readBytes(bytes);

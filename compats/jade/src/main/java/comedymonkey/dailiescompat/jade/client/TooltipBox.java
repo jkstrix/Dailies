@@ -1,32 +1,25 @@
 package comedymonkey.dailiescompat.jade.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.logging.LogUtils;
 import comedymonkey.dailies.api.DailiesApi;
 import comedymonkey.dailies.api.compat.DailiesCompats;
 import comedymonkey.dailiescompat.jade.state.JadeStates;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix3x2fStack;
 import org.slf4j.Logger;
-import snownee.jade.JadeClient;
 import snownee.jade.api.config.IWailaConfig;
 import snownee.jade.api.theme.IThemeHelper;
 import snownee.jade.api.theme.Theme;
-import snownee.jade.api.ui.BoxStyle;
-import snownee.jade.api.ui.ColorPalette;
-import snownee.jade.api.ui.IBoxElement;
-import snownee.jade.api.ui.IElement;
-import snownee.jade.api.ui.ScreenDirection;
-import snownee.jade.api.ui.TooltipRect;
+import snownee.jade.api.ui.BoxElement;
+import snownee.jade.api.ui.TooltipAnimation;
 import snownee.jade.gui.BaseOptionsScreen;
-import snownee.jade.impl.theme.ThemeHelper;
-import snownee.jade.impl.ui.BoxElement;
-import snownee.jade.overlay.DisplayHelper;
+import snownee.jade.impl.ui.BoxElementImpl;
 import snownee.jade.overlay.OverlayRenderer;
-import snownee.jade.util.JadeCodecs;
+import snownee.jade.util.JadeClientCodecs;
+import snownee.jade.util.JadeGuiGraphics;
 
 import java.nio.charset.StandardCharsets;
 import java.util.IdentityHashMap;
@@ -36,7 +29,8 @@ import java.util.Map;
  * Jade's box over play, beside the crosshair: what the player looks at. Jade works out its lines from the server's data
  * (a chest's contents, a furnace's progress) and the player's own settings, so the box recorded is the one Jade drew:
  * just after Jade has drawn it each frame, the compat keeps the box, where it was drawn, its scale and fade, the theme and
- * the settings it was drawn with, and the line of a block being broken that Jade draws along its foot. At the end of each
+ * the settings it was drawn with (the line of a block being broken, which Jade draws along its foot, is the box's own and
+ * goes with it). At the end of each
  * recorded tick the last box drawn is written down, every element of it (see {@link Elements}). In playback the box is
  * built again from Jade's own elements and drawn by Jade, with the recorder's theme and settings put in place just
  * while it is drawn; and Jade's own box, which it would work out from the playback world and its camera, is never shown.
@@ -66,19 +60,18 @@ final class TooltipBox {
     /** Themes read from the recording, by their handle */
     private static final Map<String, Theme> READ_THEMES = new java.util.HashMap<>();
     private static boolean themeFieldMissing = false;
-    private static boolean breakingUnread = false;
+    private static boolean overrideUnread = false;
 
     private TooltipBox() {
     }
 
     /** The box Jade drew in one frame, with what it was drawn with */
-    private record Drawn(BoxElement root, int x, int y, int width, int height, float scale, float fade, int guiWidth, int guiHeight, float anchorX,
-                         float anchorY, boolean square, float opacity, int iconMode, Theme theme, float breakingFade, float breaking,
-                         boolean canHarvest) {
+    private record Drawn(BoxElementImpl root, int x, int y, int width, int height, float scale, float fade, int guiWidth, int guiHeight,
+                         float anchorX, float anchorY, float opacity, int iconMode, Theme theme) {
     }
 
     /** A state built again into Jade's own elements, with the theme it is drawn in */
-    private record Built(JadeStates.Box box, BoxElement root, Theme theme) {
+    private record Built(JadeStates.Box box, BoxElementImpl root, Theme theme) {
     }
 
     // --- Jade's own drawing ---
@@ -94,33 +87,21 @@ final class TooltipBox {
     }
 
     /** Just after Jade has drawn its box on the player's game (and the line of a block being broken along its foot) */
-    static void afterRender(IBoxElement root, TooltipRect rect) {
-        if (!(root instanceof BoxElement box) || DailiesApi.isPlayback()) {
+    static void afterRender(BoxElement root, TooltipAnimation animation) {
+        if (!(root instanceof BoxElementImpl box) || DailiesApi.isPlayback()) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen instanceof BaseOptionsScreen) {
+        if (minecraft.gui.screen() instanceof BaseOptionsScreen) {
             // Jade's settings show a box to preview them: settings are not play
             return;
         }
-        IWailaConfig.IConfigOverlay overlay = IWailaConfig.get().getOverlay();
-        float breakingFade = 0.0F;
-        float breaking = 0.0F;
-        boolean canHarvest = true;
-        if (!breakingUnread) {
-            try {
-                breakingFade = Reflect.<Float>getStatic(JadeClient.class, "progressAlpha");
-                breaking = Reflect.<Float>getStatic(JadeClient.class, "savedProgress");
-                canHarvest = Reflect.<Boolean>getStatic(JadeClient.class, "canHarvest");
-            } catch (RuntimeException renamed) {
-                breakingUnread = true;
-                LOGGER.warn("Dailies Jade compat: the line of a block being broken could not be read from this Jade, so recordings leave it out", renamed);
-            }
-        }
-        lastDrawn = new Drawn(box, rect.rect.getX(), rect.rect.getY(), rect.rect.getWidth(), rect.rect.getHeight(), rect.scale, OverlayRenderer.alpha,
-            minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight(), overlay.tryFlip(overlay.getOverlayPosX()),
-            1.0F - overlay.getOverlayPosY(), overlay.getSquare(), overlay.getAlpha(), overlay.getIconMode().ordinal(), IThemeHelper.get().theme(),
-            breakingFade, breaking, canHarvest);
+        IWailaConfig.Overlay overlay = IWailaConfig.get().overlay();
+        IWailaConfig.Accessibility accessibility = IWailaConfig.get().accessibility();
+        lastDrawn = new Drawn(box, (int) animation.rect.getX(), (int) animation.rect.getY(), (int) animation.rect.getWidth(),
+            (int) animation.rect.getHeight(), animation.scale, animation.alpha, minecraft.getWindow().getGuiScaledWidth(),
+            minecraft.getWindow().getGuiScaledHeight(), accessibility.tryFlip(overlay.getOverlayPosX()), 1.0F - overlay.getOverlayPosY(),
+            overlay.getAlpha(), overlay.getIconMode().ordinal(), IThemeHelper.get().theme());
         drawnSinceTick = true;
     }
 
@@ -144,10 +125,11 @@ final class TooltipBox {
             return written;
         }
         JadeStates.Element root = Elements.write(drawn.root(), 0);
-        ResourceLocation themeId = drawn.theme().id;
+        Identifier themeId = drawn.theme().id;
+        // This Jade has no square corners, and no line of a block being broken of its own: the line is the main box's own
         byte[] state = JadeStates.box(new JadeStates.Box(drawn.x(), drawn.y(), drawn.width(), drawn.height(), drawn.scale(), drawn.fade(),
-            drawn.guiWidth(), drawn.guiHeight(), drawn.anchorX(), drawn.anchorY(), drawn.square(), drawn.opacity(), drawn.iconMode(),
-            themeId == null ? "" : themeId.toString(), handle, drawn.breakingFade(), drawn.breaking(), drawn.canHarvest(), root));
+            drawn.guiWidth(), drawn.guiHeight(), drawn.anchorX(), drawn.anchorY(), false, drawn.opacity(), drawn.iconMode(),
+            themeId == null ? "" : themeId.toString(), handle, 0.0F, 0.0F, true, root));
         writtenFrom = drawn;
         written = state;
         lastHandle = handle;
@@ -161,7 +143,7 @@ final class TooltipBox {
         }
         byte[] json;
         synchronized (THEMES) {
-            json = THEMES.computeIfAbsent(theme, each -> Json.write(JadeCodecs.THEME, each).getBytes(StandardCharsets.UTF_8));
+            json = THEMES.computeIfAbsent(theme, each -> Json.write(JadeClientCodecs.THEME.codec(), each).getBytes(StandardCharsets.UTF_8));
         }
         if (json.length == 0) {
             return "";
@@ -177,98 +159,77 @@ final class TooltipBox {
 
     // --- Playback ---
 
-    static void draw(GuiGraphics graphics, byte[] state) {
-        Built built = built(state);
-        JadeStates.Box box = built.box();
-        BoxElement root = built.root();
-        IWailaConfig.IConfigOverlay overlay = IWailaConfig.get().getOverlay();
-        // The recorder's theme and settings, put in place just while the box is drawn, as Jade reads them as it draws
-        float fade = OverlayRenderer.alpha;
-        Theme theme = ThemeHelper.theme.getValue();
+    static void draw(GuiGraphicsExtractor graphics, byte[] state, float partialTick) {
+        IWailaConfig.Overlay overlay = IWailaConfig.get().overlay();
         // Asked for first, so Jade has picked its theme and there is one to put back
         overlay.getTheme();
+        Built built = built(state, overlay);
+        JadeStates.Box box = built.box();
+        BoxElementImpl root = built.root();
+        // The recorder's theme and settings, put in place just while the box is drawn, as Jade reads them as it draws
+        TooltipAnimation animation = OverlayRenderer.animation;
+        float fade = animation.alpha;
+        float showHide = animation.showHideAlpha;
+        Theme override = themeOverride();
         Theme configTheme = configTheme(overlay);
-        boolean square = overlay.getSquare();
         float opacity = overlay.getAlpha();
-        IWailaConfig.IconMode iconMode = overlay.getIconMode();
-        PoseStack pose = graphics.pose();
-        pose.pushPose();
+        Matrix3x2fStack pose = graphics.pose();
+        pose.pushMatrix();
         try {
-            OverlayRenderer.alpha = box.fade();
-            ThemeHelper.theme.setValue(built.theme());
+            animation.alpha = box.fade();
+            animation.showHideAlpha = box.fade();
+            IThemeHelper.get().setThemeOverride(built.theme());
             setConfigTheme(overlay, built.theme());
-            overlay.setSquare(box.square());
             overlay.setAlpha(box.opacity());
-            if (box.iconMode() >= 0 && box.iconMode() < ICON_MODES.length) {
-                overlay.setIconMode(ICON_MODES[box.iconMode()]);
-            }
             // As OverlayRenderer.renderOverlay draws it, where the recorder's chasing left it, kept to the same anchor
-            pose.translate((float) box.xOn(graphics.guiWidth()), (float) box.yOn(graphics.guiHeight()), 1.0F);
+            pose.translate((float) box.xOn(graphics.guiWidth()), (float) box.yOn(graphics.guiHeight()));
             float scale = box.scale() > 0.0F ? box.scale() : 1.0F;
             if (scale != 1.0F) {
-                pose.scale(scale, scale, 1.0F);
+                pose.scale(scale);
             }
-            RenderSystem.enableBlend();
-            float maxWidth = box.width() / scale;
-            float maxHeight = box.height() / scale;
-            if (root.getStyle().hasRoundCorner()) {
-                maxWidth -= 2.0F;
-                maxHeight -= 2.0F;
+            // The size Jade's chasing had the box at, as BoxElementImpl.updateRect gives it
+            Reflect.set(root, "width", (int) (box.width() / scale));
+            Reflect.set(root, "height", (int) (box.height() / scale));
+            ((JadeGuiGraphics) graphics).jade$setIgnoreScissorTest(true);
+            try {
+                root.extractRenderState(graphics, -1, -1, partialTick);
+            } finally {
+                ((JadeGuiGraphics) graphics).jade$setIgnoreScissorTest(false);
             }
-            root.render(graphics, 0.0F, 0.0F, maxWidth, maxHeight);
-            drawBreaking(graphics, box, root, built.theme());
-            RenderSystem.disableBlend();
-            RenderSystem.disableDepthTest();
         } finally {
-            pose.popPose();
-            OverlayRenderer.alpha = fade;
-            ThemeHelper.theme.setValue(theme);
+            pose.popMatrix();
+            animation.alpha = fade;
+            animation.showHideAlpha = showHide;
+            IThemeHelper.get().setThemeOverride(override);
             setConfigTheme(overlay, configTheme);
-            overlay.setSquare(square);
             overlay.setAlpha(opacity);
-            overlay.setIconMode(iconMode);
         }
     }
 
-    /** The line of a block being broken, along the box's foot, as JadeClient.drawBreakingProgress draws it */
-    private static void drawBreaking(GuiGraphics graphics, JadeStates.Box box, IBoxElement root, Theme theme) {
-        if (box.breakingFade() <= 0.0F) {
-            return;
-        }
-        ColorPalette colors = theme.tooltipStyle.boxProgressColors;
-        int color = box.canHarvest() ? colors.normal() : colors.failure();
-        float top = root.getCachedSize().y;
-        float width = root.getCachedSize().x;
-        if (!box.square() && theme.tooltipStyle instanceof BoxStyle.GradientBorder) {
-            top++;
-        }
-        color = IWailaConfig.IConfigOverlay.applyAlpha(color, box.breakingFade());
-        float up = theme.tooltipStyle.boxProgressOffset(ScreenDirection.UP);
-        float right = theme.tooltipStyle.boxProgressOffset(ScreenDirection.RIGHT);
-        float down = theme.tooltipStyle.boxProgressOffset(ScreenDirection.DOWN);
-        float left = theme.tooltipStyle.boxProgressOffset(ScreenDirection.LEFT);
-        width += right - left;
-        DisplayHelper.fill(graphics, left, top - 1.0F + up, left + width * box.breaking(), top + down, color);
-    }
-
-    private static Built built(byte[] state) {
+    private static Built built(byte[] state, IWailaConfig.Overlay overlay) {
         Built made = built;
         if (made != null && builtFrom == state) {
             return made;
         }
         JadeStates.Box box = JadeStates.readBox(state);
         Theme theme = theme(box);
-        // The recorded theme's styles are what the box falls back on for a style the recorder's game could not write
-        Theme current = ThemeHelper.theme.getValue();
-        ThemeHelper.theme.setValue(theme);
+        // The recorded theme's styles are what the box falls back on for a style the recorder's game could not write; and
+        // the recorder's icon mode, as Jade lays the box out beside its icon as it makes it
+        Theme override = themeOverride();
+        IWailaConfig.IconMode iconMode = overlay.getIconMode();
+        IThemeHelper.get().setThemeOverride(theme);
         try {
-            IElement root = Elements.build(box.root(), theme.tooltipStyle);
-            if (!(root instanceof BoxElement rootBox)) {
+            if (box.iconMode() >= 0 && box.iconMode() < ICON_MODES.length) {
+                overlay.setIconMode(ICON_MODES[box.iconMode()]);
+            }
+            BoxElementImpl root = Elements.root(box.root(), theme.tooltipStyle);
+            if (root == null) {
                 throw new IllegalArgumentException("the recorded box is not a box");
             }
-            made = new Built(box, rootBox, theme);
+            made = new Built(box, root, theme);
         } finally {
-            ThemeHelper.theme.setValue(current);
+            IThemeHelper.get().setThemeOverride(override);
+            overlay.setIconMode(iconMode);
         }
         built = made;
         builtFrom = state;
@@ -288,23 +249,23 @@ final class TooltipBox {
                     // Found by its id below
                 }
                 if (stored != null) {
-                    theme = Json.read(JadeCodecs.THEME, new String(stored, StandardCharsets.UTF_8));
+                    theme = Json.read(JadeClientCodecs.THEME.codec(), new String(stored, StandardCharsets.UTF_8));
                     if (theme != null) {
-                        theme.id = ResourceLocation.tryParse(box.theme());
+                        theme.id = Identifier.tryParse(box.theme());
                         READ_THEMES.put(box.themeStored(), theme);
                     }
                 }
             }
         }
         if (theme == null) {
-            ResourceLocation id = ResourceLocation.tryParse(box.theme());
+            Identifier id = Identifier.tryParse(box.theme());
             theme = id != null ? IThemeHelper.get().getTheme(id) : IThemeHelper.get().theme();
         }
         return theme;
     }
 
     /** The theme Jade's settings hold, which Jade reads for its text's shadow; null when this Jade keeps it elsewhere */
-    private static @Nullable Theme configTheme(IWailaConfig.IConfigOverlay overlay) {
+    private static @Nullable Theme configTheme(IWailaConfig.Overlay overlay) {
         if (themeFieldMissing) {
             return null;
         }
@@ -317,9 +278,23 @@ final class TooltipBox {
         }
     }
 
-    private static void setConfigTheme(IWailaConfig.IConfigOverlay overlay, @Nullable Theme theme) {
+    private static void setConfigTheme(IWailaConfig.Overlay overlay, @Nullable Theme theme) {
         if (!themeFieldMissing && theme != null) {
             Reflect.set(overlay, "activeThemeInstance", theme);
+        }
+    }
+
+    /** The theme Jade draws in instead of its own just now (its settings' preview), or null; null too when unreadable */
+    private static @Nullable Theme themeOverride() {
+        if (overrideUnread) {
+            return null;
+        }
+        try {
+            return Reflect.get(IThemeHelper.get(), "themeOverride");
+        } catch (RuntimeException renamed) {
+            overrideUnread = true;
+            LOGGER.warn("Dailies Jade compat: Jade's theme override could not be read, so playback leaves Jade with no override after it draws", renamed);
+            return null;
         }
     }
 

@@ -14,7 +14,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.MenuProvider;
-import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.villager.Villager;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -53,14 +53,14 @@ final class WindowSteps {
 
     private static final List<Display> WINDOWS = List.of(
         new Display("a chest", "minecraft:generic_9x3", (test, minecraft) -> onServer(test, player ->
-            player.openMenu((MenuProvider) player.serverLevel().getBlockEntity(new BlockPos(2, Y, 0))))),
+            player.openMenu((MenuProvider) player.level().getBlockEntity(new BlockPos(2, Y, 0))))),
         new Display("a furnace smelting iron", "minecraft:furnace", (test, minecraft) -> onServer(test, player ->
-            player.openMenu((MenuProvider) player.serverLevel().getBlockEntity(new BlockPos(-2, Y, 0))))),
+            player.openMenu((MenuProvider) player.level().getBlockEntity(new BlockPos(-2, Y, 0))))),
         new Display("a villager's trades", "minecraft:merchant", (test, minecraft) -> onServer(test, player -> {
-            Villager villager = player.serverLevel().getEntitiesOfClass(Villager.class, player.getBoundingBox().inflate(6.0)).get(0);
+            Villager villager = player.level().getEntitiesOfClass(Villager.class, player.getBoundingBox().inflate(6.0)).get(0);
             villager.mobInteract(player, InteractionHand.MAIN_HAND);
         })),
-        new Display("the inventory", "inventory", (test, minecraft) -> test.onClientRun(() -> minecraft.setScreen(new InventoryScreen(minecraft.player)))));
+        new Display("the inventory", "inventory", (test, minecraft) -> test.onClientRun(() -> minecraft.gui.setScreen(new InventoryScreen(minecraft.player)))));
 
     static void run(SelfTest test) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
@@ -80,12 +80,12 @@ final class WindowSteps {
         test.waitTicks(30);
         for (Display window : WINDOWS) {
             window.opener().open(test, minecraft);
-            test.waitFor(() -> minecraft.screen != null, 10, window.label() + " to open in the live game");
+            test.waitFor(() -> minecraft.gui.screen() != null, 10, window.label() + " to open in the live game");
             test.waitTicks(20);
             ticks.add(test.onClient(() -> Recorder.get().recordingTick()));
             test.waitTicks(20);
             test.onClientRun(() -> minecraft.player.closeContainer());
-            test.waitFor(() -> minecraft.screen == null, 10, window.label() + " to close in the live game");
+            test.waitFor(() -> minecraft.gui.screen() == null, 10, window.label() + " to close in the live game");
             test.waitTicks(20);
         }
         JsonObject finished = test.tool("recording_finish", args("name", "Windows"));
@@ -138,7 +138,7 @@ final class WindowSteps {
 
     /** The chest, the furnace with iron smelting and the villager, beside where the player stands */
     private static void stage(SelfTest test) throws Exception {
-        test.command("gamerule sendCommandFeedback false");
+        test.command("gamerule send_command_feedback false");
         // In survival: in creative the inventory key opens the creative inventory, which is not a window a recording keeps
         test.command("gamemode survival");
         test.command("effect give @s minecraft:resistance 600 4 true");

@@ -7,12 +7,12 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
@@ -58,15 +58,15 @@ public final class PlayerList {
         UUID viewer = minecraft.player.getUUID();
         for (AbstractClientPlayer player : minecraft.level.players()) {
             if (player != minecraft.player && !player.getUUID().equals(viewer)) {
-                found.add(new Listed(player.getUUID(), player.getGameProfile().getName(), true));
+                found.add(new Listed(player.getUUID(), player.getGameProfile().name(), true));
             }
         }
         ClientPacketListener connection = minecraft.getConnection();
         if (connection != null) {
             for (PlayerInfo info : connection.getOnlinePlayers()) {
-                UUID id = info.getProfile().getId();
+                UUID id = info.getProfile().id();
                 if (!id.equals(viewer) && found.stream().noneMatch(listed -> listed.id().equals(id))) {
-                    found.add(new Listed(id, info.getProfile().getName(), false));
+                    found.add(new Listed(id, info.getProfile().name(), false));
                 }
             }
         }
@@ -217,15 +217,15 @@ public final class PlayerList {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             int top = this.y + (this.height - FACE) / 2;
             PlayerSkin skin = skin(this.listed.id());
             if (skin != null) {
-                PlayerFaceRenderer.draw(graphics, skin, this.x + 1, top, FACE);
+                PlayerFaceExtractor.extractRenderState(graphics, skin, this.x + 1, top, FACE);
             } else {
                 graphics.fill(this.x + 1, top, this.x + 1 + FACE, top + FACE, Controls.FIELD);
             }
-            graphics.renderOutline(this.x, top - 1, FACE + 2, FACE + 2, hidden(this.listed.id()) ? Controls.PARCHMENT_DIM : Controls.BRASS);
+            graphics.outline(this.x, top - 1, FACE + 2, FACE + 2, hidden(this.listed.id()) ? Controls.PARCHMENT_DIM : Controls.BRASS);
             String far = this.distance();
             String shown = far == null ? Kit.t("players.out_of_sight").getString() : far;
             int farWidth = font.width(shown);

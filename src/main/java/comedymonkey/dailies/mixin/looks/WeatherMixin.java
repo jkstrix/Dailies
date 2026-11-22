@@ -18,7 +18,7 @@ public abstract class WeatherMixin {
 
     @Shadow
     @Final
-    public boolean isClientSide;
+    private boolean isClientSide;
 
     @ModifyReturnValue(method = "getRainLevel", at = @At("RETURN"))
     private float dailies$rain(float recorded) {

@@ -125,8 +125,8 @@ final class TrainSteps {
     private static boolean record(SelfTest test, Minecraft minecraft, Path recording) throws Exception {
         WorldSteps.createWorld(test, WORLD);
         Census.watch(OVERWORLD, 0, -12, -61, TRACK_Z - 4, 80, -55, TRACK_Z + 7);
-        c("gamerule commandModificationBlockLimit 4000000");
-        c("gamerule sendCommandFeedback false");
+        c("gamerule max_block_modifications 4000000");
+        c("gamerule send_command_feedback false");
         c("fill -14 -61 " + (TRACK_Z - 5) + " 82 -61 " + (TRACK_Z + 8) + " minecraft:smooth_stone");
         c("fill -12 " + Y + " " + TRACK_Z + " 80 " + Y + " " + TRACK_Z + " create:track[shape=xo]");
         test.waitTicks(20);
@@ -426,7 +426,7 @@ final class TrainSteps {
     /** To the east station, three seconds there, back to the west station, three seconds there, and round again */
     private static void schedule(Minecraft minecraft) throws Exception {
         String stop = "Conditions:[[{Id:\"create:delay\",Data:{Value:3,TimeUnit:1}}]]";
-        CompoundTag tag = TagParser.parseTag("{Cyclic:1b,Entries:[{Instruction:{Id:\"create:destination\",Data:{Text:\"Dailies East\"}}," + stop + "},"
+        CompoundTag tag = TagParser.parseCompoundFully("{Cyclic:1b,Entries:[{Instruction:{Id:\"create:destination\",Data:{Text:\"Dailies East\"}}," + stop + "},"
             + "{Instruction:{Id:\"create:destination\",Data:{Text:\"Dailies West\"}}," + stop + "}]}");
         BestiarySteps.server("the train's schedule", (level, player) -> {
             Object train = serverTrain(minecraft);

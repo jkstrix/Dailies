@@ -219,7 +219,7 @@ public final class PathPreview {
     // ------------------------------------------------------------------ Drawing
 
     static void draw(WorldLines.Batch batch) {
-        if (!(Minecraft.getInstance().screen instanceof EditorScreen) || !shown()) {
+        if (!(Minecraft.getInstance().gui.screen() instanceof EditorScreen) || !shown()) {
             drawnLast = false;
             return;
         }
@@ -312,7 +312,7 @@ public final class PathPreview {
     /** Where a mark is on the screen that is open, in that screen's own measure: {x, y}, or null when it is behind the camera */
     public static double @Nullable [] onScreen(Mark mark) {
         Minecraft minecraft = Minecraft.getInstance();
-        return minecraft.screen == null ? null : WorldLines.onScreen(mark.lens(), minecraft.screen.width, minecraft.screen.height);
+        return minecraft.gui.screen() == null ? null : WorldLines.onScreen(mark.lens(), minecraft.gui.screen().width, minecraft.gui.screen().height);
     }
 
     /** The keyframe mark under a line of sight, or null */

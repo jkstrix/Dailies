@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.edit.EditHistory;
 import comedymonkey.dailies.edit.Keyframe;
 import comedymonkey.dailies.edit.KeyframeKind;
@@ -13,7 +14,7 @@ import comedymonkey.dailies.file.RecordingManifest;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -382,7 +383,7 @@ final class TimelinePanel {
 
     // ------------------------------------------------------------------ Drawing
 
-    void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         Kit.panel(graphics, this.left, this.top, this.right, this.bottom);
         for (Gadget gadget : this.transport) {
             gadget.draw(graphics, font, mouseX, mouseY);
@@ -441,7 +442,7 @@ final class TimelinePanel {
                 int y0 = (int) Math.min(this.boxFromY, this.boxToY);
                 int y1 = (int) Math.max(this.boxFromY, this.boxToY);
                 graphics.fill(x0, y0, x1 + 1, y1 + 1, 0x30EFE6D6);
-                graphics.renderOutline(x0, y0, x1 - x0 + 1, y1 - y0 + 1, Controls.PARCHMENT);
+                graphics.outline(x0, y0, x1 - x0 + 1, y1 - y0 + 1, Controls.PARCHMENT);
             }
             // The playhead: a head on the ruler to take hold of, and a line down through the rows
             int hand = (int) Math.round(this.across(Math.max(0, Math.min(total, this.scrubTick >= 0 ? this.scrubTick : PointOfView.shown()))));
@@ -483,7 +484,7 @@ final class TimelinePanel {
         }
     }
 
-    private void drawStatus(GuiGraphics graphics, Font font) {
+    private void drawStatus(GuiGraphicsExtractor graphics, Font font) {
         int room = this.statusRight - this.statusLeft;
         if (room < 30) {
             return;
@@ -506,7 +507,7 @@ final class TimelinePanel {
         Kit.text(graphics, font, shown, this.statusLeft, this.top + 2 + (BAR - 8) / 2, Controls.PARCHMENT);
     }
 
-    private void drawRange(GuiGraphics graphics, Scene scene, int total) {
+    private void drawRange(GuiGraphicsExtractor graphics, Scene scene, int total) {
         if (!scene.hasExportRange()) {
             return;
         }
@@ -527,7 +528,7 @@ final class TimelinePanel {
         graphics.fill(to, this.rulerTop, to + 1, this.rulerBottom, Controls.BRASS_BRIGHT);
     }
 
-    private void drawRuler(GuiGraphics graphics, Font font, int total) {
+    private void drawRuler(GuiGraphicsExtractor graphics, Font font, int total) {
         double start = EditorState.viewStart;
         double span = EditorState.viewSpan;
         if (span <= 0.0 || this.laneWidth <= 0) {
@@ -552,7 +553,7 @@ final class TimelinePanel {
         }
     }
 
-    private void drawMarks(GuiGraphics graphics, int total) {
+    private void drawMarks(GuiGraphicsExtractor graphics, int total) {
         RecordingManifest manifest = Playback.manifest();
         if (manifest == null) {
             return;
@@ -567,7 +568,7 @@ final class TimelinePanel {
         }
     }
 
-    private void drawKeyframes(GuiGraphics graphics, Track track, int index, int y, @Nullable KeyframeRef under) {
+    private void drawKeyframes(GuiGraphicsExtractor graphics, Track track, int index, int y, @Nullable KeyframeRef under) {
         int middle = y + LANE / 2;
         List<Keyframe> keyframes = track.keyframes();
         int plain = track.enabled() ? Controls.BRASS_BRIGHT : 0xFF6A5A3A;
@@ -618,13 +619,13 @@ final class TimelinePanel {
         }
     }
 
-    private void drawTrackName(GuiGraphics graphics, Font font, Scene scene, int index, int y, int mouseX, int mouseY) {
+    private void drawTrackName(GuiGraphicsExtractor graphics, Font font, Scene scene, int index, int y, int mouseX, int mouseY) {
         Track track = scene.track(index);
         int x = this.left + 4;
         boolean rowHovered = mouseX >= this.left && mouseX < this.laneLeft && mouseY >= y && mouseY < y + LANE;
         int boxTop = y + (LANE - 9) / 2;
         graphics.fill(x, boxTop, x + 9, boxTop + 9, Controls.FIELD);
-        graphics.renderOutline(x, boxTop, 9, 9, rowHovered && mouseX < x + 11 ? Controls.BRASS_BRIGHT : Controls.BRASS);
+        graphics.outline(x, boxTop, 9, 9, rowHovered && mouseX < x + 11 ? Controls.BRASS_BRIGHT : Controls.BRASS);
         if (track.enabled()) {
             graphics.fill(x + 2, boxTop + 2, x + 7, boxTop + 7, Controls.BRASS_BRIGHT);
         }
@@ -679,7 +680,7 @@ final class TimelinePanel {
             return null;
         }
         if (this.overViews(mouseX, mouseY)) {
-            if (button == 0) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                 PointOfViewLanes.press(this.viewsTop, mouseY, this.tickAt(mouseX));
             }
             return null;
@@ -687,7 +688,7 @@ final class TimelinePanel {
         Scene scene = EditorState.scene();
         int total = Math.max(1, PointOfView.total());
         if (this.overLaneBar(mouseX, mouseY)) {
-            if (button == 0) {
+            if (button == InputConstants.MOUSE_BUTTON_LEFT) {
                 // Taking hold of the thumb drags it from where it was taken; a click beside it brings its middle there
                 int[] thumb = Kit.thumb(this.lanesTop, this.visibleLanes() * LANE, scene.tracks().size() * LANE, EditorState.laneScroll * LANE);
                 this.laneBarGrab = mouseY >= thumb[0] && mouseY < thumb[0] + thumb[1] ? (int) mouseY - thumb[0] : thumb[1] / 2;
@@ -696,7 +697,7 @@ final class TimelinePanel {
             }
             return null;
         }
-        if (button == 0 && this.overRuler(mouseX, mouseY)) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && this.overRuler(mouseX, mouseY)) {
             if (scene.hasExportRange() && mouseY >= this.rulerBottom - 7) {
                 double start = this.across(scene.exportStart());
                 double end = this.across(scene.exportEnd());
@@ -717,7 +718,7 @@ final class TimelinePanel {
         }
         if (this.overLanes(mouseX, mouseY)) {
             KeyframeRef hit = this.keyframeAt(mouseX, mouseY);
-            if (button == 1) {
+            if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
                 if (hit != null) {
                     if (!EditorState.selection.contains(hit)) {
                         EditorState.selection.clear();
@@ -727,7 +728,7 @@ final class TimelinePanel {
                 }
                 return null;
             }
-            if (button != 0) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT) {
                 return null;
             }
             if (hit != null) {
@@ -740,7 +741,7 @@ final class TimelinePanel {
                     Controls.jumpTo(hit.tick());
                     return null;
                 }
-                if (Screen.hasShiftDown()) {
+                if (Minecraft.getInstance().hasShiftDown()) {
                     if (!EditorState.selection.remove(hit)) {
                         EditorState.selection.add(hit);
                     }
@@ -756,7 +757,7 @@ final class TimelinePanel {
                     this.dragOffset = 0;
                 }
             } else {
-                this.boxAdds = Screen.hasShiftDown();
+                this.boxAdds = Minecraft.getInstance().hasShiftDown();
                 if (!this.boxAdds) {
                     EditorState.selection.clear();
                 }
@@ -773,7 +774,7 @@ final class TimelinePanel {
             }
             return null;
         }
-        if (button == 0 && EditorState.viewSpan < total && mouseY >= this.lanesBottom + 1 && mouseY < this.lanesBottom + 7 && mouseX >= this.laneLeft) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && EditorState.viewSpan < total && mouseY >= this.lanesBottom + 1 && mouseY < this.lanesBottom + 7 && mouseX >= this.laneLeft) {
             this.drag = Drag.PAN;
             this.dragTo(mouseX, mouseY);
         }
@@ -784,9 +785,9 @@ final class TimelinePanel {
         Track track = scene.track(index);
         EditHistory history = EditorState.history();
         int buttons = this.laneLeft - 1 - 3 * 12;
-        if (button == 1) {
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
             this.openTrackMenu(index, mouseX, mouseY);
-        } else if (button != 0) {
+        } else if (button != InputConstants.MOUSE_BUTTON_LEFT) {
             return;
         } else if (mouseX < this.left + 15) {
             Kit.click();
@@ -805,7 +806,7 @@ final class TimelinePanel {
             }
         } else {
             // The name: every keyframe of the track
-            if (!Screen.hasShiftDown()) {
+            if (!Minecraft.getInstance().hasShiftDown()) {
                 EditorState.selection.clear();
             }
             for (Keyframe keyframe : track.keyframes()) {
@@ -942,7 +943,7 @@ final class TimelinePanel {
         if (mouseX < this.laneLeft || mouseY < this.rulerTop) {
             return true;
         }
-        if (Screen.hasShiftDown() || (amount == 0.0 && sideways != 0.0)) {
+        if (Minecraft.getInstance().hasShiftDown() || (amount == 0.0 && sideways != 0.0)) {
             double by = (amount != 0.0 ? amount : sideways) * EditorState.viewSpan * 0.1;
             EditorState.viewStart = Math.max(0.0, Math.min(total - EditorState.viewSpan, EditorState.viewStart - by));
             return true;
@@ -1095,7 +1096,7 @@ final class TimelinePanel {
     private void renameTrack(int index) {
         Minecraft minecraft = Minecraft.getInstance();
         Track track = EditorState.scene().track(index);
-        minecraft.setScreen(new NameScreen(
+        minecraft.gui.setScreen(new NameScreen(
                 Kit.t("track.rename.title"),
                 Kit.t("track.rename.explanation", Kit.t("kind." + track.kind().id())),
                 track.name(),
@@ -1111,7 +1112,7 @@ final class TimelinePanel {
     private void removeTrack(int index) {
         Minecraft minecraft = Minecraft.getInstance();
         Track track = EditorState.scene().track(index);
-        minecraft.setScreen(new AskScreen(
+        minecraft.gui.setScreen(new AskScreen(
                 yes -> {
                     if (yes) {
                         EditorState.guard(() -> {

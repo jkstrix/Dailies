@@ -177,7 +177,7 @@ final class CompatDisplaySteps {
         WorldSteps.createWorld(test, world);
         test.onClientRun(() -> minecraft.options.setCameraType(CameraType.FIRST_PERSON));
         DisplayTest.Stage stage = stage(test);
-        test.command("gamerule sendCommandFeedback false");
+        test.command("gamerule send_command_feedback false");
         test.command("gamemode survival");
         test.command("effect give @s minecraft:resistance 600 4 true");
         test.command("item replace entity @s weapon.mainhand with minecraft:air");
@@ -195,15 +195,15 @@ final class CompatDisplaySteps {
             ticks.add(test.onClient(() -> Recorder.get().recordingTick()));
             test.waitTicks(20);
             // Closed as the player closes it: a question asked over another screen goes back to it, which is closed in turn
-            for (int closes = 0; closes < 3 && test.onClient(() -> minecraft.screen != null); closes++) {
+            for (int closes = 0; closes < 3 && test.onClient(() -> minecraft.gui.screen() != null); closes++) {
                 test.onClientRun(() -> {
-                    if (minecraft.screen != null) {
-                        minecraft.screen.onClose();
+                    if (minecraft.gui.screen() != null) {
+                        minecraft.gui.screen().onClose();
                     }
                 });
                 test.waitTicks(2);
             }
-            test.waitFor(() -> minecraft.screen == null, 10, shown.label() + " to close in the live game");
+            test.waitFor(() -> minecraft.gui.screen() == null, 10, shown.label() + " to close in the live game");
             test.waitTicks(20);
         }
         JsonObject finished = test.tool("recording_finish", args("name", modName));

@@ -1,11 +1,10 @@
 {
   "required": false,
   "package": "comedymonkey.dailies.mixin.renderers",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_25",
   "client": [
     "IrisResetMixin",
-    "IrisTimerMixin",
-    "ShaderTimeMixin"
+    "IrisTimerMixin"
   ],
   "injectors": {
     "defaultRequire": 0

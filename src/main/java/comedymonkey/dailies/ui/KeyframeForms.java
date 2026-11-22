@@ -191,7 +191,7 @@ final class KeyframeForms {
             case SPEED -> put(new Keyframe.Speed(tick, blend, 20.0));
             case TIMELAPSE -> put(new Keyframe.Timelapse(tick, blend, 5.0));
             case FREEZE -> put(new Keyframe.Freeze(tick, blend, 2.0));
-            case TIME_OF_DAY -> put(new Keyframe.TimeOfDay(tick, blend, minecraft.level == null ? 6000.0 : Math.floorMod(minecraft.level.getDayTime(), 24000L)));
+            case TIME_OF_DAY -> put(new Keyframe.TimeOfDay(tick, blend, minecraft.level == null ? 6000.0 : Math.floorMod(minecraft.level.getOverworldClockTime(), 24000L)));
             case BLOCK_CHANGE -> EditorState.pick = new EditorState.Pick(Kit.t("pick.block"), true, false, null, KeyframeForms::addBlockChange,
                     List.of(new Menu.Item(Kit.t("pick.block_ahead"), () -> {
                         BlockHitResult hit = ViewPick.block(ViewPick.ahead());
@@ -901,7 +901,7 @@ final class KeyframeForms {
         if (minecraft.level != null) {
             Player player = minecraft.level.getPlayerByUUID(id);
             if (player != null) {
-                return player.getGameProfile().getName();
+                return player.getGameProfile().name();
             }
         }
         RecordingManifest manifest = Playback.manifest();
@@ -920,7 +920,7 @@ final class KeyframeForms {
         } catch (IllegalArgumentException notAnId) {
             if (minecraft.level != null) {
                 for (Player player : minecraft.level.players()) {
-                    if (player.getGameProfile().getName().equalsIgnoreCase(target.trim())) {
+                    if (player.getGameProfile().name().equalsIgnoreCase(target.trim())) {
                         return player.getUUID();
                     }
                 }

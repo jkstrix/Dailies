@@ -678,6 +678,30 @@ public final class SableCompat implements Host.Crafts {
         entity.zo = entity.zOld = place.z;
     }
 
+    /**
+     * Has the entity's easing go the whole way to a place in its next step, keeping the turn it was already making as its
+     * target (what a one-step lerpTo did before 26.1)
+     */
+    private static void oneStepTo(Entity entity, Vec3 end) {
+        net.minecraft.world.entity.InterpolationHandler interpolation = entity.getInterpolation();
+        net.minecraft.core.PositionAndRotation target = interpolation.target();
+        float yRot = target != null ? target.yRot() : entity.getYRot();
+        float xRot = target != null ? target.xRot() : entity.getXRot();
+        interpolation.cancel();
+        if (interpolation instanceof net.minecraft.world.entity.AbstractInterpolationHandler stepped) {
+            comedymonkey.dailies.mixin.access.InterpolationStepsAccess steps = (comedymonkey.dailies.mixin.access.InterpolationStepsAccess) stepped;
+            int usual = steps.dailies$steps();
+            steps.dailies$setSteps(1);
+            try {
+                entity.moveOrInterpolateTo(end, yRot, xRot);
+            } finally {
+                steps.dailies$setSteps(usual);
+            }
+        } else {
+            entity.moveOrInterpolateTo(end, yRot, xRot);
+        }
+    }
+
     /** Before every drawn frame of a recording: each rider goes where their craft is drawn this frame */
     private void ridersFrame(float partialTick) {
         if (this.riders.isEmpty() || !Playback.loaded()) {
@@ -714,7 +738,7 @@ public final class SableCompat implements Host.Crafts {
      * stand now, so what the tick sees as their movement (and animates as walking) is only what they walked on the deck.
      */
     private void riderTick(Entity entity) {
-        if (this.riders.isEmpty() || !entity.level().isClientSide || !(entity instanceof net.minecraft.world.entity.LivingEntity player) || !Playback.loaded()) {
+        if (this.riders.isEmpty() || !entity.level().isClientSide() || !(entity instanceof net.minecraft.world.entity.LivingEntity player) || !Playback.loaded()) {
             return;
         }
         try {
@@ -733,7 +757,7 @@ public final class SableCompat implements Host.Crafts {
             Vec3 end = (Vec3) this.transformPosition.invoke(pose, rider.to);
             hold(player, (Vec3) this.transformPosition.invoke(pose, rider.from));
             // One step, so the whole way is gone this tick. The turn it was already making is kept as its target
-            player.lerpTo(end.x, end.y, end.z, player.lerpTargetYRot(), player.lerpTargetXRot(), 1);
+            oneStepTo(player, end);
         } catch (Throwable t) {
             failOnce("moving people with their craft", t);
         }
@@ -758,7 +782,7 @@ public final class SableCompat implements Host.Crafts {
                 if (craft != null && player != null) {
                     Vec3 place = (Vec3) this.transformPosition.invoke(this.logicalPose.invoke(craft), rider.local);
                     hold(player, place);
-                    player.lerpTo(place.x, place.y, place.z, player.lerpTargetYRot(), player.lerpTargetXRot(), 1);
+                    oneStepTo(player, place);
                 }
             }
         } catch (Throwable t) {
@@ -785,7 +809,7 @@ public final class SableCompat implements Host.Crafts {
                 // Gathered first and written only when whole, so a failure never leaves a craft that has no blocks
                 Object plot = this.getPlot.invoke(subLevel);
                 ChunkPos pos = (ChunkPos) this.plotPos.get(plot);
-                long plotCoordinate = ChunkPos.asLong(pos.x - this.originX.getInt(origin), pos.z - this.originY.getInt(origin));
+                long plotCoordinate = ChunkPos.pack(pos.x() - this.originX.getInt(origin), pos.z() - this.originY.getInt(origin));
                 Object pose = this.logicalPose.invoke(subLevel);
                 Object start = this.startTracking.newInstance(plotCoordinate, this.getUniqueId.invoke(subLevel), pose, pose, this.plotBounds.invoke(plot),
                     this.getName.invoke(subLevel), tick);
@@ -821,7 +845,9 @@ public final class SableCompat implements Host.Crafts {
             if (!this.isInPlot(entity.level(), entity.getX(), entity.getZ())) {
                 return;
             }
-            ClientboundTeleportEntityPacket stay = new ClientboundTeleportEntityPacket(entity);
+            ClientboundTeleportEntityPacket stay = new ClientboundTeleportEntityPacket(entity.getId(),
+                new net.minecraft.world.entity.PositionMoveRotation(entity.position(), Vec3.ZERO, entity.getYRot(), entity.getXRot()),
+                net.minecraft.world.entity.Relative.DELTA, entity.onGround());
             this.markTeleport.invoke(stay, true);
             out.packet(stay);
         } catch (Throwable t) {
@@ -835,7 +861,7 @@ public final class SableCompat implements Host.Crafts {
     public boolean isInPlot(Level level, double x, double z) {
         try {
             Object container = this.getContainer.invoke(null, level);
-            return container != null && (boolean) this.inBounds.invoke(container, new ChunkPos(BlockPos.containing(x, 0.0, z)));
+            return container != null && (boolean) this.inBounds.invoke(container, ChunkPos.containing(BlockPos.containing(x, 0.0, z)));
         } catch (Throwable t) {
             failOnce("asking whether a place is on a craft", t);
             return false;

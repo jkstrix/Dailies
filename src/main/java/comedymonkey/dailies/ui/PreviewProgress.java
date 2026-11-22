@@ -1,15 +1,17 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.editor.StretchPreview;
 import comedymonkey.dailies.editor.StretchRun;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.Locale;
 
@@ -46,7 +48,7 @@ public final class PreviewProgress extends Screen {
      * once a frame by the playback mixin, with what the game meant to do. Render thread
      */
     public static boolean drawWorld(boolean wanted) {
-        if (wanted && StretchPreview.running() && Minecraft.getInstance().screen instanceof PreviewProgress) {
+        if (wanted && StretchPreview.running() && Minecraft.getInstance().gui.screen() instanceof PreviewProgress) {
             framesWithoutWorld++;
             return false;
         }
@@ -105,12 +107,12 @@ public final class PreviewProgress extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
             cancel();
         }
         // Every other key is kept from the game, whose keys would otherwise reach the paused recording behind
@@ -118,8 +120,8 @@ public final class PreviewProgress extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && this.overCancel(mouseX, mouseY)) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && this.overCancel(event.x(), event.y())) {
             Kit.click();
             cancel();
         }
@@ -137,15 +139,15 @@ public final class PreviewProgress extends Screen {
     @Override
     public void tick() {
         // The recording was closed behind the plate
-        if (!Playback.active() && this.minecraft != null && this.minecraft.screen == this) {
-            this.minecraft.setScreen(null);
+        if (!Playback.active() && this.minecraft != null && this.minecraft.gui.screen() == this) {
+            this.minecraft.gui.setScreen(null);
         }
     }
 
     // ------------------------------------------------------------------ Drawing
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         try {
             graphics.fill(0, 0, this.width, this.height, BACKGROUND);
             StretchRun run = StretchPreview.current();
@@ -162,7 +164,7 @@ public final class PreviewProgress extends Screen {
         }
     }
 
-    private void plate(GuiGraphics graphics, StretchRun run, int mouseX, int mouseY) {
+    private void plate(GuiGraphicsExtractor graphics, StretchRun run, int mouseX, int mouseY) {
         int width = Math.min(PLATE_WIDTH, Math.max(140, this.width - 16));
         int left = (this.width - width) / 2;
         int top = Math.max(4, (this.height - PLATE_HEIGHT) / 2);

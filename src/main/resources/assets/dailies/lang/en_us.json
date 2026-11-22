@@ -180,7 +180,7 @@
   "dailies.ui.moments.tip": "Open the moments page in your web browser: what happened while you played, the clips found in it, and what was said.",
   "dailies.ui.notice.moments_page_opened": "The moments page has opened in your web browser",
   "dailies.ui.notice.moments_page_off": "The moments page is served by Dailies' local server, which is switched off. Switch on \"mcpEnabled\" in the settings to use it",
-  "key.categories.dailies": "Dailies",
+  "key.category.dailies.dailies": "Dailies",
   "dailies.key.record": "Start or finish recording",
   "dailies.key.pause_recording": "Pause or resume recording",
   "dailies.key.marker1": "Drop marker 1",

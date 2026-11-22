@@ -1,5 +1,6 @@
 package comedymonkey.dailies.selftest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.suggestion.Suggestion;
@@ -28,9 +29,9 @@ import comedymonkey.dailies.ui.PlayerList;
 import comedymonkey.dailies.ui.PreviewProgress;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.ClientCommandHandler;
@@ -77,7 +78,7 @@ final class WatchingSteps {
 
     /** Dailies' own settings screen (CFG-4) */
     private static boolean settingsOpen(Minecraft minecraft) {
-        return minecraft.screen instanceof comedymonkey.dailies.ui.SettingsScreen;
+        return minecraft.gui.screen() instanceof comedymonkey.dailies.ui.SettingsScreen;
     }
 
     // ------------------------------------------------------------------ Recording, by command
@@ -190,7 +191,7 @@ final class WatchingSteps {
         // The settings
         expect(test, "config", "config");
         test.waitFor(() -> settingsOpen(minecraft), 10, "the settings screen");
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
 
         // The recorder walks, so there is something to follow
         test.waitTicks(10);
@@ -271,11 +272,11 @@ final class WatchingSteps {
         Minecraft minecraft = Minecraft.getInstance();
         test.waitFor(() -> !Playback.jumping(), 30, "playback to settle");
         test.onClientRun(() -> {
-            if (!(minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen)) {
+            if (!(minecraft.gui.screen() instanceof comedymonkey.dailies.ui.EditorScreen)) {
                 Controls.openTimeline();
             }
         });
-        test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor");
+        test.waitFor(() -> minecraft.gui.screen() instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the editor");
         frames(test, 4);
     }
 
@@ -284,7 +285,7 @@ final class WatchingSteps {
         frames(test, 3);
         test.onClientRun(() -> {
             Minecraft minecraft = Minecraft.getInstance();
-            net.minecraft.client.Screenshot.grab(minecraft.gameDirectory, name + ".png", minecraft.getMainRenderTarget(), said -> { });
+            net.minecraft.client.Screenshot.grab(minecraft.gameDirectory, name + ".png", minecraft.gameRenderer.mainRenderTarget(), 1, said -> { });
         });
     }
 
@@ -349,10 +350,10 @@ final class WatchingSteps {
         return differing(first, second, 0.0, 0.0, 1.0, 1.0);
     }
 
-    private static boolean layerCancelled(SelfTest test, ResourceLocation layer) throws Exception {
+    private static boolean layerCancelled(SelfTest test, Identifier layer) throws Exception {
         return test.onClient(() -> {
             Minecraft minecraft = Minecraft.getInstance();
-            GuiGraphics graphics = new GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
+            GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, new net.minecraft.client.renderer.state.gui.GuiRenderState(), 0, 0);
             return NeoForge.EVENT_BUS.post(new RenderGuiLayerEvent.Pre(graphics, DeltaTracker.ZERO, layer, (drawn, delta) -> { })).isCanceled();
         });
     }
@@ -402,31 +403,32 @@ final class WatchingSteps {
         expect(test, "moments", "moments");
         expect(test, "config", "config");
         test.waitFor(() -> settingsOpen(minecraft), 10, "the settings screen while watching");
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
 
         // Any other command is turned away before it could be sent anywhere (PLAY-4)
         test.onClientRun(() -> minecraft.player.connection.sendCommand("time set day"));
         check(DailiesCommand.lastAnswer().equals("only_own"), "a command that is not Dailies' own was not turned away while watching");
-        check(test.onClient(() -> minecraft.player.connection.sendUnsignedCommand("gamemode creative")) && DailiesCommand.lastAnswer().equals("only_own"),
-            "an unsigned command that is not Dailies' own was not turned away while watching");
+        // A command from a clicked link, which the game sends without asking for a signature
+        test.onClientRun(() -> minecraft.player.connection.sendUnattendedCommand("gamemode creative", null));
+        check(DailiesCommand.lastAnswer().equals("only_own"), "an unsigned command that is not Dailies' own was not turned away while watching");
         check(minecraft.player.isSpectator(), "the viewer is no longer a spectator after a command");
 
         // The chat never opens while watching: the chat key opens the editor and the command key does nothing
-        test.onClientRun(() -> minecraft.setScreen(new net.minecraft.client.gui.screens.ChatScreen("/")));
+        test.onClientRun(() -> minecraft.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("/", false)));
         test.waitTicks(2);
-        check(minecraft.screen == null, "the command key opened a screen while watching: " + minecraft.screen);
-        test.onClientRun(() -> minecraft.setScreen(new net.minecraft.client.gui.screens.ChatScreen("")));
-        test.waitFor(() -> minecraft.screen instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the chat key to open the editor while watching");
-        test.onClientRun(() -> minecraft.screen.onClose());
+        check(minecraft.gui.screen() == null, "the command key opened a screen while watching: " + minecraft.gui.screen());
+        test.onClientRun(() -> minecraft.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false)));
+        test.waitFor(() -> minecraft.gui.screen() instanceof comedymonkey.dailies.ui.EditorScreen, 10, "the chat key to open the editor while watching");
+        test.onClientRun(() -> minecraft.gui.screen().onClose());
         test.waitTicks(2);
 
         // Escape gives Dailies' own menu in place of the game's pause menu, and Escape there goes back to watching
         test.onClientRun(() -> minecraft.pauseGame(false));
         test.waitTicks(2);
-        check(minecraft.screen instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape while watching brought up " + minecraft.screen + " rather than Dailies' menu");
-        test.onClientRun(() -> minecraft.screen.keyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        check(minecraft.gui.screen() instanceof comedymonkey.dailies.ui.PlaybackMenu, "Escape while watching brought up " + minecraft.gui.screen() + " rather than Dailies' menu");
+        test.onClientRun(() -> minecraft.gui.screen().keyPressed(Inputs.key(com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE)));
         test.waitTicks(2);
-        check(minecraft.screen == null, "Escape in Dailies' menu did not go back to watching: " + minecraft.screen);
+        check(minecraft.gui.screen() == null, "Escape in Dailies' menu did not go back to watching: " + minecraft.gui.screen());
     }
 
     // --- REC-32: markers in the world ---
@@ -434,10 +436,17 @@ final class WatchingSteps {
     private static void markers(SelfTest test, Minecraft minecraft, RecordingManifest manifest) throws Exception {
         RecordingManifest.Marker well = manifest.markers.get(0);
         Vec3 spot = new Vec3(well.position[0], well.position[1], well.position[2]);
+        // The settings are saved between runs: an earlier run that stopped half way could have left them off
+        setting(test, "showMarkersInWorld", true);
+        setting(test, "showCameraPath", true);
         jump(test, Math.min(Playback.total() - 5, well.tick + 60));
         editor(test);
         lookFrom(test, spot.add(-5.0, 2.0, -5.0), spot);
 
+        // The rings are noted as they are drawn, once a frame: wait for a frame drawn since the camera turned
+        test.waitFor(() -> !MarkerRings.drawn().isEmpty(), 5, "the marker rings to be drawn (loaded " + Playback.loaded()
+            + ", exporting " + comedymonkey.dailies.export.Export.active() + ", Dailies hidden " + comedymonkey.dailies.ui.Notices.hidden()
+            + ", HUD hidden " + test.onClient(comedymonkey.dailies.ui.HudHidden::get) + ", markers " + manifest.markers.size() + ")");
         List<MarkerRings.Ring> rings = MarkerRings.drawn();
         check(rings.size() == 1, rings.size() + " marker rings are drawn, not one for the one marker that stored a position");
         MarkerRings.Ring ring = rings.get(0);
@@ -451,8 +460,8 @@ final class WatchingSteps {
         test.onClientRun(() -> {
             double[] at = MarkerRings.onScreen(ring);
             check(at != null, "the ring is behind the camera that was turned to it");
-            minecraft.screen.mouseClicked(at[0], at[1], 0);
-            minecraft.screen.mouseReleased(at[0], at[1], 0);
+            minecraft.gui.screen().mouseClicked(Inputs.leftClick(at[0], at[1]), false);
+            minecraft.gui.screen().mouseReleased(Inputs.leftClick(at[0], at[1]));
         });
         test.waitFor(() -> !Playback.jumping() && Playback.position() == well.tick, 60, "the jump a click on a marker's ring makes");
         editor(test);
@@ -479,7 +488,7 @@ final class WatchingSteps {
             return index;
         });
         lookFrom(test, base.add(4.0, 6.0, -18.0), base.add(4.0, 5.0, -7.0));
-        check(minecraft.screen != null && PathPreview.drawn(), "the camera path is not drawn while the editor is open");
+        check(minecraft.gui.screen() != null && PathPreview.drawn(), "the camera path is not drawn while the editor is open");
         picture(test, "watching-path");
 
         test.onClientRun(() -> {
@@ -516,8 +525,8 @@ final class WatchingSteps {
             PathPreview.Mark second = PathPreview.marks().get(1);
             double[] at = PathPreview.onScreen(second);
             check(at != null, "a keyframe mark is behind the camera that was turned to the path");
-            minecraft.screen.mouseClicked(at[0], at[1], 0);
-            minecraft.screen.mouseReleased(at[0], at[1], 0);
+            minecraft.gui.screen().mouseClicked(Inputs.leftClick(at[0], at[1]), false);
+            minecraft.gui.screen().mouseReleased(Inputs.leftClick(at[0], at[1]));
             List<PathPreview.Mark> selected = PathPreview.selectedMarks();
             check(selected.size() == 1 && selected.get(0).tick() == ticks[1], "a click on the second keyframe's mark selected " + selected);
         });
@@ -541,14 +550,15 @@ final class WatchingSteps {
         Path with = still(test, "overlays-on", 640, 360, false);
         setting(test, "showCameraPath", false);
         setting(test, "showMarkersInWorld", false);
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         frames(test, 4);
         check(!PathPreview.drawn() && MarkerRings.drawn().isEmpty(), "the path or the rings are still drawn after being switched off");
         Path without = still(test, "overlays-off", 640, 360, false);
-        check(Arrays.equals(Files.readAllBytes(with), Files.readAllBytes(without)),
-            "a still exported with the camera path, marker rings and editor on screen is not the same file as one without (" + differing(with, without) + " pixels differ)");
+        // Back on before judging: the settings are saved, and a failed check must not leave them off for later runs
         setting(test, "showCameraPath", true);
         setting(test, "showMarkersInWorld", true);
+        check(Arrays.equals(Files.readAllBytes(with), Files.readAllBytes(without)),
+            "a still exported with the camera path, marker rings and editor on screen is not the same file as one without (" + differing(with, without) + " pixels differ)");
         check(!PathPreview.drawn(), "the camera path is drawn with the editor closed");
         editor(test);
 
@@ -588,7 +598,7 @@ final class WatchingSteps {
         test.onClientRun(() -> {
             EditorSession.history().clearAllTracks();
             check(PathPreview.stretches().isEmpty() && PathPreview.marks().isEmpty(), "a path is left after every track was cleared");
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
         frames(test, 4);
     }
@@ -705,9 +715,9 @@ final class WatchingSteps {
             + ", beacon beams " + withoutBeams + "; drawn with all on: " + entities + " entities, " + players + " players, " + terrain + " terrain layers, " + blockEntities + " block entities, " + beams + " beams");
 
         // The interface layers: each look turns its own layer away and no other
-        ResourceLocation[] layers = {VanillaGuiLayers.HOTBAR, VanillaGuiLayers.SCOREBOARD_SIDEBAR, VanillaGuiLayers.OVERLAY_MESSAGE};
+        Identifier[] layers = {VanillaGuiLayers.HOTBAR, VanillaGuiLayers.SCOREBOARD_SIDEBAR, VanillaGuiLayers.OVERLAY_MESSAGE};
         String[] names = {"show_hotbar", "show_scoreboard", "show_action_bar"};
-        for (ResourceLocation layer : layers) {
+        for (Identifier layer : layers) {
             check(!layerCancelled(test, layer), "the " + layer + " layer is turned away with every look on");
         }
         for (int i = 0; i < names.length; i++) {
@@ -887,7 +897,7 @@ final class WatchingSteps {
         while (!(Playback.paused() && Playback.position() == walkEnd)) {
             worst = Math.max(worst, test.onClient(() -> {
                 Player there = minecraft.level.getPlayerByUUID(recorderId);
-                return there == null ? 0.0 : offAim(there.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true)).add(0.0, there.getEyeHeight(), 0.0));
+                return there == null ? 0.0 : offAim(there.getPosition(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true)).add(0.0, there.getEyeHeight(), 0.0));
             }));
             looked++;
             check(looked < 2000, "the walk never finished playing");
@@ -910,7 +920,7 @@ final class WatchingSteps {
         test.onClientRun(() -> PlayerList.follow(recorderId));
         check(!PlayerList.following(recorderId) && Viewer.following() == null, "pressing 'follow' again did not stop following");
         morePlayers(test, minecraft, recorderId);
-        test.onClientRun(() -> minecraft.setScreen(null));
+        test.onClientRun(() -> minecraft.gui.setScreen(null));
         test.log("following kept the recorder within " + String.format("%.1f", worst) + " degrees of the middle of the view over " + looked + " looks");
     }
 
@@ -977,8 +987,8 @@ final class WatchingSteps {
             if (recorder == null) {
                 return Double.MAX_VALUE;
             }
-            Vec3 eyes = recorder.getPosition(minecraft.getTimer().getGameTimeDeltaPartialTick(true)).add(0.0, recorder.getEyeHeight(), 0.0);
-            return minecraft.gameRenderer.getMainCamera().getPosition().distanceTo(eyes);
+            Vec3 eyes = recorder.getPosition(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true)).add(0.0, recorder.getEyeHeight(), 0.0);
+            return minecraft.gameRenderer.mainCamera().position().distanceTo(eyes);
         });
     }
 
@@ -989,12 +999,12 @@ final class WatchingSteps {
             comedymonkey.dailies.capture.GameCodec codec = new comedymonkey.dailies.capture.GameCodec(listener.registryAccess(), listener.getConnectionType());
             List<net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry> entries = List.of(
                 new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry(ADA, new com.mojang.authlib.GameProfile(ADA, ADA_NAME), true, 0,
-                    net.minecraft.world.level.GameType.SURVIVAL, null, null),
+                    net.minecraft.world.level.GameType.SURVIVAL, null, true, 0, null),
                 new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry(BRUNEL, new com.mojang.authlib.GameProfile(BRUNEL, "Brunel"), true, 0,
-                    net.minecraft.world.level.GameType.SURVIVAL, null, null));
+                    net.minecraft.world.level.GameType.SURVIVAL, null, true, 0, null));
             listener.handlePlayerInfoUpdate(comedymonkey.dailies.capture.PlayerInfoPackets.build(codec, comedymonkey.dailies.capture.PlayerInfoPackets.allButChat(), entries));
             listener.handleAddEntity(new net.minecraft.network.protocol.game.ClientboundAddEntityPacket(90001, ADA, at.x, at.y, at.z, 0.0F, 90.0F,
-                net.minecraft.world.entity.EntityType.PLAYER, 0, Vec3.ZERO, 90.0));
+                net.minecraft.world.entity.EntityTypes.PLAYER, 0, Vec3.ZERO, 90.0));
         });
         frames(test, 6);
     }
@@ -1178,11 +1188,11 @@ final class WatchingSteps {
     private static void size(SelfTest test, int width, int height, int scale) throws Exception {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
-            org.lwjgl.glfw.GLFW.glfwSetWindowSize(minecraft.getWindow().getWindow(), width, height);
+            org.lwjgl.sdl.SDLVideo.SDL_SetWindowSize(minecraft.getWindow().handle(), width, height);
             minecraft.options.guiScale().set(scale);
         });
         test.waitTicks(8);
-        test.onClientRun(minecraft::resizeDisplay);
+        test.onClientRun(minecraft::resizeGui);
         test.waitTicks(8);
     }
 
@@ -1213,8 +1223,8 @@ final class WatchingSteps {
                 test.onClientRun(() -> {
                     double[] at = PathPreview.onScreen(PathPreview.marks().get(1));
                     if (at != null) {
-                        minecraft.screen.mouseClicked(at[0], at[1], 0);
-                        minecraft.screen.mouseReleased(at[0], at[1], 0);
+                        minecraft.gui.screen().mouseClicked(Inputs.leftClick(at[0], at[1]), false);
+                        minecraft.gui.screen().mouseReleased(Inputs.leftClick(at[0], at[1]));
                     }
                 });
                 picture(test, "eye-path-sky");
@@ -1287,7 +1297,7 @@ final class WatchingSteps {
                 });
             });
         } finally {
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
             size(test, widthBefore, heightBefore, scaleBefore);
         }
     }

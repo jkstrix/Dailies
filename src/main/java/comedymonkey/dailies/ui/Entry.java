@@ -1,13 +1,17 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.function.Function;
 import java.util.function.IntSupplier;
@@ -242,7 +246,7 @@ final class Entry extends Gadget {
     }
 
     @Override
-    void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         boolean typing = focused == this;
         if (!typing && this.error == null) {
             String now = safe(this.value);
@@ -263,16 +267,16 @@ final class Entry extends Gadget {
         this.box.setX(this.x + 4);
         this.box.setY(this.y + 3);
         this.box.setWidth(Math.max(4, boxWidth - 7));
-        this.box.render(graphics, mouseX, mouseY, 0.0F);
+        this.box.extractRenderState(graphics, mouseX, mouseY, 0.0F);
         if (this.swatch != null) {
             int left = this.x + boxWidth + Kit.GAP;
             graphics.fill(left, this.y, left + patch - Kit.GAP, this.y + Kit.ROW, 0xFF000000 | (this.swatch.getAsInt() & 0xFFFFFF));
-            graphics.renderOutline(left, this.y, patch - Kit.GAP, Kit.ROW, Controls.BRASS);
+            graphics.outline(left, this.y, patch - Kit.GAP, Kit.ROW, Controls.BRASS);
         }
         if (wrong != null && this.errorBelow) {
             int line = this.y + Kit.ROW + 2;
             for (FormattedCharSequence part : font.split(wrong, Math.max(20, this.width - 2))) {
-                graphics.drawString(font, part, this.x + 1, line, Controls.ALERT, false);
+                graphics.text(font, part, this.x + 1, line, Controls.ALERT, false);
                 line += 10;
             }
         }
@@ -284,7 +288,7 @@ final class Entry extends Gadget {
 
     @Override
     @Nullable Gadget press(double mouseX, double mouseY, int button) {
-        if (button != 0 || !this.overBox(mouseX, mouseY) || !this.usable.getAsBoolean()) {
+        if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.overBox(mouseX, mouseY) || !this.usable.getAsBoolean()) {
             return null;
         }
         if (focused != this) {
@@ -293,7 +297,8 @@ final class Entry extends Gadget {
             this.box.setFocused(true);
         }
         Gadget.focus = null;
-        this.box.onClick(mouseX, mouseY);
+        int shift = Minecraft.getInstance().hasShiftDown() ? InputConstants.MOD_SHIFT : 0;
+        this.box.onClick(new MouseButtonEvent(mouseX, mouseY, new MouseButtonInfo(button, shift)), false);
         return this;
     }
 
@@ -357,15 +362,15 @@ final class Entry extends Gadget {
             }
             return;
         }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_TAB) {
+        if (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER || keyCode == InputConstants.KEY_TAB) {
             if (this.commit()) {
                 focused = null;
                 this.box.setFocused(false);
-                if (this.onEnter != null && keyCode != GLFW.GLFW_KEY_TAB) {
+                if (this.onEnter != null && keyCode != InputConstants.KEY_TAB) {
                     EditorState.guard(this.onEnter);
                 }
             }
-        } else if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        } else if (keyCode == InputConstants.KEY_ESCAPE) {
             // Back to the value it had
             this.error = null;
             this.liveError = null;
@@ -374,20 +379,20 @@ final class Entry extends Gadget {
             focused = null;
             this.box.setFocused(false);
         } else {
-            this.box.keyPressed(keyCode, scanCode, modifiers);
+            this.box.keyPressed(new KeyEvent(keyCode, scanCode, modifiers));
             this.afterKey();
         }
     }
 
-    void typed(char character, int modifiers) {
+    void typed(int codepoint) {
         if (this.forMenu) {
             Menu menu = Menu.open;
             if (menu != null) {
-                menu.typed(character);
+                menu.typed(codepoint);
             }
             return;
         }
-        this.box.charTyped(character, modifiers);
+        this.box.charTyped(new CharacterEvent(codepoint));
         this.afterKey();
     }
 

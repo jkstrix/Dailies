@@ -133,7 +133,7 @@ public final class LightPasses {
     public static void settle(ClientLevel level) {
         ours++;
         try {
-            for (int i = 0; i < 100_000 && !level.isLightUpdateQueueEmpty(); i++) {
+            for (int i = 0; i < 100_000 && !queue(level).isEmpty(); i++) {
                 level.pollLightUpdates();
             }
             level.getChunkSource().getLightEngine().runLightUpdates();

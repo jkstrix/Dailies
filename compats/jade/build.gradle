@@ -14,10 +14,10 @@ version = '1.0.0'
 group = 'comedymonkey.dailiescompat'
 
 base {
-    archivesName = 'dailies-compat-jade-1.21.1'
+    archivesName = "dailies-compat-jade-${minecraft_version}"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 repositories {
     mavenCentral()
@@ -42,8 +42,8 @@ neoForge {
     // No runs: the compat is tried in game beside Dailies and Jade, in the modded test (its jade group)
 }
 
-// Jade 15.10.6 for NeoForge 1.21.1, the version in the owner's pack and the modded test
-def jadeVersion = '15.10.6+neoforge'
+// Jade 26.3.5 for NeoForge 26.3
+def jadeVersion = '26.3.5+neoforge'
 
 dependencies {
     // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies

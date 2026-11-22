@@ -9,7 +9,6 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.ui.Controls;
 import comedymonkey.dailies.ui.RecordingsScreen;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -41,14 +40,14 @@ final class ManualShots {
         // A GUI scale at which a 1920x1080 window has room for the editor's panels
         test.onClientRun(() -> {
             minecraft.options.guiScale().set(2);
-            minecraft.resizeDisplay();
+            minecraft.resizeGui();
         });
         test.waitTicks(40);
         shot(test, "01-title-screen");
 
         WorldSteps.createWorld(test);
         test.command("time set 1000");
-        test.command("summon minecraft:pig 3 -60 6 {CustomName:'\"Hamlet\"',NoAI:1b}");
+        test.command("summon minecraft:pig 3 -60 6 {CustomName:\"Hamlet\",NoAI:1b}");
         test.command("fill -3 -61 8 9 -61 14 minecraft:smooth_stone");
         test.command("setblock 6 -60 10 minecraft:campfire");
         attempt(test, "building the machines", () -> CraftSteps.build(test));
@@ -63,7 +62,7 @@ final class ManualShots {
             test.onClientRun(() -> minecraft.pauseGame(false));
             test.waitTicks(15);
             shot(test, "03-pause-menu");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
 
         // Something worth watching: the recorder walks a loop round the campfire, with a marker half way, while
@@ -91,16 +90,16 @@ final class ManualShots {
             test.onClientRun(() -> Controls.finishRecording(null));
             test.waitTicks(15);
             shot(test, "04-name-the-recording");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
         JsonObject saved = test.tool("recording_finish", args("name", "A walk round the fire"));
         test.waitTicks(20);
 
         attempt(test, "the recordings list", () -> {
-            test.onClientRun(() -> minecraft.setScreen(new RecordingsScreen(null)));
+            test.onClientRun(() -> minecraft.gui.setScreen(new RecordingsScreen(null)));
             test.waitTicks(50);
             shot(test, "05-recordings-list");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
 
         test.tool("replay_open", args("path", saved.get("path").getAsString()));
@@ -163,8 +162,8 @@ final class ManualShots {
             test.onClientRun(Controls::openTimeline);
             test.waitTicks(5);
             test.onClientRun(() -> {
-                if (minecraft.screen != null) {
-                    minecraft.setScreen(null);
+                if (minecraft.gui.screen() != null) {
+                    minecraft.gui.setScreen(null);
                 }
             });
             // The export step's camera track would hold the view through the Smart Camera pictures that follow
@@ -213,7 +212,7 @@ final class ManualShots {
 
         attempt(test, "the settings screen", () -> {
             KitShots.settings(test, "12");
-            test.onClientRun(() -> minecraft.setScreen(null));
+            test.onClientRun(() -> minecraft.gui.setScreen(null));
         });
 
         PlaybackSteps.close(test);
@@ -225,8 +224,8 @@ final class ManualShots {
         Minecraft minecraft = Minecraft.getInstance();
         test.onClientRun(() -> {
             try {
-                if (minecraft.screen != null) {
-                    minecraft.setScreen(null);
+                if (minecraft.gui.screen() != null) {
+                    minecraft.gui.setScreen(null);
                 }
                 Class<?> state = Class.forName("comedymonkey.dailies.ui.EditorState");
                 java.lang.reflect.Field field = state.getDeclaredField("tab");
@@ -277,7 +276,7 @@ final class ManualShots {
             event.addProperty("first", turn % 5 == 0);
             JsonObject player = new JsonObject();
             player.addProperty("uuid", Minecraft.getInstance().player.getUUID().toString());
-            player.addProperty("name", Minecraft.getInstance().player.getGameProfile().getName());
+            player.addProperty("name", Minecraft.getInstance().player.getGameProfile().name());
             event.add("player", player);
             event.addProperty("real_time", now);
             event.addProperty("replay_uuid", recording);
@@ -348,8 +347,8 @@ final class ManualShots {
             Host.LOGGER.warn("Dailies manual pictures: {} could not be pictured", what, t);
             try {
                 test.onClientRun(() -> {
-                    if (Minecraft.getInstance().screen != null && Minecraft.getInstance().level != null) {
-                        Minecraft.getInstance().setScreen(null);
+                    if (Minecraft.getInstance().gui.screen() != null && Minecraft.getInstance().level != null) {
+                        Minecraft.getInstance().gui.setScreen(null);
                     }
                 });
             } catch (Exception ignored) {
@@ -361,13 +360,9 @@ final class ManualShots {
     /** Saves what is on screen now, as the full picture and as a smaller one for the manual */
     static void shot(SelfTest test, String name) throws Exception {
         Path full = folder.resolve(name + ".png");
-        test.onClientRun(() -> {
-            try (NativeImage image = Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
-                image.writeToFile(full);
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-        });
+        try (NativeImage image = SelfTestSupport.screenshot(test)) {
+            image.writeToFile(full);
+        }
         small(full, folder.resolve(name + ".jpg"));
         test.log("manual: saved " + name);
     }

@@ -10,7 +10,7 @@ import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
@@ -124,6 +124,20 @@ final class WorldProbe {
     private WorldProbe() {
     }
 
+    /** How long the sky still flashes from lightning, as the game shows it; it keeps this to itself, so it is read from its field */
+    private static int skyFlashTime(ClientLevel level) {
+        if (Minecraft.getInstance().options.hideLightningFlash().get()) {
+            return 0;
+        }
+        try {
+            java.lang.reflect.Field field = ClientLevel.class.getDeclaredField("skyFlashTime");
+            field.setAccessible(true);
+            return field.getInt(level);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("the sky's flash could not be read", e);
+        }
+    }
+
     /**
      * @param like     the live note this is to be compared with, or null when this is the live note
      * @param recorder the recorder's player: the game's own player live, the recorded one in playback
@@ -134,37 +148,37 @@ final class WorldProbe {
         WorldProbe probe = new WorldProbe();
         probe.tick = tick;
         probe.label = label;
-        probe.dimension = level.dimension().location().toString();
+        probe.dimension = level.dimension().identifier().toString();
         // What is waiting to be lit is lit first, as the next drawn frame would do: both games are read as they would be seen
         Snapshots.settleLight(level);
 
         ChunkPos centre = recorder != null ? recorder.chunkPosition() : new ChunkPos(0, 0);
-        probe.centreX = like != null ? like.centreX : centre.x;
-        probe.centreZ = like != null ? like.centreZ : centre.z;
+        probe.centreX = like != null ? like.centreX : centre.x();
+        probe.centreZ = like != null ? like.centreZ : centre.z();
         probe.sendDistance = like != null ? like.sendDistance
             : minecraft.getConnection() == null ? 12 : ((comedymonkey.dailies.mixin.access.ClientPacketListenerAccess) minecraft.getConnection()).dailies$serverChunkRadius();
-        probe.dayTime = level.getDayTime();
+        probe.dayTime = level.getOverworldClockTime();
         probe.rain = level.getRainLevel(1.0F);
         probe.thunder = level.getThunderLevel(1.0F);
-        if (level.getSkyFlashTime() <= 0 && recorder != null) {
-            Vec3 colour = level.getSkyColor(recorder.getEyePosition(), 1.0F);
-            probe.sky = new double[]{colour.x, colour.y, colour.z};
+        if (skyFlashTime(level) <= 0 && recorder != null) {
+            org.joml.Vector3fc colour = level.environmentAttributes().getValue(net.minecraft.world.attribute.EnvironmentAttributes.SKY_COLOR, recorder.getEyePosition(), null);
+            probe.sky = new double[]{colour.x(), colour.y(), colour.z()};
         }
-        probe.screen = minecraft.screen == null ? "none" : minecraft.screen.getClass().getName();
+        probe.screen = minecraft.gui.screen() == null ? "none" : minecraft.gui.screen().getClass().getName();
         if (recorder != null) {
             probe.recorder = tracked(recorder);
         }
 
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        int minY = level.getMinBuildHeight();
-        int maxY = level.getMaxBuildHeight();
+        int minY = level.getMinY();
+        int maxY = level.getMaxY() + 1;
         for (int x = probe.centreX - REACH; x <= probe.centreX + REACH; x++) {
             for (int z = probe.centreZ - REACH; z <= probe.centreZ + REACH; z++) {
                 LevelChunk chunk = level.getChunkSource().getChunk(x, z, ChunkStatus.FULL, false);
                 if (chunk == null) {
                     continue;
                 }
-                long key = ChunkPos.asLong(x, z);
+                long key = ChunkPos.pack(x, z);
                 boolean near = Math.abs(x - probe.centreX) <= NEAR && Math.abs(z - probe.centreZ) <= NEAR;
                 LevelChunkSection[] sections = chunk.getSections();
                 long[] hashes = new long[sections.length];
@@ -174,7 +188,7 @@ final class WorldProbe {
                     hashes[i] = section.hasOnlyAir() ? 0 : near ? placeByPlace(section) : byCount(section);
                     for (int quart = 0; quart < 4; quart++) {
                         Holder<Biome> biome = section.getNoiseBiome(quart, quart ^ 1, 3 - quart);
-                        biomeHash = biomeHash * 31 + biome.unwrapKey().map(name -> name.location().hashCode()).orElse(0);
+                        biomeHash = biomeHash * 31 + biome.unwrapKey().map(name -> name.identifier().hashCode()).orElse(0);
                     }
                 }
                 probe.blocks.put(key, hashes);
@@ -369,7 +383,7 @@ final class WorldProbe {
         if (entity instanceof Leashable leashed && leashed.getLeashHolder() != null) {
             state.append(" leashed to ").append(leashed.getLeashHolder().getId());
         }
-        if (entity instanceof EnderMan enderman && enderman.getCarriedBlock() != null) {
+        if (entity instanceof Enderman enderman && enderman.getCarriedBlock() != null) {
             state.append(" carrying ").append(BuiltInRegistries.BLOCK.getKey(enderman.getCarriedBlock().getBlock()).getPath());
         }
         if (entity instanceof AgeableMob young && young.isBaby()) {

@@ -8,7 +8,7 @@ import comedymonkey.dailies.edit.Scene;
 import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.editor.PointOfView;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -65,7 +65,7 @@ final class PointOfViewLanes {
     /**
      * @param across turns a tick into a position along the lanes
      */
-    static void draw(GuiGraphics graphics, Font font, int columnLeft, int laneLeft, int laneRight, int top, int total, java.util.function.DoubleUnaryOperator across) {
+    static void draw(GuiGraphicsExtractor graphics, Font font, int columnLeft, int laneLeft, int laneRight, int top, int total, java.util.function.DoubleUnaryOperator across) {
         Scene scene = EditorState.scene();
         List<LinkedRecording> lanes = lanes(scene);
         if (lanes.isEmpty()) {

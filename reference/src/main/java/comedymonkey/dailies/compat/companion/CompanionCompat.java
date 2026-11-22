@@ -11,12 +11,12 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.Event;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.lang.reflect.Method;
@@ -63,7 +63,7 @@ public final class CompanionCompat {
 
     /** The shared channel's format, see the companion's CompatPayload */
     public record Payload(int kind, String id, int version, byte[] data) implements CustomPacketPayload {
-        public static final Type<Payload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(COMPANION, "compat"));
+        public static final Type<Payload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(COMPANION, "compat"));
         public static final StreamCodec<ByteBuf, Payload> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, Payload::kind,
             ByteBufCodecs.stringUtf8(128), Payload::id, ByteBufCodecs.VAR_INT, Payload::version, ByteBufCodecs.byteArray(262144), Payload::data, Payload::new);
 
@@ -97,7 +97,9 @@ public final class CompanionCompat {
         if (Host.get().isModLoaded(COMPANION)) {
             return; // the companion registers it, see init()
         }
+        // Server side, then client side: Dailies only ever sends asks, which a server without the companion never sees
         registrar.playBidirectional(Payload.TYPE, Payload.CODEC, (payload, context) -> {
+        }, (payload, context) -> {
             if (payload.kind() == DATA) {
                 context.enqueueWork(() -> received(new CompatRoutes.Arrival(payload.id(), payload.version(), payload.data())));
             }
@@ -199,7 +201,7 @@ public final class CompanionCompat {
             } else {
                 question = new Payload(ASK, id, version, new byte[0]);
             }
-            PacketDistributor.sendToServer(question);
+            ClientPacketDistributor.sendToServer(question);
             return true;
         } catch (Throwable t) {
             if (!warned) {

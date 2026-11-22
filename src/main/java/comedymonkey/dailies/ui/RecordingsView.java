@@ -1,5 +1,7 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.file.RecordingFile;
@@ -9,14 +11,13 @@ import comedymonkey.dailies.library.LibraryIndex;
 import comedymonkey.dailies.library.LibraryQuery;
 import comedymonkey.dailies.library.StorageReport;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -274,7 +275,7 @@ final class RecordingsView extends LibraryView {
 
     /** A click on a recording: alone it chooses only that one, with Ctrl it is added or taken away, with Shift the run from the last one is chosen */
     private void choose(LibraryIndex.Entry entry) {
-        if (Screen.hasShiftDown() && this.anchor != null) {
+        if (Minecraft.getInstance().hasShiftDown() && this.anchor != null) {
             int from = -1;
             int to = -1;
             for (int i = 0; i < this.shown.size(); i++) {
@@ -286,7 +287,7 @@ final class RecordingsView extends LibraryView {
                 }
             }
             if (from >= 0 && to >= 0) {
-                if (!Screen.hasControlDown()) {
+                if (!Minecraft.getInstance().hasControlDown()) {
                     this.chosen.clear();
                 }
                 for (int i = Math.min(from, to); i <= Math.max(from, to); i++) {
@@ -295,7 +296,7 @@ final class RecordingsView extends LibraryView {
                 return;
             }
         }
-        if (Screen.hasControlDown()) {
+        if (Minecraft.getInstance().hasControlDown()) {
             if (!this.chosen.remove(entry.file)) {
                 this.chosen.add(entry.file);
             }
@@ -443,7 +444,7 @@ final class RecordingsView extends LibraryView {
         }
         Path file = Library.fileOf(entries.get(0));
         Controls.guarded(() -> {
-            Minecraft.getInstance().setScreen(null);
+            Minecraft.getInstance().gui.setScreen(null);
             Playback.open(file);
         });
     }
@@ -451,7 +452,7 @@ final class RecordingsView extends LibraryView {
     private void editChosen() {
         List<LibraryIndex.Entry> entries = this.chosenEntries();
         if (entries.size() == 1) {
-            Minecraft.getInstance().setScreen(new RecordingEditScreen(this.screen, entries.get(0), () -> {
+            Minecraft.getInstance().gui.setScreen(new RecordingEditScreen(this.screen, entries.get(0), () -> {
                 this.detailsFor = null;
                 this.screen.lookAgain();
             }));
@@ -525,7 +526,7 @@ final class RecordingsView extends LibraryView {
             List<LibraryIndex.Entry> ordered = new ArrayList<>(entries);
             // Oldest footage first: what a person combining a week of sessions nearly always wants
             ordered.sort(java.util.Comparator.comparingLong(LibraryIndex.Entry::newest));
-            Minecraft.getInstance().setScreen(new CombineScreen(this.screen, ordered, this.screen.all));
+            Minecraft.getInstance().gui.setScreen(new CombineScreen(this.screen, ordered, this.screen.all));
         }
     }
 
@@ -533,7 +534,7 @@ final class RecordingsView extends LibraryView {
         List<LibraryIndex.Entry> entries = this.chosenEntries();
         if (entries.size() == 1) {
             LibraryIndex.Entry entry = entries.get(0);
-            Minecraft.getInstance().setScreen(new TrimScreen(this.screen, Library.fileOf(entry), entry.id, RecordingsScreen.nameOf(entry), entry.totalTicks, -1, -1));
+            Minecraft.getInstance().gui.setScreen(new TrimScreen(this.screen, Library.fileOf(entry), entry.id, RecordingsScreen.nameOf(entry), entry.totalTicks, -1, -1));
         }
     }
 
@@ -581,15 +582,15 @@ final class RecordingsView extends LibraryView {
 
     private void askFolderName(Component title, String suggestion, java.util.function.Consumer<String> then) {
         Minecraft game = Minecraft.getInstance();
-        game.setScreen(new NameScreen(title, t("folder.explanation"), suggestion, t("folder.save"), t("folder.cancel"), name -> {
-            game.setScreen(this.screen);
+        game.gui.setScreen(new NameScreen(title, t("folder.explanation"), suggestion, t("folder.save"), t("folder.cancel"), name -> {
+            game.gui.setScreen(this.screen);
             String bad = LibraryQuery.badFolderName(name);
             if (bad != null) {
                 Notices.show(Component.translatable("dailies.ui.notice.refused", bad));
                 return;
             }
             then.accept(name.trim());
-        }, () -> game.setScreen(this.screen)));
+        }, () -> game.gui.setScreen(this.screen)));
     }
 
     /** "Share session" (FILE-15): the chosen recording and its moments, packed into one file for a friend */
@@ -604,7 +605,7 @@ final class RecordingsView extends LibraryView {
         Notices.show(Component.translatable("dailies.ui.share.working", RecordingsScreen.nameOf(entry)));
         Controls.offThread(() -> {
             made[0] = comedymonkey.dailies.library.Sharing.share(file, null);
-            Util.getPlatform().openPath(made[0].getParent());
+            Blaze3D.openPath(made[0].getParent());
         }, Component.translatable("dailies.ui.share.failed"), () -> {
             if (made[0] != null) {
                 Notices.show(Component.translatable("dailies.ui.share.done", made[0].getFileName().toString()));
@@ -626,7 +627,7 @@ final class RecordingsView extends LibraryView {
                 packs = list.filter(path -> path.getFileName().toString().endsWith(comedymonkey.dailies.library.SharePack.EXTENSION)).sorted().toList();
             }
             if (packs.isEmpty()) {
-                Util.getPlatform().openPath(inbox);
+                Blaze3D.openPath(inbox);
                 counts[1] = -1;
                 return;
             }
@@ -656,18 +657,18 @@ final class RecordingsView extends LibraryView {
 
     @Override
     boolean key(int keyCode, int modifiers) {
-        if ((keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN) && !this.shown.isEmpty()) {
+        if ((keyCode == InputConstants.KEY_UP || keyCode == InputConstants.KEY_DOWN) && !this.shown.isEmpty()) {
             // The arrows move the choice along the list
             int at = -1;
             for (int i = 0; i < this.shown.size(); i++) {
                 if (this.chosen.contains(this.shown.get(i).file)) {
                     at = i;
-                    if (keyCode == GLFW.GLFW_KEY_UP) {
+                    if (keyCode == InputConstants.KEY_UP) {
                         break;
                     }
                 }
             }
-            int next = Math.max(0, Math.min(this.shown.size() - 1, at + (keyCode == GLFW.GLFW_KEY_DOWN ? 1 : -1)));
+            int next = Math.max(0, Math.min(this.shown.size() - 1, at + (keyCode == InputConstants.KEY_DOWN ? 1 : -1)));
             this.chosen.clear();
             this.chosen.add(this.shown.get(next).file);
             this.anchor = this.shown.get(next).file;
@@ -678,15 +679,15 @@ final class RecordingsView extends LibraryView {
             }
             return true;
         }
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) && this.chosenEntries().size() == 1) {
+        if ((keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) && this.chosenEntries().size() == 1) {
             this.watchChosen();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_DELETE && !this.chosenEntries().isEmpty()) {
+        if (keyCode == InputConstants.KEY_DELETE && !this.chosenEntries().isEmpty()) {
             this.deleteChosen();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_A && Screen.hasControlDown()) {
+        if (keyCode == InputConstants.KEY_A && Minecraft.getInstance().hasControlDown()) {
             this.shown.forEach(entry -> this.chosen.add(entry.file));
             return true;
         }
@@ -694,11 +695,11 @@ final class RecordingsView extends LibraryView {
     }
 
     @Override
-    void typed(char character, int modifiers) {
+    void typed(int codepoint) {
         // Typing anywhere starts a search
-        if (!Character.isISOControl(character) && !Screen.hasControlDown()) {
+        if (!Character.isISOControl(codepoint) && !Minecraft.getInstance().hasControlDown()) {
             this.searchBox.focus();
-            this.searchBox.type(this.search + character);
+            this.searchBox.type(this.search + Character.toString(codepoint));
         }
     }
 
@@ -731,7 +732,7 @@ final class RecordingsView extends LibraryView {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean picked = RecordingsView.this.chosen.contains(this.entry.file);
             boolean hovered = this.over(mouseX, mouseY);
             boolean starred = RecordingsView.this.screen.starredIds.contains(this.entry.id);
@@ -768,11 +769,11 @@ final class RecordingsView extends LibraryView {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             long now = Util.getMillis();
-            boolean twice = now - this.clickedAt < 300 && !Screen.hasControlDown() && !Screen.hasShiftDown();
+            boolean twice = now - this.clickedAt < 300 && !Minecraft.getInstance().hasControlDown() && !Minecraft.getInstance().hasShiftDown();
             RecordingsView.this.choose(this.entry);
             if (twice) {
                 RecordingsView.this.chosen.clear();
@@ -805,7 +806,7 @@ final class RecordingsView extends LibraryView {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             boolean hovered = this.over(mouseX, mouseY);
             if (hovered) {
                 graphics.fill(this.x, this.y, this.x + this.width, this.y + this.height, 0x28D4B25A);
@@ -832,7 +833,7 @@ final class RecordingsView extends LibraryView {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             long now = Util.getMillis();
@@ -862,7 +863,7 @@ final class RecordingsView extends LibraryView {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             LibraryBits.Picture now = this.picture.get();
             if (now != null) {
                 now.draw(graphics, this.x, this.y, this.width, this.height);

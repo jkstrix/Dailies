@@ -42,7 +42,18 @@ public final class Drawn {
         solidNow = false;
     }
 
+    private static boolean inWorld = false;
+
+    /** Whether the game is taking the pictures of the entities it draws in the world just now. Render thread */
+    public static void inWorld(boolean now) {
+        inWorld = now;
+    }
+
+    /** An entity pictured for drawing: counted only when it is one of the world's */
     public static void entity(Entity entity) {
+        if (!inWorld) {
+            return;
+        }
         if (entity instanceof Player) {
             players++;
         } else {

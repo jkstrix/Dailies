@@ -6,7 +6,7 @@ import comedymonkey.dailies.command.MarkWords;
 import comedymonkey.dailies.edit.EditHistory;
 import comedymonkey.dailies.editor.EditorSession;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -116,10 +116,10 @@ public final class Controls {
         }
         if (Host.get().setting("saveWithoutAsking", false)) {
             finishNow(null);
-            minecraft.setScreen(back);
+            minecraft.gui.setScreen(back);
             return;
         }
-        minecraft.setScreen(new NameScreen(
+        minecraft.gui.setScreen(new NameScreen(
                 Component.translatable("dailies.ui.finish.title"),
                 Component.translatable("dailies.ui.finish.explanation"),
                 LocalDateTime.now().format(NAME_FORMAT),
@@ -127,9 +127,9 @@ public final class Controls {
                 Component.translatable("dailies.ui.finish.keep_recording"),
                 name -> {
                     finishNow(name);
-                    minecraft.setScreen(back);
+                    minecraft.gui.setScreen(back);
                 },
-                () -> minecraft.setScreen(back)));
+                () -> minecraft.gui.setScreen(back)));
     }
 
     private static void finishNow(@Nullable String name) {
@@ -155,13 +155,13 @@ public final class Controls {
             Notices.show(Component.translatable("dailies.ui.notice.nothing_recording"));
             return;
         }
-        minecraft.setScreen(new AskScreen(
+        minecraft.gui.setScreen(new AskScreen(
                 yes -> {
                     if (yes) {
                         guarded(() -> Recorder.get().cancel());
-                        minecraft.setScreen(null);
+                        minecraft.gui.setScreen(null);
                     } else {
-                        minecraft.setScreen(back);
+                        minecraft.gui.setScreen(back);
                     }
                 },
                 Component.translatable("dailies.ui.cancel.title"),
@@ -348,7 +348,7 @@ public final class Controls {
             // Plain HTTP even with remote access switched on: this computer is always served as it was, with no token.
             // A scripted run must not put browser windows on the desk of whoever is watching it
             if (!comedymonkey.dailies.ScriptedRun.asked()) {
-                net.minecraft.Util.getPlatform().openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
+                com.mojang.blaze3d.Blaze3D.openUri(java.net.URI.create("http://127.0.0.1:" + port + "/"));
             }
             opened[0] = true;
             tell(Component.translatable("dailies.ui.notice.moments_page_opened"));

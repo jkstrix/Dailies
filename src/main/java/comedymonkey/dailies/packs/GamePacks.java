@@ -89,7 +89,8 @@ public final class GamePacks {
             String prompt = "";
             if (packet.prompt().isPresent()) {
                 try {
-                    prompt = Component.Serializer.toJson(packet.prompt().get(), RegistryAccess.EMPTY);
+                    prompt = net.minecraft.network.chat.ComponentSerialization.CODEC.encodeStart(RegistryAccess.EMPTY.createSerializationContext(com.mojang.serialization.JsonOps.INSTANCE),
+                        packet.prompt().get()).getOrThrow().toString();
                 } catch (RuntimeException e) {
                     prompt = packet.prompt().get().getString();
                 }

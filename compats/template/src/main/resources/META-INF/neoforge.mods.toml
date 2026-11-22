@@ -15,14 +15,14 @@ fact only the server knows sent through the Dailies Companion. Copied to start a
 [[dependencies.dailies_template]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1,)"
+versionRange = "[26.3,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.dailies_template]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.1]"
+versionRange = "[26.3]"
 ordering = "NONE"
 side = "BOTH"
 

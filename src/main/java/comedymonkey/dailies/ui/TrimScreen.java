@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.file.RecordingFile;
 import comedymonkey.dailies.file.RecordingManifest;
@@ -10,10 +11,10 @@ import comedymonkey.dailies.library.LibraryQuery;
 import comedymonkey.dailies.moments.Moments;
 import comedymonkey.dailies.moments.MomentsTimeline;
 import comedymonkey.dailies.playback.Playback;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -267,7 +268,7 @@ public final class TrimScreen extends KitScreen {
     }
 
     @Override
-    void paint(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    void paint(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         this.heading(graphics, font, t("explained"));
         Kit.text(graphics, font, t("name").getString(), this.left + 9, this.nameBox.y + 3, Controls.PARCHMENT);
         if (this.ranges.isEmpty()) {
@@ -420,7 +421,7 @@ public final class TrimScreen extends KitScreen {
         }
 
         @Override
-        void draw(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
             int top = this.stripTop();
             int bottom = this.stripBottom();
             // The ruler: about one label every 90 pixels, on whole minutes or seconds
@@ -473,7 +474,7 @@ public final class TrimScreen extends KitScreen {
                 int from = this.xOf(TrimScreen.this.selectFrom);
                 int to = Math.max(from + 1, this.xOf(TrimScreen.this.selectTo));
                 graphics.fill(from, top + 1, to, bottom - 1, 0x30EFE6D6);
-                graphics.renderOutline(from, top - 1, to - from, bottom - top + 2, Controls.PARCHMENT);
+                graphics.outline(from, top - 1, to - from, bottom - top + 2, Controls.PARCHMENT);
             }
             if (this.over(mouseX, mouseY)) {
                 int at = Math.max(this.x, Math.min(this.x + this.width - 1, mouseX));
@@ -483,7 +484,7 @@ public final class TrimScreen extends KitScreen {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY) || TrimScreen.this.running()) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY) || TrimScreen.this.running()) {
                 return null;
             }
             this.dragging = true;

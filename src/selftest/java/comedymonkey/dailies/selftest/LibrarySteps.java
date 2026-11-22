@@ -429,7 +429,7 @@ final class LibrarySteps {
         WorldSteps.createWorld(test, "Dailies Test Two");
         test.tool("recording_start", none);
         test.waitTicks(20);
-        test.command("summon minecraft:cow 3 -60 3 {CustomName:'\"Second\"',NoAI:1b}");
+        test.command("summon minecraft:cow 3 -60 3 {CustomName:\"Second\",NoAI:1b}");
         test.waitTicks(30);
         JsonObject added = test.tool("moments_event_add", args("label", "Second world moment", "type", "library_test"));
         test.waitTicks(50);

@@ -41,7 +41,7 @@ public class InteractionTracker {
             }
             String uuid = player.getUUID().toString();
             synchronized (this.names) {
-                this.names.put(uuid, player.getGameProfile().getName());
+                this.names.put(uuid, player.getGameProfile().name());
             }
             positions.add(new ProximityLogic.PlayerPos(uuid, player.getX(), player.getY(), player.getZ()));
         }

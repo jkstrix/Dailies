@@ -31,9 +31,9 @@ public abstract class ClientLevelMixin {
      * The same goes for what a player's own act sets off in the world: a block breaking up under their hand is shown by
      * their own game and sent by the server to everyone else. What a server sends arrives here with no player named.
      */
-    @Inject(method = "levelEvent", at = @At("HEAD"))
-    private void dailies$ownEvent(@Nullable Player player, int type, BlockPos pos, int data, CallbackInfo ci) {
-        if (player != null) {
+    @Inject(method = "levelEvent(Lnet/minecraft/world/entity/Entity;ILnet/minecraft/core/BlockPos;I)V", at = @At("HEAD"))
+    private void dailies$ownEvent(@Nullable Entity source, int type, BlockPos pos, int data, CallbackInfo ci) {
+        if (source instanceof Player player) {
             Capture.ownEvent(player, type, pos, data);
         }
     }
@@ -43,10 +43,10 @@ public abstract class ClientLevelMixin {
      * plays these for them, and the server sends them to everyone else. A sound the server sent comes through here too,
      * naming the game's own player; Capture tells the two apart (ServerSoundMixin).
      */
-    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V", at = @At("HEAD"))
-    private void dailies$ownSound(@Nullable Player player, double x, double y, double z, Holder<SoundEvent> sound, SoundSource source, float volume, float pitch, long seed,
+    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/Entity;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V", at = @At("HEAD"))
+    private void dailies$ownSound(@Nullable Entity except, double x, double y, double z, Holder<SoundEvent> sound, SoundSource source, float volume, float pitch, long seed,
                                   CallbackInfo ci) {
-        if (player != null) {
+        if (except instanceof Player player) {
             Capture.ownSound(player, null, x, y, z, sound, source, volume, pitch, seed);
         }
     }
@@ -64,10 +64,10 @@ public abstract class ClientLevelMixin {
         LightPasses.afterPoll((ClientLevel) (Object) this);
     }
 
-    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
+    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
         at = @At("HEAD"))
-    private void dailies$ownEntitySound(@Nullable Player player, Entity entity, Holder<SoundEvent> sound, SoundSource source, float volume, float pitch, long seed, CallbackInfo ci) {
-        if (player != null) {
+    private void dailies$ownEntitySound(@Nullable Entity except, Entity entity, Holder<SoundEvent> sound, SoundSource source, float volume, float pitch, long seed, CallbackInfo ci) {
+        if (except instanceof Player player) {
             Capture.ownSound(player, entity, entity.getX(), entity.getY(), entity.getZ(), sound, source, volume, pitch, seed);
         }
     }

@@ -25,14 +25,12 @@ import java.util.function.Predicate;
  * for a window holds no backpack ({@link Backpacks}); its settings window is settings, and left out;</li>
  * <li>extras for windows Dailies draws itself: Curios' page and cosmetic slots ({@link CuriosExtras}), a corpse's page of
  * further items ({@link CorpseExtras});</li>
- * <li>VanillaBackport: a nautilus' inventory, which its own packet opens where Dailies' window recording never sees it
- * ({@link NautilusPart});</li>
  * <li>the lines the mods put above the hotbar on the player's own game alone ({@link StatusLine}).</li>
  * </ul>
  * Left out, as not play or not interface: configuration screens; the compasses' search lists; Corpse's death history (a list opened by a key, like the statistics); Sophisticated Backpacks' settings window; the
- * Locator Bar mod and VanillaBackport's own locator bar, at the owner's word; VanillaBackport's music toast; and how the
- * world looks (a backpack's mob catcher effect, Sophisticated's highlighted blocks), which playback draws from its own
- * world.
+ * Locator Bar mod, at the owner's word; and how the world looks (a backpack's mob catcher effect, Sophisticated's
+ * highlighted blocks), which playback draws from its own world. VanillaBackport's nautilus inventory, recorded on
+ * Minecraft 1.21.1, is left out on 26.3, where VanillaBackport has no release.
  * <p>
  * Each state is the least that draws its part again, and the whole of it; Dailies writes it when it changes and keeps it
  * for snapshots, jumps and trims.
@@ -82,7 +80,6 @@ public final class ExtrasDailies implements DailiesCompat {
         claimFor(ExtrasCompat.BACKPACKS, claims, Backpacks::claim);
         claimFor(ExtrasCompat.CURIOS, claims, CuriosExtras::claim);
         claimFor(ExtrasCompat.CORPSE, claims, CorpseExtras::claim);
-        claimFor(ExtrasCompat.VANILLA_BACKPORT, claims, NautilusPart::claim);
     }
 
     /** One mod's claims, made only when it is loaded; a mod whose classes have changed shape leaves out its own part alone */

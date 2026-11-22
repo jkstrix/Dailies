@@ -10,7 +10,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -55,7 +55,7 @@ import static comedymonkey.dailies.selftest.SelfTest.check;
 final class RegistrySteps {
 
     static final String WORLD = "Dailies Registries";
-    private static final ResourceLocation SOUNDS = Registries.SOUND_EVENT.location();
+    private static final Identifier SOUNDS = Registries.SOUND_EVENT.identifier();
     /** Played by number by the world's server: one the game holds as a holder, as the wings' sound is, and a plain one */
     private static final List<Holder<SoundEvent>> PLAYED = List.of(SoundEvents.NOTE_BLOCK_BELL, BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.ANVIL_LAND));
     private static final int ROUNDS = 3;
@@ -102,7 +102,7 @@ final class RegistrySteps {
         List<String> right = new ArrayList<>();
         List<Integer> ownNumbers = new ArrayList<>();
         for (Holder<SoundEvent> sound : PLAYED) {
-            String name = sound.value().getLocation().toString();
+            String name = sound.value().location().toString();
             int ownNumber = -1;
             for (Map.Entry<Integer, String> entry : sounds.entrySet()) {
                 if (entry.getValue().equals(name)) {
@@ -131,8 +131,8 @@ final class RegistrySteps {
             shift++;
         }
         int moved = shift;
-        SortedMap<Integer, ResourceLocation> serverNumbering = new TreeMap<>();
-        sounds.forEach((number, name) -> serverNumbering.put((number + moved) % count, ResourceLocation.parse(name)));
+        SortedMap<Integer, Identifier> serverNumbering = new TreeMap<>();
+        sounds.forEach((number, name) -> serverNumbering.put((number + moved) % count, Identifier.parse(name)));
         test.log("registries: the simulated server numbers every sound " + shift + " on, of " + count + ": " + right + " are numbered " + serverNumbers
             + ", which this game's own numbering gives to " + wrong);
 
@@ -208,7 +208,7 @@ final class RegistrySteps {
         if (!collecting || !event.getLevel().isClientSide() || event.getSound() == null) {
             return;
         }
-        String name = event.getSound().value().getLocation().toString();
+        String name = event.getSound().value().location().toString();
         if (!Host.get().inPlayback()) {
             heard.add("live " + name);
         } else if (Playback.loaded() && !Playback.skipping()) {
@@ -252,7 +252,7 @@ final class RegistrySteps {
         check(server != null, "there is no built-in server to play a sound");
         server.submit(() -> {
             ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(), sound, SoundSource.BLOCKS, 1.0F, 1.0F);
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(), sound, SoundSource.BLOCKS, 1.0F, 1.0F);
         }).get(30, java.util.concurrent.TimeUnit.SECONDS);
     }
 

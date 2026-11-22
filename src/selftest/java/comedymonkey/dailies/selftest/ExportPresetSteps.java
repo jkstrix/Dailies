@@ -276,7 +276,7 @@ final class ExportPresetSteps {
 
         // Voices: two speakers saying a tone each, handed over just as recorded voice chat is while the export steps the recording
         UUID recorder = test.onClient(() -> minecraft.player == null ? UUID.randomUUID() : minecraft.player.getUUID());
-        String recorderName = test.onClient(() -> minecraft.player == null ? null : minecraft.player.getGameProfile().getName());
+        String recorderName = test.onClient(() -> minecraft.player == null ? null : minecraft.player.getGameProfile().name());
         UUID stranger = UUID.fromString("0a1b2c3d-0000-4000-8000-000000000001");
         long[] spoken = {0, -1};
         Consumer<RenderFrameEvent.Pre> speak = event -> {
@@ -293,8 +293,8 @@ final class ExportPresetSteps {
             // As much speech as the video has had time for, in the voice chat's 20 millisecond pieces
             while (spoken[0] < (frame + 1) * RATE / 30) {
                 // A proximity voice 24 blocks to the right of the camera, in a range of 48: about half as loud, the same in both ears
-                Vec3 camera = minecraft.gameRenderer.getMainCamera().getPosition();
-                org.joml.Vector3f left = minecraft.gameRenderer.getMainCamera().getLeftVector();
+                Vec3 camera = minecraft.gameRenderer.mainCamera().position();
+                org.joml.Vector3fc left = minecraft.gameRenderer.mainCamera().leftVector();
                 byte[] near = VoiceFormat.write(VoiceFormat.PCM, VoiceFormat.HAS_POSITION | VoiceFormat.HAS_RANGE | (spoken[0] == 0 ? VoiceFormat.STREAM_START : 0), recorder,
                     camera.x - left.x() * 24.0, camera.y - left.y() * 24.0, camera.z - left.z() * 24.0, 48.0F,
                     VoiceFormat.pcmBytes(tone(spoken[0], VoiceFormat.FRAME_SAMPLES, 330.0, 9000)));
@@ -470,7 +470,7 @@ final class ExportPresetSteps {
         check(shorts.contains("preset=Shorts and Reels modified=false size=1080x1920"), "choosing Shorts did not fill the tab in: " + shorts);
         test.onClientRun(() -> {
             invoke(choose, "YouTube 1080p60");
-            minecraft.setScreen(null);
+            minecraft.gui.setScreen(null);
         });
         test.log("the Export tab: " + master + " | " + shorts + "; pictures of it are in " + folder);
     }
@@ -484,13 +484,9 @@ final class ExportPresetSteps {
     }
 
     private static void shot(SelfTest test, Path file) throws Exception {
-        test.onClientRun(() -> {
-            try (com.mojang.blaze3d.platform.NativeImage image = net.minecraft.client.Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
-                image.writeToFile(file);
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-        });
+        try (com.mojang.blaze3d.platform.NativeImage image = SelfTestSupport.screenshot(test)) {
+            image.writeToFile(file);
+        }
     }
 
     // ------------------------------------------------------------------ Helpers

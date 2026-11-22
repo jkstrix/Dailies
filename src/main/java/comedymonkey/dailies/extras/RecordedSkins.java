@@ -11,8 +11,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.resources.DefaultPlayerSkin;
-import net.minecraft.client.resources.PlayerSkin;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.ClientAsset;
+import net.minecraft.world.entity.player.PlayerModelType;
+import net.minecraft.world.entity.player.PlayerSkin;
+import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -34,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RecordedSkins implements PlaybackExtensions.Extension {
 
     /** A player's skin as the game wants it, the textures registered for it, and a mark of the record it came from */
-    private record Held(PlayerSkin skin, List<ResourceLocation> textures, int mark, byte[] record) {
+    private record Held(PlayerSkin skin, List<Identifier> textures, int mark, byte[] record) {
     }
 
     private static final RecordedSkins INSTANCE = new RecordedSkins();
@@ -61,10 +63,10 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
      */
     public static @Nullable PlayerSkin replacement(@Nullable GameProfile profile, boolean fallBack) {
         RecordedSkins skins = INSTANCE;
-        if (profile == null || profile.getId() == null || !skins.recordingHoldsSkins || !Playback.active()) {
+        if (profile == null || profile.id() == null || !skins.recordingHoldsSkins || !Playback.active()) {
             return null;
         }
-        Held held = skins.held.get(profile.getId());
+        Held held = skins.held.get(profile.id());
         if (held != null) {
             return held.skin();
         }
@@ -88,14 +90,14 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
                 return;
             }
             boolean slim = in.readByte() == 1;
-            List<ResourceLocation> textures = new ArrayList<>();
-            ResourceLocation skin = this.register(id, "skin", in, textures);
-            ResourceLocation cape = this.register(id, "cape", in, textures);
-            ResourceLocation elytra = this.register(id, "elytra", in, textures);
+            List<Identifier> textures = new ArrayList<>();
+            Identifier skin = this.register(id, "skin", in, textures);
+            Identifier cape = this.register(id, "cape", in, textures);
+            Identifier elytra = this.register(id, "elytra", in, textures);
             PlayerSkin builtIn = DefaultPlayerSkin.get(id);
             PlayerSkin shown = skin == null
-                ? new PlayerSkin(builtIn.texture(), null, cape, elytra, builtIn.model(), true)
-                : new PlayerSkin(skin, null, cape, elytra, slim ? PlayerSkin.Model.SLIM : PlayerSkin.Model.WIDE, true);
+                ? new PlayerSkin(builtIn.body(), asset(cape), asset(elytra), builtIn.model(), true)
+                : new PlayerSkin(asset(skin), asset(cape), asset(elytra), slim ? PlayerModelType.SLIM : PlayerModelType.WIDE, true);
             this.held.put(id, new Held(shown, textures, mark, Arrays.copyOfRange(data, from, from + length)));
             if (before != null) {
                 this.release(before);
@@ -115,16 +117,21 @@ public final class RecordedSkins implements PlaybackExtensions.Extension {
     }
 
     /** Reads one picture and registers it as a texture. Null when the record holds none */
-    private @Nullable ResourceLocation register(UUID id, String kind, BoundedReader in, List<ResourceLocation> textures) throws Exception {
+    private @Nullable Identifier register(UUID id, String kind, BoundedReader in, List<Identifier> textures) throws Exception {
         int length = in.readInt();
         if (length <= 0) {
             return null;
         }
         byte[] png = in.readBytes(length);
-        ResourceLocation location = ResourceLocation.fromNamespaceAndPath(Dailies.ID, "recorded_skins/" + id + "/" + kind + "_" + this.counter++);
-        Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(NativeImage.read(png)));
+        Identifier location = Identifier.fromNamespaceAndPath(Dailies.ID, "recorded_skins/" + id + "/" + kind + "_" + this.counter++);
+        Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(location::toString, NativeImage.read(png)));
         textures.add(location);
         return location;
+    }
+
+    /** A texture registered here, as a skin names its pictures: under the same name it was registered by */
+    private static ClientAsset.@Nullable Texture asset(@Nullable Identifier location) {
+        return location == null ? null : new ClientAsset.ResourceTexture(location, location);
     }
 
     private void release(Held old) {

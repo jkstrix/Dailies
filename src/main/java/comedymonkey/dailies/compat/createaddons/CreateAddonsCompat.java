@@ -87,6 +87,11 @@ public final class CreateAddonsCompat {
 
     // --- The trough and the tray ---
 
+    /** A stack as it is saved, the form ItemStack#save gave before 26.1 */
+    private static net.minecraft.nbt.Tag saved(ItemStack stack, HolderLookup.Provider registries) {
+        return ItemStack.CODEC.encodeStart(registries.createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), stack).getOrThrow();
+    }
+
     private static CompoundTag describe(BlockEntity blockEntity, HolderLookup.Provider registries, Supplier<CompoundTag> own) throws Exception {
         Optional<Summary> found = SUMMARIES.computeIfAbsent(blockEntity.getClass(), CreateAddonsCompat::summaryOf);
         if (found.isEmpty()) {
@@ -112,13 +117,13 @@ public final class CreateAddonsCompat {
         }
         tag.remove(summary.shownKey);
         if (!shown.isEmpty()) {
-            tag.put(summary.shownKey, shown.save(registries));
+            tag.put(summary.shownKey, saved(shown, registries));
         }
         tag.putInt(summary.countKey, count);
         ListTag shownTray = new ListTag();
         for (ItemStack stack : trayKept) {
             if (!stack.isEmpty()) {
-                shownTray.add(stack.save(registries));
+                shownTray.add(saved(stack, registries));
             }
         }
         tag.put("Tray", shownTray);

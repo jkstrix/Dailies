@@ -51,7 +51,7 @@ public final class Capture {
                 SPAWN_EXTRAS.put(entity, extras);
             }
         } else if (packet instanceof ClientboundRemoveEntitiesPacket removed) {
-            for (int id : removed.getEntityIds()) {
+            for (int id : removed.entityIds()) {
                 SPAWN_EXTRAS.remove(id);
             }
         } else if (packet instanceof ClientboundLoginPacket) {
@@ -87,9 +87,9 @@ public final class Capture {
         }
     }
 
-    public static void ownSwing(LocalPlayer player, InteractionHand hand) {
+    public static void ownSwing(LocalPlayer player, InteractionHand hand, net.minecraft.world.item.component.SwingAnimation animation) {
         try {
-            Recorder.get().onOwnSwing(player, hand);
+            Recorder.get().onOwnSwing(player, hand, animation);
         } catch (Throwable t) {
             failed(t);
         }

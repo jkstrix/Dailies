@@ -8,7 +8,6 @@ import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.Viewer;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -120,7 +119,7 @@ final class SupplementariesPlacingSteps {
         }
         WorldSteps.createWorld(test, "Dailies Supplementaries Placing");
         test.onClientRun(() -> minecraft.options.setCameraType(CameraType.FIRST_PERSON));
-        test.command("gamerule sendCommandFeedback false");
+        test.command("gamerule send_command_feedback false");
         test.command("gamemode survival");
         test.command("effect give @s minecraft:resistance 600 4 true");
         test.command("time set noon");
@@ -164,7 +163,7 @@ final class SupplementariesPlacingSteps {
         // The picture: from where the player stands, looking down at the row, with nothing in the hand and no HUD
         test.command("item replace entity @s weapon.mainhand with minecraft:air");
         test.command("tp @s 0.5 -60 0.5 0 35");
-        test.onClientRun(() -> minecraft.options.hideGui = true);
+        test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(true));
         test.waitTicks(20);
         WindowSteps.frames(test, 10);
         Path live = folder.resolve("placed-live.png");
@@ -172,7 +171,7 @@ final class SupplementariesPlacingSteps {
         int end = test.onClient(() -> Recorder.get().recordingTick());
         note(test, minecraft, placements, atEnd);
         test.waitTicks(20);
-        test.onClientRun(() -> minecraft.options.hideGui = false);
+        test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(false));
         JsonObject finished = test.tool("recording_finish", args("name", "Supplementaries placing"));
         Path recording = Path.of(finished.get("path").getAsString());
         WorldSteps.leaveWorld(test);
@@ -191,11 +190,11 @@ final class SupplementariesPlacingSteps {
             test.waitFor(() -> Playback.paused() && Playback.position() == to, 120, "play to reach the end of the placing at tick " + to);
             ride(test, minecraft);
             compare(test, minecraft, made, atEnd, "after playing to the end", problems);
-            test.onClientRun(() -> minecraft.options.hideGui = true);
+            test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(true));
             WindowSteps.frames(test, 20);
             Path played = folder.resolve("placed-playback.png");
             picture(test, minecraft, played);
-            test.onClientRun(() -> minecraft.options.hideGui = false);
+            test.onClientRun(() -> comedymonkey.dailies.ui.HudHidden.set(false));
             apart = apart(live, played);
             test.log(String.format("Supplementaries placing: the playback picture is %.2f apart from the live one (mean difference of a pixel, of 255; %s and %s)",
                 apart, live.getFileName(), played.getFileName()));
@@ -224,7 +223,7 @@ final class SupplementariesPlacingSteps {
             }
         } finally {
             test.onClientRun(() -> {
-                minecraft.options.hideGui = false;
+                comedymonkey.dailies.ui.HudHidden.set(false);
                 Viewer.ride(null);
             });
             PlaybackSteps.close(test);
@@ -308,13 +307,9 @@ final class SupplementariesPlacingSteps {
 
     /** A picture of the screen as last drawn, kept for a person to look at too */
     private static void picture(SelfTest test, Minecraft minecraft, Path file) throws Exception {
-        test.onClientRun(() -> {
-            try (NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
-                image.writeToFile(file);
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
-        });
+        try (NativeImage image = SelfTestSupport.screenshot(test)) {
+            image.writeToFile(file);
+        }
     }
 
     /** The mean difference of a pixel between two pictures, of 255, across the middle of the screen, as the bestiary compares */

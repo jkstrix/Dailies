@@ -98,8 +98,8 @@ final class RecordingSteps {
         BlockWatch.start();
         test.waitTicks(20);
 
-        test.command("summon minecraft:armor_stand 8.5 -60 6.5 {CustomName:'\"Mover\"',NoGravity:1b}");
-        test.command("summon minecraft:pig 3 -60 3 {CustomName:'\"Hamlet\"',NoAI:1b}");
+        test.command("summon minecraft:armor_stand 8.5 -60 6.5 {CustomName:\"Mover\",NoGravity:1b}");
+        test.command("summon minecraft:pig 3 -60 3 {CustomName:\"Hamlet\",NoAI:1b}");
         test.command("setblock 2 -60 0 minecraft:gold_block");
         test.waitTicks(10);
         test.command("setblock 2 -60 0 minecraft:air destroy");
@@ -112,7 +112,7 @@ final class RecordingSteps {
         test.command("damage @e[type=minecraft:zombie,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
         test.command("item replace entity @s weapon.mainhand with minecraft:diamond_sword");
         test.waitTicks(10);
-        test.onClientRun(() -> minecraft.player.swing(InteractionHand.MAIN_HAND));
+        test.onClientRun(() -> minecraft.player.swing(InteractionHand.MAIN_HAND, minecraft.player.getMainHandItem().getAttackAnimation(), false));
         test.command("tp @s 4.5 -60 0.5 90 10");
         test.waitTicks(10);
 
@@ -122,7 +122,7 @@ final class RecordingSteps {
         // Chapter XIV step 9: what only a server can tell the game, through the Dailies Companion
         if (comedymonkey.dailies.Host.get().isModLoaded("dailies_companion")) {
             test.command("moment data @s test_event {answer:42} Hello from the server");
-            test.command("summon minecraft:iron_golem 0 -60 9 {NoAI:1b,CustomName:'\"Stand-in boss\"',attributes:[{id:\"minecraft:generic.max_health\",base:200.0}],Health:200.0f}");
+            test.command("summon minecraft:iron_golem 0 -60 9 {NoAI:1b,CustomName:\"Stand-in boss\",attributes:[{id:\"minecraft:max_health\",base:200.0}],Health:200.0f}");
             test.waitTicks(10);
             test.command("damage @e[type=minecraft:iron_golem,limit=1,sort=nearest] 500 minecraft:player_attack by @s");
             test.waitTicks(20);
@@ -201,7 +201,7 @@ final class RecordingSteps {
             RecordingManifest manifest = file.manifest();
             check(manifest.id.equals(id), "the file's id is not the one recording_start reported");
             check(manifest.name.equals("Self test") && manifest.finished && !manifest.recovered, "the manifest's name or state is wrong");
-            check(manifest.recorderName.equals(minecraft.player.getGameProfile().getName()), "the recorder's name is missing");
+            check(manifest.recorderName.equals(minecraft.player.getGameProfile().name()), "the recorder's name is missing");
             check(manifest.worldName.equals(WorldSteps.WORLD) && manifest.singleplayer, "the world name is missing");
             check(manifest.mods.stream().anyMatch(mod -> mod.id.equals("dailies")) && manifest.mods.stream().anyMatch(mod -> mod.id.equals("minecraft")), "the mod list is incomplete");
             check(manifest.markers.size() == 1 && manifest.markers.get(0).description.equals("The pig") && manifest.markers.get(0).colour == 0x33AAFF
@@ -212,9 +212,9 @@ final class RecordingSteps {
             Audit audit = Audit.of(file, codec, true);
             check(audit.problems.isEmpty(), "the recording has problems: " + audit.problems);
             check(audit.snapshots == manifest.segments.size(), "not every segment starts with a snapshot");
-            check(audit.count(ClientboundAnimatePacket.class) >= 1, "the recorder's arm swing was not captured");
+            check(audit.count(net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket.class) >= 1, "the recorder's arm swing was not captured");
             check(audit.count(ClientboundSetEquipmentPacket.class) >= 1, "the recorder's held item was not captured");
-            long ownMoves = audit.seen.stream().filter(seen -> seen.packet() instanceof ClientboundTeleportEntityPacket move && move.getId() == ownId).count();
+            long ownMoves = audit.seen.stream().filter(seen -> seen.packet() instanceof ClientboundTeleportEntityPacket move && move.id() == ownId).count();
             check(ownMoves >= 10, "the recorder's own movement was captured only " + ownMoves + " times");
             check(audit.packets.containsKey("ClientboundAddEntityPacket") || audit.bundles > 0, "no entity spawn was captured");
             check(audit.packets.containsKey("ClientboundBlockUpdatePacket") || audit.packets.containsKey("ClientboundSectionBlocksUpdatePacket"), "no block change was captured");
@@ -224,10 +224,10 @@ final class RecordingSteps {
                 && login.playerId() == comedymonkey.dailies.capture.Snapshots.VIEWER_ENTITY_ID).count();
             check(logins == manifest.segments.size(), "not every snapshot starts a world for the viewer");
             long ownSpawns = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket spawn
-                && spawn.getId() == ownId && spawn.getType() == net.minecraft.world.entity.EntityType.PLAYER).count();
+                && spawn.getId() == ownId && spawn.getType() == net.minecraft.world.entity.EntityTypes.PLAYER).count();
             check(ownSpawns == manifest.segments.size(), "the recorder is not in every snapshot");
             long pigs = audit.seen.stream().filter(seen -> seen.inSnapshot() && seen.packet() instanceof net.minecraft.network.protocol.game.ClientboundAddEntityPacket spawn
-                && spawn.getType() == net.minecraft.world.entity.EntityType.PIG).count();
+                && spawn.getType() == net.minecraft.world.entity.EntityTypes.PIG).count();
             check(pigs >= manifest.segments.size() - 1, "the pig is missing from the later snapshots");
             // What a snapshot shares is its chunks, and for a chunk whose blocks are unchanged but whose light may not be, that
             // light on its own (Snapshots.writeChunks)

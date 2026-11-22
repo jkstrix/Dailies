@@ -11,7 +11,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import org.joml.Quaternionf;
+import org.joml.Quaternionfc;
 import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -97,11 +99,10 @@ public final class EntityClocks {
                 try {
                     AnimationState animation = (AnimationState) field.get(entity);
                     if (animation != null && animation.isStarted()) {
-                        // Brought up to this tick, as drawing the entity would: one that is out of sight has not been counting
-                        animation.updateTime(entity.tickCount, 1.0F);
+                        // How long it has run by this tick
                         out.writeByte(3);
                         out.writeUTF(field.getName());
-                        out.writeInt((int) Math.min(Integer.MAX_VALUE, animation.getAccumulatedTime() / 50L));
+                        out.writeInt((int) Math.min(Integer.MAX_VALUE, animation.getTimeInMillis(entity.tickCount) / 50L));
                     }
                 } catch (IllegalAccessException ignored) {
                     // Not ours to read: the animation starts afresh after a jump, as it did before
@@ -112,10 +113,10 @@ public final class EntityClocks {
                 out.writeByte(4);
                 out.writeInt((int) (display.tickCount - display.interpolationStartClientTick));
                 Transformation from = moving.previous();
-                vector(out, from.getTranslation());
-                rotation(out, from.getLeftRotation());
-                vector(out, from.getScale());
-                rotation(out, from.getRightRotation());
+                vector(out, from.translation());
+                rotation(out, from.leftRotation());
+                vector(out, from.scale());
+                rotation(out, from.rightRotation());
             }
             if (entity instanceof net.minecraft.world.entity.monster.Guardian guardian && guardian.hasActiveAttackTarget()) {
                 out.writeByte(5);
@@ -126,13 +127,13 @@ public final class EntityClocks {
         return bytes.toByteArray();
     }
 
-    private static void vector(DataOutputStream out, Vector3f vector) throws IOException {
+    private static void vector(DataOutputStream out, Vector3fc vector) throws IOException {
         out.writeFloat(vector.x());
         out.writeFloat(vector.y());
         out.writeFloat(vector.z());
     }
 
-    private static void rotation(DataOutputStream out, Quaternionf rotation) throws IOException {
+    private static void rotation(DataOutputStream out, Quaternionfc rotation) throws IOException {
         out.writeFloat(rotation.x());
         out.writeFloat(rotation.y());
         out.writeFloat(rotation.z());

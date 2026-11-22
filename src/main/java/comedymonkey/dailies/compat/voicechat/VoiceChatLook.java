@@ -164,7 +164,7 @@ public final class VoiceChatLook {
         FriendlyByteBuf in = new FriendlyByteBuf(Unpooled.wrappedBuffer(frame, from, length));
         try {
             in.readVarInt();
-            in.readResourceLocation();
+            in.readIdentifier();
         } catch (RuntimeException e) {
             return;
         }
@@ -390,7 +390,7 @@ public final class VoiceChatLook {
     }
 
     /** Voice chat's group display, drawn by voice chat from the recorded group the look has put in, when the recorder was in one */
-    public static void drawGroup(net.minecraft.client.gui.GuiGraphics graphics) {
+    public static void drawGroup(net.minecraft.client.gui.GuiGraphicsExtractor graphics) {
         try {
             Object config = clientConfig.get(null);
             if (RECORDED.group() != null && config != null && Boolean.TRUE.equals(entryGet.invoke(showGroupHud.get(config)))) {
@@ -411,7 +411,7 @@ public final class VoiceChatLook {
                 Class<?> playerState = Class.forName(COMMON + "PlayerState");
                 stateDisconnected = playerState.getMethod("isDisconnected");
                 stateDisabled = playerState.getMethod("isDisabled");
-                groupIcons = Class.forName(CLIENT + "GroupChatManager").getMethod("renderIcons", net.minecraft.client.gui.GuiGraphics.class);
+                groupIcons = Class.forName(CLIENT + "GroupChatManager").getMethod("renderIcons", net.minecraft.client.gui.GuiGraphicsExtractor.class);
                 clientConfig = Class.forName("de.maxhenkel.voicechat.VoicechatClient").getField("CLIENT_CONFIG");
                 Class<?> config = Class.forName("de.maxhenkel.voicechat.config.ClientConfig");
                 hideIcons = config.getField("hideIcons");

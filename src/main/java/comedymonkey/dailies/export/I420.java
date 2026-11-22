@@ -109,9 +109,12 @@ public final class I420 {
      */
     static String fragmentShader() {
         return String.format(Locale.ROOT, """
-            #version 150
+            #version 330
+            #extension GL_ARB_separate_shader_objects : require
+
             uniform sampler2D picture;
-            out vec4 result;
+
+            layout(location = 0) out vec4 result;
 
             vec3 at(int x, int y) {
                 return texelFetch(picture, ivec2(x, y), 0).rgb;
@@ -143,9 +146,11 @@ public final class I420 {
     /** A triangle that covers the whole target, made from nothing but the vertex number */
     static String vertexShader() {
         return """
-            #version 150
+            #version 330
+            #extension GL_ARB_separate_shader_objects : require
+
             void main() {
-                vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+                vec2 corner = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2));
                 gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
             }
             """;

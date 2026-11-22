@@ -199,8 +199,8 @@ final class CameraRoute {
         }
         RealWorldSteps.hook();
         WorldSteps.createRealWorld(test, WORLD, SEED);
-        test.command("gamerule doDaylightCycle false");
-        test.command("gamerule doWeatherCycle false");
+        test.command("gamerule advance_time false");
+        test.command("gamerule advance_weather false");
         test.command("time set 1000");
         test.command("weather clear");
         test.onClientRun(() -> minecraft.options.autoJump().set(true));
@@ -286,9 +286,9 @@ final class CameraRoute {
             test.command("ride @s dismount");
             test.command("gamemode creative");
             test.onClientRun(() -> {
-                if (minecraft.screen != null && minecraft.player != null) {
+                if (minecraft.gui.screen() != null && minecraft.player != null) {
                     minecraft.player.closeContainer();
-                    minecraft.setScreen(null);
+                    minecraft.gui.setScreen(null);
                 }
             });
         }
@@ -818,7 +818,7 @@ final class CameraRoute {
                     return "no player or level";
                 }
                 return String.format(java.util.Locale.ROOT, "player at %.2f %.2f %.2f facing %.0f in %s, screen %s, portal %s: %s and %s", player.getX(), player.getY(), player.getZ(),
-                    player.getYRot(), minecraft.level.dimension().location(), minecraft.screen == null ? "none" : minecraft.screen.getClass().getSimpleName(), portal,
+                    player.getYRot(), minecraft.level.dimension().identifier(), minecraft.gui.screen() == null ? "none" : minecraft.gui.screen().getClass().getSimpleName(), portal,
                     portal == null ? "-" : minecraft.level.getBlockState(portal), portal == null ? "-" : minecraft.level.getBlockState(portal.east()));
             }));
             net.minecraft.client.server.IntegratedServer server = minecraft.getSingleplayerServer();
@@ -826,7 +826,7 @@ final class CameraRoute {
                 said.append("; on the server ").append(server.submit(() -> {
                     net.minecraft.server.level.ServerPlayer player = server.getPlayerList().getPlayers().get(0);
                     return String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f in %s, %s, portal cooldown %d, on cooldown %s", player.getX(), player.getY(), player.getZ(),
-                        player.level().dimension().location(), player.gameMode.getGameModeForPlayer(), player.getPortalCooldown(), player.isOnPortalCooldown());
+                        player.level().dimension().identifier(), player.gameMode.getGameModeForPlayer(), player.getPortalCooldown(), player.isOnPortalCooldown());
                 }).get(10, java.util.concurrent.TimeUnit.SECONDS));
             }
         } catch (Throwable t) {
@@ -847,7 +847,7 @@ final class CameraRoute {
             check(false, notThere.getMessage() + "; " + whereAtThePortal(test));
         }
         RealWorldSteps.drive = null;
-        test.waitFor(() -> minecraft.screen == null && minecraft.player != null, 60, "the Nether to appear");
+        test.waitFor(() -> minecraft.gui.screen() == null && minecraft.player != null, 60, "the Nether to appear");
         RealWorldSteps.flying(test, false, 0.05F);
         RealWorldSteps.ticks(test, 20);
         walk(test, end, wandering(test, here(test), 60.0), false, 0, null);
@@ -860,7 +860,7 @@ final class CameraRoute {
         int x = plains.getX() + 200;
         int z = plains.getZ() + 200;
         test.command("execute in minecraft:overworld run tp @s " + x + " 220 " + z);
-        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD && minecraft.screen == null, 60, "the overworld again");
+        test.waitFor(() -> minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD && minecraft.gui.screen() == null, 60, "the overworld again");
         RealWorldSteps.flying(test, true, 0.05F);
         int ground = RealWorldSteps.surface(x, z, Heightmap.Types.MOTION_BLOCKING);
         RealWorldSteps.goTo(test, x + 0.5, Math.max(ground, 63) + 60, z + 0.5, 0, 10);
@@ -992,9 +992,9 @@ final class CameraRoute {
         RealWorldSteps.flying(test, true, 0.05F);
         int top = RealWorldSteps.surface(water.getX(), water.getZ(), Heightmap.Types.MOTION_BLOCKING);
         RealWorldSteps.goTo(test, water.getX() + 0.5, top + 1, water.getZ() + 0.5, 0, 10);
-        RealWorldSteps.command(test, "summon minecraft:boat %.1f %d %.1f {Type:\"oak\"}", water.getX() + 0.5, top, water.getZ() + 0.5);
+        RealWorldSteps.command(test, "summon minecraft:oak_boat %.1f %d %.1f", water.getX() + 0.5, top, water.getZ() + 0.5);
         RealWorldSteps.ticks(test, 5);
-        test.command("ride @s mount @e[type=minecraft:boat,limit=1,sort=nearest]");
+        test.command("ride @s mount @e[type=minecraft:oak_boat,limit=1,sort=nearest]");
         RealWorldSteps.ticks(test, 10);
         if (!test.onClient(() -> minecraft.player.isPassenger())) {
             test.fault("camera route: the recorder could not get into the boat");
@@ -1019,7 +1019,7 @@ final class CameraRoute {
                 RealWorldSteps.drive = null;
             });
             test.command("ride @s dismount");
-            test.command("kill @e[type=minecraft:boat]");
+            test.command("kill @e[type=minecraft:oak_boat]");
         }
 
         // The minecart: a loop of rails laid one after another as a player lays them, so each joins the last and the corners turn
@@ -1069,8 +1069,8 @@ final class CameraRoute {
         // The horse: tame, saddled and quick, ridden at a gallop over open ground
         BlockPos meadow = platform(test, plains, 40, 30, 2, 2);
         RealWorldSteps.goTo(test, meadow.getX() + 0.5, meadow.getY() + 1, meadow.getZ() + 0.5, 0, 0);
-        RealWorldSteps.command(test, "summon minecraft:horse %.1f %d %.1f {Tame:1b,SaddleItem:{id:\"minecraft:saddle\",count:1},Variant:1,"
-            + "attributes:[{id:\"minecraft:generic.movement_speed\",base:0.3375},{id:\"minecraft:generic.jump_strength\",base:0.9}]}", meadow.getX() + 0.5, meadow.getY(), meadow.getZ() + 0.5);
+        RealWorldSteps.command(test, "summon minecraft:horse %.1f %d %.1f {Tame:1b,equipment:{saddle:{id:\"minecraft:saddle\",count:1}},Variant:1,"
+            + "attributes:[{id:\"minecraft:movement_speed\",base:0.3375},{id:\"minecraft:jump_strength\",base:0.9}]}", meadow.getX() + 0.5, meadow.getY(), meadow.getZ() + 0.5);
         RealWorldSteps.ticks(test, 5);
         test.command("ride @s mount @e[type=minecraft:horse,limit=1,sort=nearest]");
         RealWorldSteps.flying(test, false, 0.05F);
