@@ -16,7 +16,8 @@
     "BeamMixin",
     "ProjectionMixin",
     "CameraHudFovMixin",
-    "WorldEntitiesMixin"
+    "WorldEntitiesMixin",
+    "SodiumTerrainMixin"
   ],
   "injectors": {
     "defaultRequire": 1
