@@ -6,8 +6,8 @@ license = "MIT"
 modId = "dailies"
 version = "${version}"
 displayName = "Dailies"
-logoFile = "dailies.png"
-logoBlur = false
+iconFile = "dailies.png"
+iconBlur = false
 authors = "James Knight"
 description = '''Records what you played, plays it back from any angle, and tells you which moments are worth cutting into a video. Client only: never needed on a server.'''
 

@@ -337,7 +337,8 @@ tasks.register('modpackJars', Sync) {
     from(tasks.named('jar'))
     modpackCompats.each { name -> from({ project(":compats:${name}").tasks.named('jar').get().archiveFile }) }
     from(file('companion/build/libs')) {
-        include 'dailies-companion-*.jar'
+        // This Minecraft version's only: a jar the companion built for another version may still lie there
+        include "dailies-companion-${minecraft_version}-*.jar"
         exclude '*-sources.jar', '*-javadoc.jar'
     }
     into(layout.buildDirectory.dir('modpack'))

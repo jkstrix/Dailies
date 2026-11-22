@@ -6,8 +6,8 @@ license = "MIT"
 modId = "dailies_jade"
 version = "${version}"
 displayName = "Dailies Jade Compat"
-logoFile = "dailies_jade.png"
-logoBlur = false
+iconFile = "dailies_jade.png"
+iconBlur = false
 authors = "James Knight"
 description = '''
 Jade's box in Dailies recordings: what the player looks at, as Jade drew it (the lines, item icons, progress bars, fluid

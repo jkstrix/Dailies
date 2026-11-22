@@ -1,6 +1,6 @@
 # Dailies
 
-Dailies is a Minecraft mod (NeoForge 1.21.1, client side) for making videos of play. It records what your game is
+Dailies is a Minecraft mod (NeoForge 26.3 on `main`, and 1.21.1 on `mc/1.21.1`; client side) for making videos of play. It records what your game is
 shown to its own file, plays that back later with no server, lets you fly a camera through it and edit on a keyframe
 timeline, and exports finished video. It also keeps a log of what happened while you played ("moments"), frames shots
 by itself (the Smart Camera), and can be driven by an AI agent over a local MCP server.

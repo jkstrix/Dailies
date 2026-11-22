@@ -919,6 +919,13 @@ public final class Snapshots {
             if (!equipment.isEmpty()) {
                 out.packet(new ClientboundSetEquipmentPacket(entity.getId(), equipment));
             }
+            // The effects the game knows of: the recorder's own (the server tells no one else's). Without them a jump left
+            // the recorder with none until the next change, and darkness, nausea and the rest were gone through their eyes.
+            // The blend does not travel: an effect mostly blended in arrives whole, one just starting blends in again
+            for (net.minecraft.world.effect.MobEffectInstance effect : living.getActiveEffects()) {
+                boolean blending = effect.getBlendFactor(living, 1.0F) < 0.5F;
+                out.packet(new net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket(entity.getId(), effect, blending));
+            }
         }
     }
 

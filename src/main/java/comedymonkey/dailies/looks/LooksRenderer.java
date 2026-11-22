@@ -480,6 +480,18 @@ public final class LooksRenderer {
         return now != null && (!now.showEntities || !now.showPlayers || anyOverrides || !hiddenEntityTypes.isEmpty());
     }
 
+    /** Whether the scene shows the recorder's HUD (its Show HUD look), as it does with no scene open */
+    public static boolean showsHud() {
+        Looks now = looks;
+        return now == null || now.showHud;
+    }
+
+    /** Whether the scene shows the carved pumpkin's view and other worn items' overlays (its Pumpkin overlay look) */
+    public static boolean showsPumpkinOverlay() {
+        Looks now = looks;
+        return now == null || now.showPumpkinOverlay;
+    }
+
     /** Whether the terrain, and the block entities in it, are left out */
     public static boolean hidesBlocks() {
         Looks now = looks;
