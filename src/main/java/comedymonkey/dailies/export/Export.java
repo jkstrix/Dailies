@@ -474,12 +474,12 @@ public final class Export {
             active = true;
 
             // An export draws each frame once and moves on: nothing should make it wait for the monitor or a frame limit
-            window.updateVsync(false);
-            window.setFramerateLimit(260);
+            noVsync(minecraft);
+            minecraft.getFramerateLimitTracker().setFramerateLimit(260);
             comedymonkey.dailies.ui.HudHidden.set(wanted.hideGui || !scene.looks().showHud);
             window.setWidth(wanted.width * scale);
             window.setHeight(wanted.height * scale);
-            minecraft.resizeDisplay();
+            minecraft.resizeGui();
             // The scene's shaders before its first frame is drawn, should the editor not have shown it that way yet
             comedymonkey.dailies.compat.iris.IrisShaders.apply(scene.looks().shaders);
             if (!wanted.still) {
@@ -703,7 +703,8 @@ public final class Export {
             // Encoder trials are remembered per graphics card and driver, and only this thread may ask which they are
             machineTold = true;
             try {
-                Encoder.machine(com.mojang.blaze3d.platform.GlUtil.getRenderer() + ", " + com.mojang.blaze3d.platform.GlUtil.getOpenGLVersion());
+                com.mojang.renderpearl.api.device.DeviceInfo device = com.mojang.blaze3d.systems.RenderSystem.getDevice().getDeviceInfo();
+                Encoder.machine(device.name() + ", " + device.backendName() + " " + device.driverInfo());
             } catch (Throwable t) {
                 Host.LOGGER.debug("Dailies: the graphics card could not be asked its name", t);
             }
@@ -744,7 +745,7 @@ public final class Export {
             if (worldRebuilt && minecraft.levelRenderer != null) {
                 // A world that has only just appeared reports nothing left to draw before it has drawn anything. Wait until
                 // some terrain is on screen and the amount has stopped growing
-                int drawn = minecraft.levelRenderer.countRenderedSections();
+                int drawn = countRenderedSections(minecraft);
                 settledFrames = drawn > 0 && drawn == lastDrawn ? settledFrames + 1 : 0;
                 lastDrawn = drawn;
                 if (settledFrames < 8 && rebuildWaits++ < 600) {
@@ -925,7 +926,7 @@ public final class Export {
         finishedOutput = null;
         finishFailure = null;
         // Only the panel is shown while the file is finished: there is no need to draw hundreds of frames a second
-        minecraft.getWindow().setFramerateLimit(30);
+        minecraft.getFramerateLimitTracker().setFramerateLimit(30);
         minecraft.getWindow().setTitle("Dailies: finishing the export");
         FrameSink out = sink;
         Thread frameWriter = writer;
@@ -1020,7 +1021,7 @@ public final class Export {
         Window window = minecraft.getWindow();
         window.setWidth(realWidth > 0 ? realWidth : savedWidth);
         window.setHeight(realHeight > 0 ? realHeight : savedHeight);
-        minecraft.resizeDisplay();
+        minecraft.resizeGui();
         comedymonkey.dailies.ui.HudHidden.set(savedHideGui);
         minecraft.updateTitle();
         if (!wasStill) {
@@ -1035,13 +1036,45 @@ public final class Export {
                 }
             }
         }
-        minecraft.getWindow().updateVsync(minecraft.options.enableVsync().get());
-        minecraft.getWindow().setFramerateLimit(minecraft.options.framerateLimit().get());
+        // The window's surface is set up again from the player's own vsync setting before the next frame
+        minecraft.invalidateSurfaceConfiguration();
+        minecraft.getFramerateLimitTracker().setFramerateLimit(minecraft.options.framerateLimit().get());
         finisher = null;
         // Said last: by the time anyone hears the export is over, playback is already on its way back
         active = false;
         // Encoders side by side at a size this export could not wait to try are tried now, beside the game (EXP-6)
         Encoder.exportEnded();
+    }
+
+    /**
+     * Turns off waiting for the monitor for the export, without touching the player's own setting: the window's surface
+     * is set up again without vsync. Only between frames, when the surface is not in use
+     */
+    private static void noVsync(Minecraft minecraft) {
+        com.mojang.renderpearl.api.device.GpuSurface surface = minecraft.windowSurface();
+        java.util.Optional<com.mojang.renderpearl.api.device.GpuSurface.Configuration> now = surface.currentConfiguration();
+        if (surface.isAcquired() || now.isEmpty()) {
+            return;
+        }
+        try {
+            com.mojang.renderpearl.api.device.GpuSurface.PresentMode mode
+                = com.mojang.renderpearl.api.device.GpuSurface.PresentMode.getSupportedVsyncMode(surface.supportedPresentModes(), false);
+            surface.configure(new com.mojang.renderpearl.api.device.GpuSurface.Configuration(now.get().width(), now.get().height(), mode));
+        } catch (com.mojang.renderpearl.api.device.SurfaceException | RuntimeException e) {
+            Host.LOGGER.debug("Dailies: the window could not be set to not wait for the monitor", e);
+            minecraft.invalidateSurfaceConfiguration();
+        }
+    }
+
+    /** The sections on screen that have something to draw */
+    private static int countRenderedSections(Minecraft minecraft) {
+        int drawn = 0;
+        for (net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection section : minecraft.levelRenderer.visibleSections()) {
+            if (section.getSectionMesh().hasRenderableLayers()) {
+                drawn++;
+            }
+        }
+        return drawn;
     }
 
 }

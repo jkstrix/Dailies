@@ -11,32 +11,39 @@ import comedymonkey.dailies.export.Export;
 import comedymonkey.dailies.playback.Playback;
 import comedymonkey.dailies.playback.PlaybackExtensions;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.particle.Particle;
-import net.minecraft.client.renderer.FogRenderer;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.entity.state.EquineRenderState;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
+import net.minecraft.client.renderer.entity.state.WolfRenderState;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.TriState;
+import net.minecraft.util.context.ContextKey;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.client.event.ExtractBlockOutlineRenderStateEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
-import net.neoforged.neoforge.client.event.RenderHighlightEvent;
 import net.neoforged.neoforge.client.event.RenderNameTagEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
+import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.common.util.TriState;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL11;
+import org.joml.Vector4f;
 
 import java.util.HashSet;
 import java.util.List;
@@ -61,7 +68,7 @@ public final class LooksRenderer {
     /** The layers that make up the recorder's HUD when riding along */
     private static final Set<Identifier> HUD = Set.of(VanillaGuiLayers.HOTBAR, VanillaGuiLayers.CROSSHAIR, VanillaGuiLayers.PLAYER_HEALTH,
             VanillaGuiLayers.ARMOR_LEVEL, VanillaGuiLayers.FOOD_LEVEL, VanillaGuiLayers.VEHICLE_HEALTH, VanillaGuiLayers.AIR_LEVEL,
-            VanillaGuiLayers.JUMP_METER, VanillaGuiLayers.EXPERIENCE_BAR, VanillaGuiLayers.EXPERIENCE_LEVEL, VanillaGuiLayers.SELECTED_ITEM_NAME,
+            VanillaGuiLayers.CONTEXTUAL_INFO_BAR_BACKGROUND, VanillaGuiLayers.CONTEXTUAL_INFO_BAR, VanillaGuiLayers.EXPERIENCE_LEVEL, VanillaGuiLayers.SELECTED_ITEM_NAME,
             VanillaGuiLayers.SPECTATOR_TOOLTIP, VanillaGuiLayers.EFFECTS, VanillaGuiLayers.SCOREBOARD_SIDEBAR, VanillaGuiLayers.TAB_LIST);
 
     /** The looks of the scene being shown, or null whenever no recording is on screen */
@@ -75,6 +82,11 @@ public final class LooksRenderer {
 
     private static final Set<String> FAILED = ConcurrentHashMap.newKeySet();
 
+    /** Noted on an entity's picture as it is taken from the entity: whether its armour is hidden */
+    private static final ContextKey<Boolean> HIDE_ARMOUR = new ContextKey<>(Identifier.fromNamespaceAndPath(Dailies.ID, "hide_armour"));
+    /** Whether the field of view being worked out is the held item's, which is never fitted to the frame */
+    private static boolean heldItemFov = false;
+
     private LooksRenderer() {
     }
 
@@ -86,14 +98,14 @@ public final class LooksRenderer {
         // After whoever sets the field of view, and before whoever reads what it came to
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOW, (ViewportEvent.ComputeFov event) -> framedFov(event));
         NeoForge.EVENT_BUS.addListener((RenderGuiLayerEvent.Pre event) -> guiLayer(event));
-        NeoForge.EVENT_BUS.addListener((RenderNameTagEvent event) -> nameTag(event));
+        NeoForge.EVENT_BUS.addListener((RenderNameTagEvent.CanRender event) -> nameTag(event));
         NeoForge.EVENT_BUS.addListener((RenderHandEvent event) -> {
             Looks now = looks;
             if (now != null && !now.showHeldItems) {
                 event.setCanceled(true);
             }
         });
-        NeoForge.EVENT_BUS.addListener((RenderHighlightEvent.Block event) -> {
+        NeoForge.EVENT_BUS.addListener((ExtractBlockOutlineRenderStateEvent event) -> {
             Looks now = looks;
             if (now != null && !now.showBlockOutline) {
                 event.setCanceled(true);
@@ -127,6 +139,8 @@ public final class LooksRenderer {
         if (modBus != null) {
             modBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(Identifier.fromNamespaceAndPath(Dailies.ID, "frame_guides"),
                     FrameGuides::draw));
+            // Every entity's picture, as it is taken from the entity: what of it a scene leaves out
+            modBus.addListener((RegisterRenderStateModifiersEvent event) -> event.registerEntityModifier(anyRenderer(), LooksRenderer::entityPicture));
         } else {
             failOnce("registering the frame guides", new IllegalStateException("The mod's event bus was not found"));
         }
@@ -232,17 +246,22 @@ public final class LooksRenderer {
      */
     private static void framedFov(ViewportEvent.ComputeFov event) {
         double ratio = framedRatio();
-        if (ratio <= 0.0 || !event.usedConfiguredFov()) {
+        if (ratio <= 0.0 || heldItemFov) {
             return;
         }
         try {
             com.mojang.blaze3d.platform.Window window = Minecraft.getInstance().getWindow();
             if (window.getHeight() > 0) {
-                event.setFOV(Looks.fovBehindBars(event.getFOV(), ratio, (double) window.getWidth() / window.getHeight()));
+                event.setFOV((float) Looks.fovBehindBars(event.getFOV(), ratio, (double) window.getWidth() / window.getHeight()));
             }
         } catch (Throwable t) {
             failOnce("fitting the view to the scene's frame", t);
         }
+    }
+
+    /** Said around the game working out the held item's field of view ({@code CameraHudFovMixin}) */
+    public static void heldItemFov(boolean working) {
+        heldItemFov = working;
     }
 
     private static void forget() {
@@ -297,7 +316,7 @@ public final class LooksRenderer {
             }
             if (particlesShown && !now.showParticles) {
                 // Those already in the air go at once; new ones are turned away where they are added
-                minecraft.particleEngine.iterateParticles(Particle::remove);
+                minecraft.particleEngine.clearParticles();
             }
             particlesShown = now.showParticles;
             looks = now;
@@ -331,7 +350,7 @@ public final class LooksRenderer {
         }
     }
 
-    private static void nameTag(RenderNameTagEvent event) {
+    private static void nameTag(RenderNameTagEvent.CanRender event) {
         Looks now = looks;
         if (now == null) {
             return;
@@ -386,6 +405,52 @@ public final class LooksRenderer {
     }
 
     // ------------------------------------------------------------------ Entities
+
+    @SuppressWarnings("unchecked")
+    private static Class<? extends EntityRenderer<? extends Entity, ? extends EntityRenderState>> anyRenderer() {
+        return (Class<? extends EntityRenderer<? extends Entity, ? extends EntityRenderState>>) (Class<?>) EntityRenderer.class;
+    }
+
+    /**
+     * Each entity's picture as the game takes it from the entity, before anything is drawn of it: counted, and what
+     * the scene leaves out of it taken out of the picture. The armour of a two-legged entity is only noted, as what is
+     * worn on the chest also decides a cape and wings, which stay.
+     */
+    private static void entityPicture(Entity entity, EntityRenderState state) {
+        try {
+            Drawn.entity(entity);
+            Looks now = looks;
+            if (now == null) {
+                return;
+            }
+            if (hidesShadow(entity)) {
+                state.shadowRadius = 0.0F;
+                state.shadowPieces.clear();
+            }
+            if (!anyOverrides) {
+                return;
+            }
+            EntityOverride override = override(now, entity);
+            if (override.hideArmour()) {
+                state.setRenderData(HIDE_ARMOUR, Boolean.TRUE);
+                if (state instanceof EquineRenderState equine) {
+                    equine.bodyArmorItem = ItemStack.EMPTY;
+                } else if (state instanceof WolfRenderState wolf) {
+                    wolf.bodyArmorItem = ItemStack.EMPTY;
+                }
+            }
+            if (override.hideCape() && state instanceof AvatarRenderState avatar) {
+                avatar.showCape = false;
+            }
+        } catch (Throwable t) {
+            failOnce("changing how an entity is drawn", t);
+        }
+    }
+
+    /** Whether the armour on this picture of a two-legged entity is hidden */
+    public static boolean hidesArmour(HumanoidRenderState state) {
+        return looks != null && Boolean.TRUE.equals(state.getRenderData(HIDE_ARMOUR));
+    }
 
     private static EntityOverride override(Looks now, Entity entity) {
         try {
@@ -471,9 +536,14 @@ public final class LooksRenderer {
         return weather == null ? recorded : weather == Looks.Weather.THUNDER ? 1.0F : 0.0F;
     }
 
+    /**
+     * The fog over the world: the game has fog of its surroundings (water, blindness, the weather) and fog at the edge
+     * of the render distance, and the larger of the two wins. Off moves both out of sight; custom puts the scene's in
+     * place of both. The sky's and the clouds' own fog are left as they are.
+     */
     private static void fog(ViewportEvent.RenderFog event) {
         Looks now = looks;
-        if (now == null || now.fogMode == Looks.FogMode.AS_RECORDED || event.getMode() != FogRenderer.FogMode.FOG_TERRAIN) {
+        if (now == null || now.fogMode == Looks.FogMode.AS_RECORDED) {
             return;
         }
         if (now.fogMode == Looks.FogMode.OFF) {
@@ -484,8 +554,8 @@ public final class LooksRenderer {
             event.setNearPlaneDistance(start);
             event.setFarPlaneDistance(Math.max((float) now.fogEnd, start + 0.01F));
         }
-        // Cancelling is how this event is told to use the distances set on it
-        event.setCanceled(true);
+        event.getFogData().renderDistanceStart = NO_FOG_START;
+        event.getFogData().renderDistanceEnd = NO_FOG_END;
     }
 
     private static void fogColour(ViewportEvent.ComputeFogColor event) {
@@ -517,9 +587,12 @@ public final class LooksRenderer {
         }
         try {
             int colour = now.backgroundColour;
-            // No alpha, as the game clears it, so an export can keep the background see-through
-            RenderSystem.clearColor((colour >> 16 & 0xFF) / 255.0F, (colour >> 8 & 0xFF) / 255.0F, (colour & 0xFF) / 255.0F, 0.0F);
-            RenderSystem.clear(GL11.GL_COLOR_BUFFER_BIT, Minecraft.ON_OSX);
+            com.mojang.renderpearl.api.textures.GpuTexture picture = Minecraft.getInstance().gameRenderer.mainRenderTarget().getColorTexture();
+            if (picture != null) {
+                // No alpha, as the game clears it, so an export can keep the background see-through
+                RenderSystem.getDevice().createCommandEncoder().clearColorTexture(picture,
+                    new Vector4f((colour >> 16 & 0xFF) / 255.0F, (colour >> 8 & 0xFF) / 255.0F, (colour & 0xFF) / 255.0F, 0.0F));
+            }
         } catch (Throwable t) {
             failOnce("filling the background where the sky was", t);
         }

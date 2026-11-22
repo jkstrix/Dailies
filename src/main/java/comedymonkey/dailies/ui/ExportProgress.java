@@ -1,23 +1,24 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.VertexSorting;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.GpuSurface;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.export.Export;
+import comedymonkey.dailies.export.PictureGui;
+import comedymonkey.dailies.export.WindowPicture;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fStack;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
 
 import java.util.Locale;
 
@@ -27,7 +28,7 @@ import java.util.Locale;
  * <p>
  * Nothing of it may end up in the video. The export takes each picture after the game has drawn everything, screens
  * included, so as a screen this draws nothing at all. Where the game would then put the frame in the window, the
- * window is given only the plate instead ({@link #showInWindow()}, from the export preview mixin), drawn in the
+ * window is given only the plate instead ({@link #showInWindow}, from the export preview mixin), sized in the
  * window's own pixels. The screen is there to take the Escape key and the click on Cancel.
  */
 public final class ExportProgress extends Screen {
@@ -37,9 +38,6 @@ public final class ExportProgress extends Screen {
 
     /** The dark behind the panel, which fills the rest of the window */
     private static final int BACKGROUND = 0xFF17100A;
-    private static final float BACKGROUND_RED = ((BACKGROUND >> 16) & 0xFF) / 255.0F;
-    private static final float BACKGROUND_GREEN = ((BACKGROUND >> 8) & 0xFF) / 255.0F;
-    private static final float BACKGROUND_BLUE = (BACKGROUND & 0xFF) / 255.0F;
 
     private static boolean failureLogged = false;
     // Where Cancel was last painted, in pixels of the real window from its top left corner
@@ -96,24 +94,24 @@ public final class ExportProgress extends Screen {
 
     /** Nothing: whatever a screen draws would be in the exported picture */
     @Override
-    public void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
-    public void renderBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == InputConstants.KEY_ESCAPE) {
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
             cancel();
         }
         return true;
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && overCancel()) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && overCancel()) {
             cancel();
         }
         return true;
@@ -140,57 +138,49 @@ public final class ExportProgress extends Screen {
 
     /**
      * Shows the panel in the window in place of the frame, while a video is exported. Called where the game would put
-     * the frame on the screen, after the export has taken its picture, so it is drawn in the real window's own pixels
-     * whatever size the video is: centred and whole at any export size and any window size. Render thread
+     * the frame in the window, after the export has taken its picture: the panel is painted over the picture, measured
+     * so that once the picture is scaled to fit the window a unit of the panel is the same number of the window's
+     * pixels on any display, centred and whole at any export size and any window size. Returns whether the window was
+     * given anything; if not, the caller hands it the picture as it is. Render thread
      */
-    public static void showInWindow() {
+    public static boolean showInWindow(GpuSurface surface, CommandEncoder encoder) {
         Minecraft minecraft = Minecraft.getInstance();
         try {
-            Window.FramebufferSize pixels = minecraft.getWindow().queryFramebufferSize();
-            int wideInPixels = pixels.width();
-            int highInPixels = pixels.height();
-            if (minecraft.getWindow().isIconified()) {
-                // Minimised: there is nothing to draw on
-                return;
+            int[] window = WindowPicture.size(surface);
+            RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+            GpuTextureView picture = main.getColorTextureView();
+            if (window == null || window[0] <= 0 || window[1] <= 0 || picture == null || minecraft.getWindow().isIconified()) {
+                // Minimised, or nothing to draw on
+                return false;
             }
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
-            RenderSystem.viewport(0, 0, wideInPixels, highInPixels);
-            RenderSystem.clearColor(BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE, 1.0F);
-            RenderSystem.clear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-            // As the game's own blit to the window does: what is drawn must not make the window see-through anywhere
-            GlStateManager._colorMask(true, true, true, false);
+            int wideInPixels = window[0];
+            int highInPixels = window[1];
+            int[] at = WindowPicture.fitted(main.width, main.height, wideInPixels, highInPixels);
+            double fit = at[2] / (double) main.width;
 
             // One unit of the plate is this many pixels of the window, so that it reads the same on any display
             float unit = (float) Math.max(1.0, Math.min(3.0, Math.min(wideInPixels / 330.0, highInPixels / 120.0)));
-            float wide = wideInPixels / unit;
-            float high = highInPixels / unit;
-
-            RenderSystem.backupProjectionMatrix();
-            RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0.0F, wide, high, 0.0F, 1000.0F, 3000.0F), VertexSorting.ORTHOGRAPHIC_Z);
-            Matrix4fStack stack = RenderSystem.getModelViewStack();
-            stack.pushMatrix();
-            stack.translation(0.0F, 0.0F, -2000.0F);
-            RenderSystem.applyModelViewMatrix();
-            try {
-                GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, minecraft.renderBuffers().bufferSource());
+            // ... and this many pixels of the picture, which the fit shrinks or grows on its way to the window
+            float toPicture = (float) (unit / fit);
+            float wide = at[2] / unit;
+            float high = at[3] / unit;
+            PictureGui.draw(graphics -> {
+                graphics.pose().scale(toPicture, toPicture);
                 cancelHovered = minecraft.gui.screen() instanceof ExportProgress && overCancel();
-                plate(graphics, minecraft.font, (int) wide, (int) high, unit);
-                graphics.flush();
-            } finally {
-                stack.popMatrix();
-                RenderSystem.applyModelViewMatrix();
-                RenderSystem.restoreProjectionMatrix();
-                GlStateManager._colorMask(true, true, true, true);
-            }
+                plate(graphics, minecraft.font, (int) wide, (int) high, unit, at[0], at[1]);
+            });
+            WindowPicture.show(surface, encoder, picture, BACKGROUND & 0xFFFFFF);
+            return true;
         } catch (RuntimeException | LinkageError e) {
             if (!failureLogged) {
                 failureLogged = true;
                 Host.LOGGER.error("Dailies: the export progress display could not be drawn", e);
             }
+            return false;
         }
     }
 
-    private static void plate(GuiGraphicsExtractor graphics, Font font, int wide, int high, float unit) {
+    private static void plate(GuiGraphicsExtractor graphics, Font font, int wide, int high, float unit, int offsetX, int offsetY) {
         int width = Math.min(PLATE_WIDTH, Math.max(120, wide - 8));
         int left = (wide - width) / 2;
         // The picture being exported is not shown: nobody should have to sit through the video to get the video
@@ -234,10 +224,10 @@ public final class ExportProgress extends Screen {
         Kit.text(graphics, font, Kit.clip(font, left1, inner - buttonWidth - 8), x, buttonTop + 4, Controls.PARCHMENT);
         Kit.face(graphics, buttonLeft, buttonTop, buttonWidth, 16, cancelHovered, false, true);
         Kit.centred(graphics, font, Kit.t("progress.cancel").getString(), buttonLeft, buttonTop + 4, buttonWidth, Controls.PARCHMENT);
-        cancelLeft = buttonLeft * (double) unit;
-        cancelTop = buttonTop * (double) unit;
-        cancelRight = (buttonLeft + buttonWidth) * (double) unit;
-        cancelBottom = (buttonTop + 16) * (double) unit;
+        cancelLeft = offsetX + buttonLeft * (double) unit;
+        cancelTop = offsetY + buttonTop * (double) unit;
+        cancelRight = offsetX + (buttonLeft + buttonWidth) * (double) unit;
+        cancelBottom = offsetY + (buttonTop + 16) * (double) unit;
     }
 
 }

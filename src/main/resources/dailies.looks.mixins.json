@@ -5,10 +5,7 @@
   "client": [
     "EntityRenderDispatcherMixin",
     "GlowMixin",
-    "CapeLayerMixin",
     "ArmourLayerMixin",
-    "HorseArmourLayerMixin",
-    "WolfArmourLayerMixin",
     "WeatherMixin",
     "SkyMixin",
     "CloudsOptionMixin",
@@ -17,7 +14,8 @@
     "TerrainMixin",
     "BlockEntityMixin",
     "BeamMixin",
-    "ProjectionMixin"
+    "ProjectionMixin",
+    "CameraHudFovMixin"
   ],
   "injectors": {
     "defaultRequire": 1

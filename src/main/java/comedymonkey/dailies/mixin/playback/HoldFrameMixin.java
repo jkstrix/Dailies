@@ -1,7 +1,6 @@
 package comedymonkey.dailies.mixin.playback;
 
 import comedymonkey.dailies.playback.FrameHold;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class HoldFrameMixin {
 
     @Inject(method = "renderLevel", at = @At("RETURN"), require = 0)
-    private void dailies$holdFrame(DeltaTracker delta, CallbackInfo ci) {
+    private void dailies$holdFrame(CallbackInfo ci) {
         FrameHold.worldDrawn();
     }
 

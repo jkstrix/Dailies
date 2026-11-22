@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 public abstract class PreviewWorldMixin {
 
     // Not required: should another mod have taken this call, the preview still works, only drawing the world as it goes
-    @ModifyArg(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"),
+    @ModifyArg(method = "renderFrame", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;extract(Lnet/minecraft/client/DeltaTracker;Z)V"),
         index = 1, require = 0)
     private boolean dailies$noWorldWhilePreviewing(boolean renderLevel) {
         return PreviewProgress.drawWorld(renderLevel);

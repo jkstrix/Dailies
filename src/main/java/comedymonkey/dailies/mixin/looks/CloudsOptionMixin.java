@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(Options.class)
 public abstract class CloudsOptionMixin {
 
-    @ModifyReturnValue(method = "getCloudsType", at = @At("RETURN"))
+    @ModifyReturnValue(method = "getCloudStatus", at = @At("RETURN"))
     private CloudStatus dailies$noCloudsWithoutSky(CloudStatus chosen) {
         return LooksRenderer.skyOff() ? CloudStatus.OFF : chosen;
     }
