@@ -78,6 +78,8 @@ public final class Looks {
     public boolean showHud = true;
     /** The windows the recorder had open (a chest, a furnace, their inventory, a compat's screens), drawn with the HUD; off hides them and leaves the rest of the HUD */
     public boolean showWindows = true;
+    /** The carved pumpkin's view, and any worn item's overlay, through the recorder's eyes (with the HUD) */
+    public boolean showPumpkinOverlay = true;
     public boolean showChat = true;
     public boolean showBossBars = true;
     public boolean showTitles = true;
@@ -525,6 +527,8 @@ public final class Looks {
         toggle("show_hud", "Draw the recorder's HUD", looks -> looks.showHud, (looks, value) -> looks.showHud = value);
         toggle("show_windows", "Draw the windows the recorder had open (a chest, a furnace, a villager's trades, their inventory, and other mods' screens their compats record) with the pointer, riding along in first person; needs show_hud. Off hides them and keeps the rest of the HUD",
                 looks -> looks.showWindows, (looks, value) -> looks.showWindows = value);
+        toggle("show_pumpkin_overlay", "Draw the carved pumpkin's view, and any other worn item's overlay, through the recorder's eyes; needs show_hud",
+                looks -> looks.showPumpkinOverlay, (looks, value) -> looks.showPumpkinOverlay = value);
         toggle("show_chat", "Draw chat", looks -> looks.showChat, (looks, value) -> looks.showChat = value);
         toggle("show_boss_bars", "Draw boss bars", looks -> looks.showBossBars, (looks, value) -> looks.showBossBars = value);
         toggle("show_titles", "Draw titles and subtitles", looks -> looks.showTitles, (looks, value) -> looks.showTitles = value);
