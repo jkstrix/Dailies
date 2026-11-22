@@ -147,29 +147,25 @@ public final class ExportProgress extends Screen {
         Minecraft minecraft = Minecraft.getInstance();
         try {
             int[] window = WindowPicture.size(surface);
-            RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
-            GpuTextureView picture = main.getColorTextureView();
-            if (window == null || window[0] <= 0 || window[1] <= 0 || picture == null || minecraft.getWindow().isIconified()) {
+            if (window == null || window[0] <= 0 || window[1] <= 0 || minecraft.getWindow().isIconified()) {
                 // Minimised, or nothing to draw on
                 return false;
             }
             int wideInPixels = window[0];
             int highInPixels = window[1];
-            int[] at = WindowPicture.fitted(main.width, main.height, wideInPixels, highInPixels);
-            double fit = at[2] / (double) main.width;
+            // Drawn in the window's own pixels, on a picture of its own: sharp whatever size the video is
+            RenderTarget into = panelTarget(wideInPixels, highInPixels);
 
             // One unit of the plate is this many pixels of the window, so that it reads the same on any display
             float unit = (float) Math.max(1.0, Math.min(3.0, Math.min(wideInPixels / 330.0, highInPixels / 120.0)));
-            // ... and this many pixels of the picture, which the fit shrinks or grows on its way to the window
-            float toPicture = (float) (unit / fit);
-            float wide = at[2] / unit;
-            float high = at[3] / unit;
-            PictureGui.draw(graphics -> {
-                graphics.pose().scale(toPicture, toPicture);
+            float wide = wideInPixels / unit;
+            float high = highInPixels / unit;
+            PictureGui.drawInto(into, graphics -> {
+                graphics.pose().scale(unit, unit);
                 cancelHovered = minecraft.gui.screen() instanceof ExportProgress && overCancel();
-                plate(graphics, minecraft.font, (int) wide, (int) high, unit, at[0], at[1]);
+                plate(graphics, minecraft.font, (int) Math.ceil(wide), (int) Math.ceil(high), unit, 0, 0);
             });
-            WindowPicture.show(surface, encoder, picture, BACKGROUND & 0xFFFFFF);
+            surface.blitFromTexture(encoder, into.getColorTextureView());
             return true;
         } catch (RuntimeException | LinkageError e) {
             if (!failureLogged) {
@@ -178,6 +174,19 @@ public final class ExportProgress extends Screen {
             }
             return false;
         }
+    }
+
+    private static RenderTarget panelTarget = null;
+
+    /** A picture the size of the window for the panel, made again when the window's size changes. Render thread */
+    private static RenderTarget panelTarget(int width, int height) {
+        if (panelTarget == null) {
+            panelTarget = new com.mojang.blaze3d.pipeline.TextureTarget("Dailies export panel", width, height,
+                com.mojang.renderpearl.api.GpuFormat.RGBA8_UNORM, com.mojang.renderpearl.api.GpuFormat.D32_FLOAT);
+        } else if (panelTarget.width != width || panelTarget.height != height) {
+            panelTarget.resize(width, height);
+        }
+        return panelTarget;
     }
 
     private static void plate(GuiGraphicsExtractor graphics, Font font, int wide, int high, float unit, int offsetX, int offsetY) {

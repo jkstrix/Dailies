@@ -154,6 +154,12 @@ public final class PackPlayback implements GamePacks.Listener {
      */
     static void frame(Minecraft minecraft, boolean still) {
         try {
+            // 26.3 finishes a resource reload from the loading screen's tick, not its drawing. An export runs the game's
+            // ticks itself and runs none while it waits for the packs, so the reload would never finish: tick the
+            // loading screen here (a second tick in the same frame does nothing)
+            if (comedymonkey.dailies.export.Export.active() && minecraft.gui.overlay() instanceof net.minecraft.client.gui.screens.LoadingOverlay loading) {
+                loading.tick();
+            }
             sync(minecraft, still);
         } catch (Throwable t) {
             Host.LOGGER.error("Dailies: the recording's resource packs could not be applied; it plays without them", t);

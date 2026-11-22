@@ -21,17 +21,49 @@ public final class PictureGui {
 
     private static @Nullable GuiRenderState state = null;
     private static @Nullable GuiRenderer renderer = null;
+    /** The picture being drawn into instead of the game's, while {@link #drawInto} runs; render thread */
+    private static @Nullable RenderTarget into = null;
 
     private PictureGui() {
+    }
+
+    /** The picture {@link #drawInto} is drawing into just now, or null (for the mixin that points the renderer at it) */
+    public static @Nullable RenderTarget drawingInto() {
+        return into;
+    }
+
+    /**
+     * Paints into a picture of Dailies' own, one unit a pixel of it, whatever size the game's picture is: for what is
+     * shown in the window in its own pixels while an export draws the game at the video's size
+     */
+    public static void drawInto(RenderTarget target, Consumer<GuiGraphicsExtractor> painter) {
+        Minecraft minecraft = Minecraft.getInstance();
+        renderer(minecraft);
+        GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, state, Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2);
+        painter.accept(graphics);
+        if (target.getDepthTexture() != null) {
+            RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(target.getDepthTexture(), 0.0);
+        }
+        into = target;
+        try {
+            renderer.render();
+        } finally {
+            into = null;
+        }
+        renderer.endFrame();
+    }
+
+    private static void renderer(Minecraft minecraft) {
+        if (renderer == null) {
+            state = new GuiRenderState();
+            renderer = new GuiRenderer(state, minecraft.gameRenderer.featureRenderDispatcher(), List.of());
+        }
     }
 
     /** Paints into the game's picture now, on top of everything drawn so far this frame */
     public static void draw(Consumer<GuiGraphicsExtractor> painter) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (renderer == null) {
-            state = new GuiRenderState();
-            renderer = new GuiRenderer(state, minecraft.gameRenderer.featureRenderDispatcher(), List.of());
-        }
+        renderer(minecraft);
         GuiGraphicsExtractor graphics = new GuiGraphicsExtractor(minecraft, state, Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2);
         int guiScale = Math.max(1, minecraft.gameRenderer.gameRenderState().windowRenderState.guiScale);
         graphics.pose().pushMatrix();
