@@ -18,7 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
-import net.minecraft.network.protocol.game.ClientboundHorseScreenOpenPacket;
+import net.minecraft.network.protocol.game.ClientboundMountScreenOpenPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -82,7 +82,7 @@ final class WindowCapture {
             }
         } else if (packet instanceof ClientboundOpenScreenPacket open) {
             opened = new Opened(open.getContainerId(), key(open.getType()), open.getTitle(), null, -1, 0, false);
-        } else if (packet instanceof ClientboundHorseScreenOpenPacket horse) {
+        } else if (packet instanceof ClientboundMountScreenOpenPacket horse) {
             opened = new Opened(horse.getContainerId(), "", Component.empty(), null, horse.getEntityId(), horse.getInventoryColumns(), true);
         } else if (packet instanceof ClientboundCustomPayloadPacket custom && custom.payload() instanceof AdvancedOpenScreenPayload advanced) {
             opened = new Opened(advanced.windowId(), key(advanced.menuType()), advanced.name(), advanced.additionalData(), -1, 0, false);
@@ -176,7 +176,7 @@ final class WindowCapture {
             window.share = false;
             window.x = (float) WindowPointer.toWindow(rawX, gameWindow.getScreenWidth(), gameWindow.getGuiScaledWidth(), container.getLeftPos());
             window.y = (float) WindowPointer.toWindow(rawY, gameWindow.getScreenHeight(), gameWindow.getGuiScaledHeight(), container.getTopPos());
-            Slot hovered = container.getSlotUnderMouse();
+            Slot hovered = ((comedymonkey.dailies.mixin.access.ContainerScreenAccess) container).dailies$hoveredSlot();
             window.hovered = hovered == null ? -1 : hovered.index;
         } else {
             window.share = true;

@@ -244,8 +244,7 @@ final class Menu {
         int visible = Math.max(1, Math.round(this.height * opened));
         int top = this.above ? this.y + this.height - visible : this.y;
         graphics.pose().pushMatrix();
-        // Above the panels and whatever they have drawn
-        graphics.pose().translate(0.0F, 0.0F, 300.0F);
+        // Above the panels and whatever they have drawn, being drawn after them
         try {
             Kit.shadow(graphics, this.x, top, this.x + this.width, top + visible, 4);
             graphics.enableScissor(this.x, top, this.x + this.width, top + visible);
@@ -432,12 +431,12 @@ final class Menu {
     }
 
     /** A letter was typed: the list narrows to the lines that fit everything typed so far */
-    void typed(char character) {
-        if (character < ' ' || character == 127 || (character == ' ' && this.query.isEmpty())) {
+    void typed(int codepoint) {
+        if (codepoint < ' ' || codepoint == 127 || (codepoint == ' ' && this.query.isEmpty())) {
             return;
         }
         if (this.query.length() < 40) {
-            this.find(this.query + character);
+            this.find(this.query + Character.toString(codepoint));
         }
     }
 

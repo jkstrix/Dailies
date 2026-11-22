@@ -101,7 +101,6 @@ public final class Notices {
     /** The notice, drawn over a screen: the layer it usually lives on is under every screen and is not drawn at all without a world */
     static void drawOver(GuiGraphicsExtractor graphics, Font font) {
         graphics.pose().pushMatrix();
-        graphics.pose().translate(0.0F, 0.0F, 350.0F);
         try {
             drawNotice(graphics, font);
         } finally {

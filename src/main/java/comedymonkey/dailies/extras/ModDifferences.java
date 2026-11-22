@@ -70,7 +70,7 @@ public final class ModDifferences {
 
     static void registerKey(RegisterKeyMappingsEvent event) {
         if (key == null) {
-            KeyMapping mapping = new KeyMapping("dailies.extras.key.mod_differences", WATCHING, InputConstants.Type.KEYSYM, InputConstants.KEY_F7, "key.categories.dailies");
+            KeyMapping mapping = new KeyMapping("dailies.extras.key.mod_differences", WATCHING, InputConstants.Type.KEYBOARD, InputConstants.KEY_F7, comedymonkey.dailies.ui.Keys.CATEGORY);
             event.register(mapping);
             key = mapping;
         }

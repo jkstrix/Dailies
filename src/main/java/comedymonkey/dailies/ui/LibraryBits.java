@@ -6,6 +6,7 @@ import comedymonkey.dailies.library.LibraryJob;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -61,7 +62,7 @@ final class LibraryBits {
             try {
                 NativeImage image = NativeImage.read(png);
                 Identifier location = Identifier.fromNamespaceAndPath(Dailies.ID, "library_preview/" + pictures++);
-                Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(image));
+                Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(location::toString, image));
                 return new Picture(location, image.getWidth(), image.getHeight());
             } catch (Exception | LinkageError unreadable) {
                 return null;
@@ -77,7 +78,7 @@ final class LibraryBits {
                 int drawnHeight = Math.max(1, (int) Math.round(this.height * scale));
                 int left = x + (boxWidth - drawnWidth) / 2;
                 int top = y + (boxHeight - drawnHeight) / 2;
-                graphics.blit(this.location, left, top, drawnWidth, drawnHeight, 0.0F, 0.0F, this.width, this.height, this.width, this.height);
+                graphics.blit(RenderPipelines.GUI_TEXTURED, this.location, left, top, 0.0F, 0.0F, drawnWidth, drawnHeight, this.width, this.height, this.width, this.height);
             }
             graphics.outline(x, y, boxWidth, boxHeight, Controls.BRASS_DIM);
         }

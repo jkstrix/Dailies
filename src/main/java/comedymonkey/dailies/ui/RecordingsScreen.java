@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
 import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.file.RecordingFile;
@@ -400,7 +401,7 @@ public final class RecordingsScreen extends KitScreen {
         Controls.offThread(() -> {
             Path where = this.current().folder();
             Files.createDirectories(where);
-            Util.getPlatform().openPath(where);
+            Blaze3D.openPath(where);
         }, t("folder_failed"), () -> {
         });
     }
@@ -424,8 +425,8 @@ public final class RecordingsScreen extends KitScreen {
     }
 
     @Override
-    void typedElsewhere(char character, int modifiers) {
-        this.current().typed(character, modifiers);
+    void typedElsewhere(int codepoint) {
+        this.current().typed(codepoint);
     }
 
     static String nameOf(LibraryIndex.Entry entry) {

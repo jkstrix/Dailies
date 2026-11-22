@@ -5,6 +5,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
@@ -263,7 +267,7 @@ final class Entry extends Gadget {
         this.box.setX(this.x + 4);
         this.box.setY(this.y + 3);
         this.box.setWidth(Math.max(4, boxWidth - 7));
-        this.box.render(graphics, mouseX, mouseY, 0.0F);
+        this.box.extractRenderState(graphics, mouseX, mouseY, 0.0F);
         if (this.swatch != null) {
             int left = this.x + boxWidth + Kit.GAP;
             graphics.fill(left, this.y, left + patch - Kit.GAP, this.y + Kit.ROW, 0xFF000000 | (this.swatch.getAsInt() & 0xFFFFFF));
@@ -284,7 +288,7 @@ final class Entry extends Gadget {
 
     @Override
     @Nullable Gadget press(double mouseX, double mouseY, int button) {
-        if (button != 0 || !this.overBox(mouseX, mouseY) || !this.usable.getAsBoolean()) {
+        if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.overBox(mouseX, mouseY) || !this.usable.getAsBoolean()) {
             return null;
         }
         if (focused != this) {
@@ -293,7 +297,8 @@ final class Entry extends Gadget {
             this.box.setFocused(true);
         }
         Gadget.focus = null;
-        this.box.onClick(mouseX, mouseY);
+        int shift = Minecraft.getInstance().hasShiftDown() ? InputConstants.MOD_SHIFT : 0;
+        this.box.onClick(new MouseButtonEvent(mouseX, mouseY, new MouseButtonInfo(button, shift)), false);
         return this;
     }
 
@@ -374,20 +379,20 @@ final class Entry extends Gadget {
             focused = null;
             this.box.setFocused(false);
         } else {
-            this.box.keyPressed(keyCode, scanCode, modifiers);
+            this.box.keyPressed(new KeyEvent(keyCode, scanCode, modifiers));
             this.afterKey();
         }
     }
 
-    void typed(char character, int modifiers) {
+    void typed(int codepoint) {
         if (this.forMenu) {
             Menu menu = Menu.open;
             if (menu != null) {
-                menu.typed(character);
+                menu.typed(codepoint);
             }
             return;
         }
-        this.box.charTyped(character, modifiers);
+        this.box.charTyped(new CharacterEvent(codepoint));
         this.afterKey();
     }
 

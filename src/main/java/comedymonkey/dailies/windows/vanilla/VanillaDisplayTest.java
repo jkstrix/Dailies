@@ -8,6 +8,8 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.inventory.BookEditScreen;
 import net.minecraft.client.gui.screens.inventory.BookViewScreen;
 import net.minecraft.client.gui.screens.inventory.LecternScreen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -29,6 +31,8 @@ import net.minecraft.world.level.block.entity.SignBlockEntity;
 
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.world.level.block.entity.SignTextSlot;
+import org.lwjgl.sdl.SDLKeyboard;
 
 /**
  * The display test of Dailies' own compat for the game's books, lectern and signs, run by the windows group of the
@@ -84,10 +88,10 @@ final class VanillaDisplayTest implements DisplayTest {
 
     /** Types into the screen open, a character a tick, as a player types */
     private static void type(Stage stage, Minecraft minecraft, String text) throws Exception {
-        for (char typed : text.toCharArray()) {
+        for (int typed : text.codePoints().toArray()) {
             stage.onClient(() -> {
                 if (minecraft.gui.screen() != null) {
-                    minecraft.gui.screen().charTyped(typed, 0);
+                    minecraft.gui.screen().charTyped(new CharacterEvent(typed));
                 }
             });
             stage.waitTicks(1);
@@ -98,17 +102,22 @@ final class VanillaDisplayTest implements DisplayTest {
     private static void press(Stage stage, Minecraft minecraft, int key) throws Exception {
         stage.onClient(() -> {
             if (minecraft.gui.screen() != null) {
-                minecraft.gui.screen().keyPressed(key, 0, 0);
+                minecraft.gui.screen().keyPressed(keyEvent(key));
             }
         });
         stage.waitTicks(1);
+    }
+
+    /** A key as the game hands it to a screen: where it is on the keyboard, and what it means there */
+    private static KeyEvent keyEvent(int key) {
+        return new KeyEvent(key, SDLKeyboard.SDL_GetKeyFromScancode(key, (short) 0, false), 0);
     }
 
     /** Opens a sign's editing screen as placing a sign does */
     private static void editSign(Stage stage, BlockPos pos) throws Exception {
         stage.onServer(player -> {
             if (player.level().getBlockEntity(pos) instanceof SignBlockEntity sign && sign.getBlockState().getBlock() instanceof SignBlock block) {
-                block.openTextEdit(player, sign, true);
+                block.openTextEdit(player, sign, SignTextSlot.FRONT);
             }
         });
         stage.waitTicks(5);
@@ -126,7 +135,7 @@ final class VanillaDisplayTest implements DisplayTest {
                 for (int turn = 0; turn < 2; turn++) {
                     stage.onClient(() -> {
                         if (minecraft.gui.screen() instanceof BookViewScreen) {
-                            minecraft.gui.screen().keyPressed(InputConstants.KEY_PAGEDOWN, 0, 0);
+                            minecraft.gui.screen().keyPressed(keyEvent(InputConstants.KEY_PAGEDOWN));
                         }
                     });
                     stage.waitTicks(10);
@@ -157,7 +166,7 @@ final class VanillaDisplayTest implements DisplayTest {
                     press(stage, minecraft, InputConstants.KEY_LEFT);
                 }
             }),
-            new Display("a book and quill being signed", VanillaCompat.ID + "/book_write", stage -> {
+            new Display("a book and quill being signed", VanillaCompat.ID + "/book_sign", stage -> {
                 openBookAndQuill(stage, minecraft);
                 type(stage, minecraft, "To be signed.");
                 // The Sign button, as clicking it does
@@ -165,7 +174,7 @@ final class VanillaDisplayTest implements DisplayTest {
                     if (minecraft.gui.screen() instanceof BookEditScreen writing) {
                         for (GuiEventListener child : writing.children()) {
                             if (child instanceof Button button && button.getMessage().equals(Component.translatable("book.signButton"))) {
-                                button.onPress();
+                                button.onPress(keyEvent(InputConstants.KEY_RETURN));
                                 break;
                             }
                         }

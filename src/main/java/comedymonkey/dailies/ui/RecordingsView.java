@@ -1,5 +1,6 @@
 package comedymonkey.dailies.ui;
 
+import com.mojang.blaze3d.Blaze3D;
 import com.mojang.blaze3d.platform.InputConstants;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.capture.Recorder;
@@ -604,7 +605,7 @@ final class RecordingsView extends LibraryView {
         Notices.show(Component.translatable("dailies.ui.share.working", RecordingsScreen.nameOf(entry)));
         Controls.offThread(() -> {
             made[0] = comedymonkey.dailies.library.Sharing.share(file, null);
-            Util.getPlatform().openPath(made[0].getParent());
+            Blaze3D.openPath(made[0].getParent());
         }, Component.translatable("dailies.ui.share.failed"), () -> {
             if (made[0] != null) {
                 Notices.show(Component.translatable("dailies.ui.share.done", made[0].getFileName().toString()));
@@ -626,7 +627,7 @@ final class RecordingsView extends LibraryView {
                 packs = list.filter(path -> path.getFileName().toString().endsWith(comedymonkey.dailies.library.SharePack.EXTENSION)).sorted().toList();
             }
             if (packs.isEmpty()) {
-                Util.getPlatform().openPath(inbox);
+                Blaze3D.openPath(inbox);
                 counts[1] = -1;
                 return;
             }
@@ -694,11 +695,11 @@ final class RecordingsView extends LibraryView {
     }
 
     @Override
-    void typed(char character, int modifiers) {
+    void typed(int codepoint) {
         // Typing anywhere starts a search
-        if (!Character.isISOControl(character) && !Minecraft.getInstance().hasControlDown()) {
+        if (!Character.isISOControl(codepoint) && !Minecraft.getInstance().hasControlDown()) {
             this.searchBox.focus();
-            this.searchBox.type(this.search + character);
+            this.searchBox.type(this.search + Character.toString(codepoint));
         }
     }
 
@@ -768,7 +769,7 @@ final class RecordingsView extends LibraryView {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             long now = Util.getMillis();
@@ -832,7 +833,7 @@ final class RecordingsView extends LibraryView {
 
         @Override
         @Nullable Gadget press(double mouseX, double mouseY, int button) {
-            if (button != 0 || !this.over(mouseX, mouseY)) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT || !this.over(mouseX, mouseY)) {
                 return null;
             }
             long now = Util.getMillis();

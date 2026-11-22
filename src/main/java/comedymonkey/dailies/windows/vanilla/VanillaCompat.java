@@ -1,19 +1,27 @@
 package comedymonkey.dailies.windows.vanilla;
 
+import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
+import com.mojang.serialization.JsonOps;
 import comedymonkey.dailies.api.compat.Claims;
 import comedymonkey.dailies.api.compat.DailiesCompat;
 import comedymonkey.dailies.api.compat.DailiesCompats;
 import comedymonkey.dailies.api.compat.DisplayTest;
 import comedymonkey.dailies.api.compat.ScreenPart;
 import comedymonkey.dailies.mixin.access.BookEditScreenAccess;
+import comedymonkey.dailies.mixin.access.BookSignScreenAccess;
 import comedymonkey.dailies.mixin.access.BookViewScreenAccess;
+import comedymonkey.dailies.mixin.access.MultiLineEditBoxAccess;
+import comedymonkey.dailies.mixin.access.MultilineTextFieldAccess;
 import comedymonkey.dailies.mixin.access.SignEditScreenAccess;
 import comedymonkey.dailies.windows.Compats;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.MultiLineEditBox;
+import net.minecraft.client.gui.components.MultilineTextField;
 import net.minecraft.client.gui.font.TextFieldHelper;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.BookEditScreen;
+import net.minecraft.client.gui.screens.inventory.BookSignScreen;
 import net.minecraft.client.gui.screens.inventory.BookViewScreen;
 import net.minecraft.client.gui.screens.inventory.HangingSignEditScreen;
 import net.minecraft.client.gui.screens.inventory.LecternScreen;
@@ -23,7 +31,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -35,7 +45,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.HangingSignBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.TagValueInput;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
@@ -98,7 +110,10 @@ public final class VanillaCompat implements DailiesCompat {
     public void claim(Claims claims) {
         claims.screen("book_read", BookViewScreen.class, new BookRead());
         claims.menu("lectern", "minecraft:lectern", new Lectern());
-        claims.screen("book_write", BookEditScreen.class, new BookWrite());
+        BookWrite bookWrite = new BookWrite();
+        claims.screen("book_write", BookEditScreen.class, bookWrite);
+        // Signing is a screen of its own since 26.1; it records the same state, with the title
+        claims.screen("book_sign", BookSignScreen.class, bookWrite);
         claims.screen("sign_edit", SignEditScreen.class, new SignEdit(SignEditScreen.class));
         claims.screen("hanging_sign_edit", HangingSignEditScreen.class, new SignEdit(HangingSignEditScreen.class));
     }
@@ -137,7 +152,7 @@ public final class VanillaCompat implements DailiesCompat {
     private static List<String> json(List<Component> pages, HolderLookup.Provider registries) {
         List<String> json = new ArrayList<>(pages.size());
         for (Component page : pages) {
-            json.add(Component.Serializer.toJson(page, registries));
+            json.add(ComponentSerialization.CODEC.encodeStart(registries.createSerializationContext(JsonOps.INSTANCE), page).getOrThrow().toString());
         }
         return json;
     }
@@ -151,7 +166,7 @@ public final class VanillaCompat implements DailiesCompat {
         }
         List<Component> pages = new ArrayList<>();
         for (String page : VanillaStates.readPages(stored)) {
-            pages.add(Component.Serializer.fromJson(page, registries));
+            pages.add(ComponentSerialization.CODEC.parse(registries.createSerializationContext(JsonOps.INSTANCE), JsonParser.parseString(page)).getOrThrow());
         }
         return new BookViewScreen.BookAccess(pages);
     }
@@ -239,18 +254,43 @@ public final class VanillaCompat implements DailiesCompat {
 
         @Override
         public byte @Nullable [] capture(Screen screen) {
-            if (screen.getClass() != BookEditScreen.class) {
+            BookEditScreenAccess book;
+            boolean signing;
+            String title;
+            if (screen.getClass() == BookEditScreen.class) {
+                book = (BookEditScreenAccess) screen;
+                signing = false;
+                title = "";
+            } else if (screen.getClass() == BookSignScreen.class) {
+                BookSignScreenAccess sign = (BookSignScreenAccess) screen;
+                if (sign.dailies$titleBox() == null) {
+                    return null;
+                }
+                book = (BookEditScreenAccess) sign.dailies$bookEditScreen();
+                signing = true;
+                title = sign.dailies$titleBox().getValue();
+            } else {
                 return null;
             }
-            BookEditScreenAccess book = (BookEditScreenAccess) screen;
             List<String> pages = book.dailies$pages();
             int page = book.dailies$currentPage();
             String pageText = page >= 0 && page < pages.size() ? pages.get(page) : "";
             // The other pages change only as pages are turned or added, so the page typed on is all a write carries
             String others = pages.size() > 1 ? this.stored.handle(VanillaStates.others(pages, page), each -> each) : null;
-            TextFieldHelper field = book.dailies$pageEdit();
-            return VanillaStates.bookWrite(new VanillaStates.BookWrite(others, page, pageText, field.getCursorPos(), field.getSelectionPos(), book.dailies$signing(),
-                book.dailies$title(), book.dailies$owner().getGameProfile().name()));
+            int cursor;
+            int selection;
+            MultiLineEditBox box = book.dailies$page();
+            if (signing || box == null) {
+                // The title is typed at its end, which is where its cursor is drawn
+                cursor = signing ? title.length() : 0;
+                selection = cursor;
+            } else {
+                MultilineTextField field = ((MultiLineEditBoxAccess) box).dailies$textField();
+                cursor = field.cursor();
+                selection = ((MultilineTextFieldAccess) field).dailies$selectCursor();
+            }
+            return VanillaStates.bookWrite(new VanillaStates.BookWrite(others, page, pageText, cursor, selection, signing, title,
+                book.dailies$owner().getGameProfile().name()));
         }
 
         @Override
@@ -277,10 +317,14 @@ public final class VanillaCompat implements DailiesCompat {
             book.dailies$pages().clear();
             book.dailies$pages().addAll(pages);
             book.dailies$setCurrentPage(Math.max(0, Math.min(recorded.page(), pages.size() - 1)));
-            book.dailies$setSigning(recorded.signing());
-            book.dailies$setTitle(recorded.title());
-            // The field reads the open page, put on above; laying the screen out leaves the cursor where it is
-            book.dailies$pageEdit().setSelectionRange(recorded.cursor(), recorded.selection());
+            if (recorded.signing()) {
+                // The signing screen, over the book it signs, which is never shown
+                PlaybackScreens.BookSign signing = new PlaybackScreens.BookSign(screen, owner, book.dailies$pages());
+                ((BookSignScreenAccess) (Object) signing).dailies$setTitleValue(recorded.title());
+                return signing;
+            }
+            // The page's box is made as the screen is laid out, and takes the cursor then
+            screen.cursorAfterLayout(recorded.cursor(), recorded.selection());
             return screen;
         }
 
@@ -313,9 +357,9 @@ public final class VanillaCompat implements DailiesCompat {
             Block block = sign.getBlockState().getBlock();
             Identifier key = BuiltInRegistries.BLOCK.getKey(block);
             TextFieldHelper field = editing.dailies$signField();
-            SignText text = editing.dailies$text();
+            SignText text = editing.dailies$text().asImmutable();
             return VanillaStates.signEdit(new VanillaStates.SignEdit(sign.getBlockPos().asLong(), key.toString(), SignBlock.getWoodType(block).name(),
-                sign instanceof HangingSignBlockEntity, editing.dailies$front(), Arrays.asList(editing.dailies$messages().clone()), editing.dailies$line(),
+                sign instanceof HangingSignBlockEntity, editing.dailies$slot() == SignTextSlot.FRONT, Arrays.asList(editing.dailies$messages().clone()), editing.dailies$line(),
                 field == null ? 0 : field.getCursorPos(), field == null ? 0 : field.getSelectionPos(), text.getColor().getName(), text.hasGlowingText()));
         }
 
@@ -334,20 +378,20 @@ public final class VanillaCompat implements DailiesCompat {
             if (!(made instanceof SignBlockEntity sign)) {
                 return null;
             }
-            Component[] lines = new Component[4];
-            for (int i = 0; i < lines.length; i++) {
-                lines[i] = Component.literal(recorded.line(i));
+            List<Component> lines = new ArrayList<>(4);
+            for (int i = 0; i < 4; i++) {
+                lines.add(Component.literal(recorded.line(i)));
             }
             // Loaded as a saved sign is, which tells no world: setText would, and the copy is in none
-            SignText text = new SignText(lines, lines.clone(), DyeColor.byName(recorded.colour(), DyeColor.BLACK), recorded.glowing());
+            SignText text = new SignText(lines, List.copyOf(lines), DyeColor.byName(recorded.colour(), DyeColor.BLACK), recorded.glowing());
             net.minecraft.core.HolderLookup.Provider registries = Minecraft.getInstance().level == null ? null : Minecraft.getInstance().level.registryAccess();
             if (registries == null) {
                 return null;
             }
             net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
             tag.put(recorded.front() ? "front_text" : "back_text",
-                SignText.DIRECT_CODEC.encodeStart(registries.createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), text).getOrThrow());
-            sign.loadCustomOnly(tag, registries);
+                SignText.CODEC.encodeStart(registries.createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), text).getOrThrow());
+            sign.loadCustomOnly(TagValueInput.create(ProblemReporter.DISCARDING, registries, tag));
             Screen screen = sign instanceof HangingSignBlockEntity
                 ? new PlaybackScreens.HangingSign(sign, recorded.front(), recorded.cursor(), recorded.selection())
                 : new PlaybackScreens.Sign(sign, recorded.front(), recorded.cursor(), recorded.selection());

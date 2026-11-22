@@ -6,7 +6,6 @@ import comedymonkey.dailies.capture.Recorder;
 import comedymonkey.dailies.playback.Playback;
 import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -36,7 +35,6 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class Screens {
 
-    private static final int BRASS_EDGE = Controls.BRASS;
     private static boolean lookedForUnfinished = false;
     /** Unfinished recordings found and not yet offered. Client thread */
     private static @Nullable List<Path> unfinished = null;
@@ -48,14 +46,6 @@ public final class Screens {
         // Last, so that the buttons other mods add to the same screens are there to be kept clear of
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, Screens::screenBuilt);
         NeoForge.EVENT_BUS.addListener(Screens::screenOpening);
-        // Explanations in the editor are drawn by the game; they are given the house colours here
-        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderTooltipEvent.Color event) -> {
-            if (Minecraft.getInstance().gui.screen() instanceof EditorScreen) {
-                event.setBackground(0xFA1C1308);
-                event.setBorderStart(BRASS_EDGE);
-                event.setBorderEnd(BRASS_EDGE);
-            }
-        });
     }
 
     private static void screenBuilt(ScreenEvent.Init.Post event) {
@@ -122,7 +112,10 @@ public final class Screens {
         int x = place[0];
         int y = place[1];
 
-        event.addListener(new StringWidget(x, y, width, 9, Component.translatable("dailies.ui.pause.heading"), minecraft.font).setColor(Controls.PARCHMENT));
+        // Centred over the column, as the game's string widgets were before they took to the left edge
+        Component heading = Component.translatable("dailies.ui.pause.heading").withColor(Controls.PARCHMENT & 0xFFFFFF);
+        int headingWidth = Math.min(width, minecraft.font.width(heading));
+        event.addListener(new StringWidget(x + (width - headingWidth) / 2, y, headingWidth, 9, heading, minecraft.font));
         y += 12;
 
         if (Playback.active()) {
@@ -311,7 +304,8 @@ public final class Screens {
         }
 
         @Override
-        public void renderString(GuiGraphicsExtractor graphics, Font font, int colour) {
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+            this.extractDefaultSprite(graphics);
             int left = this.getX() + 5;
             int top = this.getY() + 5;
             int brass = this.active ? Controls.BRASS_BRIGHT : Controls.BRASS;
@@ -335,7 +329,8 @@ public final class Screens {
         }
 
         @Override
-        public void renderString(GuiGraphicsExtractor graphics, Font font, int colour) {
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+            this.extractDefaultSprite(graphics);
             int centreX = this.getX() + this.getWidth() / 2;
             int centreY = this.getY() + this.getHeight() / 2;
             int brass = this.active ? Controls.BRASS_BRIGHT : Controls.BRASS;

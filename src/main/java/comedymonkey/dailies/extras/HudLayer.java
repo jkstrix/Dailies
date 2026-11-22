@@ -1,6 +1,5 @@
 package comedymonkey.dailies.extras;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import comedymonkey.dailies.Dailies;
 import comedymonkey.dailies.Host;
 import comedymonkey.dailies.editor.EditorSession;
@@ -13,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -58,7 +58,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
 
     /** How far the playback bar reaches up from the bottom of the screen: the HUD sits above it */
     private static final int PLAYBACK_BAR = 22;
-    private static final int LEVEL_COLOUR = 0x80FF20;
+    private static final int LEVEL_COLOUR = 0xFF80FF20;
 
     private static final HudLayer INSTANCE = new HudLayer();
 
@@ -220,7 +220,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
             boolean barShown = !comedymonkey.dailies.export.Export.active() && !comedymonkey.dailies.ui.Notices.hidden();
             graphics.pose().pushMatrix();
             try {
-                graphics.pose().translate(0.0F, barShown ? -PLAYBACK_BAR : 0.0F, 0.0F);
+                graphics.pose().translate(0.0F, barShown ? -PLAYBACK_BAR : 0.0F);
                 if (hotbar) {
                     this.drawHotbar(graphics, minecraft, recorder, hud);
                 }
@@ -248,20 +248,15 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         // The off-hand slot sits on the side of the arm that holds it
         boolean offHandLeft = hud.rightHanded;
 
-        RenderSystem.enableBlend();
-        graphics.pose().pushMatrix();
-        graphics.pose().translate(0.0F, 0.0F, -90.0F);
-        graphics.blitSprite(HOTBAR, centre - 91, bottom - 22, 182, 22);
-        graphics.blitSprite(HOTBAR_SELECTION, centre - 91 - 1 + hud.selected * 20, bottom - 22 - 1, 24, 23);
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR, centre - 91, bottom - 22, 182, 22);
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_SELECTION, centre - 91 - 1 + hud.selected * 20, bottom - 22 - 1, 24, 23);
         if (!offHand.isEmpty()) {
             if (offHandLeft) {
-                graphics.blitSprite(OFF_HAND_LEFT, centre - 91 - 29, bottom - 23, 29, 24);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, OFF_HAND_LEFT, centre - 91 - 29, bottom - 23, 29, 24);
             } else {
-                graphics.blitSprite(OFF_HAND_RIGHT, centre + 91, bottom - 23, 29, 24);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, OFF_HAND_RIGHT, centre + 91, bottom - 23, 29, 24);
             }
         }
-        graphics.pose().popMatrix();
-        RenderSystem.disableBlend();
 
         int seed = 1;
         int y = bottom - 16 - 3;
@@ -276,7 +271,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
     private void drawStack(GuiGraphicsExtractor graphics, Font font, Player recorder, ItemStack stack, int x, int y, int seed) {
         if (!stack.isEmpty()) {
             graphics.item(recorder, stack, x, y, seed);
-            graphics.renderItemDecorations(font, stack, x, y);
+            graphics.itemDecorations(font, stack, x, y);
         }
     }
 
@@ -286,7 +281,6 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         int bottom = graphics.guiHeight();
         int leftHeight = 39;
         int rightHeight = 39;
-        RenderSystem.enableBlend();
 
         // Hearts
         int health = Mth.ceil(hud.health);
@@ -300,18 +294,18 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         for (int heart = containers + extra - 1; heart >= 0; heart--) {
             int x = left + (heart % 10) * 8;
             int y = top - (heart / 10) * rowHeight;
-            graphics.blitSprite(hud.hardcore ? HEART_CONTAINER_HARDCORE : HEART_CONTAINER, x, y, 9, 9);
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, hud.hardcore ? HEART_CONTAINER_HARDCORE : HEART_CONTAINER, x, y, 9, 9);
             int points = heart * 2;
             if (heart >= containers) {
                 int absorbed = points - containers * 2;
                 if (absorbed < absorption) {
                     boolean half = absorbed + 1 == absorption;
-                    graphics.blitSprite(hud.hardcore ? (half ? ABSORBING_HALF_HARDCORE : ABSORBING_FULL_HARDCORE) : (half ? ABSORBING_HALF : ABSORBING_FULL), x, y, 9, 9);
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, hud.hardcore ? (half ? ABSORBING_HALF_HARDCORE : ABSORBING_FULL_HARDCORE) : (half ? ABSORBING_HALF : ABSORBING_FULL), x, y, 9, 9);
                 }
             }
             if (points < health) {
                 boolean half = points + 1 == health;
-                graphics.blitSprite(hud.hardcore ? (half ? HEART_HALF_HARDCORE : HEART_FULL_HARDCORE) : (half ? HEART_HALF : HEART_FULL), x, y, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, hud.hardcore ? (half ? HEART_HALF_HARDCORE : HEART_FULL_HARDCORE) : (half ? HEART_HALF : HEART_FULL), x, y, 9, 9);
             }
         }
         leftHeight += (rows - 1) * rowHeight + 10;
@@ -322,7 +316,7 @@ public final class HudLayer implements PlaybackExtensions.Extension {
             for (int piece = 0; piece < 10; piece++) {
                 int x = left + piece * 8;
                 int points = piece * 2 + 1;
-                graphics.blitSprite(points < hud.armour ? ARMOUR_FULL : points == hud.armour ? ARMOUR_HALF : ARMOUR_EMPTY, x, y, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, points < hud.armour ? ARMOUR_FULL : points == hud.armour ? ARMOUR_HALF : ARMOUR_EMPTY, x, y, 9, 9);
             }
         }
 
@@ -330,11 +324,11 @@ public final class HudLayer implements PlaybackExtensions.Extension {
         int foodTop = bottom - rightHeight;
         for (int leg = 0; leg < 10; leg++) {
             int x = right - leg * 8 - 9;
-            graphics.blitSprite(FOOD_EMPTY, x, foodTop, 9, 9);
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FOOD_EMPTY, x, foodTop, 9, 9);
             if (leg * 2 + 1 < hud.food) {
-                graphics.blitSprite(FOOD_FULL, x, foodTop, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FOOD_FULL, x, foodTop, 9, 9);
             } else if (leg * 2 + 1 == hud.food) {
-                graphics.blitSprite(FOOD_HALF, x, foodTop, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FOOD_HALF, x, foodTop, 9, 9);
             }
         }
         rightHeight += 10;
@@ -346,30 +340,27 @@ public final class HudLayer implements PlaybackExtensions.Extension {
             int whole = Mth.ceil((air - 2) * 10.0 / hud.maxAir);
             int bursting = Mth.ceil(air * 10.0 / hud.maxAir) - whole;
             for (int bubble = 0; bubble < whole + bursting; bubble++) {
-                graphics.blitSprite(bubble < whole ? AIR : AIR_BURSTING, right - bubble * 8 - 9, y, 9, 9);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, bubble < whole ? AIR : AIR_BURSTING, right - bubble * 8 - 9, y, 9, 9);
             }
         }
-        RenderSystem.disableBlend();
     }
 
     private void drawExperience(GuiGraphicsExtractor graphics, Font font, HudState hud) {
         int left = graphics.guiWidth() / 2 - 91;
         int top = graphics.guiHeight() - 32 + 3;
         int filled = Mth.clamp((int) (hud.progress * 183.0F), 0, 182);
-        RenderSystem.enableBlend();
-        graphics.blitSprite(EXPERIENCE_BACKGROUND, left, top, 182, 5);
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, EXPERIENCE_BACKGROUND, left, top, 182, 5);
         if (filled > 0) {
-            graphics.blitSprite(EXPERIENCE_PROGRESS, 182, 5, 0, 0, left, top, filled, 5);
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, EXPERIENCE_PROGRESS, 182, 5, 0, 0, left, top, filled, 5);
         }
-        RenderSystem.disableBlend();
         if (hud.level > 0) {
             String level = Integer.toString(hud.level);
             int x = (graphics.guiWidth() - font.width(level)) / 2;
             int y = graphics.guiHeight() - 31 - 4;
-            graphics.text(font, level, x + 1, y, 0, false);
-            graphics.text(font, level, x - 1, y, 0, false);
-            graphics.text(font, level, x, y + 1, 0, false);
-            graphics.text(font, level, x, y - 1, 0, false);
+            graphics.text(font, level, x + 1, y, 0xFF000000, false);
+            graphics.text(font, level, x - 1, y, 0xFF000000, false);
+            graphics.text(font, level, x, y + 1, 0xFF000000, false);
+            graphics.text(font, level, x, y - 1, 0xFF000000, false);
             graphics.text(font, level, x, y, LEVEL_COLOUR, false);
         }
     }
