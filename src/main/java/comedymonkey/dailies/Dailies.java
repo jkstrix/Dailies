@@ -61,6 +61,8 @@ public final class Dailies {
         comedymonkey.dailies.looks.LooksRenderer.init();
         comedymonkey.dailies.compat.voicechat.VoiceChatLook.init();
         comedymonkey.dailies.compat.iris.IrisShaders.init();
+        // The recorder's overlays and screen effects through their eyes (PLAN-EFFECTS.md)
+        comedymonkey.dailies.effects.RecorderEyes.init();
 
         // Optional, so a server without the Dailies Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> {

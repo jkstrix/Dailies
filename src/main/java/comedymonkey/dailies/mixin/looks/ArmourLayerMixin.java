@@ -23,7 +23,9 @@ public abstract class ArmourLayerMixin {
     private void dailies$noArmour(PoseStack poseStack, SubmitNodeCollector collector, int light, HumanoidRenderState state, float yRot, float xRot, CallbackInfo ci) {
         if (LooksRenderer.hidesArmour(state)) {
             ci.cancel();
+            return;
         }
+        comedymonkey.dailies.looks.Drawn.armour(state);
     }
 
 }
