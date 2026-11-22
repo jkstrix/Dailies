@@ -23,13 +23,13 @@ public final class JadeHooks implements IWailaPlugin {
 
     @Override
     public void registerClient(IWailaClientRegistration registration) {
-        registration.addBeforeRenderCallback(FIRST, (root, rect, graphics, accessor) -> JadeDailies.registered() && TooltipBox.beforeRender());
-        registration.addAfterRenderCallback(LAST, (root, rect, graphics, accessor) -> {
+        registration.addBeforeRenderCallback(FIRST, (root, animation, graphics, accessor) -> JadeDailies.registered() && TooltipBox.beforeRender());
+        registration.addAfterRenderCallback(LAST, (root, animation, graphics, accessor) -> {
             if (!JadeDailies.registered() || failed) {
                 return;
             }
             try {
-                TooltipBox.afterRender(root, rect);
+                TooltipBox.afterRender(root, animation);
             } catch (RuntimeException | LinkageError e) {
                 // Never Jade's drawing broken by the compat: the box goes unrecorded from here on
                 failed = true;

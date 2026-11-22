@@ -1,6 +1,7 @@
 // The compat for the rest of the owner's pack (specification CPT-12): a small mod of its own, dailies_extras, that records
-// the play screens and overlays of Explorer's Compass, Nature's Compass, Sophisticated Backpacks, Curios, Corpse
-// and VanillaBackport through Dailies' compat API, and draws them again in playback. Like the Create
+// the play screens and overlays of Explorer's Compass, Nature's Compass, Sophisticated Backpacks, Curios and Corpse
+// through Dailies' compat API, and draws them again in playback (VanillaBackport, whose nautilus inventory it recorded on
+// Minecraft 1.21.1, has no 26.3 release, so its part is left out). Like the Create
 // compat it has only a client half: everything it records is on the player's own screen. It loads and runs without
 // Dailies or any of those mods, doing nothing: each is a soft dependency, only compiled against (or, for the compasses,
 // named only), and each part is claimed only when its mod is loaded.
@@ -43,13 +44,11 @@ neoForge {
     // No runs: the compat is tried in game beside Dailies and the mods, in the modded test (its extras group)
 }
 
-// The versions in the owner's pack and the modded test. VanillaBackport publishes the same version number for several
-// loaders on Modrinth, so it is named by the NeoForge file's version id
+// The versions in the owner's pack and the modded test
 def backpacksVersion = '26.3-3.26.22.2260'
 def sophisticatedCoreVersion = '26.3-1.5.40.2492'
 def curiosVersion = '17.0.1+26.3'
 def corpseVersion = 'neoforge-1.1.22+26.3'
-def vanillaBackportVersion = 'mGS7BxD4'
 
 dependencies {
     // Dailies' compat API, as its API jar: only compiled against, never packed in, so the mod runs without Dailies
@@ -61,7 +60,6 @@ dependencies {
     compileOnly("maven.modrinth:sophisticated-core:${sophisticatedCoreVersion}") { transitive = false }
     compileOnly("maven.modrinth:curios:${curiosVersion}") { transitive = false }
     compileOnly("maven.modrinth:corpse:${corpseVersion}") { transitive = false }
-    compileOnly("maven.modrinth:vanillabackport:${vanillaBackportVersion}") { transitive = false }
 
     // The states' unit tests need neither the game nor the mods: the states are plain bytes
     testImplementation platform('org.junit:junit-bom:5.11.4')

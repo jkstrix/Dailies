@@ -3,7 +3,7 @@ package comedymonkey.dailiescompat.template.client;
 import comedymonkey.dailiescompat.template.ExampleNoteItem;
 import comedymonkey.dailiescompat.template.TemplateMod;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
@@ -21,9 +21,9 @@ public final class TemplateClient {
     private static final boolean DAILIES = ModList.get().isLoaded("dailies");
 
     public TemplateClient(IEventBus modBus) {
-        ExampleNoteItem.opener = () -> Minecraft.getInstance().setScreen(new ExampleScreen(0, false));
+        ExampleNoteItem.opener = () -> Minecraft.getInstance().gui.setScreen(new ExampleScreen(0, false));
         modBus.addListener((RegisterGuiLayersEvent event) -> event.registerAbove(VanillaGuiLayers.HOTBAR,
-            ResourceLocation.fromNamespaceAndPath(TemplateMod.ID, "home"), HomeOverlay::drawLive));
+            Identifier.fromNamespaceAndPath(TemplateMod.ID, "home"), HomeOverlay::drawLive));
         if (DAILIES) {
             TemplateDailies.register();
         }

@@ -5,18 +5,17 @@ import comedymonkey.dailies.api.compat.DisplayTest;
 import comedymonkey.dailiescompat.extras.ExtrasCompat;
 import de.maxhenkel.corpse.corelib.death.Death;
 import de.maxhenkel.corpse.entities.CorpseEntity;
-import com.blackgear.vanillabackport.common.level.entities.mob.animal.nautilus.AbstractNautilus;
-import com.blackgear.vanillabackport.common.registries.entities.ModEntityTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import net.p3pp3rf1y.sophisticatedbackpacks.backpack.wrapper.BackpackWrapper;
 import net.p3pp3rf1y.sophisticatedbackpacks.backpack.wrapper.IBackpackWrapper;
 import org.slf4j.Logger;
-import top.theillusivec4.curios.common.inventory.container.CuriosContainerProvider;
+import top.theillusivec4.curios.common.inventory.container.CuriosMenuProvider;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,18 +26,13 @@ import java.util.function.Predicate;
  * The display test of the compat for the rest of the pack, run by Dailies' scripted run (its extras group), around the
  * player at the middle of a flat world, with nothing staged beforehand. While recording, the player, in survival, holds
  * Explorer's Compass and Nature's Compass each with something found, opens a backpack held in the hand and one with a
- * pickup upgrade's tab open, opens the Curios window, opens a corpse laid two blocks off, and opens a tamed nautilus'
- * inventory. Dailies then checks each is drawn riding along in first person, and nothing in third
- * person or flying free.
+ * pickup upgrade's tab open, opens the Curios window and opens a corpse laid two blocks off. Dailies then checks each is
+ * drawn riding along in first person, and nothing in third person or flying free.
  * <p>
  * The mods' own conditions for drawing, met here: a compass shows its lines while held in either hand with no screen
  * open, from its state on the item (found, with a structure or biome and where), set as the item is given; the backpack is opened as using it in the hand opens it, its upgrade and open tab
  * set on the backpack first; the Curios window as Curios' key opens it, by the server; the corpse is opened by the server
- * as using it does, once the player's game has it, within reach, and holding the items the player carried; and the
- * nautilus, once tamed and known to the player's game, as using it while sneaking opens its inventory, two blocks off
- * (within its reach of four). VanillaBackport registers its mobs under the game's own name, so the nautilus is
- * {@code minecraft:nautilus}, made here from VanillaBackport's own entity type. Turned by yaw and pitch, never by
- * {@code tp ... facing}. Not in
+ * as using it does, once the player's game has it, within reach, and holding the items the player carried. Not in
  * the test: Curios' second page and cosmetic slots (no pack of curio slots big enough in a test world), a corpse's page of
  * further items (they come only from mods' slots), and a line Sophisticated Backpacks or Corpse puts above the hotbar
  * (the tool swap key and the death history key with no deaths), which a key opens rather than a step.
@@ -57,12 +51,6 @@ final class ExtrasDisplayTest implements DisplayTest {
     private void reset(Stage stage) throws Exception {
         stage.command("item replace entity @s weapon.mainhand with minecraft:air");
         stage.command("tp @s 0.5 -60 0.5 0 0");
-        stage.waitTicks(3);
-    }
-
-    /** Stands the player at the middle, turned by yaw and pitch, and lets the game catch up */
-    private static void face(Stage stage, float yaw, float pitch) throws Exception {
-        stage.command("tp @s 0.5 -60 0.5 " + yaw + " " + pitch);
         stage.waitTicks(3);
     }
 
@@ -127,16 +115,6 @@ final class ExtrasDisplayTest implements DisplayTest {
                 stage.waitTicks(5);
             }));
         }
-        if (this.loaded.test(ExtrasCompat.VANILLA_BACKPORT)) {
-            displays.add(new Display("a tamed nautilus' inventory", prefix + NautilusPart.NAME, stage -> {
-                reset(stage);
-                face(stage, 135.0F, 20.0F);
-                stage.onServer(NautilusSteps::tame);
-                stage.waitTicks(10);
-                stage.onServer(NautilusSteps::open);
-                stage.waitTicks(5);
-            }));
-        }
         return displays;
     }
 
@@ -153,15 +131,15 @@ final class ExtrasDisplayTest implements DisplayTest {
             }
             if (withUpgrade) {
                 IBackpackWrapper wrapper = BackpackWrapper.fromStack(backpack);
-                if (wrapper.getUpgradeHandler().getSlots() == 0) {
+                if (wrapper.getUpgradeHandler().size() == 0) {
                     LOGGER.warn("Dailies extras compat's display test: the backpack has no upgrade slots");
                 } else {
-                    wrapper.getUpgradeHandler().setStackInSlot(0, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath("sophisticatedbackpacks",
+                    wrapper.getUpgradeHandler().setStackInSlot(0, new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.fromNamespaceAndPath("sophisticatedbackpacks",
                         "pickup_upgrade"))));
                     wrapper.setOpenTabId(0);
                 }
             }
-            backpack.getItem().use(player.serverLevel(), player, InteractionHand.MAIN_HAND);
+            backpack.getItem().use(player.level(), player, InteractionHand.MAIN_HAND);
         }
     }
 
@@ -169,7 +147,7 @@ final class ExtrasDisplayTest implements DisplayTest {
     private static final class CuriosSteps {
         /** As Curios' key opens its window, by the server */
         static void open(ServerPlayer player) {
-            player.openMenu(new CuriosContainerProvider());
+            player.openMenu(new CuriosMenuProvider());
         }
     }
 
@@ -181,47 +159,17 @@ final class ExtrasDisplayTest implements DisplayTest {
         static void layCorpse(ServerPlayer player) {
             CorpseEntity corpse = CorpseEntity.createFromDeath(player, Death.fromPlayer(player));
             corpse.setPos(2.5, -60.0, 2.5);
-            player.serverLevel().addFreshEntity(corpse);
+            player.level().addFreshEntity(corpse);
             laid = corpse.getUUID();
         }
 
         /** As using the corpse opens it, once the player's game has it */
         static void open(ServerPlayer player) {
-            Entity corpse = laid == null ? null : player.serverLevel().getEntity(laid);
+            Entity corpse = laid == null ? null : player.level().getEntity(laid);
             if (corpse instanceof CorpseEntity) {
-                corpse.interact(player, InteractionHand.MAIN_HAND);
+                corpse.interact(player, InteractionHand.MAIN_HAND, Vec3.ZERO);
             } else {
                 LOGGER.warn("Dailies extras compat's display test: the corpse was not laid");
-            }
-        }
-    }
-
-    /** VanillaBackport's steps */
-    private static final class NautilusSteps {
-        private static UUID tamed = null;
-
-        /** A nautilus two blocks off, standing still, tamed by the player */
-        static void tame(ServerPlayer player) {
-            // Its id is minecraft:nautilus, not vanillabackport:nautilus: VanillaBackport registers its mobs under the game's name
-            Entity made = ModEntityTypes.NAUTILUS.get().create(player.serverLevel());
-            if (!(made instanceof AbstractNautilus nautilus)) {
-                LOGGER.warn("Dailies extras compat's display test: this game has no nautilus");
-                return;
-            }
-            nautilus.moveTo(-1.5, -60.0, -1.5, 0.0F, 0.0F);
-            nautilus.setNoAi(true);
-            nautilus.tame(player);
-            player.serverLevel().addFreshEntity(nautilus);
-            tamed = nautilus.getUUID();
-        }
-
-        /** As using it while sneaking opens its inventory */
-        static void open(ServerPlayer player) {
-            Entity nautilus = tamed == null ? null : player.serverLevel().getEntity(tamed);
-            if (nautilus instanceof AbstractNautilus tame) {
-                tame.openCustomInventoryScreen(player);
-            } else {
-                LOGGER.warn("Dailies extras compat's display test: the nautilus was not tamed");
             }
         }
     }

@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -64,7 +64,7 @@ public final class CompanionPlugins {
 	 */
 	public static void register(CompanionPlugin plugin) {
 		String id = plugin.id();
-		if (id == null || id.length() > CompatPayload.MAX_ID || id.indexOf(':') < 1 || ResourceLocation.tryParse(id) == null)
+		if (id == null || id.length() > CompatPayload.MAX_ID || id.indexOf(':') < 1 || Identifier.tryParse(id) == null)
 			throw new IllegalArgumentException("A companion plugin needs a namespaced id such as 'mymod:thing', not '" + id + "'");
 		if (plugin.version() < 1)
 			throw new IllegalArgumentException("The companion plugin " + id + " has version " + plugin.version() + "; versions start at 1");
@@ -146,7 +146,7 @@ public final class CompanionPlugins {
 		try {
 			data = plugin.describe(player, clientVersion);
 		} catch (RuntimeException e) {
-			LoggerFactory.getLogger("Dailies Companion").warn("Dailies Companion: plugin '{}' failed to answer {}", id, player.getGameProfile().getName(), e);
+			LoggerFactory.getLogger("Dailies Companion").warn("Dailies Companion: plugin '{}' failed to answer {}", id, player.getGameProfile().name(), e);
 			return;
 		}
 		send(player, id, plugin.version(), data);

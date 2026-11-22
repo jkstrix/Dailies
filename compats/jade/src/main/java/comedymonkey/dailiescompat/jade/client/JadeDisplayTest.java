@@ -33,7 +33,7 @@ final class JadeDisplayTest implements DisplayTest {
     @Override
     public void stage(Stage stage) throws Exception {
         stage.onClient(() -> {
-            IWailaConfig.IConfigGeneral general = IWailaConfig.get().getGeneral();
+            IWailaConfig.General general = IWailaConfig.get().general();
             if (!general.shouldDisplayTooltip()) {
                 general.setDisplayTooltip(true);
             }
@@ -44,7 +44,7 @@ final class JadeDisplayTest implements DisplayTest {
             general.setDisplayBlocks(true);
             general.setDisplayEntities(true);
             for (var id : List.of(JadeIds.UNIVERSAL_ITEM_STORAGE, JadeIds.MC_FURNACE, JadeIds.MC_ENTITY_HEALTH)) {
-                if (!IWailaConfig.get().getPlugin().get(id)) {
+                if (!IWailaConfig.get().plugin().get(id)) {
                     LOGGER.warn("Dailies Jade compat's display test: Jade's {} is turned off in this game's settings, so its box shows less", id);
                 }
             }

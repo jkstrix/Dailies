@@ -1,12 +1,10 @@
 package comedymonkey.dailiescompat.template;
 
 import comedymonkey.dailiescompat.template.server.TemplateServer;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
@@ -22,9 +20,9 @@ public final class TemplateMod {
 
     public static final String ID = "dailies_template";
 
-    private static final DeferredRegister<Item> ITEMS = DeferredRegister.create(Registries.ITEM, ID);
+    private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(ID);
     /** Using it opens the example screen; holding it shows the example overlay */
-    public static final DeferredHolder<Item, ExampleNoteItem> NOTE = ITEMS.register("example_note", () -> new ExampleNoteItem(new Item.Properties().stacksTo(1)));
+    public static final DeferredItem<ExampleNoteItem> NOTE = ITEMS.registerItem("example_note", ExampleNoteItem::new, properties -> properties.stacksTo(1));
 
     public TemplateMod(IEventBus modBus) {
         ITEMS.register(modBus);

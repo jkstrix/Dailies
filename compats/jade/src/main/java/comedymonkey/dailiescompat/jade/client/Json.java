@@ -8,8 +8,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.FormattedText;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.RegistryOps;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,19 +34,15 @@ final class Json {
 
     static String text(FormattedText text) {
         Component component = text instanceof Component whole ? whole : Component.literal(text.getString());
-        return Component.Serializer.toJson(component, registries());
+        return write(ComponentSerialization.CODEC, component);
     }
 
     static Component readText(String json) {
         if (json == null || json.isEmpty()) {
             return Component.empty();
         }
-        try {
-            MutableComponent read = Component.Serializer.fromJson(json, registries());
-            return read == null ? Component.empty() : read;
-        } catch (RuntimeException unreadable) {
-            return Component.literal(json);
-        }
+        Component read = read(ComponentSerialization.CODEC, json);
+        return read == null ? Component.literal(json) : read;
     }
 
     /** What the codec makes of the value, or empty when it cannot (a plugin's own kind of style, say) */

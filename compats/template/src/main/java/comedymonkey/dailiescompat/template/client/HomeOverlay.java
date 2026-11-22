@@ -3,7 +3,7 @@ package comedymonkey.dailiescompat.template.client;
 import comedymonkey.dailiescompat.template.TemplateMod;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -23,7 +23,7 @@ public final class HomeOverlay {
 
     /** The line the overlay shows now in the live game, or null when it is not showing */
     static @Nullable String line(Minecraft minecraft) {
-        if (minecraft.player == null || minecraft.options.hideGui || !minecraft.player.getMainHandItem().is(TemplateMod.NOTE.get())) {
+        if (minecraft.player == null || minecraft.gui.hud.isHidden() || !minecraft.player.getMainHandItem().is(TemplateMod.NOTE.get())) {
             return null;
         }
         BlockPos at = home;
@@ -32,7 +32,7 @@ public final class HomeOverlay {
     }
 
     /** The live layer. It stands down in playback, where Dailies draws what was recorded instead */
-    static void drawLive(GuiGraphics graphics, DeltaTracker delta) {
+    static void drawLive(GuiGraphicsExtractor graphics, DeltaTracker delta) {
         if (TemplateClient.inPlayback()) {
             return;
         }
@@ -43,13 +43,13 @@ public final class HomeOverlay {
     }
 
     /** Draws the line, live or in playback */
-    static void draw(GuiGraphics graphics, String line) {
+    static void draw(GuiGraphicsExtractor graphics, String line) {
         Minecraft minecraft = Minecraft.getInstance();
         int width = minecraft.font.width(line);
         int x = (graphics.guiWidth() - width) / 2;
         int y = graphics.guiHeight() - 72;
         graphics.fill(x - 3, y - 3, x + width + 3, y + 11, 0x90000000);
-        graphics.drawString(minecraft.font, line, x, y, 0xA0E0FF, false);
+        graphics.text(minecraft.font, line, x, y, 0xFFA0E0FF, false);
     }
 
 }

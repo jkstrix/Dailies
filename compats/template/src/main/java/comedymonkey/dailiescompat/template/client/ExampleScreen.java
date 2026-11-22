@@ -1,6 +1,6 @@
 package comedymonkey.dailiescompat.template.client;
 
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -47,11 +47,11 @@ public final class ExampleScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
         graphics.fill(this.left(), this.top(), this.left() + WIDTH, this.top() + HEIGHT - 32, 0xC0101010);
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, this.top() + 8, 0xFFFFFF);
-        graphics.drawCenteredString(this.font, Component.translatable("screen.dailies_template.count", this.count), this.width / 2, this.top() + 26, 0xFFE070);
+        graphics.centeredText(this.font, this.title, this.width / 2, this.top() + 8, 0xFFFFFFFF);
+        graphics.centeredText(this.font, Component.translatable("screen.dailies_template.count", this.count), this.width / 2, this.top() + 26, 0xFFFFE070);
     }
 
     @Override

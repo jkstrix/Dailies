@@ -106,12 +106,12 @@ final class Backpacks {
             return null;
         }
         List<ItemStack> slots = Stacks.loadAll(items, Stacks.SLOTS);
-        int inventory = items.getInt(INVENTORY);
-        int upgrades = items.getInt(UPGRADES);
+        int inventory = items.getIntOr(INVENTORY, 0);
+        int upgrades = items.getIntOr(UPGRADES, 0);
         // A stand-in of the compat's own, never in the world, holding the backpack in its first slot as a hand holds one
         RemotePlayer owner = new RemotePlayer(minecraft.level, OWNER);
-        owner.getInventory().selected = 0;
-        owner.getInventory().items.set(0, backpack);
+        owner.getInventory().setSelectedSlot(0);
+        owner.getInventory().setItem(0, backpack);
         BackpackContext context = new BackpackContext.Item("main", 0);
         IBackpackWrapper wrapper = context.getBackpackWrapper(owner);
         if (wrapper == IBackpackWrapper.Noop.INSTANCE) {
@@ -119,7 +119,7 @@ final class Backpacks {
         }
         // The upgrades first, so the window makes their tabs as the recorder's did; the tab open is on the backpack itself
         UpgradeHandler handler = wrapper.getUpgradeHandler();
-        for (int i = 0; i < upgrades && i < handler.getSlots() && inventory + i < slots.size(); i++) {
+        for (int i = 0; i < upgrades && i < handler.size() && inventory + i < slots.size(); i++) {
             handler.setStackInSlot(i, slots.get(inventory + i).copy());
         }
         if (recorded.openTab() >= 0) {

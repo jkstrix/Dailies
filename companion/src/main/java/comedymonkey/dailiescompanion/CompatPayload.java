@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -23,7 +23,7 @@ public record CompatPayload(int kind, String id, int version, byte[] data) imple
 	public static final int ASK = 1;
 	public static final int MAX_ID = 128, MAX_DATA = 262144;
 
-	public static final Type<CompatPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(DailiesCompanion.MODID, "compat"));
+	public static final Type<CompatPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(DailiesCompanion.MODID, "compat"));
 	public static final StreamCodec<ByteBuf, CompatPayload> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, CompatPayload::kind,
 		ByteBufCodecs.stringUtf8(MAX_ID), CompatPayload::id, ByteBufCodecs.VAR_INT, CompatPayload::version,
 		ByteBufCodecs.byteArray(MAX_DATA), CompatPayload::data, CompatPayload::new);
