@@ -288,8 +288,6 @@ public final class WindowLayer implements PlaybackExtensions.Extension {
      */
     static void layOut(Minecraft minecraft, Screen screen, int width, int height) {
         ScreenAccess access = (ScreenAccess) screen;
-        access.dailies$setMinecraft(minecraft);
-        access.dailies$setFont(minecraft.font);
         screen.width = width;
         screen.height = height;
         asViewer(minecraft, access::dailies$init);
