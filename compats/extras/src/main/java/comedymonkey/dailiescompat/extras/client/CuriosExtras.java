@@ -5,8 +5,8 @@ import comedymonkey.dailiescompat.extras.state.ExtrasStates;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
-import top.theillusivec4.curios.client.gui.CuriosScreen;
-import top.theillusivec4.curios.common.inventory.container.CuriosContainer;
+import top.theillusivec4.curios.client.screen.CuriosScreen;
+import top.theillusivec4.curios.common.inventory.container.CuriosMenu;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,14 +31,14 @@ final class CuriosExtras {
     }
 
     static byte @Nullable [] capture(AbstractContainerScreen<?> screen) {
-        if (!(screen.getMenu() instanceof CuriosContainer menu)) {
+        if (!(screen.getMenu() instanceof CuriosMenu menu)) {
             return null;
         }
         return ExtrasStates.curios(new ExtrasStates.Curios(menu.currentPage, menu.isViewingCosmetics));
     }
 
     static void apply(AbstractContainerScreen<?> screen, byte[] state) {
-        if (!(screen.getMenu() instanceof CuriosContainer menu)) {
+        if (!(screen.getMenu() instanceof CuriosMenu menu)) {
             return;
         }
         ExtrasStates.Curios recorded = ExtrasStates.readCurios(state);

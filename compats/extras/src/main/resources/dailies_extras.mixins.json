@@ -1,7 +1,7 @@
 {
   "required": false,
   "package": "comedymonkey.dailiescompat.extras.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_25",
   "client": [
     "ExplorersCompassLinesMixin",
     "NaturesCompassLinesMixin",

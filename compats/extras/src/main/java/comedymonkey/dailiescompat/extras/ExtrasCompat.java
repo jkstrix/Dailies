@@ -25,8 +25,9 @@ public final class ExtrasCompat {
     public static final String BACKPACKS = "sophisticatedbackpacks";
     public static final String CURIOS = "curios";
     public static final String CORPSE = "corpse";
-    public static final String VANILLA_BACKPORT = "vanillabackport";
-    public static final List<String> MODS = List.of(EXPLORERS_COMPASS, NATURES_COMPASS, BACKPACKS, CURIOS, CORPSE, VANILLA_BACKPORT);
+    // VanillaBackport, whose nautilus inventory the compat recorded on Minecraft 1.21.1, has no release for 26.3: its part is
+    // left out until it has one
+    public static final List<String> MODS = List.of(EXPLORERS_COMPASS, NATURES_COMPASS, BACKPACKS, CURIOS, CORPSE);
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public ExtrasCompat() {

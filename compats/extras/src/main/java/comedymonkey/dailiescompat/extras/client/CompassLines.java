@@ -4,8 +4,8 @@ import comedymonkey.dailies.api.DailiesApi;
 import comedymonkey.dailiescompat.extras.state.ExtrasStates;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,8 +25,8 @@ final class CompassLines {
     static final String EXPLORERS = "explorers_compass";
     static final String NATURES = "natures_compass";
 
-    private static final ResourceLocation[] LAYERS = {ResourceLocation.fromNamespaceAndPath("explorerscompass", "explorers_compass"),
-        ResourceLocation.fromNamespaceAndPath("naturescompass", "natures_compass")};
+    private static final Identifier[] LAYERS = {Identifier.fromNamespaceAndPath("explorerscompass", "explorers_compass"),
+        Identifier.fromNamespaceAndPath("naturescompass", "natures_compass")};
 
     /** What each compass's layer drew last, and whether it has drawn since the last tick was recorded */
     private static final List<List<ExtrasStates.Line>> last = new ArrayList<>(List.of(List.of(), List.of()));
@@ -36,7 +36,7 @@ final class CompassLines {
     private CompassLines() {
     }
 
-    private static int compass(ResourceLocation layer) {
+    private static int compass(Identifier layer) {
         for (int i = 0; i < LAYERS.length; i++) {
             if (LAYERS[i].equals(layer)) {
                 return i;
@@ -99,11 +99,11 @@ final class CompassLines {
     // --- Playback ---
 
     /** As the compasses' RenderUtils draw each string: with a shadow, from its left end or its right end */
-    static void draw(GuiGraphics graphics, byte[] state, float partialTick) {
+    static void draw(GuiGraphicsExtractor graphics, byte[] state, float partialTick) {
         Font font = Minecraft.getInstance().font;
         for (ExtrasStates.Line line : ExtrasStates.readLines(state).lines()) {
             int x = line.right() ? graphics.guiWidth() - line.fromSide() - font.width(line.text()) : line.fromSide();
-            graphics.drawString(font, line.text(), x, line.y(), line.colour(), true);
+            graphics.text(font, line.text(), x, line.y(), line.colour(), true);
         }
     }
 
