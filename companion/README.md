@@ -4,6 +4,9 @@ A small server-side mod for NeoForge 1.21.1. It tells a player's game that somet
 happened to them, so that Dailies, running in that player's game, can write it into its moments log with the time and
 the place.
 
+It is for dedicated servers. Singleplayer needs nothing extra: Dailies carries a copy of the companion inside its own
+jar (jar-in-jar), which runs in the game's own world, LAN included.
+
 It is optional on both sides:
 
 - A player without Dailies is sent nothing and joins as usual.
@@ -13,8 +16,9 @@ Mod id `dailies_companion`. Licence MIT.
 
 ## Install
 
-Put `dailies-companion-1.21.1-<version>.jar` in the server's `mods` folder. Players need nothing extra: Dailies
-registers the companion's channel itself. In singleplayer, put the jar in the game's `mods` folder beside Dailies.
+Put `dailies-companion-1.21.1-<version>.jar` in the server's `mods` folder. Players need nothing extra beside Dailies.
+In singleplayer there is nothing to install: Dailies has the companion inside. A copy of the companion left in a
+player's own `mods` folder does no harm; NeoForge loads the newer of the two.
 
 ## Build
 
@@ -22,7 +26,7 @@ registers the companion's channel itself. In singleplayer, put the jar in the ga
 gradlew build
 ```
 
-The jar is written to `build/libs/`. `gradlew runServer` starts a bare dedicated server with only this mod, in
+The jar is written to `build/libs/`. Dailies' own build includes this one and packs the same jar into the Dailies jar. `gradlew runServer` starts a bare dedicated server with only this mod, in
 `run-server/`, for trying it against a client that does not have it.
 
 ## The `/moment` command

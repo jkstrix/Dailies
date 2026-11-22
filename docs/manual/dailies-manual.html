@@ -243,7 +243,7 @@ footer .logo{justify-content:center;margin-bottom:14px}
     <div class="meta">
       <div>Minecraft<b>1.21.1</b></div>
       <div>Loader<b>NeoForge 21.1</b></div>
-      <div>Install<b>Dailies + Companion</b></div>
+      <div>Install<b>Just Dailies</b></div>
       <div>Licence<b>MIT</b></div>
     </div>
   </div>
@@ -401,12 +401,12 @@ footer .logo{justify-content:center;margin-bottom:14px}
     <div class="chap rv"><span class="num">QUICK START</span><span class="rule"></span></div>
     <h2 class="rv">From play to video in minutes</h2>
     <div class="steps">
-      <div class="step rv"><h4>Install</h4><p>Put <code>dailies-1.21.1-1.2.0.jar</code> <b>and</b> <code>dailies-companion</code> in <code>mods</code> with NeoForge 21.1, plus the compats for your pack. The encoder is inside the jar.</p></div>
+      <div class="step rv"><h4>Install</h4><p>Put <code>dailies-1.21.1-1.2.0.jar</code> in <code>mods</code> with NeoForge 21.1, plus the compats for your pack. The encoder and the companion are inside the jar.</p></div>
       <div class="step rv"><h4>Record</h4><p>Join a world, press <kbd>Esc</kbd>, then <b>Start recording</b>. A red lamp shows in the corner.</p></div>
       <div class="step rv"><h4>Watch</h4><p>Finish, open <b>Recordings</b>, then <b>Watch</b>. Fly freely and press <kbd>P</kbd> to play.</p></div>
       <div class="step rv"><h4>Direct &amp; export</h4><p>Add camera keyframes, set the range, choose a preset and press <b>Export</b>.</p></div>
     </div>
-    <div class="call warn rv"><span class="i">🧩</span><p><b>Always install the Dailies Companion.</b> In <b>singleplayer</b>, put it in your own <code>mods</code> folder next to Dailies. In <b>multiplayer</b>, it goes on the <b>server</b>. The companion supplies what only the world's server knows: boss fights, close calls, craft and train events, and the data compats need from the server side. Without it, recording still works, but Dailies has less to show.</p></div>
+    <div class="call warn rv"><span class="i">🧩</span><p><b>Running a server? Install the Dailies Companion on it.</b> The companion supplies what only the world's server knows: boss fights, close calls, craft and train events, and the data compats need from the server side. In <b>singleplayer</b> you need nothing extra: Dailies carries its own copy, which also works when you open your world to LAN. On a server without the companion, recording still works, but Dailies has less to show.</p></div>
     <div class="call note rv"><span class="i">ℹ️</span><p>Dailies itself runs in your own game and writes everything to <code>dailies/</code> in your game folder. Players without Dailies can still join a server that runs the companion. They are sent nothing.</p></div>
 
     <h3 class="rv">Controls</h3>
@@ -639,7 +639,7 @@ footer .logo{justify-content:center;margin-bottom:14px}
     <div class="chap rv"><span class="num">CHAPTER VII</span><span class="rule"></span></div>
     <h2 class="rv">Servers, agents &amp; settings</h2>
     <div class="feat">
-      <div class="card rv"><div class="ico">🖧</div><h4>Dailies Companion</h4><p><b>Always install it:</b> in your own <code>mods</code> folder for singleplayer, and on the server for multiplayer. It reports events only the server knows (boss fights, close calls, totems, explosions, train departures, craft lost) and carries compats' server-side data. Operators can send their own events with <code>/moment send</code>. <a href="../../companion/README.md">Reference ›</a></p></div>
+      <div class="card rv"><div class="ico">🖧</div><h4>Dailies Companion</h4><p><b>Install it on your server.</b> Singleplayer needs nothing extra, because Dailies carries its own copy. It reports events only the server knows (boss fights, close calls, totems, explosions, train departures, craft lost) and carries compats' server-side data. Operators can send their own events with <code>/moment send</code>. <a href="../../companion/README.md">Reference ›</a></p></div>
       <div class="card rv"><div class="ico">🤖</div><h4>MCP server</h4><p>Point an AI agent at <code>http://127.0.0.1:25595/mcp</code> to record, edit, export and search moments. It is local only unless you open it, and remote access uses HTTPS and a token.</p></div>
       <div class="card rv"><div class="ico">⚙️</div><h4>Settings</h4><p>Searchable with <kbd>Ctrl</kbd><kbd>F</kbd>, resettable, and applied without a restart. Stored in <code>config/dailies-client.toml</code>.</p></div>
     </div>
