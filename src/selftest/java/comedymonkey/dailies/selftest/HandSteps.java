@@ -273,6 +273,7 @@ final class HandSteps {
                 + "the husk an axe and a totem, the other player a pickaxe and a torch; drawn: " + seen);
         }
         othersTotem(test, minecraft);
+        othersTotemEffects(test, minecraft);
         test.onClientRun(() -> minecraft.getConnection().handleRemoveEntities(new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(ADA_ID)));
     }
 
@@ -286,6 +287,52 @@ final class HandSteps {
         totem(test, minecraft, "riding with the other player", test.onClient(() -> minecraft.level.getEntity(ADA_ID)), true);
         test.onClientRun(() -> Viewer.ride(null));
         test.log("hands: another player's totem bursts around them in every view, and is over the screen only through their eyes");
+    }
+
+    /**
+     * What a totem leaves on another player: regeneration, absorption and fire resistance, which a watching game is told of
+     * as the player's effect particles. Their swirls show around them while the recording plays, and stop when the
+     * effects end
+     */
+    private static void othersTotemEffects(SelfTest test, Minecraft minecraft) throws Exception {
+        test.onClientRun(() -> {
+            Viewer.ride(null);
+            minecraft.options.setCameraType(CameraType.FIRST_PERSON);
+        });
+        List<net.minecraft.core.particles.ParticleOptions> afterTotem = List.of(
+            new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.REGENERATION, 900, 1).getParticleOptions(),
+            new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.ABSORPTION, 100, 1).getParticleOptions(),
+            new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE, 800, 0).getParticleOptions());
+        long withEffects = swirls(test, minecraft, afterTotem);
+        long ended = swirls(test, minecraft, List.of());
+        test.log("hands: the other player's effects after the totem: " + withEffects + " swirls around them, then " + ended + " once they ended");
+        check(withEffects > 0, "the other player's effects after the totem (regeneration, absorption, fire resistance) show no swirls around them");
+        check(ended == 0, "the other player's swirls go on after their effects ended: " + ended);
+    }
+
+    /** Tells the playback world the other player's effect particles are these, plays a while, and counts the swirls made around them */
+    @SuppressWarnings("unchecked")
+    private static long swirls(SelfTest test, Minecraft minecraft, List<net.minecraft.core.particles.ParticleOptions> particles) throws Exception {
+        test.onClientRun(() -> {
+            try {
+                java.lang.reflect.Field field = net.minecraft.world.entity.LivingEntity.class.getDeclaredField("DATA_EFFECT_PARTICLES");
+                field.setAccessible(true);
+                var accessor = (net.minecraft.network.syncher.EntityDataAccessor<List<net.minecraft.core.particles.ParticleOptions>>) field.get(null);
+                minecraft.getConnection().handleSetEntityData(new net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket(ADA_ID,
+                    List.of(net.minecraft.network.syncher.SynchedEntityData.DataValue.create(accessor, particles))));
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        frames(test, 2);
+        comedymonkey.dailies.effects.ParticleWatch.start();
+        test.tool("replay_play", new JsonObject());
+        long until = System.currentTimeMillis() + 2500;
+        test.waitFor(() -> System.currentTimeMillis() > until, 10, "the swirls to be made");
+        test.tool("replay_pause", new JsonObject());
+        net.minecraft.world.phys.Vec3 at = new net.minecraft.world.phys.Vec3(-2.5, Y + 1.0, 3.5);
+        return comedymonkey.dailies.effects.ParticleWatch.stop().stream()
+            .filter(one -> one.type().equals("minecraft:entity_effect") && one.at().distanceTo(at) < 2.5).count();
     }
 
     private static void totem(SelfTest test, Minecraft minecraft, String view, net.minecraft.world.entity.Entity riding, boolean overScreen) throws Exception {
