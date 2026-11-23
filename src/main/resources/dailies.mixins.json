@@ -27,6 +27,7 @@
     "access.ClientClockManagerAccess",
     "access.LevelRendererAccess",
     "access.ClientAvatarStateAccess",
+    "access.FirstPersonHandsAccess",
     "access.InterpolationStepsAccess",
     "access.ChatScreenAccess",
     "access.ContainerMenuAccess",
@@ -67,6 +68,8 @@
     "effects.InvisibleMixin",
     "effects.ParticleWatchMixin",
     "effects.SkyBlockMixin",
+    "effects.HandsInPlaybackMixin",
+    "effects.HandsDrawnMixin",
     "export.GuiRendererTargetMixin",
     "export.ExportChunkFadeMixin",
     "playback.PlaybackSessionDataMixin"

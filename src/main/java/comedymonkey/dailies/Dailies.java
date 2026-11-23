@@ -63,6 +63,7 @@ public final class Dailies {
         comedymonkey.dailies.compat.iris.IrisShaders.init();
         // The recorder's overlays and screen effects through their eyes (PLAN-EFFECTS.md)
         comedymonkey.dailies.effects.RecorderEyes.init();
+        comedymonkey.dailies.effects.RecorderHands.init();
 
         // Optional, so a server without the Dailies Companion stays joinable
         modBus.addListener((RegisterPayloadHandlersEvent event) -> {
