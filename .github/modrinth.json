@@ -1,0 +1,71 @@
+{
+  "_about": "Which Modrinth project each release jar goes to, read by .github/scripts/modrinth-publish.sh. The key is the jar's name between 'dailies-' and '-<minecraft>-<version>.jar' ('dailies' for the mod itself). A dependency with 'minecraft' applies to those versions only. A jar with no entry (the API jar) stays on GitHub only.",
+  "dailies": {
+    "project": "y4ql9bAD",
+    "title": "Dailies"
+  },
+  "companion": {
+    "project": "RxrBV53y",
+    "title": "Dailies Server Companion"
+  },
+  "compat-create": {
+    "project": "vTrdwlBm",
+    "title": "Dailies Create Compat",
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "LNytGWDc", "type": "required"}
+    ]
+  },
+  "compat-aeronautics": {
+    "project": "kg3CU15a",
+    "title": "Dailies Create Aeronautics Compat",
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "oWaK0Q19", "type": "required"},
+      {"project": "W1ZUfWdr", "type": "optional"}
+    ]
+  },
+  "compat-createextras": {
+    "project": "Ny8V7ZEA",
+    "title": "Dailies Create Add-ons Compat",
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "mva5q4qZ", "type": "optional"},
+      {"project": "Vg5TIO6d", "type": "optional"},
+      {"project": "hSSqdyU1", "type": "optional"},
+      {"project": "ZzjhlDgM", "type": "optional"},
+      {"project": "UbFnAd4l", "type": "optional"},
+      {"project": "ATDdrG1y", "type": "optional"}
+    ]
+  },
+  "compat-supplementaries": {
+    "project": "iphXr1pS",
+    "title": "Dailies Supplementaries Compat",
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "fFEIiSDQ", "type": "required"},
+      {"project": "6iTJugQR", "type": "optional"}
+    ]
+  },
+  "compat-jade": {
+    "project": "UIiTAnkD",
+    "title": "Dailies Jade Compat",
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "nvQzSEkH", "type": "required"}
+    ]
+  },
+  "compat-extras": {
+    "project": "LqI4EVVu",
+    "title": "Dailies Extras Compat",
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "RV1qfVQ8", "type": "optional"},
+      {"project": "fPetb5Kh", "type": "optional"},
+      {"project": "TyCTlI4b", "type": "optional"},
+      {"project": "vvuO3ImH", "type": "optional"},
+      {"project": "WrpuIfhw", "type": "optional"},
+      {"project": "6xwxDTgf", "type": "optional", "minecraft": ["1.21.1"]}
+    ]
+  }
+}
