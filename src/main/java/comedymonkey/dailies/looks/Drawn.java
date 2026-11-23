@@ -38,6 +38,8 @@ public final class Drawn {
         entities = players = terrainLayers = terrainLayersHidden = blockEntities = blockEntitiesHidden = beams = beamsHidden = 0;
         armourLast = new int[]{armour, armourTrimmed, armourOnInvisible};
         armour = armourTrimmed = armourOnInvisible = 0;
+        heldLast = held;
+        held = new java.util.HashSet<>();
         clear = barsNow;
         solidBars = solidNow;
         barsNow = null;
@@ -84,6 +86,22 @@ public final class Drawn {
     /** Of those, the pieces with a trim */
     public static int armourTrimmedDrawn() {
         return armourLast[1];
+    }
+
+    // Items drawn in hands on bodies in the world this frame and the last, as "RIGHT minecraft:iron_sword"
+    private static java.util.Set<String> held = new java.util.HashSet<>();
+    private static java.util.Set<String> heldLast = java.util.Set.of();
+
+    /** An item about to be drawn in one hand of a body (a player's or a mob's, not the first-person hands). Render thread */
+    public static void held(net.minecraft.world.entity.HumanoidArm arm, net.minecraft.world.item.ItemStack item) {
+        if (item != null && !item.isEmpty()) {
+            held.add(arm.name() + " " + net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item.getItem()));
+        }
+    }
+
+    /** The items drawn in hands on bodies in the last whole frame, as "RIGHT minecraft:iron_sword" */
+    public static java.util.Set<String> heldDrawn() {
+        return heldLast;
     }
 
     /** Of those, the pieces worn by entities invisible to the viewer, which the game still draws */
