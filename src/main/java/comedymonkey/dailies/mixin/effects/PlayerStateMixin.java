@@ -22,5 +22,10 @@ public abstract class PlayerStateMixin {
         } catch (RuntimeException | LinkageError e) {
             comedymonkey.dailies.effects.RecorderOverlays.failOnce("the frame's player state", e);
         }
+        try {
+            comedymonkey.dailies.effects.RecorderHands.fillHands(state, deltaTracker.getGameTimeDeltaPartialTick(true));
+        } catch (RuntimeException | LinkageError e) {
+            comedymonkey.dailies.effects.RecorderOverlays.failOnce("the hands through their eyes", e);
+        }
     }
 }

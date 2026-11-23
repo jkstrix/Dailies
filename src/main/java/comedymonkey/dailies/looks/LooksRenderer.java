@@ -486,6 +486,12 @@ public final class LooksRenderer {
         return now == null || now.showHud;
     }
 
+    /** Whether the scene draws the hands and what they hold in first person (its held items look) */
+    public static boolean showsHeldItems() {
+        Looks now = looks;
+        return now == null || now.showHeldItems;
+    }
+
     /** Whether the scene shows the carved pumpkin's view and other worn items' overlays (its Pumpkin overlay look) */
     public static boolean showsPumpkinOverlay() {
         Looks now = looks;
