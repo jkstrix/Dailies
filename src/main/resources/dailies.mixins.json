@@ -58,6 +58,7 @@
     "effects.ParticleWatchMixin",
     "effects.SkyBlockMixin",
     "effects.HandsInPlaybackMixin",
+    "looks.HeldItemLayerMixin",
     "effects.TheirArmMixin"
   ],
   "injectors": {
