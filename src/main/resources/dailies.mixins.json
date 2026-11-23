@@ -22,6 +22,7 @@
     "access.TimerAccess",
     "access.MinecraftAccess",
     "access.ClientLevelAccess",
+    "access.ItemInHandRendererAccess",
     "access.ChatScreenAccess",
     "access.ContainerMenuAccess",
     "access.ScreenAccess",
@@ -55,7 +56,9 @@
     "effects.MusicManagerAccess",
     "effects.InvisibleMixin",
     "effects.ParticleWatchMixin",
-    "effects.SkyBlockMixin"
+    "effects.SkyBlockMixin",
+    "effects.HandsInPlaybackMixin",
+    "effects.TheirArmMixin"
   ],
   "injectors": {
     "defaultRequire": 1

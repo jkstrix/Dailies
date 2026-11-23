@@ -233,6 +233,8 @@ public final class SelfTest {
             always("edges", "EdgeSteps.run", () -> EdgeSteps.run(this)),
             // Effects and music in playback (PLAN-EFFECTS.md)
             always("effects", "EffectSteps.run", () -> EffectSteps.run(this)),
+            // The recorder's hands through their eyes: what each holds, a swing, a raised shield, a swap, a drawn bow
+            always("hands", "HandSteps.run", () -> HandSteps.run(this)),
             // A recording made on a server that numbers its sounds differently from this game, simulated by numbering them so
             // before a world opens, plays each sound as itself (REC-37, PLAY-25); two short recordings in a world of their own
             always("registries", "RegistrySteps.run", () -> RegistrySteps.run(this)),
