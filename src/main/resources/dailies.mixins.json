@@ -69,6 +69,7 @@
     "effects.ParticleWatchMixin",
     "effects.SkyBlockMixin",
     "effects.HandsInPlaybackMixin",
+    "looks.HeldItemLayerMixin",
     "effects.HandsDrawnMixin",
     "export.GuiRendererTargetMixin",
     "export.ExportChunkFadeMixin",
