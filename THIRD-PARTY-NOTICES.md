@@ -1,13 +1,13 @@
 # Third-party notices
 
-Dailies itself is under the MIT licence (see `LICENSE`). Its jar also carries the video encoder below, run as
-a separate program, the Zstandard library recordings are packed with (see "Zstandard"), and the weights of a small
+Dailies itself is under the MIT licence (see `LICENSE`). It downloads the video encoder below on first export and
+runs it as a separate program. Its jar carries the Zstandard library recordings are packed with (see "Zstandard"), and the weights of a small
 sound classifier (see "YAMNet" at the end). This file and the licence texts it names are inside the jar too: this file at the top, the texts
 in the `licenses` folder.
 
 ## Platforms
 
-A video encoder is packed in for **Windows (64-bit Intel or AMD), Linux (64-bit Intel or AMD, and ARM) and macOS
+A video encoder is built for **Windows (64-bit Intel or AMD), Linux (64-bit Intel or AMD, and ARM) and macOS
 (Apple silicon and Intel)**: `windows-x86_64`, `linux-x86_64`, `linux-arm64`, `macosx-arm64` and `macosx-x86_64`. On
 any other platform (Windows on ARM, say) Dailies says so in the Export tab and exports numbered PNG pictures;
 everything else in the mod works the same.
@@ -21,8 +21,10 @@ everything else in the mod works the same.
   exact configuration is in `META-INF/BUILDINFO-<platform>.txt` inside its encoder jar.
 - **Licence:** GNU Lesser General Public License, version 2.1 or later. FFmpeg's own statement and licence texts are in
   `licenses/ffmpeg-build/ffmpeg/` (`LICENSE.md`, `COPYING.LGPLv2.1`, with the other texts FFmpeg ships beside them).
-- **Where it is:** `encoder/ffmpeg-<platform>.jar` inside the Dailies jar, one per platform. On first export the
-  programs for the running platform are unpacked to `<game>/dailies/encoder/<platform>/`.
+- **Where it is:** one jar per platform, `dailies-ffmpeg-8.1.2-<platform>.jar`, on this repository's GitHub release
+  `encoder-ffmpeg-8.1.2`. The Dailies jar carries none: on first export it downloads the one for the running platform
+  to `<game>/dailies/encoder/downloads/`, keeps it only when its length and SHA-256 are the ones written into the
+  Dailies jar (`encoder/downloads.properties`), and unpacks the programs to `<game>/dailies/encoder/<platform>/`.
 - **Replacing it:** Dailies runs the encoder as a separate program and does not link against it. Any FFmpeg build can
   be used in its place by replacing the unpacked files in that folder, which is what the LGPL asks to be possible.
 - **Source:** https://ffmpeg.org/, and this repository's `tools/ffmpeg/` for how it is built (see "Rebuilding").
@@ -71,8 +73,7 @@ machine before it is listed. Nothing is offered that the build does not contain 
 The LGPL asks that anyone can rebuild the encoder. Everything needed is kept with this source: `tools/ffmpeg/build.sh`,
 with every source pinned by its sha256 in `tools/ffmpeg/sources.lock`, and the workflow `.github/workflows/ffmpeg.yml`,
 which builds, checks and packs every platform on GitHub's machines. `./tools/ffmpeg/build.sh build <platform>` then
-`pack` does the same on a machine of your own. Dailies can also be built with the JavaCPP Presets' Windows-only build
-(`-Pdailies.encoderSource=bytedeco`), whose licence texts then go into the jar's `licenses` folder instead.
+`pack` does the same on a machine of your own.
 
 ## Zstandard
 
