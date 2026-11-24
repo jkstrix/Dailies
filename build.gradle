@@ -368,9 +368,8 @@ tasks.register('modpackJars', Sync) {
     group = 'build'
     dependsOn tasks.named('jar'), 'buildCompanion', 'curseforgeJar'
     modpackCompats.each { dependsOn ":compats:${it}:jar" }
+    // Built alongside, but left in build/libs: the CurseForge jar is the same mod again, and a modpack takes one Dailies
     from(tasks.named('jar'))
-    // The same Dailies without the encoders inside, for CurseForge only (the release workflow sends it there alone)
-    from(tasks.named('curseforgeJar'))
     modpackCompats.each { name -> from({ project(":compats:${name}").tasks.named('jar').get().archiveFile }) }
     from(file('companion/build/libs')) {
         // This Minecraft version's only: a jar the companion built for another version may still lie there
