@@ -1,0 +1,43 @@
+# When a release is published on GitHub, its jars go to Modrinth and CurseForge: Dailies itself, the Server
+# Companion and each compat to its own project (.github/publish.json). The API jar stays on GitHub. Needs the
+# repository secrets MODRINTH_TOKEN and CURSEFORGE_TOKEN. Run by hand for a release already out, to add what the
+# sites are missing (or to see what it would do)
+name: Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v1.3.0+26.3"
+        required: true
+      dry_run:
+        description: "Only say what would be published"
+        type: boolean
+        default: true
+      curseforge_all:
+        description: "Send every jar to CurseForge, not only those new on Modrinth (to fill CurseForge in)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Publish the release's jars to Modrinth and CurseForge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '0' }}
+          CURSEFORGE_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.curseforge_all) && '1' || '0' }}
+        run: bash .github/scripts/publish.sh "$TAG"
