@@ -85,6 +85,22 @@ public final class Encoder {
         return EncoderDownload.downloading();
     }
 
+    /** Where this build keeps the encoder it downloads, or null when it carries its encoder inside or has none to fetch */
+    public static Path downloadedCopy() {
+        String platform = platform();
+        if (packedHere(platform) || !downloadable(platform)) {
+            return null;
+        }
+        String url = DOWNLOAD.getProperty(platform + ".url");
+        return Host.get().dataDirectory().resolve("encoder").resolve("downloads").resolve(url.substring(url.lastIndexOf('/') + 1));
+    }
+
+    /** The length of the encoder this build downloads, in bytes, or -1 when it downloads none */
+    public static long downloadLength() {
+        String length = DOWNLOAD.getProperty(platform() + ".length");
+        return length == null ? -1 : Long.parseLong(length.trim());
+    }
+
     /** Whether the packed encoders are Dailies' own build (tools/ffmpeg/build.sh), which brings its own licence folder */
     private static final boolean OWN_BUILD = Encoder.class.getResource("/licenses/ffmpeg-build/notices/ffmpeg.txt") != null;
     public static final String NOTICE = OWN_BUILD
@@ -159,10 +175,9 @@ public final class Encoder {
             if (!downloadable(platform)) {
                 throw new IOException(noEncoderWords());
             }
-            String url = DOWNLOAD.getProperty(platform + ".url");
-            Path downloaded = EncoderDownload.fetch(url, DOWNLOAD.getProperty(platform + ".sha256"),
-                Long.parseLong(DOWNLOAD.getProperty(platform + ".length").trim()), Host.get().dataDirectory().resolve("encoder").resolve("downloads"),
-                url.substring(url.lastIndexOf('/') + 1), "Dailies/" + Host.get().modVersion(), Host.LOGGER::info);
+            Path kept = downloadedCopy();
+            Path downloaded = EncoderDownload.fetch(DOWNLOAD.getProperty(platform + ".url"), DOWNLOAD.getProperty(platform + ".sha256"),
+                downloadLength(), kept.getParent(), kept.getFileName().toString(), "Dailies/" + Host.get().modVersion(), Host.LOGGER::info);
             program = unpack(() -> Files.newInputStream(downloaded), folder, platform, Host.get().modVersion());
             return program;
         }
