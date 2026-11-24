@@ -565,7 +565,7 @@ public final class QueueRunner {
             fail(job, "The recording could not be opened: " + Playback.lastError());
             return;
         }
-        if (now - stepSince > OPEN_MILLIS) {
+        if (now - stepSince > OPEN_MILLIS && !Encoder.downloading()) {
             fail(job, "The recording took too long to open");
             return;
         }
