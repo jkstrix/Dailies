@@ -153,29 +153,16 @@ repositories {
     }
 }
 
-configurations {
-    // The video encoder packed into the mod's jar (specification EXP-8). Not a Java library on the classpath: the jar
-    // is carried as a file, and its contents are unpacked and run beside the game when a video is exported
-    encoder {
-        transitive = false
-    }
-}
-
-// Which encoder is packed in (EXP-8). "bytedeco", the default until the owner switches: the JavaCPP Presets' LGPL
-// build, Windows only. "dailies": our own LGPL build from tools/ffmpeg/build.sh, one jar per platform, taken from
-// -Pdailies.encoderDir (default tools/ffmpeg/out/jars, where "build.sh pack" or the FFmpeg workflow's artifact puts
-// them), for the platforms in -Pdailies.encoderPlatforms (comma-separated, default all that are there)
-def encoderSource = providers.gradleProperty('dailies.encoderSource').getOrElse('bytedeco')
+// The video encoder (EXP-8): our own LGPL build from tools/ffmpeg/build.sh, one jar per platform, taken from
+// -Pdailies.encoderDir (default tools/ffmpeg/out/jars, where "build.sh pack" or the FFmpeg workflow's artifact puts them).
+// None is packed into the mod's jar: the jar names each one's download, length and SHA-256 (encoderDownloads), and
+// Dailies downloads its platform's on first use from the GitHub release encoder_release in gradle.properties
 def encoderDir = file(providers.gradleProperty('dailies.encoderDir').getOrElse('tools/ffmpeg/out/jars'))
-def encoderPlatforms = providers.gradleProperty('dailies.encoderPlatforms').getOrElse('windows-x86_64,linux-x86_64,linux-arm64,macosx-arm64,macosx-x86_64').split(',').collect { it.trim() }
-if (!(encoderSource in ['bytedeco', 'dailies'])) {
-    throw new GradleException("dailies.encoderSource is '${encoderSource}': it must be bytedeco or dailies")
+def encoderJars = fileTree(encoderDir) {
+    include 'dailies-ffmpeg-*-windows-*.jar', 'dailies-ffmpeg-*-linux-*.jar', 'dailies-ffmpeg-*-macosx-*.jar'
 }
-def encoderJars = encoderSource == 'bytedeco' ? configurations.encoder : fileTree(encoderDir) {
-    include encoderPlatforms.collect { "dailies-ffmpeg-*-${it}.jar".toString() }
-}
-if (encoderSource == 'dailies' && encoderJars.isEmpty()) {
-    throw new GradleException("dailies.encoderSource is dailies, and there are no dailies-ffmpeg-*-<platform>.jar files in ${encoderDir}: run tools/ffmpeg/build.sh pack, or point dailies.encoderDir at the FFmpeg workflow's jars")
+if (encoderJars.isEmpty()) {
+    throw new GradleException("There are no dailies-ffmpeg-*-<platform>.jar files in ${encoderDir}: run tools/ffmpeg/build.sh pack, or point dailies.encoderDir at the FFmpeg workflow's jars (the build reads their length and SHA-256)")
 }
 
 // Minecraft, NeoForge and their libraries for the self test, as the main classes have them
@@ -187,11 +174,6 @@ file('companion/gradle.properties').withInputStream { companionProperties.load(i
 def companionVersion = companionProperties.mod_version
 
 dependencies {
-    // FFmpeg, LGPL build (the artifact without the -gpl classifier), as packaged by the JavaCPP Presets
-    if (encoderSource == 'bytedeco') {
-        encoder "org.bytedeco:ffmpeg:${ffmpeg_version}:windows-x86_64@jar"
-    }
-
     // Zstandard (zstd-jni, BSD 2-Clause, with the native zstd for every platform Dailies ships for), which every block of a
     // recording is packed with. Packed into the mod's jar with jar-in-jar, where NeoForge loads it as a library of its own.
     // The runs that load Dailies from its classes take it from implementation (MDG has no separate run classpath for 26.x)
@@ -267,29 +249,28 @@ tasks.register('benchmarks', Test) {
 }
 
 // Where each platform's video encoder can be downloaded (Encoder, EncoderDownload): Dailies' own GitHub release of the
-// encoder (encoder_release in gradle.properties), with each jar's length and SHA-256. Written into every build; only the
-// build made without the encoders inside (curseforgeJar) uses it
+// encoder (encoder_release in gradle.properties), with each jar's length and SHA-256
 def encoderRelease = providers.gradleProperty('encoder_release').getOrElse('')
 def encoderDownloadsDir = layout.buildDirectory.dir('generated/encoder-downloads')
 tasks.register('encoderDownloads') {
     description = 'Writes where the video encoder for each platform can be downloaded, with its length and SHA-256'
     def out = encoderDownloadsDir.map { it.file('encoder/downloads.properties') }
     inputs.property 'release', encoderRelease
-    inputs.property 'encoderSource', encoderSource
     inputs.files(encoderJars)
     outputs.file(out)
     doLast {
         def lines = ["# Where each platform's video encoder can be downloaded, with its length and SHA-256 (EncoderDownload)"]
-        if (encoderSource == 'dailies' && !encoderRelease.isEmpty()) {
-            encoderJars.files.sort { it.name }.each { File jar ->
-                def found = jar.name =~ /^dailies-ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/
-                if (found.matches()) {
-                    def platform = "${found.group(1)}-${found.group(2)}"
-                    def sha = java.security.MessageDigest.getInstance('SHA-256').digest(jar.bytes).encodeHex().toString()
-                    lines << "${platform}.url=https://github.com/jkstrix/Dailies/releases/download/${encoderRelease}/${jar.name}".toString()
-                    lines << "${platform}.sha256=${sha}".toString()
-                    lines << "${platform}.length=${jar.length()}".toString()
-                }
+        if (encoderRelease.isEmpty()) {
+            throw new GradleException('encoder_release is not set in gradle.properties: Dailies would have no encoder to download')
+        }
+        encoderJars.files.sort { it.name }.each { File jar ->
+            def found = jar.name =~ /^dailies-ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/
+            if (found.matches()) {
+                def platform = "${found.group(1)}-${found.group(2)}"
+                def sha = java.security.MessageDigest.getInstance('SHA-256').digest(jar.bytes).encodeHex().toString()
+                lines << "${platform}.url=https://github.com/jkstrix/Dailies/releases/download/${encoderRelease}/${jar.name}".toString()
+                lines << "${platform}.sha256=${sha}".toString()
+                lines << "${platform}.length=${jar.length()}".toString()
             }
         }
         def file = out.get().asFile
@@ -301,25 +282,10 @@ tasks.register('encoderDownloads') {
 processResources {
     dependsOn 'encoderDownloads'
     from(encoderDownloadsDir)
-    if (encoderSource == 'bytedeco') {
-        // The JavaCPP Presets' build carries libraries of its own (OpenH264, freetype, lame and others), whose licence texts
-        // go in only with it; our own build brings its own texts (licenses/ffmpeg-build, below)
-        from('src/encoder-licenses/bytedeco') { into 'licenses' }
-    }
-    from(encoderJars) {
-        into 'encoder'
-        // Either kind becomes encoder/ffmpeg-<platform>.jar, which is where Encoder looks
-        rename { String name ->
-            name.replaceFirst(/^ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar')
-                .replaceFirst(/^dailies-ffmpeg-.*-(windows|linux|macosx)-([a-z0-9_]+)\.jar$/, 'ffmpeg-$1-$2.jar')
-        }
-    }
-    if (encoderSource == 'dailies') {
-        // Our own build's licence texts and notices, one folder per library, beside the others (EXP-8)
-        from(new File(encoderDir, 'licenses')) { into 'licenses/ffmpeg-build' }
-        from(new File(encoderDir, 'notices')) { into 'licenses/ffmpeg-build/notices' }
-    }
-    inputs.property 'encoderSource', encoderSource
+    // The encoder's licence texts and notices, one folder per library, beside the others (EXP-8): the jar names the
+    // encoder it downloads, so they travel with it
+    from(new File(encoderDir, 'licenses')) { into 'licenses/ffmpeg-build' }
+    from(new File(encoderDir, 'notices')) { into 'licenses/ffmpeg-build/notices' }
     // The notices and Dailies' own licence travel in the jar, beside the licence texts in the licenses folder (EXP-8)
     from(rootProject.file('THIRD-PARTY-NOTICES.md'))
     from(rootProject.file('LICENSE'))
@@ -366,11 +332,9 @@ def modpackCompats = ['jade', 'extras']
 tasks.register('modpackJars', Sync) {
     description = 'Puts every Dailies jar a modpack takes into build/modpack: Dailies, the compats and the companion'
     group = 'build'
-    dependsOn tasks.named('jar'), 'buildCompanion', 'curseforgeJar'
+    dependsOn tasks.named('jar'), 'buildCompanion'
     modpackCompats.each { dependsOn ":compats:${it}:jar" }
     from(tasks.named('jar'))
-    // The same Dailies without the encoders inside, for CurseForge only (the release workflow sends it there alone)
-    from(tasks.named('curseforgeJar'))
     modpackCompats.each { name -> from({ project(":compats:${name}").tasks.named('jar').get().archiveFile }) }
     from(file('companion/build/libs')) {
         // This Minecraft version's only: a jar the companion built for another version may still lie there
@@ -378,25 +342,6 @@ tasks.register('modpackJars', Sync) {
         exclude '*-sources.jar', '*-javadoc.jar'
     }
     into(layout.buildDirectory.dir('modpack'))
-}
-
-// The Dailies jar without the video encoders inside, for sites that take no programs inside a mod's jar (CurseForge):
-// everything else is the same, and the encoder for the player's platform is downloaded on first use from Dailies' GitHub
-// release of it, checked against the length and SHA-256 written in (encoder/downloads.properties)
-tasks.register('curseforgeJar', Zip) {
-    description = 'The Dailies jar without the video encoders inside, for CurseForge: it downloads its encoder on first use'
-    group = 'build'
-    dependsOn tasks.named('jar')
-    doFirst {
-        if (encoderSource != 'dailies' || encoderRelease.isEmpty()) {
-            throw new GradleException("curseforgeJar needs Dailies' own encoder (dailies.encoderSource=dailies) and encoder_release, so it can download it")
-        }
-    }
-    from({ zipTree(tasks.named('jar').get().archiveFile) }) {
-        exclude 'encoder/ffmpeg-*.jar'
-    }
-    archiveFileName = "dailies-curseforge-${minecraft_version}-${project.version}.jar"
-    destinationDirectory = layout.buildDirectory.dir('libs')
 }
 
 // The compats in compats/ compile against the API jar, as a compat in another repository does
