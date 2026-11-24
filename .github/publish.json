@@ -1,0 +1,123 @@
+{
+  "_about": "Where each release jar is published, read by .github/scripts/publish.sh. The key is the jar's name between 'dailies-' and '-<minecraft>-<version>.jar' ('dailies' for the mod itself). 'project' is the Modrinth project, 'curseforge' the CurseForge project; 'side' is where the jar runs (client or server). A dependency or relation with 'minecraft' applies to those versions only. A jar with no entry (the API jar) stays on GitHub only.",
+  "dailies": {
+    "title": "Dailies",
+    "side": "client",
+    "project": "y4ql9bAD",
+    "curseforge": 1827141
+  },
+  "companion": {
+    "title": "Dailies Server Companion",
+    "side": "server",
+    "project": "RxrBV53y",
+    "curseforge": 1827149
+  },
+  "compat-create": {
+    "title": "Dailies Create Compat",
+    "side": "client",
+    "project": "vTrdwlBm",
+    "curseforge": 1827155,
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "LNytGWDc", "type": "required"}
+    ],
+    "relations": [
+      {"slug": "dailies", "type": "requiredDependency"},
+      {"slug": "create", "type": "requiredDependency"}
+    ]
+  },
+  "compat-aeronautics": {
+    "title": "Dailies Create Aeronautics Compat",
+    "side": "client",
+    "project": "kg3CU15a",
+    "curseforge": 1827160,
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "oWaK0Q19", "type": "required"},
+      {"project": "W1ZUfWdr", "type": "optional"}
+    ],
+    "relations": [
+      {"slug": "dailies", "type": "requiredDependency"},
+      {"slug": "create-aeronautics", "type": "requiredDependency"},
+      {"slug": "create-coasters-simulated", "type": "optionalDependency"}
+    ]
+  },
+  "compat-createextras": {
+    "title": "Dailies Create Add-ons Compat",
+    "side": "client",
+    "project": "Ny8V7ZEA",
+    "curseforge": 1827167,
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "mva5q4qZ", "type": "optional"},
+      {"project": "Vg5TIO6d", "type": "optional"},
+      {"project": "hSSqdyU1", "type": "optional"},
+      {"project": "ZzjhlDgM", "type": "optional"},
+      {"project": "UbFnAd4l", "type": "optional"},
+      {"project": "ATDdrG1y", "type": "optional"}
+    ],
+    "relations": [
+      {"slug": "dailies", "type": "requiredDependency"},
+      {"slug": "create-deep-seas", "type": "optionalDependency"},
+      {"slug": "create-connected", "type": "optionalDependency"},
+      {"slug": "create-encased", "type": "optionalDependency"},
+      {"slug": "create-steam-n-rails", "type": "optionalDependency"},
+      {"slug": "create-jetpack", "type": "optionalDependency"},
+      {"slug": "hypertubes", "type": "optionalDependency"}
+    ]
+  },
+  "compat-supplementaries": {
+    "title": "Dailies Supplementaries Compat",
+    "side": "client",
+    "project": "iphXr1pS",
+    "curseforge": 1827169,
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "fFEIiSDQ", "type": "required"},
+      {"project": "6iTJugQR", "type": "optional"}
+    ],
+    "relations": [
+      {"slug": "dailies", "type": "requiredDependency"},
+      {"slug": "supplementaries", "type": "requiredDependency"},
+      {"slug": "amendments", "type": "optionalDependency"}
+    ]
+  },
+  "compat-jade": {
+    "title": "Dailies Jade Compat",
+    "side": "client",
+    "project": "UIiTAnkD",
+    "curseforge": 1827170,
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "nvQzSEkH", "type": "required"}
+    ],
+    "relations": [
+      {"slug": "dailies", "type": "requiredDependency"},
+      {"slug": "jade", "type": "requiredDependency"}
+    ]
+  },
+  "compat-extras": {
+    "title": "Dailies Extras Compat",
+    "side": "client",
+    "project": "LqI4EVVu",
+    "curseforge": 1827176,
+    "dependencies": [
+      {"project": "y4ql9bAD", "type": "required"},
+      {"project": "RV1qfVQ8", "type": "optional"},
+      {"project": "fPetb5Kh", "type": "optional"},
+      {"project": "TyCTlI4b", "type": "optional"},
+      {"project": "vvuO3ImH", "type": "optional"},
+      {"project": "WrpuIfhw", "type": "optional"},
+      {"project": "6xwxDTgf", "type": "optional", "minecraft": ["1.21.1"]}
+    ],
+    "relations": [
+      {"slug": "dailies", "type": "requiredDependency"},
+      {"slug": "explorers-compass", "type": "optionalDependency"},
+      {"slug": "natures-compass", "type": "optionalDependency"},
+      {"slug": "sophisticated-backpacks", "type": "optionalDependency"},
+      {"slug": "curios", "type": "optionalDependency"},
+      {"slug": "corpse", "type": "optionalDependency"},
+      {"slug": "vanillabackport", "type": "optionalDependency", "minecraft": ["1.21.1"]}
+    ]
+  }
+}
