@@ -99,7 +99,7 @@ final class ExportTools {
 
         registrar.add("export_codecs_list",
             "The video codecs this computer can really export, fastest first: each with its encoder and whether it runs on a graphics card (and whose) or in software. "
-                + "Hardware encoders are tried once before they are listed. Also says which codecs are missing and why, and which platform has an encoder packed in.",
+                + "Hardware encoders are tried once before they are listed. Also says which codecs are missing and why, and which platforms have an encoder to download.",
             McpSchema.object(), McpTool.ThreadMode.HTTP, 60, args -> {
                 CoreTools.allowOnly(args);
                 return codecs();

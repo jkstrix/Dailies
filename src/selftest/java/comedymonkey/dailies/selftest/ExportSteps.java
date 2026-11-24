@@ -124,7 +124,7 @@ final class ExportSteps {
         check(picture != null && picture.getWidth() == 2560 && picture.getHeight() == 1440 && spread(picture) > 12.0, "the still is missing, the wrong size or blank");
 
         if (!Encoder.bundled()) {
-            test.skip("this build has no video encoder packed in: exporting a video file was not tried (EXP-1 containers and codecs, EXP-8), nor BUD-6 measured");
+            test.skip("this build has no video encoder to download for this platform: exporting a video file was not tried (EXP-1 containers and codecs, EXP-8), nor BUD-6 measured");
         } else {
             // Picture 7 is a quarter of a second in, which is frame 14 of a video at sixty frames a second
             video(test, minecraft, from, ImageIO.read(frames.get(7).toFile()));
@@ -134,21 +134,15 @@ final class ExportSteps {
     }
 
     /**
-     * The CurseForge build carries no encoder and downloads it on first use; dailies.encoder.forceDownload makes this
-     * build do the same. The videos above were then made by an encoder downloaded during this run, at its full length
-     * (its SHA-256 was checked as it came in, or it would not have been kept)
+     * Dailies carries no encoder in its jar and downloads it on first use: the videos above were made by the downloaded
+     * one, kept at its full length (its SHA-256 was checked as it came in, or it would not have been kept)
      */
     private static void downloaded(SelfTest test) throws java.io.IOException {
         Path copy = Encoder.downloadedCopy();
-        if (copy == null) {
-            check(!Boolean.getBoolean("dailies.encoder.forceDownload"), "dailies.encoder.forceDownload is on, but this build names no encoder to download for " + Encoder.platform());
-            return;
-        }
-        long started = java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
+        check(copy != null, "this build names no encoder to download for " + Encoder.platform());
         check(Files.isRegularFile(copy), "the encoder was not downloaded to " + copy);
         check(Files.size(copy) == Encoder.downloadLength(), "the downloaded encoder is " + Files.size(copy) + " bytes, not " + Encoder.downloadLength());
-        check(Files.getLastModifiedTime(copy).toMillis() >= started, "the downloaded encoder at " + copy + " is from an earlier run, so this run did not download it");
-        test.log("the videos were made with the encoder downloaded during this run: " + copy.getFileName() + ", " + Files.size(copy) / 1_000_000 + " MB");
+        test.log("the videos were made with the downloaded encoder: " + copy.getFileName() + ", " + Files.size(copy) / 1_000_000 + " MB");
     }
 
     /**

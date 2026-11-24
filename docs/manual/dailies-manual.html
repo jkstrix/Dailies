@@ -401,7 +401,7 @@ footer .logo{justify-content:center;margin-bottom:14px}
     <div class="chap rv"><span class="num">QUICK START</span><span class="rule"></span></div>
     <h2 class="rv">From play to video in minutes</h2>
     <div class="steps">
-      <div class="step rv"><h4>Install</h4><p>Put <code>dailies-1.21.1-1.3.0.jar</code> in <code>mods</code> with NeoForge 21.1, plus the compats for your pack. The encoder and the companion are inside the jar.</p></div>
+      <div class="step rv"><h4>Install</h4><p>Put <code>dailies-1.21.1-1.3.0.jar</code> in <code>mods</code> with NeoForge 21.1, plus the compats for your pack. The companion is inside the jar. The video encoder (about 35 MB) downloads by itself the first time you export a video.</p></div>
       <div class="step rv"><h4>Record</h4><p>Join a world, press <kbd>Esc</kbd>, then <b>Start recording</b>. A red lamp shows in the corner.</p></div>
       <div class="step rv"><h4>Watch</h4><p>Finish, open <b>Recordings</b>, then <b>Watch</b>. Fly freely and press <kbd>P</kbd> to play.</p></div>
       <div class="step rv"><h4>Direct &amp; export</h4><p>Add camera keyframes, set the range, choose a preset and press <b>Export</b>.</p></div>
@@ -606,7 +606,7 @@ footer .logo{justify-content:center;margin-bottom:14px}
       <div class="card rv"><div class="ico">📋</div><h4>Queue</h4><p>Queue scenes from any recording. The queue survives a restart.</p></div>
       <div class="card big rv"><div class="ico">🌙</div><h4>Background export</h4><p>A hidden second game works through the queue while you keep playing, even overnight after you close your own game. It never touches your saves or settings.</p></div>
     </div>
-    <div class="call note rv"><span class="i">ℹ️</span><p><b>Why there is no software H.264:</b> the usual software encoders would force a GPL build of FFmpeg, which cannot ship inside a mod like this. Without a hardware H.264 encoder you are offered AV1, which YouTube accepts. The bundled encoder is FFmpeg 8.1.2 (LGPL) for Windows, Linux and macOS.</p></div>
+    <div class="call note rv"><span class="i">ℹ️</span><p><b>Why there is no software H.264:</b> the usual software encoders would force a GPL build of FFmpeg, which cannot ship inside a mod like this. Without a hardware H.264 encoder you are offered AV1, which YouTube accepts. The encoder is FFmpeg 8.1.2 (LGPL) for Windows, Linux and macOS, downloaded on first export.</p></div>
   </div>
 </section>
 
@@ -653,13 +653,13 @@ footer .logo{justify-content:center;margin-bottom:14px}
     <details class="rv"><summary>H.264 is missing from the codec list</summary><div>Your computer has no hardware H.264 encoder Dailies can use. Choose AV1 or an editing master. The Export tab explains why.</div></details>
     <details class="rv"><summary>A mod's window doesn't show in playback</summary><div>Install its compat if there is one, and ride along with the recorder in first person with <i>The recorder's HUD</i> and <i>Open windows</i> on. A window already open when recording started is left out, and the creative inventory is never recorded.</div></details>
     <details class="rv"><summary>Shader pack exports look grainy</summary><div>Raise <b>Throwaway Frames</b> so that shader packs which build up their picture over several frames can finish each frame.</div></details>
-    <details class="rv"><summary>What hasn't been tested yet?</summary><div>AMD, Intel and Apple encoders, and the Linux and macOS encoder builds, are packed but have only been tested on Windows with NVIDIA. Distant Horizons far terrain and shader packs in exports have not been fully checked in the game.</div></details>
+    <details class="rv"><summary>What hasn't been tested yet?</summary><div>AMD, Intel and Apple encoders, and the Linux and macOS encoder builds, are built but have only been tested on Windows with NVIDIA. Distant Horizons far terrain and shader packs in exports have not been fully checked in the game.</div></details>
   </div>
 </section>
 
 <footer>
   <div class="logo"><span class="lamp"></span>DAILIES</div>
-  <p>MIT licensed. The bundled FFmpeg encoder is LGPL and runs as a separate program. See <a href="../../LICENSE">LICENSE</a> and <a href="../../THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES</a>.</p>
+  <p>MIT licensed. The FFmpeg encoder it downloads is LGPL and runs as a separate program. See <a href="../../LICENSE">LICENSE</a> and <a href="../../THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES</a>.</p>
   <p>Screenshots taken from the running game at 1920×1080. Minecraft is a trademark of Mojang AB. Dailies is not affiliated with Mojang or Microsoft.</p>
 </footer>
 

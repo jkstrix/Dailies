@@ -29,7 +29,7 @@ with Simple Voice Chat.
 | `companion/` | The Dailies Companion: a small separate server mod that tells players' games about things only a server knows. Its own Gradle build and README, included in this one so the Dailies jar carries the companion (jar-in-jar) for singleplayer. |
 | `docs/manual/` | The user manual and its pictures. |
 | `docs/` | Also the brief for an outside reviewer (`reviewer-brief.md`). |
-| `tools/` | `tools/ffmpeg/`: our own encoder build, the one the jar packs. `tools/ci/`: the scripted run for CI, and `check_spec.py`, which checks the design documents. |
+| `tools/` | `tools/ffmpeg/`: our own encoder build, the one Dailies downloads on first export. `tools/ci/`: the scripted run for CI, and `check_spec.py`, which checks the design documents. |
 | `run-test/`, `run-modded/` | Game folders the scripted tests run in. Not kept in git. |
 
 ## Where the work comes from
@@ -91,16 +91,18 @@ jar in `run-modded/mods` from `installTestMods`. `runClient` and `runPlayModded`
 a newer build of a mod, go in `dailies.modJars=<jar>,<jar>`. The modded runs stop with a message when the folder is not
 set. The companion is not copied there on its own: the Dailies jar carries it, as in a player's singleplayer game.
 
-Video is encoded by a bundled FFmpeg, our own LGPL build (`tools/ffmpeg/build.sh`), for Windows, Linux and macOS,
-with every vendor's hardware encoders and without x264, x265 or OpenH264. Its jars are not kept in git: build them with
-the "FFmpeg for Dailies" workflow (or `tools/ffmpeg/build.sh build <platform>` and `pack`) and put the
-`dailies-ffmpeg-jars` download in `tools/ffmpeg/out/jars` before `gradlew build`. `-Pdailies.encoderSource=bytedeco`
-packs the JavaCPP Presets' Windows-only build instead. `THIRD-PARTY-NOTICES.md` lists what is bundled and under which
-licences.
+Video is encoded by FFmpeg, our own LGPL build (`tools/ffmpeg/build.sh`), for Windows, Linux and macOS, with every
+vendor's hardware encoders and without x264, x265 or OpenH264. The Dailies jar carries no programs: on first export it
+downloads the encoder for its platform from the GitHub release named by `encoder_release` in `gradle.properties`,
+checked against the length and SHA-256 written into the jar. The encoder jars are not kept in git: build them with the
+"FFmpeg for Dailies" workflow (or `tools/ffmpeg/build.sh build <platform>` and `pack`) and put the `dailies-ffmpeg-jars`
+download in `tools/ffmpeg/out/jars` before `gradlew build`, which reads their lengths and SHA-256s. A new encoder build
+goes up as a new GitHub release, named in `encoder_release`. `THIRD-PARTY-NOTICES.md` lists what is used and under
+which licences.
 
 ## Licence
 
-MIT, see `LICENSE`. The bundled encoder is LGPL and is run as a separate program.
+MIT, see `LICENSE`. The encoder Dailies downloads is LGPL and is run as a separate program.
 
 ## Who to ask
 

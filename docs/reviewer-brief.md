@@ -59,14 +59,15 @@ particular is the owner's alone: others correct only ids, links and counts.
 
 ## The encoder and its licences
 
-Dailies runs FFmpeg's `ffmpeg` and `ffprobe` as separate programs. It does not link against them. They are packed
-inside the jar and unpacked on first export to `<game>/dailies/encoder/<platform>/`, where any FFmpeg build can be
-put in their place, as the LGPL asks.
+Dailies runs FFmpeg's `ffmpeg` and `ffprobe` as separate programs. It does not link against them. The jar carries no
+programs: on first export Dailies downloads the encoder jar for its platform from the project's GitHub release
+(`encoder_release` in `gradle.properties`), keeps it only when its length and SHA-256 match those written into the
+Dailies jar (`encoder/downloads.properties`), and unpacks it to `<game>/dailies/encoder/<platform>/`, where any FFmpeg
+build can be put in its place, as the LGPL asks.
 
-**What the jar bundles.** The project's own FFmpeg 8.1.2 build: `tools/ffmpeg/build.sh`, with pinned sources and
+**What it downloads.** The project's own FFmpeg 8.1.2 build: `tools/ffmpeg/build.sh`, with pinned sources and
 checksums in `tools/ffmpeg/sources.lock`, built, checked and packed for every platform by the workflow in
-`.github/workflows/ffmpeg.yml`, for Windows x64, Linux x64 and arm64, and macOS arm64 and x64
-(`gradle.properties`: `dailies.encoderSource=dailies`).
+`.github/workflows/ffmpeg.yml`, for Windows x64, Linux x64 and arm64, and macOS arm64 and x64.
 
 - It is LGPL 2.1 or later: no `--enable-gpl`, `--enable-nonfree` or `--enable-version3`, and no x264, x265 or
   OpenH264. Its `verify` step refuses a build that has any of them.
@@ -77,18 +78,15 @@ checksums in `tools/ffmpeg/sources.lock`, built, checked and packed for every pl
   `THIRD-PARTY-NOTICES.md` names each library, its version and its licence; the build's own licence texts and notices
   go into the jar under `licenses/ffmpeg-build`. On Windows the MinGW GCC runtime and winpthreads are linked in
   statically; their texts are `licenses/gcc-COPYING.RUNTIME` and `licenses/winpthreads-COPYING`.
-- `-Pdailies.encoderSource=bytedeco` still packs the JavaCPP Presets' Windows-only build (`org.bytedeco:ffmpeg`,
-  LGPL 3, which contains OpenH264, never used); its licence texts are kept apart in `src/encoder-licenses/bytedeco`
-  and go into the jar only then.
 
 ## The codec patent position
 
 - **H.264 and H.265** come from hardware encoders only: the graphics driver's or the operating system's (NVIDIA,
   AMD, Intel, Apple, Windows Media Foundation). Dailies carries only the open headers needed to call them. It carries
   no software encoder for either: x264 and x265 are GPL and would make the whole build GPL.
-- **OpenH264** is not in the bundled build. Cisco's patent licence for OpenH264 covers only binaries fetched from
+- **OpenH264** is not in the encoder build. Cisco's patent licence for OpenH264 covers only binaries fetched from
   Cisco, so the project's build leaves it out, and Dailies refuses it by name anyway (`export/Codecs.java`,
-  `FORBIDDEN`). Only the optional JavaCPP Presets build (`-Pdailies.encoderSource=bytedeco`) contains it.
+  `FORBIDDEN`).
 - **AV1 and VP9** are offered in software (SVT-AV1, libaom, libvpx) under royalty-free patent grants: the Alliance
   for Open Media Patent License 1.0 and Google's additional grant for libvpx. Those texts are in the licences folder.
 - **ProRes and DNxHR** (editing masters) and **AAC** (sound) are FFmpeg's own encoders. Their patent position has
