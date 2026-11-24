@@ -20,6 +20,10 @@ on:
         description: "Send every jar to CurseForge, not only those new on Modrinth (to fill CurseForge in)"
         type: boolean
         default: false
+      only:
+        description: "Only these jars, comma-separated (dailies, companion, compat-jade, ...); empty for all"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -40,4 +44,5 @@ jobs:
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '0' }}
           CURSEFORGE_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.curseforge_all) && '1' || '0' }}
+          ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
         run: bash .github/scripts/publish.sh "$TAG"
