@@ -36,26 +36,20 @@ import java.util.jar.JarInputStream;
 import java.util.zip.CRC32;
 
 /**
- * The video encoder shipped inside the mod (specification EXP-8): the FFmpeg libraries and their command-line front
- * end, in an LGPL build, packed into the mod's jar. Nothing has to be installed. On first use the files are unpacked
- * into the game's dailies/encoder folder; frames are then piped to the encoder as it runs beside the game.
- * <p>
- * A build made without the encoders inside (for sites that take no programs inside a mod's jar) downloads the one for
- * its platform on first use instead, from Dailies' GitHub release of the encoder, and keeps it only when its length and
- * SHA-256 are the ones written into the build ({@link EncoderDownload}).
+ * The video encoder (specification EXP-8): the FFmpeg libraries and their command-line front end, in an LGPL build made
+ * for Dailies. Nothing has to be installed. The mod's jar carries no programs (some sites take none): on first use the
+ * encoder for this platform is downloaded from Dailies' GitHub release of it and kept only when its length and SHA-256
+ * are the ones written into the build ({@link EncoderDownload}), then unpacked into the game's dailies/encoder folder;
+ * frames are then piped to the encoder as it runs beside the game.
  * <p>
  * Which codecs can be offered is asked of the build itself and tried on this machine, never assumed (EXP-1): see
  * {@link #choices}. What may be used at all, and what stands in for what, is in {@link Codecs}.
  */
 public final class Encoder {
 
-    /** The packed encoder for this platform inside the mod's jar, or absent in a build made without one */
-    private static final String PACKED = "/encoder/ffmpeg-%s.jar";
     /** Where each platform's packed encoder can be downloaded, with its length and SHA-256, written in by the build */
     private static final String DOWNLOADS = "/encoder/downloads.properties";
     private static final java.util.Properties DOWNLOAD = downloads();
-    /** For trying the download in a build that has the encoders inside: -Ddailies.encoder.forceDownload=true */
-    private static final boolean FORCE_DOWNLOAD = Boolean.getBoolean("dailies.encoder.forceDownload");
 
     private static java.util.Properties downloads() {
         java.util.Properties properties = new java.util.Properties();
@@ -69,12 +63,7 @@ public final class Encoder {
         return properties;
     }
 
-    /** Whether this platform's encoder is packed inside the jar */
-    private static boolean packedHere(String platform) {
-        return !FORCE_DOWNLOAD && Encoder.class.getResource(String.format(PACKED, platform)) != null;
-    }
-
-    /** Whether this platform's encoder can be downloaded, when it is not packed inside */
+    /** Whether this build names an encoder to download for the platform */
     private static boolean downloadable(String platform) {
         return DOWNLOAD.getProperty(platform + ".url") != null && DOWNLOAD.getProperty(platform + ".sha256") != null
             && DOWNLOAD.getProperty(platform + ".length") != null;
@@ -85,10 +74,10 @@ public final class Encoder {
         return EncoderDownload.downloading();
     }
 
-    /** Where this build keeps the encoder it downloads, or null when it carries its encoder inside or has none to fetch */
+    /** Where the downloaded encoder is kept, or null when this build has none to fetch for this platform */
     public static Path downloadedCopy() {
         String platform = platform();
-        if (packedHere(platform) || !downloadable(platform)) {
+        if (!downloadable(platform)) {
             return null;
         }
         String url = DOWNLOAD.getProperty(platform + ".url");
@@ -101,11 +90,7 @@ public final class Encoder {
         return length == null ? -1 : Long.parseLong(length.trim());
     }
 
-    /** Whether the packed encoders are Dailies' own build (tools/ffmpeg/build.sh), which brings its own licence folder */
-    private static final boolean OWN_BUILD = Encoder.class.getResource("/licenses/ffmpeg-build/notices/ffmpeg.txt") != null;
-    public static final String NOTICE = OWN_BUILD
-        ? "FFmpeg, LGPL build made for Dailies (tools/ffmpeg/build.sh). Licences: THIRD-PARTY-NOTICES.md and the licenses/ffmpeg-build folder inside the Dailies jar"
-        : "FFmpeg, LGPL build, as packaged by the JavaCPP Presets (org.bytedeco:ffmpeg). Licences: THIRD-PARTY-NOTICES.md and the licenses folder inside the Dailies jar";
+    public static final String NOTICE = "FFmpeg, LGPL build made for Dailies (tools/ffmpeg/build.sh), downloaded on first use. Licences: THIRD-PARTY-NOTICES.md and the licenses/ffmpeg-build folder inside the Dailies jar";
 
     private static Path program = null;
     private static Set<String> encoders = null;
@@ -113,7 +98,7 @@ public final class Encoder {
     private Encoder() {
     }
 
-    /** The platforms an encoder can be packed for, with the words for each */
+    /** The platforms an encoder is built for, with the words for each */
     private static final String[][] PLATFORMS = {
         {"windows-x86_64", "Windows (64-bit Intel or AMD)"},
         {"linux-x86_64", "Linux (64-bit Intel or AMD)"},
@@ -121,13 +106,13 @@ public final class Encoder {
         {"macosx-arm64", "macOS (Apple silicon)"},
         {"macosx-x86_64", "macOS (Intel)"}};
 
-    /** Where a video encoder is packed into this Dailies, read from the jar itself. Other platforms export numbered pictures (EXP-8) */
+    /** Where this Dailies has a video encoder to download, read from the jar itself. Other platforms export numbered pictures (EXP-8) */
     public static final String SUPPORTED = supported();
 
     private static String supported() {
         java.util.List<String> packed = new java.util.ArrayList<>();
         for (String[] platform : PLATFORMS) {
-            if (packedHere(platform[0]) || downloadable(platform[0])) {
+            if (downloadable(platform[0])) {
                 packed.add(platform[1]);
             }
         }
@@ -153,41 +138,30 @@ public final class Encoder {
         return (os.contains("win") ? "windows" : os.contains("mac") ? "macosx" : "linux") + "-" + cpu;
     }
 
-    /** What to tell someone whose platform has no encoder packed in, rather than failing obscurely */
+    /** What to tell someone whose platform has no encoder, rather than failing obscurely */
     public static String noEncoderWords() {
-        return "Dailies carries a video encoder for " + SUPPORTED + " only for now, and this is " + platform()
+        return "Dailies has a video encoder for " + SUPPORTED + " only for now, and this is " + platform()
             + ". Numbered PNG pictures can be exported here instead (container png_sequence)";
     }
 
     public static boolean bundled() {
-        return packedHere(platform()) || downloadable(platform());
+        return downloadable(platform());
     }
 
-    /** Unpacks the encoder on first use and returns its program */
+    /** Downloads and unpacks the encoder on first use and returns its program */
     static synchronized Path program() throws IOException {
         if (program != null) {
             return program;
         }
         String platform = platform();
-        String resource = String.format(PACKED, platform);
-        Path folder = Host.get().dataDirectory().resolve("encoder").resolve(platform);
-        if (!packedHere(platform)) {
-            if (!downloadable(platform)) {
-                throw new IOException(noEncoderWords());
-            }
-            Path kept = downloadedCopy();
-            Path downloaded = EncoderDownload.fetch(DOWNLOAD.getProperty(platform + ".url"), DOWNLOAD.getProperty(platform + ".sha256"),
-                downloadLength(), kept.getParent(), kept.getFileName().toString(), "Dailies/" + Host.get().modVersion(), Host.LOGGER::info);
-            program = unpack(() -> Files.newInputStream(downloaded), folder, platform, Host.get().modVersion());
-            return program;
+        if (!downloadable(platform)) {
+            throw new IOException(noEncoderWords());
         }
-        program = unpack(() -> {
-            InputStream packed = Encoder.class.getResourceAsStream(resource);
-            if (packed == null) {
-                throw new IOException(noEncoderWords());
-            }
-            return packed;
-        }, folder, platform, Host.get().modVersion());
+        Path folder = Host.get().dataDirectory().resolve("encoder").resolve(platform);
+        Path kept = downloadedCopy();
+        Path downloaded = EncoderDownload.fetch(DOWNLOAD.getProperty(platform + ".url"), DOWNLOAD.getProperty(platform + ".sha256"),
+            downloadLength(), kept.getParent(), kept.getFileName().toString(), "Dailies/" + Host.get().modVersion(), Host.LOGGER::info);
+        program = unpack(() -> Files.newInputStream(downloaded), folder, platform, Host.get().modVersion());
         return program;
     }
 
@@ -260,7 +234,7 @@ public final class Encoder {
                 }
             }
             if (found == null) {
-                throw new IOException("The video encoder packed in this build of Dailies is incomplete");
+                throw new IOException("The video encoder downloaded for this Dailies is incomplete");
             }
             removeOthers(folder, written);
             Path newStamp = folder.resolve(STAMP + "." + UUID.randomUUID() + UNPACKING);
