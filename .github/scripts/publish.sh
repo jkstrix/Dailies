@@ -8,7 +8,8 @@
 #
 # A version already on Modrinth is left alone, so running it again only adds what is missing there. CurseForge has
 # no such check, so a jar goes to CurseForge only when it was new on Modrinth in this run; CURSEFORGE_ALL=1 sends every
-# jar to CurseForge regardless, for filling it in for a release that is already out.
+# jar to CurseForge regardless, for filling it in for a release that is already out. ONLY=dailies,companion publishes
+# just those jars.
 set -euo pipefail
 
 tag="${1:?the release tag, e.g. v1.3.0+26.3}"
@@ -19,6 +20,8 @@ curseforge="https://minecraft.curseforge.com/api"
 agent="jkstrix/Dailies release workflow (github.com/jkstrix/Dailies)"
 dry="${DRY_RUN:-0}"
 cf_all="${CURSEFORGE_ALL:-0}"
+# A comma-separated list of jar keys (dailies, companion, compat-jade, ...) to publish alone; empty for all
+only=",${ONLY:-},"
 
 if [[ ! "$tag" =~ ^v([^+]+)\+(.+)$ ]]; then
     echo "::error::the tag $tag is not v<version>+<minecraft>"
@@ -60,7 +63,8 @@ if [ -n "${CURSEFORGE_TOKEN:-}" ]; then
             ($types[0] | map({(.id | tostring): .name}) | add) as $typeNames
             | [.[] | select(.name == $name and ($typeNames[(.gameVersionTypeID | tostring)] // "" | test($type)))][0].id // empty' "$work/cf-versions.json"
     }
-    cf_minecraft="$(cf_version "$minecraft" '^Minecraft')"
+    # The version type is "Minecraft 1.21" for 1.21.x and just "26.3" for 26.x
+    cf_minecraft="$(cf_version "$minecraft" '^(Minecraft )?[0-9]')"
     cf_neoforge="$(cf_version NeoForge '^Modloader')"
     cf_client="$(cf_version Client '^Environment')"
     cf_server="$(cf_version Server '^Environment')"
@@ -71,28 +75,25 @@ if [ -n "${CURSEFORGE_TOKEN:-}" ]; then
     echo "CurseForge game versions: Minecraft $minecraft $cf_minecraft, NeoForge $cf_neoforge, client $cf_client, server $cf_server"
 fi
 
-# Sends one jar to CurseForge; when CurseForge refuses its relations (a project it does not know yet), sends it again without
+# Sends one jar to CurseForge. A relation CurseForge refuses (a project it has not approved yet, or a slug it does not
+# know) is left out and the file sent again, as many times as it takes, with a warning to add it by hand later
 curseforge_upload() {
     local jar="$1" file="$2" cf_project="$3" meta="$4"
-    local out="$work/cf-out.json"
-    if curl -sS -o "$out" -w '%{http_code}' -A "$agent" -H "X-Api-Token: $CURSEFORGE_TOKEN" \
-        -F "metadata=<$meta;type=application/json" -F "file=@$jar;filename=$file" "$curseforge/projects/$cf_project/upload-file" > "$work/cf-code" \
-        && [ "$(cat "$work/cf-code")" = 200 ]; then
-        echo "$file: on CurseForge as file $(jq -r .id "$out")"
-        return 0
-    fi
-    echo "$file: CurseForge said $(cat "$work/cf-code"): $(head -c 400 "$out")"
-    if [ "$(jq '.relations.projects | length' "$meta")" != 0 ]; then
-        echo "::warning::$file: sending it to CurseForge again without its dependencies; add them on the file's page"
-        jq 'del(.relations)' "$meta" > "$meta.bare"
-        if curl -sS -o "$out" -w '%{http_code}' -A "$agent" -H "X-Api-Token: $CURSEFORGE_TOKEN" \
-            -F "metadata=<$meta.bare;type=application/json" -F "file=@$jar;filename=$file" "$curseforge/projects/$cf_project/upload-file" > "$work/cf-code" \
-            && [ "$(cat "$work/cf-code")" = 200 ]; then
-            echo "$file: on CurseForge as file $(jq -r .id "$out") (without dependencies)"
+    local out="$work/cf-out.json" code slug
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        code="$(curl -sS -o "$out" -w '%{http_code}' -A "$agent" -H "X-Api-Token: $CURSEFORGE_TOKEN"             -F "metadata=<$meta;type=application/json" -F "file=@$jar;filename=$file" "$curseforge/projects/$cf_project/upload-file" || true)"
+        if [ "$code" = 200 ]; then
+            echo "$file: on CurseForge as file $(jq -r .id "$out")"
             return 0
         fi
-        echo "$file: CurseForge said $(cat "$work/cf-code"): $(head -c 400 "$out")"
-    fi
+        echo "$file: CurseForge said $code: $(head -c 400 "$out")"
+        slug="$(jq -r '.errorMessage // ""' "$out" 2>/dev/null | sed -n "s/^Invalid slug in project relations: '\([^']*\)'.*/\1/p")"
+        if [ -z "$slug" ] || [ "$(jq --arg s "$slug" '[.relations.projects[]? | select(.slug == $s)] | length' "$meta")" = 0 ]; then
+            return 1
+        fi
+        echo "::warning::$file: CurseForge does not know '$slug' yet; sent without that relation, so add it on the file's page later"
+        jq --arg s "$slug" '.relations.projects |= map(select(.slug != $s)) | if (.relations.projects | length) == 0 then del(.relations) else . end'             "$meta" > "$meta.next" && mv "$meta.next" "$meta"
+    done
     return 1
 }
 
@@ -112,6 +113,9 @@ for jar in "$work"/*.jar; do
     key="${key#dailies}"
     key="${key#-}"
     key="${key:-dailies}"
+    if [ "$only" != ",," ] && [[ "$only" != *",$key,"* ]]; then
+        continue
+    fi
     entry="$(jq -c --arg key "$key" '.[$key] // empty' "$config")"
     if [ -z "$entry" ]; then
         echo "::warning::$file: publish.json has no project for '$key'; left on GitHub"
@@ -182,7 +186,7 @@ for jar in "$work"/*.jar; do
             gameVersions: ([$mc, $neo, $side] | map(select(. != "" and . != "0") | tonumber)),
             relations: {projects: [($entry.relations // [])[] | select((.minecraft // [$minecraft]) | index($minecraft))
                 | {slug: .slug, type: .type}]}
-        }' > "$work/cf-meta.json"
+        } | if (.relations.projects | length) == 0 then del(.relations) else . end' > "$work/cf-meta.json"
     if [ "$dry" = 1 ]; then
         echo "$file: would send $name to CurseForge project $cf_project"
         jq -c '{displayName, releaseType, gameVersions, relations}' "$work/cf-meta.json"
