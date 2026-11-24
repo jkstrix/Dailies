@@ -129,7 +129,26 @@ final class ExportSteps {
             // Picture 7 is a quarter of a second in, which is frame 14 of a video at sixty frames a second
             video(test, minecraft, from, ImageIO.read(frames.get(7).toFile()));
             otherFormats(test, minecraft, from);
+            downloaded(test);
         }
+    }
+
+    /**
+     * The CurseForge build carries no encoder and downloads it on first use; dailies.encoder.forceDownload makes this
+     * build do the same. The videos above were then made by an encoder downloaded during this run, at its full length
+     * (its SHA-256 was checked as it came in, or it would not have been kept)
+     */
+    private static void downloaded(SelfTest test) throws java.io.IOException {
+        Path copy = Encoder.downloadedCopy();
+        if (copy == null) {
+            check(!Boolean.getBoolean("dailies.encoder.forceDownload"), "dailies.encoder.forceDownload is on, but this build names no encoder to download for " + Encoder.platform());
+            return;
+        }
+        long started = java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
+        check(Files.isRegularFile(copy), "the encoder was not downloaded to " + copy);
+        check(Files.size(copy) == Encoder.downloadLength(), "the downloaded encoder is " + Files.size(copy) + " bytes, not " + Encoder.downloadLength());
+        check(Files.getLastModifiedTime(copy).toMillis() >= started, "the downloaded encoder at " + copy + " is from an earlier run, so this run did not download it");
+        test.log("the videos were made with the encoder downloaded during this run: " + copy.getFileName() + ", " + Files.size(copy) / 1_000_000 + " MB");
     }
 
     /**

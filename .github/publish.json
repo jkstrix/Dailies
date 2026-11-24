@@ -1,10 +1,16 @@
 {
-  "_about": "Where each release jar is published, read by .github/scripts/publish.sh. The key is the jar's name between 'dailies-' and '-<minecraft>-<version>.jar' ('dailies' for the mod itself). 'project' is the Modrinth project, 'curseforge' the CurseForge project; 'side' is where the jar runs (client or server). A dependency or relation with 'minecraft' applies to those versions only. A jar with no entry (the API jar) stays on GitHub only.",
+  "_about": "Where each release jar is published, read by .github/scripts/publish.sh. The key is the jar's name between 'dailies-' and '-<minecraft>-<version>.jar' ('dailies' for the mod itself). 'project' is the Modrinth project, 'curseforge' the CurseForge project, 'follows' another key whose jar this one goes out with (sent to CurseForge when that one was new on Modrinth); 'side' is where the jar runs (client or server). A dependency or relation with 'minecraft' applies to those versions only. A jar with no entry (the API jar) stays on GitHub only.",
   "dailies": {
     "title": "Dailies",
     "side": "client",
-    "project": "y4ql9bAD",
-    "curseforge": 1827141
+    "project": "y4ql9bAD"
+  },
+  "curseforge": {
+    "title": "Dailies",
+    "side": "client",
+    "curseforge": 1827141,
+    "follows": "dailies",
+    "_note": "Dailies without the video encoders inside (CurseForge takes no programs in a jar); it downloads its encoder on first use"
   },
   "companion": {
     "title": "Dailies Server Companion",

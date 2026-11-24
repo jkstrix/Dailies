@@ -9,7 +9,9 @@
 # A version already on Modrinth is left alone, so running it again only adds what is missing there. CurseForge has
 # no such check, so a jar goes to CurseForge only when it was new on Modrinth in this run; CURSEFORGE_ALL=1 sends every
 # jar to CurseForge regardless, for filling it in for a release that is already out. ONLY=dailies,companion publishes
-# just those jars.
+# just those jars. A jar whose entry 'follows' another and has no Modrinth project (Dailies' CurseForge build, which
+# carries no encoder) goes to CurseForge only, when the one it follows was new on Modrinth. Only tags starting with v
+# are Dailies releases: the workflow leaves the encoder's own release alone.
 set -euo pipefail
 
 tag="${1:?the release tag, e.g. v1.3.0+26.3}"
@@ -100,7 +102,18 @@ curseforge_upload() {
 published=0
 uploaded=0
 failed=0
+new_keys=","
+# The jars whose entry follows another go last, once it is known whether the one they follow was new on Modrinth
+jars=()
+later=()
 for jar in "$work"/*.jar; do
+    if [[ "$(basename "$jar")" == dailies-curseforge-* ]]; then
+        later+=("$jar")
+    else
+        jars+=("$jar")
+    fi
+done
+for jar in "${jars[@]}" "${later[@]}"; do
     file="$(basename "$jar")"
     stem="${file%.jar}"
     version="${stem##*-}"
@@ -113,28 +126,35 @@ for jar in "$work"/*.jar; do
     key="${key#dailies}"
     key="${key#-}"
     key="${key:-dailies}"
-    if [ "$only" != ",," ] && [[ "$only" != *",$key,"* ]]; then
-        continue
-    fi
     entry="$(jq -c --arg key "$key" '.[$key] // empty' "$config")"
     if [ -z "$entry" ]; then
         echo "::warning::$file: publish.json has no project for '$key'; left on GitHub"
         continue
     fi
-    project="$(jq -r .project <<<"$entry")"
+    project="$(jq -r '.project // empty' <<<"$entry")"
+    follows="$(jq -r '.follows // empty' <<<"$entry")"
+    # "only" takes a jar's own key or the key of the one it follows
+    if [ "$only" != ",," ] && [[ "$only" != *",$key,"* ]] && { [ -z "$follows" ] || [[ "$only" != *",$follows,"* ]]; }; then
+        continue
+    fi
     title="$(jq -r .title <<<"$entry")"
     number="$version+$minecraft"
     name="$title $version for Minecraft $minecraft"
-    if [ "$key" = dailies ]; then
+    if [ "$key" = dailies ] || [ "$follows" = dailies ]; then
         changelog="$dailies_changelog"
     else
         changelog="Released with Dailies $dailies_version for Minecraft $minecraft."
     fi
 
-    # Modrinth
+    # Modrinth (a jar that follows another, with no Modrinth project of its own, is new when the one it follows was)
     new_on_modrinth=0
     on_modrinth=0
-    if versions="$(curl -fsS -A "$agent" "${auth[@]}" "$modrinth/project/$project/version")"; then
+    if [ -z "$project" ]; then
+        on_modrinth=1
+        if [ -n "$follows" ] && [[ "$new_keys" == *",$follows,"* ]]; then
+            new_on_modrinth=1
+        fi
+    elif versions="$(curl -fsS -A "$agent" "${auth[@]}" "$modrinth/project/$project/version")"; then
         if [ "$(jq --arg n "$number" '[.[] | select(.version_number == $n)] | length' <<<"$versions")" != 0 ]; then
             on_modrinth=1
             echo "$file: $title $number is already on Modrinth"
@@ -164,6 +184,7 @@ for jar in "$work"/*.jar; do
             published=$((published + 1))
         fi
         new_on_modrinth=1
+        new_keys="$new_keys$key,"
     fi
 
     # CurseForge
