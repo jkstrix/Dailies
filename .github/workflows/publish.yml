@@ -1,5 +1,6 @@
-# When a release is published on GitHub, its jars go to Modrinth and CurseForge: Dailies itself, the Server
-# Companion and each compat to its own project (.github/publish.json). The API jar stays on GitHub. Needs the
+# When a release is published on GitHub, its jars go to Modrinth and CurseForge: on Modrinth Dailies itself, the
+# Server Companion and each compat to its own project; on CurseForge all of them to Dailies' one project, the companion
+# and compats as additional files of the Dailies file (.github/publish.json). The API jar stays on GitHub. Needs the
 # repository secrets MODRINTH_TOKEN and CURSEFORGE_TOKEN. Run by hand for a release already out, to add what the
 # sites are missing (or to see what it would do)
 name: Publish
@@ -22,6 +23,10 @@ on:
         default: false
       only:
         description: "Only these jars, comma-separated (dailies, companion, compat-jade, ...); empty for all"
+        required: false
+        default: ""
+      curseforge_parent:
+        description: "A Dailies file already on CurseForge (its file id) to add the companion and compats to, instead of sending Dailies again"
         required: false
         default: ""
 
@@ -47,4 +52,5 @@ jobs:
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '0' }}
           CURSEFORGE_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.curseforge_all) && '1' || '0' }}
           ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
+          CURSEFORGE_PARENT: ${{ github.event_name == 'workflow_dispatch' && inputs.curseforge_parent || '' }}
         run: bash .github/scripts/publish.sh "$TAG"
