@@ -1,5 +1,5 @@
 {
-  "_about": "Where each release jar is published, read by .github/scripts/publish.sh. The key is the jar's name between 'dailies-' and '-<minecraft>-<version>.jar' ('dailies' for the mod itself). 'project' is the Modrinth project, 'curseforge' the CurseForge project; 'side' is where the jar runs (client or server). A dependency or relation with 'minecraft' applies to those versions only. A jar with no entry (the API jar) stays on GitHub only.",
+  "_about": "Where each release jar is published, read by .github/scripts/publish.sh. The key is the jar's name between 'dailies-' and '-<minecraft>-<version>.jar' ('dailies' for the mod itself). 'project' is the Modrinth project. 'curseforge' is Dailies' CurseForge project, or 'additional' for a jar that goes into that same project as an additional file of the Dailies file sent in the same run (CurseForge keeps Dailies' jars in one project); 'side' is where the jar runs (client or server). A dependency or relation with 'minecraft' applies to those versions only. A jar with no entry (the API jar) stays on GitHub only.",
   "dailies": {
     "title": "Dailies",
     "side": "client",
@@ -10,19 +10,18 @@
     "title": "Dailies Server Companion",
     "side": "server",
     "project": "RxrBV53y",
-    "curseforge": 1827149
+    "curseforge": "additional"
   },
   "compat-create": {
     "title": "Dailies Create Compat",
     "side": "client",
     "project": "vTrdwlBm",
-    "curseforge": 1827155,
+    "curseforge": "additional",
     "dependencies": [
       {"project": "y4ql9bAD", "type": "required"},
       {"project": "LNytGWDc", "type": "required"}
     ],
     "relations": [
-      {"slug": "dailies", "type": "requiredDependency"},
       {"slug": "create", "type": "requiredDependency"}
     ]
   },
@@ -30,14 +29,13 @@
     "title": "Dailies Create Aeronautics Compat",
     "side": "client",
     "project": "kg3CU15a",
-    "curseforge": 1827160,
+    "curseforge": "additional",
     "dependencies": [
       {"project": "y4ql9bAD", "type": "required"},
       {"project": "oWaK0Q19", "type": "required"},
       {"project": "W1ZUfWdr", "type": "optional"}
     ],
     "relations": [
-      {"slug": "dailies", "type": "requiredDependency"},
       {"slug": "create-aeronautics", "type": "requiredDependency"},
       {"slug": "create-coasters-simulated", "type": "optionalDependency"}
     ]
@@ -46,7 +44,7 @@
     "title": "Dailies Create Add-ons Compat",
     "side": "client",
     "project": "Ny8V7ZEA",
-    "curseforge": 1827167,
+    "curseforge": "additional",
     "dependencies": [
       {"project": "y4ql9bAD", "type": "required"},
       {"project": "mva5q4qZ", "type": "optional"},
@@ -57,7 +55,6 @@
       {"project": "ATDdrG1y", "type": "optional"}
     ],
     "relations": [
-      {"slug": "dailies", "type": "requiredDependency"},
       {"slug": "create-deep-seas", "type": "optionalDependency"},
       {"slug": "create-connected", "type": "optionalDependency"},
       {"slug": "create-encased", "type": "optionalDependency"},
@@ -70,14 +67,13 @@
     "title": "Dailies Supplementaries Compat",
     "side": "client",
     "project": "iphXr1pS",
-    "curseforge": 1827169,
+    "curseforge": "additional",
     "dependencies": [
       {"project": "y4ql9bAD", "type": "required"},
       {"project": "fFEIiSDQ", "type": "required"},
       {"project": "6iTJugQR", "type": "optional"}
     ],
     "relations": [
-      {"slug": "dailies", "type": "requiredDependency"},
       {"slug": "supplementaries", "type": "requiredDependency"},
       {"slug": "amendments", "type": "optionalDependency"}
     ]
@@ -86,13 +82,12 @@
     "title": "Dailies Jade Compat",
     "side": "client",
     "project": "UIiTAnkD",
-    "curseforge": 1827170,
+    "curseforge": "additional",
     "dependencies": [
       {"project": "y4ql9bAD", "type": "required"},
       {"project": "nvQzSEkH", "type": "required"}
     ],
     "relations": [
-      {"slug": "dailies", "type": "requiredDependency"},
       {"slug": "jade", "type": "requiredDependency"}
     ]
   },
@@ -100,7 +95,7 @@
     "title": "Dailies Extras Compat",
     "side": "client",
     "project": "LqI4EVVu",
-    "curseforge": 1827176,
+    "curseforge": "additional",
     "dependencies": [
       {"project": "y4ql9bAD", "type": "required"},
       {"project": "RV1qfVQ8", "type": "optional"},
@@ -111,7 +106,6 @@
       {"project": "6xwxDTgf", "type": "optional", "minecraft": ["1.21.1"]}
     ],
     "relations": [
-      {"slug": "dailies", "type": "requiredDependency"},
       {"slug": "explorers-compass", "type": "optionalDependency"},
       {"slug": "natures-compass", "type": "optionalDependency"},
       {"slug": "sophisticated-backpacks", "type": "optionalDependency"},
