@@ -7,8 +7,11 @@
 # and CURSEFORGE_TOKEN (a CurseForge API token). DRY_RUN=1 says what it would publish and uploads nothing.
 #
 # A version already on Modrinth is left alone, so running it again only adds what is missing there. CurseForge has
-# no such check, so a jar goes to CurseForge only when it was new on Modrinth in this run; CURSEFORGE_ALL=1 sends every
-# jar to CurseForge regardless, for filling it in for a release that is already out. ONLY=dailies,companion publishes
+# no such check, so Dailies goes to CurseForge only when it was new on Modrinth in this run; CURSEFORGE_ALL=1 sends it
+# regardless, for filling it in for a release that is already out. CurseForge keeps all of Dailies' jars in one
+# project: the companion and the compats go there as additional files of the Dailies file sent in the same run, every
+# release, whether or not they are new. CURSEFORGE_PARENT=<file id> attaches them to a Dailies file already on
+# CurseForge instead, and sends Dailies itself no more. ONLY=dailies,companion publishes
 # just those jars. Only tags starting with v are Dailies releases: the workflow leaves the encoder's own release alone.
 set -euo pipefail
 
@@ -22,6 +25,8 @@ dry="${DRY_RUN:-0}"
 cf_all="${CURSEFORGE_ALL:-0}"
 # A comma-separated list of jar keys (dailies, companion, compat-jade, ...) to publish alone; empty for all
 only=",${ONLY:-},"
+# A Dailies file already on CurseForge to attach the companion and compats to, instead of sending Dailies again
+cf_parent="${CURSEFORGE_PARENT:-}"
 
 if [[ ! "$tag" =~ ^v([^+]+)\+(.+)$ ]]; then
     echo "::error::the tag $tag is not v<version>+<minecraft>"
@@ -75,20 +80,31 @@ if [ -n "${CURSEFORGE_TOKEN:-}" ]; then
     echo "CurseForge game versions: Minecraft $minecraft $cf_minecraft, NeoForge $cf_neoforge, client $cf_client, server $cf_server"
 fi
 
-# Sends one jar to CurseForge. A relation CurseForge refuses (a project it has not approved yet, or a slug it does not
-# know) is left out and the file sent again, as many times as it takes, with a warning to add it by hand later
+# Sends one jar to CurseForge, leaving its new file's id in cf_file. A relation CurseForge refuses (a project it has not
+# approved yet, or a slug it does not know) is left out and the file sent again, as many times as it takes, with a
+# warning to add it by hand later
+cf_file=""
 curseforge_upload() {
     local jar="$1" file="$2" cf_project="$3" meta="$4"
     local out="$work/cf-out.json" code slug
+    cf_file=""
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
         code="$(curl -sS -o "$out" -w '%{http_code}' -A "$agent" -H "X-Api-Token: $CURSEFORGE_TOKEN"             -F "metadata=<$meta;type=application/json" -F "file=@$jar;filename=$file" "$curseforge/projects/$cf_project/upload-file" || true)"
         if [ "$code" = 200 ]; then
-            echo "$file: on CurseForge as file $(jq -r .id "$out")"
+            cf_file="$(jq -r .id "$out")"
+            echo "$file: on CurseForge as file $cf_file"
             return 0
         fi
         echo "$file: CurseForge said $code: $(head -c 400 "$out")"
         slug="$(jq -r '.errorMessage // ""' "$out" 2>/dev/null | sed -n "s/^Invalid slug in project relations: '\([^']*\)'.*/\1/p")"
         if [ -z "$slug" ] || [ "$(jq --arg s "$slug" '[.relations.projects[]? | select(.slug == $s)] | length' "$meta")" = 0 ]; then
+            # The upload API does not say whether an additional file may carry relations: one refused for another
+            # reason is sent once more without them
+            if [ "$(jq 'has("parentFileID") and has("relations")' "$meta")" = true ]; then
+                echo "::warning::$file: sent again without its relations, so add them on the file's page later"
+                jq 'del(.relations)' "$meta" > "$meta.next" && mv "$meta.next" "$meta"
+                continue
+            fi
             return 1
         fi
         echo "::warning::$file: CurseForge does not know '$slug' yet; sent without that relation, so add it on the file's page later"
@@ -100,7 +116,16 @@ curseforge_upload() {
 published=0
 uploaded=0
 failed=0
+# Dailies first: the companion and the compats go to CurseForge as additional files of its file
+jars=()
 for jar in "$work"/*.jar; do
+    if [ "$(basename "$jar")" = "dailies-$minecraft-$dailies_version.jar" ]; then
+        jars=("$jar" "${jars[@]}")
+    else
+        jars+=("$jar")
+    fi
+done
+for jar in "${jars[@]}"; do
     file="$(basename "$jar")"
     stem="${file%.jar}"
     version="${stem##*-}"
@@ -171,7 +196,19 @@ for jar in "$work"/*.jar; do
     if [ -z "$cf_project" ]; then
         continue
     fi
-    if [ "$new_on_modrinth" = 0 ] && [ "$cf_all" != 1 ]; then
+    parent=""
+    if [ "$cf_project" = additional ]; then
+        # An additional file of the Dailies file sent in this run (or named by CURSEFORGE_PARENT), in Dailies' project
+        if [ -z "$cf_parent" ]; then
+            echo "$file: Dailies was not sent to CurseForge in this run, so there is no file to add this to (CURSEFORGE_PARENT names one)"
+            continue
+        fi
+        parent="$cf_parent"
+        cf_project="$(jq -r '.dailies.curseforge' "$config")"
+    elif [ -n "$cf_parent" ]; then
+        echo "$file: already on CurseForge as file $cf_parent"
+        continue
+    elif [ "$new_on_modrinth" = 0 ] && [ "$cf_all" != 1 ]; then
         echo "$file: not new on Modrinth, so taken to be on CurseForge already (CURSEFORGE_ALL=1 sends it anyway)"
         continue
     fi
@@ -180,20 +217,32 @@ for jar in "$work"/*.jar; do
     if [ "$side" = server ]; then
         side_version="$cf_server"
     fi
+    # An additional file takes no game versions of its own: it has its parent's
     jq -n --arg name "$name" --arg changelog "$changelog" --arg minecraft "$minecraft" --arg type "$version_type" \
-        --arg mc "${cf_minecraft:-0}" --arg neo "${cf_neoforge:-0}" --arg side "${side_version:-}" --argjson entry "$entry" '{
+        --arg mc "${cf_minecraft:-0}" --arg neo "${cf_neoforge:-0}" --arg side "${side_version:-}" --arg parent "$parent" --argjson entry "$entry" '{
             displayName: $name, changelog: $changelog, changelogType: "markdown", releaseType: $type,
             gameVersions: ([$mc, $neo, $side] | map(select(. != "" and . != "0") | tonumber)),
             relations: {projects: [($entry.relations // [])[] | select((.minecraft // [$minecraft]) | index($minecraft))
                 | {slug: .slug, type: .type}]}
-        } | if (.relations.projects | length) == 0 then del(.relations) else . end' > "$work/cf-meta.json"
+        } | if (.relations.projects | length) == 0 then del(.relations) else . end
+          | if $parent != "" then del(.gameVersions) + {parentFileID: ($parent | tonumber? // $parent)} else . end' > "$work/cf-meta.json"
     if [ "$dry" = 1 ]; then
-        echo "$file: would send $name to CurseForge project $cf_project"
-        jq -c '{displayName, releaseType, gameVersions, relations}' "$work/cf-meta.json"
+        if [ -n "$parent" ]; then
+            echo "$file: would add $name to CurseForge project $cf_project as an additional file of $parent"
+        else
+            echo "$file: would send $name to CurseForge project $cf_project"
+        fi
+        jq -c '{displayName, releaseType, gameVersions, parentFileID, relations}' "$work/cf-meta.json"
+        if [ "$key" = dailies ]; then
+            cf_parent="(the new Dailies file)"
+        fi
         continue
     fi
     if curseforge_upload "$jar" "$file" "$cf_project" "$work/cf-meta.json"; then
         uploaded=$((uploaded + 1))
+        if [ "$key" = dailies ]; then
+            cf_parent="$cf_file"
+        fi
     else
         echo "::error::$file: CurseForge did not take it"
         failed=$((failed + 1))
